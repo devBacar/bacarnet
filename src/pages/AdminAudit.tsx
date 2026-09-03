@@ -5,6 +5,8 @@ import {
   type AuditFilterBy,
   type AuditLogDto,
 } from '../services/auditApi'
+import { GOVERNANCE_ACTION_LABELS } from '../services/governanceAccess'
+import type { GovernanceAction } from '../services/userService'
 
 const ACTION_LABELS: Record<string, string> = {
   create: 'Crear',
@@ -15,6 +17,8 @@ const ACTION_LABELS: Record<string, string> = {
   permission_revoke: 'Revocar permiso',
   role_change: 'Cambio de rol',
   managed_areas_change: 'Cambio de áreas',
+  member_areas_change: 'Cambio de pertenencia',
+  action_grants_change: 'Excepción de gobernanza',
   classification_change: 'Clasificación',
   authorized_copy: 'Copia autorizada',
   approval: 'Aprobación',
@@ -38,6 +42,8 @@ const ACTION_OPTIONS = [
   'board_access_revoke',
   'role_change',
   'managed_areas_change',
+  'member_areas_change',
+  'action_grants_change',
 ] as const
 
 function formatWhen(iso: string | null): string {
@@ -47,8 +53,32 @@ function formatWhen(iso: string | null): string {
   return d.toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'medium' })
 }
 
+function areaIdsSummary(before: unknown, after: unknown): string | null {
+  const beforeIds = Array.isArray(before) ? before.map(String) : []
+  const afterIds = Array.isArray(after) ? after.map(String) : []
+  if (beforeIds.length === afterIds.length && beforeIds.every((id, i) => id === afterIds[i])) {
+    return null
+  }
+  return `${beforeIds.length} → ${afterIds.length} área(s)`
+}
+
 function metadataSummary(log: AuditLogDto): string | null {
   const m = log.metadata ?? {}
+  if (log.action === 'action_grants_change') {
+    const operation = m.operation === 'grant' ? 'Otorgar' : m.operation === 'revoke' ? 'Quitar' : null
+    const actionKey = typeof m.governanceAction === 'string' ? m.governanceAction : null
+    const actionLabel =
+      actionKey && actionKey in GOVERNANCE_ACTION_LABELS
+        ? GOVERNANCE_ACTION_LABELS[actionKey as GovernanceAction]
+        : actionKey
+    const areaName = typeof m.areaName === 'string' ? m.areaName : null
+    const parts = [operation, actionLabel, areaName].filter(Boolean)
+    if (parts.length) return parts.join(' · ')
+  }
+  if (log.action === 'member_areas_change' || log.action === 'managed_areas_change') {
+    const summary = areaIdsSummary(m.antes, m.despues)
+    if (summary) return summary
+  }
   if (log.action === 'classification_change') {
     const from = m.previousClassification
     const to = m.classification

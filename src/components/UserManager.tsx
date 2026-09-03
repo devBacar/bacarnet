@@ -1,10 +1,12 @@
-import { Pencil, Settings2, Shield, Trash2, X } from 'lucide-react'
+import { KeyRound, Pencil, Settings2, Shield, Trash2, X } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
+import { GovernanceExceptionsDrawer } from './GovernanceExceptionsDrawer'
 import { PendingUserSetupPanel } from './PendingUserSetupPanel'
 import { useAuth } from '../context'
 import { useDepartments } from '../hooks/useDepartments'
 import { listAssignableRootAreas, type GoverningArea } from '../services/areaService'
+import { countActionGrantEntries } from '../services/governanceAccess'
 import {
   deleteUser,
   getAllUsers,
@@ -746,6 +748,58 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
   )
 }
 
+function ManagedAreasCell({
+  user,
+  areaNameById,
+}: {
+  user: UserProfile
+  areaNameById: Map<string, string>
+}) {
+  const exceptionCount = countActionGrantEntries(user.actionGrants)
+
+  if (user.role === 'super_admin') {
+    return <span className="text-neutral-400">Todo</span>
+  }
+
+  const managedIds = user.managedAreaIds ?? []
+  if (managedIds.length === 0 && exceptionCount === 0) {
+    return <span className="text-neutral-400">—</span>
+  }
+
+  const visible = managedIds.slice(0, 2)
+  const hiddenCount = managedIds.length - visible.length
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {visible.map((id) => (
+        <span
+          key={id}
+          className="inline-flex max-w-[8rem] truncate rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+          title={areaNameById.get(id) ?? id}
+        >
+          {areaNameById.get(id) ?? id}
+        </span>
+      ))}
+      {hiddenCount > 0 && (
+        <span className="inline-flex rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-600 dark:bg-zinc-800 dark:text-gray-400">
+          +{hiddenCount}
+        </span>
+      )}
+      {managedIds.length === 0 && exceptionCount > 0 && (
+        <span className="text-neutral-400">—</span>
+      )}
+      {exceptionCount > 0 && (
+        <span
+          className="inline-flex rounded-full border border-brand-primary/25 bg-brand-tint px-2 py-0.5 text-xs font-medium text-brand-primary"
+          title="Excepciones de gobernanza (acciones puntuales)"
+        >
+          +{exceptionCount} excepc.{exceptionCount === 1 ? '' : 'es'}
+        </span>
+      )}
+    </div>
+  )
+}
+
 export function UserManager() {
   const { user: currentAuthUser, userProfile, refreshProfile } = useAuth()
   const canAssignRoles =
@@ -758,7 +812,32 @@ export function UserManager() {
   const [permissionsUser, setPermissionsUser] = useState<UserProfile | null>(null)
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
   const [roleUser, setRoleUser] = useState<UserProfile | null>(null)
+  const [exceptionsUser, setExceptionsUser] = useState<UserProfile | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [governingAreas, setGoverningAreas] = useState<GoverningArea[]>([])
+
+  const areaNameById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const area of governingAreas) {
+      if (area.id) map.set(area.id, area.name)
+    }
+    return map
+  }, [governingAreas])
+
+  useEffect(() => {
+    if (!canAssignRoles) return
+    let cancelled = false
+    listAssignableRootAreas()
+      .then((rows) => {
+        if (!cancelled) setGoverningAreas(rows)
+      })
+      .catch((err) => {
+        console.error('Error al cargar áreas para listado:', err)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [canAssignRoles])
 
   const loadUsers = useCallback(async () => {
     try {
@@ -807,6 +886,7 @@ export function UserManager() {
       if (permissionsUser?.uid === user.uid) setPermissionsUser(null)
       if (editingUser?.uid === user.uid) setEditingUser(null)
       if (roleUser?.uid === user.uid) setRoleUser(null)
+      if (exceptionsUser?.uid === user.uid) setExceptionsUser(null)
     } catch (err) {
       console.error('Error al eliminar usuario:', err)
       toast.error('No se pudo eliminar el usuario')
@@ -857,7 +937,7 @@ export function UserManager() {
 
       <div className="overflow-hidden rounded-lg border border-neutral-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px] border-collapse text-left text-sm">
+          <table className="w-full min-w-[960px] border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-neutral-200 dark:border-zinc-800 bg-neutral-50 dark:bg-zinc-950">
                 <th className="px-5 py-3.5 font-semibold text-neutral-700 dark:text-gray-300">Nombre</th>
@@ -865,6 +945,11 @@ export function UserManager() {
                 <th className="px-5 py-3.5 font-semibold text-neutral-700 dark:text-gray-300">Departamento</th>
                 {canAssignRoles && (
                   <th className="px-5 py-3.5 font-semibold text-neutral-700 dark:text-gray-300">Rol</th>
+                )}
+                {canAssignRoles && (
+                  <th className="px-5 py-3.5 font-semibold text-neutral-700 dark:text-gray-300">
+                    Gobierna
+                  </th>
                 )}
                 <th className="px-5 py-3.5 text-right font-semibold text-neutral-700 dark:text-gray-300">
                   Acciones
@@ -874,14 +959,14 @@ export function UserManager() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={canAssignRoles ? 5 : 4}>
+                  <td colSpan={canAssignRoles ? 6 : 4}>
                     <TableSkeleton />
                   </td>
                 </tr>
               ) : error ? (
                 <tr>
                   <td
-                    colSpan={canAssignRoles ? 5 : 4}
+                    colSpan={canAssignRoles ? 6 : 4}
                     className="px-5 py-12 text-center text-danger"
                   >
                     {error}
@@ -890,7 +975,7 @@ export function UserManager() {
               ) : users.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={canAssignRoles ? 5 : 4}
+                    colSpan={canAssignRoles ? 6 : 4}
                     className="px-5 py-12 text-center text-neutral-500 dark:text-gray-400"
                   >
                     No hay usuarios registrados.
@@ -926,6 +1011,11 @@ export function UserManager() {
                         )}
                       </td>
                     )}
+                    {canAssignRoles && (
+                      <td className="px-5 py-4">
+                        <ManagedAreasCell user={user} areaNameById={areaNameById} />
+                      </td>
+                    )}
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-end gap-1">
                         <button
@@ -954,6 +1044,17 @@ export function UserManager() {
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:border-brand-primary/25 hover:bg-brand-tint hover:text-brand-primary dark:text-gray-400 dark:hover:border-brand-primary/40 dark:hover:bg-brand-primary-hover/40"
                           >
                             <Settings2 className="h-4 w-4" />
+                          </button>
+                        )}
+                        {canAssignRoles && user.role !== 'super_admin' && (
+                          <button
+                            type="button"
+                            onClick={() => setExceptionsUser(user)}
+                            aria-label={`Excepciones de gobernanza de ${user.displayName}`}
+                            title="Excepciones de gobernanza"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-violet-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-violet-950/40 dark:hover:text-violet-300"
+                          >
+                            <KeyRound className="h-4 w-4" />
                           </button>
                         )}
                         <button
@@ -1001,6 +1102,14 @@ export function UserManager() {
         <RoleAreasDrawer
           user={roleUser}
           onClose={() => setRoleUser(null)}
+          onSaved={handleSaved}
+        />
+      )}
+
+      {exceptionsUser && canAssignRoles && (
+        <GovernanceExceptionsDrawer
+          user={exceptionsUser}
+          onClose={() => setExceptionsUser(null)}
           onSaved={handleSaved}
         />
       )}

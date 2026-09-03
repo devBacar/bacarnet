@@ -39,6 +39,7 @@ import {
   invalidateDriveFolderListing,
   useDriveFilesQuery,
 } from '../hooks/queries/useDriveFilesQuery'
+import { canPerformGovernanceAction } from '../services/governanceAccess'
 import { canOpenDriveEmbedded } from '../utils/googleDriveEmbed'
 
 type FileKind = 'folder' | 'document' | 'spreadsheet' | 'pdf' | 'image'
@@ -104,7 +105,6 @@ export function AdminDriveLab() {
   const navigate = useNavigate()
   const location = useLocation()
   const isSuperAdmin = userProfile?.role === 'super_admin'
-  const managedAreaIds = userProfile?.managedAreaIds ?? []
   const [query, setQuery] = useState('')
   const [view, setView] = useState<'list' | 'grid'>('list')
   const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([
@@ -243,15 +243,21 @@ export function AdminDriveLab() {
     }
   }
 
-  const canGovernFile = (file: DriveFileDto) =>
-    isSuperAdmin ||
-    (Boolean(file.governingAreaId) &&
-      managedAreaIds.includes(file.governingAreaId as string))
-
   const canApprove = (file: DriveFileDto) =>
     !file.isFolder &&
     file.status === 'BORRADOR' &&
-    canGovernFile(file)
+    canPerformGovernanceAction(userProfile, 'approval', file.governingAreaId)
+
+  const canManagePermissions = (file: DriveFileDto) =>
+    canPerformGovernanceAction(userProfile, 'permission_grant', file.governingAreaId)
+
+  const canChangeClassification = (file: DriveFileDto) =>
+    !file.isFolder &&
+    canPerformGovernanceAction(userProfile, 'classification_change', file.governingAreaId)
+
+  const canAuthorizedCopy = (file: DriveFileDto) =>
+    !file.isFolder &&
+    canPerformGovernanceAction(userProfile, 'authorized_copy', file.governingAreaId)
 
   const openAction = (kind: FileAction, file: DriveFileDto) => {
     setActiveMenuId(null)
@@ -522,7 +528,7 @@ export function AdminDriveLab() {
                       {formatModified(file.modifiedTime)}
                     </span>
                     <div className="relative ml-auto flex items-center justify-end gap-0.5">
-                      {canGovernFile(file) && (
+                      {canManagePermissions(file) && (
                         <button
                           type="button"
                           onClick={() => {
@@ -569,7 +575,7 @@ export function AdminDriveLab() {
                               Aprobar
                             </button>
                           )}
-                          {canGovernFile(file) && !file.isFolder && (
+                          {canChangeClassification(file) && (
                             <button
                               type="button"
                               onClick={() => openAction('classification', file)}
@@ -579,7 +585,7 @@ export function AdminDriveLab() {
                               Clasificación
                             </button>
                           )}
-                          {canGovernFile(file) && (
+                          {canManagePermissions(file) && (
                             <button
                               type="button"
                               onClick={() => {
@@ -592,7 +598,7 @@ export function AdminDriveLab() {
                               Permisos
                             </button>
                           )}
-                          {canGovernFile(file) && !file.isFolder && (
+                          {canAuthorizedCopy(file) && (
                             <button
                               type="button"
                               onClick={() => {

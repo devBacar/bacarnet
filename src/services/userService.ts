@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { logAction } from './auditLogService'
-import { applyPendingUserSetupAfterRegister } from './usersApi'
+import { applyPendingUserSetupAfterRegister, patchUserManagedAreas, patchUserMemberAreas } from './usersApi'
 import {
   resolveHomeWidgetPreferences,
   type HomeWidgetId,
@@ -467,9 +467,6 @@ export async function updateUserRole(
     uid
 
   const patch: Record<string, unknown> = { role }
-  if (role === 'user') {
-    patch.managedAreaIds = []
-  }
 
   await updateDoc(doc(db, USERS_COLLECTION, uid), patch)
 
@@ -483,89 +480,33 @@ export async function updateUserRole(
 }
 
 /**
- * Actualiza managedAreaIds. Solo válido si el usuario ya tiene role === 'admin'.
+ * Actualiza managedAreaIds vía backend (solo super_admin, motivo obligatorio).
  */
 export async function updateManagedAreaIds(
   uid: string,
   areaIds: string[],
+  reason: string,
 ): Promise<void> {
-  const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid))
-  if (!snapshot.exists()) {
-    throw new Error('Usuario no encontrado')
-  }
-
-  const currentRole = snapshot.data().role
-  if (currentRole !== 'admin') {
-    throw new Error(
-      'updateManagedAreaIds solo aplica a usuarios con role "admin"',
-    )
-  }
-
   const cleaned = areaIds
     .filter((id): id is string => typeof id === 'string')
     .map((id) => id.trim())
     .filter((id) => id.length > 0)
 
-  const beforeAreas = Array.isArray(snapshot.data().managedAreaIds)
-    ? (snapshot.data().managedAreaIds as string[])
-    : []
-  const targetName =
-    (typeof snapshot.data().displayName === 'string' && snapshot.data().displayName) ||
-    (typeof snapshot.data().email === 'string' && snapshot.data().email) ||
-    uid
-
-  await updateDoc(doc(db, USERS_COLLECTION, uid), {
-    managedAreaIds: cleaned,
-  })
-
-  await logAction({
-    action: 'managed_areas_change',
-    targetType: 'user',
-    targetId: uid,
-    targetName,
-    metadata: { antes: beforeAreas, despues: cleaned },
-  })
+  await patchUserManagedAreas(uid, cleaned, reason.trim())
 }
 
 /**
- * Actualiza memberAreaIds (pertenencia a áreas). Válido para cualquier rol excepto super_admin.
+ * Actualiza memberAreaIds vía backend (solo super_admin, motivo obligatorio).
  */
 export async function updateMemberAreaIds(
   uid: string,
   areaIds: string[],
+  reason: string,
 ): Promise<void> {
-  const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid))
-  if (!snapshot.exists()) {
-    throw new Error('Usuario no encontrado')
-  }
-
-  const currentRole = snapshot.data().role
-  if (currentRole === 'super_admin') {
-    throw new Error('No se editan áreas de pertenencia de super_admin desde aquí')
-  }
-
   const cleaned = areaIds
     .filter((id): id is string => typeof id === 'string')
     .map((id) => id.trim())
     .filter((id) => id.length > 0)
 
-  const beforeAreas = Array.isArray(snapshot.data().memberAreaIds)
-    ? (snapshot.data().memberAreaIds as string[])
-    : []
-  const targetName =
-    (typeof snapshot.data().displayName === 'string' && snapshot.data().displayName) ||
-    (typeof snapshot.data().email === 'string' && snapshot.data().email) ||
-    uid
-
-  await updateDoc(doc(db, USERS_COLLECTION, uid), {
-    memberAreaIds: cleaned,
-  })
-
-  await logAction({
-    action: 'member_areas_change',
-    targetType: 'user',
-    targetId: uid,
-    targetName,
-    metadata: { antes: beforeAreas, despues: cleaned },
-  })
+  await patchUserMemberAreas(uid, cleaned, reason.trim())
 }

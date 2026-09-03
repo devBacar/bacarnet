@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { requireSuperAdmin, requireWorkspaceUser } from '../auth/middleware.js'
 import { applyPendingUserSetupForNewUser } from './applyPendingUserSetup.js'
 import { patchUserActionGrants } from './patchUserActionGrants.js'
+import { patchUserManagedAreas, patchUserMemberAreas } from './patchUserAreas.js'
 
 export const usersRouter = Router()
 
@@ -33,4 +34,20 @@ usersRouter.patch(
   requireWorkspaceUser,
   requireSuperAdmin,
   patchUserActionGrants,
+)
+
+/** Áreas que gobierna un admin de área (solo super_admin, Admin SDK). */
+usersRouter.patch(
+  '/:uid/managed-areas',
+  requireWorkspaceUser,
+  requireSuperAdmin,
+  patchUserManagedAreas,
+)
+
+/** Áreas de pertenencia (solo super_admin, Admin SDK). */
+usersRouter.patch(
+  '/:uid/member-areas',
+  requireWorkspaceUser,
+  requireSuperAdmin,
+  patchUserMemberAreas,
 )

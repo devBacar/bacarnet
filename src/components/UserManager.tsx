@@ -19,6 +19,15 @@ import {
   type UserProfile,
 } from '../services/userService'
 
+const MIN_REASON_LENGTH = 15
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const sortedA = [...a].sort()
+  const sortedB = [...b].sort()
+  return sortedA.every((value, index) => value === sortedB[index])
+}
+
 const PERMISSION_FIELDS: {
   key: 'view_directory' | 'view_drive'
   label: string
@@ -210,6 +219,7 @@ function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
   const [selectedMemberAreaIds, setSelectedMemberAreaIds] = useState<string[]>(
     () => [...(user.memberAreaIds ?? [])],
   )
+  const [memberAreasReason, setMemberAreasReason] = useState('')
   const [areas, setAreas] = useState<GoverningArea[]>([])
   const [loadingAreas, setLoadingAreas] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -247,13 +257,24 @@ function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
     setSaving(true)
 
     try {
+      const initialMemberAreaIds = user.memberAreaIds ?? []
+      const memberAreasChanged = !arraysEqual(selectedMemberAreaIds, initialMemberAreaIds)
+
+      if (memberAreasChanged) {
+        if (memberAreasReason.trim().length < MIN_REASON_LENGTH) {
+          toast.error(`El motivo de áreas de pertenencia debe tener al menos ${MIN_REASON_LENGTH} caracteres`)
+          setSaving(false)
+          return
+        }
+      }
+
       await updateUserBasicInfo(user.uid, {
         displayName,
         email,
         department,
       })
-      if (user.role !== 'super_admin') {
-        await updateMemberAreaIds(user.uid, selectedMemberAreaIds)
+      if (user.role !== 'super_admin' && memberAreasChanged) {
+        await updateMemberAreaIds(user.uid, selectedMemberAreaIds, memberAreasReason.trim())
       }
       toast.success('Datos actualizados correctamente')
       onSaved(user.uid)
@@ -390,6 +411,25 @@ function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
                 )}
               </div>
             )}
+
+            {user.role !== 'super_admin' && (
+              <div>
+                <label
+                  htmlFor="edit-member-areas-reason"
+                  className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-gray-300"
+                >
+                  Motivo del cambio de áreas de pertenencia
+                </label>
+                <textarea
+                  id="edit-member-areas-reason"
+                  value={memberAreasReason}
+                  onChange={(e) => setMemberAreasReason(e.target.value)}
+                  rows={3}
+                  placeholder={`Obligatorio si modificás las áreas de pertenencia (mín. ${MIN_REASON_LENGTH} caracteres)`}
+                  className="input-brand-focus w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </div>
+            )}
           </div>
 
           <footer className="flex gap-3 border-t border-neutral-200 dark:border-zinc-800 px-6 py-4">
@@ -433,6 +473,7 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
   const [areas, setAreas] = useState<GoverningArea[]>([])
   const [loadingAreas, setLoadingAreas] = useState(true)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [saveReason, setSaveReason] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -474,11 +515,39 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
   }
 
   const handleConfirm = async () => {
+    const initialManagedAreaIds = user.managedAreaIds ?? []
+    const roleChanged = draftRole !== initialRole
+    const areasChanged = !arraysEqual(selectedAreaIds, initialManagedAreaIds)
+    const needsManagedAreasUpdate =
+      (draftRole === 'admin' && areasChanged) ||
+      (initialRole === 'admin' && draftRole === 'user' && initialManagedAreaIds.length > 0)
+
+    if (!roleChanged && !areasChanged) {
+      toast.error('No hay cambios para guardar')
+      return
+    }
+
+    if (needsManagedAreasUpdate && saveReason.trim().length < MIN_REASON_LENGTH) {
+      toast.error(`El motivo debe tener al menos ${MIN_REASON_LENGTH} caracteres`)
+      return
+    }
+
     setSaving(true)
     try {
-      await updateUserRole(user.uid, draftRole)
-      if (draftRole === 'admin') {
-        await updateManagedAreaIds(user.uid, selectedAreaIds)
+      if (initialRole === 'admin' && draftRole === 'user') {
+        if (initialManagedAreaIds.length > 0) {
+          await updateManagedAreaIds(user.uid, [], saveReason.trim())
+        }
+        if (roleChanged) {
+          await updateUserRole(user.uid, 'user')
+        }
+      } else {
+        if (roleChanged) {
+          await updateUserRole(user.uid, draftRole)
+        }
+        if (draftRole === 'admin' && areasChanged) {
+          await updateManagedAreaIds(user.uid, selectedAreaIds, saveReason.trim())
+        }
       }
       toast.success('Rol actualizado')
       setConfirmOpen(false)
@@ -632,6 +701,26 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
                 </p>
               )}
             </div>
+            {(draftRole === 'admin' && !arraysEqual(selectedAreaIds, user.managedAreaIds ?? [])) ||
+            (initialRole === 'admin' &&
+              draftRole === 'user' &&
+              (user.managedAreaIds ?? []).length > 0) ? (
+              <div className="mt-4">
+                <label
+                  htmlFor="role-areas-reason"
+                  className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-gray-300"
+                >
+                  Motivo (mín. {MIN_REASON_LENGTH} caracteres)
+                </label>
+                <textarea
+                  id="role-areas-reason"
+                  value={saveReason}
+                  onChange={(e) => setSaveReason(e.target.value)}
+                  rows={3}
+                  className="input-brand-focus w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                />
+              </div>
+            ) : null}
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"

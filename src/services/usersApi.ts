@@ -72,3 +72,31 @@ export async function patchUserActionGrants(
   if (!res.ok) throw new Error(await parseError(res))
   return (await res.json()) as { actionGrants: ActionGrants }
 }
+
+/** Reemplazo de áreas administradas (solo super_admin). */
+export async function patchUserManagedAreas(
+  uid: string,
+  areaIds: string[],
+  reason: string,
+): Promise<{ managedAreaIds: string[] }> {
+  const res = await authFetch(`/api/users/${encodeURIComponent(uid)}/managed-areas`, {
+    method: 'PATCH',
+    body: JSON.stringify({ areaIds, reason }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return (await res.json()) as { managedAreaIds: string[] }
+}
+
+/** Reemplazo de áreas de pertenencia (solo super_admin). */
+export async function patchUserMemberAreas(
+  uid: string,
+  areaIds: string[],
+  reason: string,
+): Promise<{ memberAreaIds: string[] }> {
+  const res = await authFetch(`/api/users/${encodeURIComponent(uid)}/member-areas`, {
+    method: 'PATCH',
+    body: JSON.stringify({ areaIds, reason }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return (await res.json()) as { memberAreaIds: string[] }
+}

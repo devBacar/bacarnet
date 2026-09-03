@@ -56,6 +56,15 @@ service cloud.firestore {
         || keys.hasOnly(['favoriteApps', 'widgetPreferences']);
     }
 
+    // managedAreaIds, memberAreaIds y actionGrants solo vía Admin SDK (backend super_admin).
+    function userGovernanceFieldsUnchanged() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return after.get('managedAreaIds', null) == before.get('managedAreaIds', null)
+        && after.get('memberAreaIds', null) == before.get('memberAreaIds', null)
+        && after.get('actionGrants', null) == before.get('actionGrants', null);
+    }
+
     function auditLogCreateValid() {
       return request.resource.data.keys().hasAll([
         'userId',
@@ -106,8 +115,11 @@ service cloud.firestore {
         );
       allow list: if isSuperAdmin() || isAreaAdmin() || isAdmin();
       allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if canManageUsers() || isAdmin()
-        || (isAuthenticated() && request.auth.uid == userId && onlySelfPreferencesUpdate());
+      allow update: if userGovernanceFieldsUnchanged()
+        && (
+          canManageUsers() || isAdmin()
+          || (isAuthenticated() && request.auth.uid == userId && onlySelfPreferencesUpdate())
+        );
       allow delete: if canManageUsers() || isAdmin();
     }
 

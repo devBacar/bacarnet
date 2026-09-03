@@ -19,6 +19,7 @@ const ACTIONS = [
   'permission_revoke',
   'role_change',
   'managed_areas_change',
+  'member_areas_change',
   'action_grants_change',
   'classification_change',
   'authorized_copy',

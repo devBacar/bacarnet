@@ -506,6 +506,11 @@ export function AdminDriveLab() {
                                 {file.status === 'APROBADO' ? 'Aprobado' : 'Borrador'}
                               </span>
                             )}
+                            {file.directAccess && (
+                              <span className="rounded-md border border-brand-primary/20 bg-brand-tint px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
+                                Acceso directo
+                              </span>
+                            )}
                           </div>
                         )}
                       </div>

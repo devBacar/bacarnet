@@ -32,6 +32,8 @@ export interface DriveFileDto {
   governingAreaName: string | null
   creator: DriveCreator
   ownerLabel: string
+  /** Archivo visible en raíz por permiso directo (carpeta padre inaccesible). */
+  directAccess?: boolean
 }
 
 export interface DriveFileDetailDto {

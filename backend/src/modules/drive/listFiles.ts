@@ -14,8 +14,10 @@ import {
 import {
   getAreaNamesByIds,
   getCachedRootProbeExtras,
+  getCachedRootSharedFiles,
   getDriveFolderMappings,
 } from './driveMetadataCache.js'
+import { listRootOrphanSharedFiles } from './listRootOrphanSharedFiles.js'
 import { resolveDriveSubject } from './driveSubject.js'
 import { resolveGoverningAreaId } from './resolveGoverningArea.js'
 
@@ -66,6 +68,7 @@ export async function listDriveFiles(req: Request, res: Response): Promise<void>
     })
 
     let driveFiles = result.data.files ?? []
+    let directAccessIds = new Set<string>()
 
     // Los no-miembros de una Unidad compartida pueden abrir una carpeta otorgada
     // directamente, pero Drive no siempre la devuelve al listar la raíz. Usamos
@@ -103,6 +106,25 @@ export async function listDriveFiles(req: Request, res: Response): Promise<void>
           Number(b.mimeType === FOLDER_MIME) - Number(a.mimeType === FOLDER_MIME)
         return folderDelta || (a.name ?? '').localeCompare(b.name ?? '', 'es')
       })
+
+      const knownAfterProbe = new Set(
+        driveFiles.map((file) => file.id).filter((id): id is string => Boolean(id)),
+      )
+      const sharedOrphans = await getCachedRootSharedFiles(
+        driveSubject,
+        user.uid,
+        async () => listRootOrphanSharedFiles(drive, folderId, knownAfterProbe),
+      )
+      if (sharedOrphans.length > 0) {
+        for (const file of sharedOrphans) {
+          if (file.id) directAccessIds.add(file.id)
+        }
+        driveFiles = [...driveFiles, ...sharedOrphans].sort((a, b) => {
+          const folderDelta =
+            Number(b.mimeType === FOLDER_MIME) - Number(a.mimeType === FOLDER_MIME)
+          return folderDelta || (a.name ?? '').localeCompare(b.name ?? '', 'es')
+        })
+      }
     }
     const sidecars = driveFiles.length
       ? await adminDb().getAll(
@@ -125,6 +147,9 @@ export async function listDriveFiles(req: Request, res: Response): Promise<void>
         }
         if (storedAreaId === null) return null
         if (inheritedAreaId !== undefined) return inheritedAreaId
+        if (file.mimeType !== FOLDER_MIME && file.parents?.[0]) {
+          return resolveGoverningAreaId(file.parents[0])
+        }
         if (file.mimeType !== FOLDER_MIME || !file.id) return null
         return resolveGoverningAreaId(file.id)
       }),
@@ -191,6 +216,7 @@ export async function listDriveFiles(req: Request, res: Response): Promise<void>
         ownerLabel: isFolder
           ? areaName ?? 'Sin área'
           : `${areaName ?? 'Sin área'} - ${creatorName ?? 'Creador desconocido'}`,
+        directAccess: directAccessIds.has(id) ? true : undefined,
       }
     })
 

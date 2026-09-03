@@ -78,7 +78,35 @@ export async function getCachedRootProbeExtras(
   return value
 }
 
+export async function getCachedRootSharedFiles(
+  driveSubject: string,
+  uid: string,
+  loader: () => Promise<DriveFileMeta[]>,
+): Promise<DriveFileMeta[]> {
+  const key = subjectCacheKey(driveSubject, uid, 'root-shared-files')
+  const cached = rootProbeCache.get(key)
+  if (cached) return cached
+
+  const value = await loader()
+  rootProbeCache.set(key, value)
+  return value
+}
+
 /** Invalida caché dependiente del usuario tras mutaciones en Drive. */
 export function invalidateDriveMetadataForUser(driveSubject: string, uid: string): void {
   rootProbeCache.deleteByPrefix(`${driveSubject}\x00${uid}\x00`)
+}
+
+export async function invalidateDriveMetadataForEmail(email: string): Promise<void> {
+  const normalized = email.trim().toLowerCase()
+  if (!normalized) return
+
+  const snap = await adminDb()
+    .collection('users')
+    .where('email', '==', normalized)
+    .limit(1)
+    .get()
+  if (snap.empty) return
+
+  invalidateDriveMetadataForUser(normalized, snap.docs[0].id)
 }

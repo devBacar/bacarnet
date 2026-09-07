@@ -155,7 +155,7 @@ Vite (`npm run dev`) proxea `/api` al emulador, así el front puede llamar `/api
 ***REMOVED******REMOVED*** Deploy
 
 ```bash
-npx firebase deploy --only functions:api,hosting:intranet-bacar --project bacar-web
+npx firebase deploy --only functions:api,hosting:bacarnet --project bacar-web
 ```
 
 Hosting reescribe `/api/**` a la función `api` (antes del SPA fallback).

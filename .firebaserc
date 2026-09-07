@@ -5,6 +5,9 @@
   "targets": {
     "bacar-web": {
       "hosting": {
+        "bacarnet": [
+          "bacarnet"
+        ],
         "intranet-bacar": [
           "intranet-bacar"
         ]

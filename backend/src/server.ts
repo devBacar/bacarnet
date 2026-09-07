@@ -25,6 +25,8 @@ app.use(
     origin: [
       'http://localhost:5173',
       'http://127.0.0.1:5173',
+      'https://bacarnet.web.app',
+      'https://bacarnet.firebaseapp.com',
       'https://intranet-bacar.web.app',
       'https://intranet-bacar.firebaseapp.com',
     ],

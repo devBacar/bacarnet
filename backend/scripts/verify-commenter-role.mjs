@@ -12,7 +12,7 @@ const REASON = 'Verificación rol Comentarista pre-deploy'
 function apiBase() {
   return (
     process.env.FUNCTIONS_API_BASE?.trim() ||
-    'https://intranet-bacar.web.app'
+    'https://bacarnet.web.app'
   )
 }
 

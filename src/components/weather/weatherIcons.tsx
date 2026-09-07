@@ -17,7 +17,8 @@ const STANDARD_ICONS: Record<
 > = {
   sun: Sun,
   moon: Moon,
-  'cloud-sun': CloudSun,
+  'mostly-clear': Sun,
+  'partly-cloudy': CloudSun,
   cloud: Cloud,
   fog: CloudFog,
   'cloud-rain': CloudRain,
@@ -60,8 +61,10 @@ export function getWeatherIconTone(icon: WeatherIcon): string {
       return 'text-amber-500/45 dark:text-amber-300/35'
     case 'moon':
       return 'text-indigo-400/40 dark:text-indigo-300/30'
-    case 'cloud-sun':
-      return 'text-amber-500/35 dark:text-amber-200/28'
+    case 'mostly-clear':
+      return 'text-amber-500/40 dark:text-amber-300/32'
+    case 'partly-cloudy':
+      return 'text-slate-400/38 dark:text-slate-300/30'
     case 'cloud':
     case 'fog':
       return 'text-slate-400/40 dark:text-slate-300/30'
@@ -85,8 +88,10 @@ export function getWeatherInlineIconTone(icon: WeatherIcon): string {
       return 'text-amber-500 dark:text-amber-300'
     case 'moon':
       return 'text-indigo-500 dark:text-indigo-300'
-    case 'cloud-sun':
-      return 'text-amber-500 dark:text-amber-200'
+    case 'mostly-clear':
+      return 'text-amber-500 dark:text-amber-300'
+    case 'partly-cloudy':
+      return 'text-slate-500 dark:text-slate-300'
     case 'cloud':
     case 'fog':
       return 'text-slate-500 dark:text-slate-300'
@@ -109,8 +114,10 @@ export function getWeatherIconLabel(icon: WeatherIcon): string {
       return 'Sol'
     case 'moon':
       return 'Luna'
-    case 'cloud-sun':
-      return 'Sol con nubes'
+    case 'mostly-clear':
+      return 'Mayormente despejado'
+    case 'partly-cloudy':
+      return 'Parcialmente nublado'
     case 'cloud':
       return 'Nublado'
     case 'fog':

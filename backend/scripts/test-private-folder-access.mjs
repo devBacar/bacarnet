@@ -12,7 +12,7 @@ const SISTEMAS_DRIVE = '188-zgNhMIfeUjAI8GracINlItBbFwoUb'
 function apiBase() {
   return (
     process.env.FUNCTIONS_API_BASE?.trim() ||
-    'https://intranet-bacar.web.app'
+    'https://bacarnet.web.app'
   )
 }
 

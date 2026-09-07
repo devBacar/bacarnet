@@ -12,7 +12,7 @@ loadTestEnv()
 initAdmin()
 
 const APPLY = process.argv.includes('--apply')
-const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 
 const VISUAL_REQUESTER_EMAIL = 'visual.requester@bacarsa.com.ar'
 const TI_EMAIL = 'implementaciones.ti@bacarsa.com.ar'

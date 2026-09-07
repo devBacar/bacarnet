@@ -36,7 +36,7 @@ async function testFile(label, fileName, mimeType, buffer) {
     updatedAt: FieldValue.serverTimestamp(),
   })
   const res = await fetch(
-    `https://intranet-bacar.web.app/api/approval-requests/${requestId}/staging-preview`,
+    `https://bacarnet.web.app/api/approval-requests/${requestId}/staging-preview`,
     { headers: { Authorization: `Bearer ${approver.idToken}` } },
   )
   const body = await res.json()

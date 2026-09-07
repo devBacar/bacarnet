@@ -1,6 +1,6 @@
 import { getTestIdToken } from './get-test-token.mjs'
 
-const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 
 const user = await getTestIdToken()
 const sessionRes = await fetch(`${base}/api/boards/session`, {

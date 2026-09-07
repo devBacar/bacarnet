@@ -454,6 +454,13 @@
     height: 18px;
   }
 
+  .weather-header-bg .weather-card-sun-peek {
+    right: 0;
+    top: -5%;
+    width: min(45%, 18rem);
+    height: 120%;
+  }
+
   .weather-card-sun-svg {
     animation: weather-card-sun-pulse 8s ease-in-out infinite alternate;
   }

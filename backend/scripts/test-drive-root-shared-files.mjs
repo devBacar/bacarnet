@@ -1,12 +1,12 @@
 /**
  * Lista raíz bacarsa como grantee y busca archivos de acceso directo.
  *
- *   FUNCTIONS_API_BASE=https://intranet-bacar.web.app node backend/scripts/test-drive-root-shared-files.mjs
+ *   FUNCTIONS_API_BASE=https://bacarnet.web.app node backend/scripts/test-drive-root-shared-files.mjs
  */
 
 import { getTestIdToken } from './get-test-token.mjs'
 
-const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const GRANTEE_EMAIL =
   process.env.TEST_GRANTEE_EMAIL?.trim().toLowerCase() || 'implementaciones.it@bacarsa.com.ar'
 

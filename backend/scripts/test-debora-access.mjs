@@ -1,6 +1,6 @@
 import { getTestIdToken } from './get-test-token.mjs'
 
-const base = 'https://intranet-bacar.web.app'
+const base = 'https://bacarnet.web.app'
 process.env.TEST_EMAIL = 'implementaciones.it@bacarsa.com.ar'
 const debora = await getTestIdToken({ requireSuperAdmin: false })
 

@@ -3,7 +3,7 @@
  * labels auditoría, columna Gobierna.
  *
  * Local:  INTRANET_BASE=http://localhost:5173 (+ functions emulator en :5001)
- * Prod:   INTRANET_BASE=https://intranet-bacar.web.app
+ * Prod:   INTRANET_BASE=https://bacarnet.web.app
  *
  *   node backend/scripts/test-governance-ui-df.mjs
  */

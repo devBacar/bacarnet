@@ -9,8 +9,8 @@ import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
 
-const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
-const BASE = process.env.INTRANET_BASE?.trim() || 'https://intranet-bacar.web.app'
+const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
+const BASE = process.env.INTRANET_BASE?.trim() || 'https://bacarnet.web.app'
 const TEST_DRIVE_FOLDER =
   process.env.ACCESS_TEST_DRIVE_FOLDER?.trim() || '1xSy-TSp4EFeqYJ2n772X46Pj5WM42WZ5'
 const REQUESTER_EMAIL =

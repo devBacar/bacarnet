@@ -12,7 +12,7 @@ import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
 
-const BASE = process.env.INTRANET_BASE?.trim() || 'https://intranet-bacar.web.app'
+const BASE = process.env.INTRANET_BASE?.trim() || 'https://bacarnet.web.app'
 const TEST_USER_EMAIL =
   process.env.UI_TEST_USER_EMAIL?.trim() || 'implementaciones.it@bacarsa.com.ar'
 const REASON =

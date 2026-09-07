@@ -1,12 +1,12 @@
 /**
  * Verifica que tras crear un archivo el listado lo incluye de inmediato (sin depender del TTL).
  *
- *   FUNCTIONS_API_BASE=https://intranet-bacar.web.app node backend/scripts/test-drive-cache-invalidation.mjs
+ *   FUNCTIONS_API_BASE=https://bacarnet.web.app node backend/scripts/test-drive-cache-invalidation.mjs
  */
 
 import { getTestIdToken } from './get-test-token.mjs'
 
-const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const SISTEMAS_DRIVE = '188-zgNhMIfeUjAI8GracINlItBbFwoUb'
 
 async function main() {

@@ -47,14 +47,25 @@ export function getWeatherAmbientStyle(
           size,
         ),
       }
-    case 'cloud-sun':
+    case 'mostly-clear':
       return {
         light: softCorner(
-          `rgb(251 191 36 / 0.36) 0%, rgb(253 224 71 / 0.18) 32%, rgb(148 163 184 / 0.07) 56%, ${tail}`,
+          `rgb(251 191 36 / 0.42) 0%, rgb(253 224 71 / 0.22) 32%, rgb(253 224 71 / 0.06) 56%, ${tail}`,
           size,
         ),
         dark: softCorner(
-          `rgb(217 119 6 / 0.22) 0%, rgb(202 138 4 / 0.11) 32%, rgb(100 116 139 / 0.05) 56%, ${tail}`,
+          `rgb(217 119 6 / 0.28) 0%, rgb(202 138 4 / 0.14) 32%, rgb(202 138 4 / 0.05) 56%, ${tail}`,
+          size,
+        ),
+      }
+    case 'partly-cloudy':
+      return {
+        light: softCorner(
+          `rgb(148 163 184 / 0.32) 0%, rgb(186 210 226 / 0.18) 32%, rgb(203 213 225 / 0.06) 56%, ${tail}`,
+          size,
+        ),
+        dark: softCorner(
+          `rgb(100 116 139 / 0.28) 0%, rgb(71 85 105 / 0.14) 32%, rgb(51 65 85 / 0.05) 56%, ${tail}`,
           size,
         ),
       }

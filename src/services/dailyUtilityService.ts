@@ -5,7 +5,8 @@ export type WeatherIcon =
   | 'sun'
   | 'moon'
   | 'cloud'
-  | 'cloud-sun'
+  | 'mostly-clear'
+  | 'partly-cloudy'
   | 'fog'
   | 'cloud-rain'
   | 'cloud-snow'
@@ -59,12 +60,12 @@ export function getWeatherInfo(
   if (code === 1) {
     return {
       description: isDay ? 'Mayormente despejado' : 'Despejado',
-      icon: isDay ? 'cloud-sun' : 'moon',
+      icon: isDay ? 'mostly-clear' : 'moon',
       isDay,
     }
   }
   if (code === 2) {
-    return { description: 'Parcialmente nublado', icon: 'cloud-sun', isDay }
+    return { description: 'Parcialmente nublado', icon: 'partly-cloudy', isDay }
   }
   if (code === 3) {
     return { description: 'Nublado', icon: 'cloud', isDay }

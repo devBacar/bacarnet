@@ -140,13 +140,15 @@ export function WeatherAmbientEffects({ icon }: WeatherAmbientEffectsProps) {
       return <SunRays />
     case 'moon':
       return <MoonStars />
-    case 'cloud-sun':
+    case 'mostly-clear':
       return (
         <>
           <SunRays />
           <Clouds count={1} />
         </>
       )
+    case 'partly-cloudy':
+      return <Clouds count={2} />
     case 'fog':
       return <FogLayers />
     case 'cloud-rain':

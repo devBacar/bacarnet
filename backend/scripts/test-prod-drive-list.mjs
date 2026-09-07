@@ -2,7 +2,7 @@ import { getTestIdToken } from './get-test-token.mjs'
 
 const { idToken, email } = await getTestIdToken()
 const res = await fetch(
-  'https://intranet-bacar.web.app/api/drive/files?folderId=root',
+  'https://bacarnet.web.app/api/drive/files?folderId=root',
   { headers: { Authorization: `Bearer ${idToken}` } },
 )
 const text = await res.text()

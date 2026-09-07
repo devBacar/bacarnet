@@ -35,7 +35,7 @@
   },
   "hosting": [
     {
-      "target": "intranet-bacar",
+      "target": "bacarnet",
       "public": "dist",
       "ignore": [
         "firebase.json",
@@ -51,6 +51,22 @@
         {
           "source": "**",
           "destination": "/index.html"
+        }
+      ]
+    },
+    {
+      "target": "intranet-bacar",
+      "public": "hosting-redirect",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ],
+      "redirects": [
+        {
+          "source": "**",
+          "destination": "https://bacarnet.web.app",
+          "type": 301
         }
       ]
     }

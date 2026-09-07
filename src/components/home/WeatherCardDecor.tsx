@@ -10,10 +10,11 @@ export function WeatherCardDecor({ icon }: WeatherCardDecorProps) {
 
   return (
     <div className={`weather-card-decor pointer-events-none absolute inset-0 overflow-hidden ${decorClass}`} aria-hidden>
-      {(icon === 'sun' || icon === 'cloud-sun') && <SunDecor />}
+      {icon === 'sun' && <SunDecor />}
+      {icon === 'mostly-clear' && <MostlyClearDecor />}
+      {icon === 'partly-cloudy' && <PartlyCloudyDecor />}
       {icon === 'moon' && <MoonDecor />}
       {icon === 'cloud' && <CloudDecor />}
-      {icon === 'cloud-sun' && <CloudDecor subtle />}
       {icon === 'fog' && <FogDecor />}
       {icon === 'cloud-rain' && <RainDecor />}
       {icon === 'cloud-snow' && <SnowDecor />}
@@ -32,6 +33,35 @@ function SunDecor() {
       <circle cx="170" cy="30" r="90" stroke="rgb(255 160 50 / 0.18)" strokeWidth="14" className="weather-card-sun-ring weather-card-sun-ring-3" />
       <circle cx="170" cy="30" r="115" stroke="rgb(255 140 40 / 0.1)" strokeWidth="16" className="weather-card-sun-ring weather-card-sun-ring-4" />
     </svg>
+  )
+}
+
+/** Código 1: sol dominante, nubecita mínima. */
+function MostlyClearDecor() {
+  return (
+    <>
+      <SunDecor />
+      <svg className="absolute right-[8%] bottom-[18%] h-12 w-24 opacity-30" viewBox="0 0 96 48" fill="none">
+        <ellipse cx="48" cy="32" rx="36" ry="14" fill="rgb(255 255 255 / 0.55)" />
+      </svg>
+    </>
+  )
+}
+
+/** Código 2: nubes prominentes, sol asomándose detrás. */
+function PartlyCloudyDecor() {
+  return (
+    <>
+      <svg className="weather-card-sun-peek absolute right-[6%] top-[8%] h-[55%] w-[42%]" viewBox="0 0 200 200" fill="none">
+        <circle cx="150" cy="70" r="20" fill="rgb(255 230 120 / 0.75)" />
+        <circle cx="150" cy="70" r="34" stroke="rgb(255 210 90 / 0.25)" strokeWidth="8" className="weather-card-sun-ring" />
+      </svg>
+      <CloudDecor tone="heavy" />
+      <svg className="absolute right-[12%] top-[28%] h-16 w-32 opacity-55" viewBox="0 0 128 64" fill="none">
+        <ellipse cx="64" cy="40" rx="52" ry="18" fill="rgb(220 230 240 / 0.7)" />
+        <ellipse cx="88" cy="34" rx="32" ry="14" fill="rgb(235 242 248 / 0.65)" />
+      </svg>
+    </>
   )
 }
 
@@ -63,29 +93,36 @@ function MoonDecor() {
   )
 }
 
-function CloudDecor({ subtle = false }: { subtle?: boolean }) {
+function CloudDecor({ tone = 'normal' }: { tone?: 'normal' | 'heavy' | 'subtle' }) {
+  const strokes =
+    tone === 'heavy'
+      ? ['rgb(235 242 248 / 0.75)', 'rgb(210 222 232 / 0.65)', 'rgb(190 205 218 / 0.55)']
+      : tone === 'subtle'
+        ? ['rgb(255 255 255 / 0.25)', 'rgb(200 235 255 / 0.3)', 'rgb(160 210 240 / 0.25)']
+        : ['rgb(255 255 255 / 0.35)', 'rgb(200 235 255 / 0.45)', 'rgb(160 210 240 / 0.35)']
+
   return (
     <svg className="absolute -right-2 bottom-0 h-[85%] w-[72%]" viewBox="0 0 240 160" fill="none">
       <path
         d="M20 110 Q60 80 100 95 T180 85 T260 100"
-        stroke={subtle ? 'rgb(255 255 255 / 0.25)' : 'rgb(255 255 255 / 0.35)'}
-        strokeWidth="28"
+        stroke={strokes[0]}
+        strokeWidth={tone === 'heavy' ? 34 : 28}
         strokeLinecap="round"
         fill="none"
         className="weather-card-wave"
       />
       <path
         d="M0 130 Q50 100 110 115 T210 105 T280 125"
-        stroke={subtle ? 'rgb(200 235 255 / 0.3)' : 'rgb(200 235 255 / 0.45)'}
-        strokeWidth="32"
+        stroke={strokes[1]}
+        strokeWidth={tone === 'heavy' ? 38 : 32}
         strokeLinecap="round"
         fill="none"
         className="weather-card-wave weather-card-wave-2"
       />
       <path
         d="M10 150 Q70 120 130 135 T230 125"
-        stroke={subtle ? 'rgb(160 210 240 / 0.25)' : 'rgb(160 210 240 / 0.35)'}
-        strokeWidth="24"
+        stroke={strokes[2]}
+        strokeWidth={tone === 'heavy' ? 28 : 24}
         strokeLinecap="round"
         fill="none"
         className="weather-card-wave weather-card-wave-3"

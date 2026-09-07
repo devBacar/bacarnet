@@ -24,11 +24,18 @@ export function getWeatherCardTheme(icon: WeatherIcon): WeatherCardTheme {
         decorClass: 'weather-card-decor-moon',
         usesLightText: true,
       }
-    case 'cloud-sun':
+    case 'mostly-clear':
       return {
-        gradient: 'linear-gradient(125deg, ***REMOVED***5eb0d9 0%, ***REMOVED***7ec8e8 45%, ***REMOVED***ffe08a 100%)',
+        gradient: 'linear-gradient(125deg, ***REMOVED***ff9a56 0%, ***REMOVED***ffc857 38%, ***REMOVED***ffeaa7 100%)',
+        timeColor: '***REMOVED***fff8dc',
+        decorClass: 'weather-card-decor-mostly-clear',
+        usesLightText: true,
+      }
+    case 'partly-cloudy':
+      return {
+        gradient: 'linear-gradient(125deg, ***REMOVED***6b8fa3 0%, ***REMOVED***8aaec0 42%, ***REMOVED***a8c4d4 100%)',
         timeColor: '***REMOVED***ffffff',
-        decorClass: 'weather-card-decor-cloud-sun',
+        decorClass: 'weather-card-decor-partly-cloudy',
         usesLightText: true,
       }
     case 'fog':
@@ -83,7 +90,9 @@ export function getWeatherCardLabel(icon: WeatherIcon): string {
       return 'Soleado'
     case 'moon':
       return 'Despejado'
-    case 'cloud-sun':
+    case 'mostly-clear':
+      return 'Mayormente despejado'
+    case 'partly-cloudy':
       return 'Parcialmente nublado'
     case 'cloud':
       return 'Nublado'

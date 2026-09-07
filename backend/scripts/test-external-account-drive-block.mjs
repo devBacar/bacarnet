@@ -10,7 +10,7 @@
 import { getAuth } from 'firebase-admin/auth'
 import { getTestIdToken, getAdminDb, initAdmin, loadTestEnv } from './get-test-token.mjs'
 
-const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const TEST_EMAIL =
   process.env.EXTERNAL_TEST_EMAIL?.trim().toLowerCase() ||
   'intranet-external-drive-test@example.com'

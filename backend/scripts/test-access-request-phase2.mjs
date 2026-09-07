@@ -13,7 +13,7 @@ import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
 
-const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const TEST_DRIVE_FOLDER =
   process.env.ACCESS_TEST_DRIVE_FOLDER?.trim() || '1NeotsCiPgZaaL1NNTbjHGilltY-IIwq7'
 const REQUESTER_EMAIL =

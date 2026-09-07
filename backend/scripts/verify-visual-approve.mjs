@@ -1,7 +1,7 @@
 import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
-const API = 'https://intranet-bacar.web.app'
+const API = 'https://bacarnet.web.app'
 const approveFileId = '1AQyKOX8YJ_owtpITAvwunoQgEgvpIKu8wPMcg3aWjRk'
 
 process.env.TEST_EMAIL = 'visual.requester@bacarsa.com.ar'

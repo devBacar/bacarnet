@@ -6,7 +6,7 @@
 import { getAuth } from 'firebase-admin/auth'
 import { getTestIdToken, getAdminDb, initAdmin } from './get-test-token.mjs'
 
-const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const ts = Date.now()
 const EXTERNAL_EMAIL = `checklist-ext-${ts}@example.com`
 const CORPORATE_EMAIL = `checklist-corp-${ts}@bacarsa.com.ar`

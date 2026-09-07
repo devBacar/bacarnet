@@ -3,12 +3,12 @@
  * Idealmente el grantee no debería listar la carpeta contenedora; si ya es miembro
  * de la unidad compartida o tiene acceso heredado, igual debe poder abrir el archivo por id/link.
  *
- *   FUNCTIONS_API_BASE=https://intranet-bacar.web.app node backend/scripts/test-drive-file-only-access.mjs
+ *   FUNCTIONS_API_BASE=https://bacarnet.web.app node backend/scripts/test-drive-file-only-access.mjs
  */
 
 import { getTestIdToken } from './get-test-token.mjs'
 
-const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const SISTEMAS_DRIVE = '188-zgNhMIfeUjAI8GracINlItBbFwoUb'
 const GRANTEE_EMAIL =
   process.env.TEST_GRANTEE_EMAIL?.trim().toLowerCase() || 'implementaciones.it@bacarsa.com.ar'

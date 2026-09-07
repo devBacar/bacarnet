@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { WeatherSnapshot } from '../../services/dailyUtilityService'
 import { WeatherIconGlyph } from '../weather/weatherIcons'
-import { getWeatherCardLabel, getWeatherCardTheme, type WeatherCardTheme } from './weatherCardTheme'
+import { getWeatherCardTheme, type WeatherCardTheme } from './weatherCardTheme'
 
 interface WeatherCompactWidgetProps {
   weather: WeatherSnapshot | null
@@ -37,7 +37,7 @@ function useCordobaClock(active: boolean) {
 export function WeatherCompactWidget({ weather, theme: themeProp }: WeatherCompactWidgetProps) {
   const icon = weather?.icon ?? 'cloud'
   const theme = themeProp ?? getWeatherCardTheme(icon)
-  const label = weather ? getWeatherCardLabel(icon) : 'Córdoba'
+  const label = weather?.description ?? 'Córdoba'
   const { time, date } = useCordobaClock(Boolean(weather))
   const light = theme.usesLightText
 

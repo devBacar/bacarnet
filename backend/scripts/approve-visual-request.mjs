@@ -1,7 +1,7 @@
 import { getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
-const API = 'https://intranet-bacar.web.app'
+const API = 'https://bacarnet.web.app'
 
 process.env.TEST_EMAIL = 'admin@bacarsa.com.ar'
 const admin = await getTestIdToken()

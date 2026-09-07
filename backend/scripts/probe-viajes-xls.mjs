@@ -26,7 +26,7 @@ if (matches[0]) {
   process.env.TEST_EMAIL = 'admin@bacarsa.com.ar'
   const approver = await getTestIdToken()
   const res = await fetch(
-    `https://intranet-bacar.web.app/api/approval-requests/${doc.id}/staging-preview`,
+    `https://bacarnet.web.app/api/approval-requests/${doc.id}/staging-preview`,
     { headers: { Authorization: `Bearer ${approver.idToken}` } },
   )
   const body = await res.json()

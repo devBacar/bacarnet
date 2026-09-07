@@ -17,7 +17,7 @@ initAdmin()
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const useApi = process.argv.includes('--api')
-const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 

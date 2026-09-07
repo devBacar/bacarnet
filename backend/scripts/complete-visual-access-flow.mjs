@@ -4,7 +4,7 @@
 import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
-const API = 'https://intranet-bacar.web.app'
+const API = 'https://bacarnet.web.app'
 
 const approveFileId = process.argv[2] || '1ajOGvgJdZeKiuyQZXQvYnz7qajWSnq4A6e763p16thQ'
 const rejectFileId = process.argv[3] || '1B8NY50_dsNB12cLffpzy2RUW6YlcHW3IDXnxDjrAABM'

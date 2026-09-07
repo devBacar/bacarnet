@@ -9,7 +9,7 @@ import { minimalDocxBuffer } from './minimal-docx.mjs'
 
 loadTestEnv()
 
-const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const API = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const TEST_DRIVE_FOLDER =
   process.env.OFFICE_TEST_DRIVE_FOLDER?.trim() || '1NeotsCiPgZaaL1NNTbjHGilltY-IIwq7'
 const REQUESTER_EMAIL = process.env.OFFICE_TEST_REQUESTER_EMAIL?.trim() || null

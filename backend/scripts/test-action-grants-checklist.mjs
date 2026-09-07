@@ -1,14 +1,14 @@
 /**
  * Checklist: actionGrants + migración managed/member areas.
  *
- *   FUNCTIONS_API_BASE=https://intranet-bacar.web.app node backend/scripts/test-action-grants-checklist.mjs
+ *   FUNCTIONS_API_BASE=https://bacarnet.web.app node backend/scripts/test-action-grants-checklist.mjs
  */
 
 import { FieldValue } from 'firebase-admin/firestore'
 import { getAdminDb, getTestIdToken } from './get-test-token.mjs'
 
 const BASE =
-  process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+  process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 
 const GRANTEE_EMAIL =
   process.env.GRANTEE_EMAIL?.trim() || 'implementaciones.it@bacarsa.com.ar'

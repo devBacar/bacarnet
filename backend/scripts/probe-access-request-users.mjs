@@ -3,7 +3,7 @@ import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 loadTestEnv()
 
 const FILE_ID = process.argv[2] || '1spB-ew5jGpA6ZYwhrIhWfPr9MSa7DbxKR2jAqGa5npE'
-const API = 'https://intranet-bacar.web.app'
+const API = 'https://bacarnet.web.app'
 
 async function probe(email) {
   process.env.TEST_EMAIL = email

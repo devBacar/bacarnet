@@ -76,7 +76,7 @@ export function NavbarUtilities() {
     }
   }, [])
 
-  const weatherIcon = weather?.icon ?? 'cloud-sun'
+  const weatherIcon = weather?.icon ?? 'cloud'
 
   return (
     <div className="hidden items-center gap-2 lg:flex">

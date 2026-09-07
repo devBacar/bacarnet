@@ -1,6 +1,6 @@
 import { getTestIdToken } from './get-test-token.mjs'
 
-const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 process.env.TEST_EMAIL = process.env.TEST_EMAIL || 'implementaciones.it@bacarsa.com.ar'
 const user = await getTestIdToken({ requireSuperAdmin: false })
 console.log('as', user.email, user.role)

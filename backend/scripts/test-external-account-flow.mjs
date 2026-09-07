@@ -12,7 +12,7 @@
 import { getAuth } from 'firebase-admin/auth'
 import { getTestIdToken, getAdminDb, initAdmin } from './get-test-token.mjs'
 
-const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://intranet-bacar.web.app'
+const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const PENDING_EMAIL = 'intranet-external-pending-test@example.com'
 const CORPORATE_EMAIL = 'intranet-corporate-reg-test@bacarsa.com.ar'
 

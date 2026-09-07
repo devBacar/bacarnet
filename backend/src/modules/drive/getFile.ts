@@ -1,7 +1,8 @@
 import type { Request, Response } from 'express'
 import { sanitizeDriveId } from '../../lib/google/driveIds.js'
 import { getDrive } from '../../lib/google/driveClient.js'
-import { getFileInSharedDrive, googleStatus, googleUserMessage } from './assertInSharedDrive.js'
+import { getSharedDriveRootId } from '../../lib/google/sharedDrive.js'
+import { googleStatus, googleUserMessage } from './assertInSharedDrive.js'
 import { resolveDriveSubject } from './driveSubject.js'
 import { logError } from '../../lib/log.js'
 
@@ -21,34 +22,37 @@ export async function getDriveFile(req: Request, res: Response): Promise<void> {
   }
 
   const subject = resolveDriveSubject(user)
-  const found = await getFileInSharedDrive(fileId, subject)
-  if (!found.ok) {
-    res.status(found.status).json({ error: found.error })
-    return
-  }
-
-  if (found.file.trashed) {
-    res.status(404).json({ error: 'Archivo no encontrado' })
-    return
-  }
-
-  if (found.file.mimeType === FOLDER_MIME) {
-    res.status(400).json({ error: 'No se puede abrir una carpeta embebida' })
-    return
-  }
 
   try {
     const drive = await getDrive(subject)
+    const driveId = getSharedDriveRootId()
     const meta = await drive.files.get({
       fileId,
       supportsAllDrives: true,
-      fields: 'id, name, mimeType, webViewLink, capabilities/canEdit',
+      fields:
+        'id, name, mimeType, parents, driveId, trashed, webViewLink, capabilities/canEdit',
     })
+
+    const fileDriveId = meta.data.driveId ?? (fileId === driveId ? driveId : null)
+    if (fileDriveId !== driveId) {
+      res.status(400).json({ error: 'El archivo no pertenece a la Unidad compartida' })
+      return
+    }
+
+    if (meta.data.trashed) {
+      res.status(404).json({ error: 'Archivo no encontrado' })
+      return
+    }
+
+    if (meta.data.mimeType === FOLDER_MIME) {
+      res.status(400).json({ error: 'No se puede abrir una carpeta embebida' })
+      return
+    }
 
     res.json({
       id: meta.data.id ?? fileId,
       name: meta.data.name ?? fileId,
-      mimeType: meta.data.mimeType ?? found.file.mimeType ?? 'application/octet-stream',
+      mimeType: meta.data.mimeType ?? 'application/octet-stream',
       webViewLink: meta.data.webViewLink ?? null,
       canEdit: Boolean(meta.data.capabilities?.canEdit),
     })

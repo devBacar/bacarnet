@@ -28,14 +28,17 @@ export async function serveOfficeUploadStagingContent(req: Request, res: Respons
   const requestId = String(req.params.requestId ?? '').trim()
   const token = typeof req.query.t === 'string' ? req.query.t : ''
 
-  if (!requestId || !verifyStagingPreviewToken(requestId, token)) {
-    res.status(403).json({ error: 'Enlace de vista previa inválido o expirado' })
-    return
-  }
-
   const snap = await adminDb().collection('approvalRequests').doc(requestId).get()
   if (!snap.exists) {
     res.status(404).json({ error: 'Solicitud no encontrada' })
+    return
+  }
+
+  const expectedNonce =
+    typeof snap.get('stagingPreviewNonce') === 'string' ? snap.get('stagingPreviewNonce') : null
+
+  if (!requestId || !verifyStagingPreviewToken(requestId, token, expectedNonce)) {
+    res.status(403).json({ error: 'Enlace de vista previa inválido o expirado' })
     return
   }
 

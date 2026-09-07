@@ -10,8 +10,13 @@ import {
   listPendingExternalAccounts,
   rejectExternalAccount,
 } from './reviewExternalAccount.js'
+import { requireAuthBootstrap } from '../auth/middleware.js'
+import { bootstrapUserProfile } from './bootstrapUserProfile.js'
 
 export const usersRouter = Router()
+
+/** Perfil inicial vía Admin SDK — reemplaza create cliente en Firestore rules. */
+usersRouter.post('/bootstrap-profile', requireAuthBootstrap, bootstrapUserProfile)
 
 usersRouter.get(
   '/pending-external-accounts',

@@ -1,8 +1,11 @@
+import { defineSecret } from 'firebase-functions/params'
 import { setGlobalOptions } from 'firebase-functions/v2'
 import { onRequest } from 'firebase-functions/v2/https'
 import { initFirebaseAdmin } from './lib/firebase/admin.js'
 import { logCredentialDiagnostics } from './lib/diag.js'
 import { app } from './server.js'
+
+const boardsSessionSecret = defineSecret('BOARDS_SESSION_SECRET')
 
 const adminMode = initFirebaseAdmin()
 logCredentialDiagnostics(adminMode)
@@ -22,8 +25,10 @@ export const api = onRequest(
     timeoutSeconds: 60,
     memory: '256MiB',
     invoker: 'public',
+    secrets: [boardsSessionSecret],
   },
   app,
 )
 
-export { applyPendingUserSetup } from './triggers/onUserCreated.js'
+// Trigger Firestore pendiente de IAM Eventarc en prod; pendingUserSetup usa POST /api/users/apply-pending-setup.
+// export { applyPendingUserSetup } from './triggers/onUserCreated.js'

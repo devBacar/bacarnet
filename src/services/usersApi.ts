@@ -34,6 +34,44 @@ async function parseError(res: Response): Promise<string> {
   return body.error ?? `Error ${res.status}`
 }
 
+export interface BootstrapProfileInput {
+  source: 'register' | 'google'
+  displayName?: string
+  department?: string
+  birthDate?: string
+}
+
+export interface BootstrapProfileResult {
+  created: boolean
+  syncedSuperAdmin?: boolean
+}
+
+/** Crea o sincroniza users/{uid} vía backend (Admin SDK). Idempotente. */
+export async function bootstrapUserProfileAfterAuth(
+  input: BootstrapProfileInput,
+): Promise<BootstrapProfileResult> {
+  const token = await auth.currentUser?.getIdToken()
+  if (!token) {
+    throw new Error('No autenticado')
+  }
+
+  const res = await fetch('/api/users/bootstrap-profile', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(input),
+  })
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error ?? `Error ${res.status}`)
+  }
+
+  return (await res.json()) as BootstrapProfileResult
+}
+
 /** Idempotente: aplica pendingUserSetup/{email} vía backend (Admin SDK). */
 export async function applyPendingUserSetupAfterRegister(): Promise<ApplyPendingSetupResult | null> {
   const token = await auth.currentUser?.getIdToken()

@@ -31,7 +31,11 @@ if (matches[0]) {
   )
   const body = await res.json()
   console.log('preview status', res.status)
-  console.log('previewUrl', body.previewUrl)
+  const redacted =
+    typeof body.previewUrl === 'string'
+      ? body.previewUrl.replace(/([?&]t=)[^&]+/, '$1[REDACTED]')
+      : body.previewUrl
+  console.log('previewUrl', redacted)
   const content = await fetch(body.previewUrl)
   const buf = Buffer.from(await content.arrayBuffer())
   console.log('content', content.status, content.headers.get('content-type'), buf.length, 'bytes')

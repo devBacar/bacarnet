@@ -23,11 +23,58 @@ export function isSuperAdminUser(user: Pick<AuthedUser, 'role' | 'permissions'>)
   return user.role === 'super_admin' || user.permissions.super_admin === true
 }
 
+export interface AuthBootstrapContext {
+  uid: string
+  email: string
+  displayName: string
+  emailVerified: boolean
+}
+
 declare global {
   namespace Express {
     interface Request {
       authedUser?: AuthedUser
+      authBootstrap?: AuthBootstrapContext
     }
+  }
+}
+
+/** Verifica ID token sin exigir dominio corporativo ni perfil Firestore (bootstrap de perfil). */
+export async function requireAuthBootstrap(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const header = req.headers.authorization
+  if (!header || !header.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'No autenticado' })
+    return
+  }
+
+  const token = header.slice('Bearer '.length).trim()
+  if (!token) {
+    res.status(401).json({ error: 'No autenticado' })
+    return
+  }
+
+  try {
+    const decoded = await adminAuth().verifyIdToken(token)
+    const email = (decoded.email ?? '').trim().toLowerCase()
+    if (!email) {
+      res.status(403).json({ error: 'El token no incluye email' })
+      return
+    }
+
+    req.authBootstrap = {
+      uid: decoded.uid,
+      email,
+      displayName: typeof decoded.name === 'string' ? decoded.name.trim() : '',
+      emailVerified: decoded.email_verified === true,
+    }
+    next()
+  } catch (err) {
+    logError('Fallo al verificar ID token (bootstrap)', err)
+    res.status(401).json({ error: 'Token inválido' })
   }
 }
 

@@ -27,6 +27,18 @@ Función exportada: `api` → Express. Rutas con prefijo `/api`.
 
 **Importante:** Drive se llama impersonando a `datos@bacarsa.com.ar`. Aprobación, clasificación, permisos y copia autorizada usan **gobernanza por área** (`canGovernDriveFile`: `super_admin` o jefe con el `governingAreaId` del archivo en `managedAreaIds`). Listado/creación/trash de archivos siguen restringidos a `super_admin` por ahora.
 
+***REMOVED******REMOVED******REMOVED*** Mutaciones estructurales (renombrar / mover / papelera)
+
+**Política intencional:** `PATCH …/rename`, `PATCH …/move` y `POST …/trash` **no** pasan por gobernanza de área intranet (`governingAreaId`, `actionGrants`, etc.). Solo exigen:
+
+1. Usuario autenticado con dominio corporativo y perfil activo (`requireWorkspaceUser`).
+2. El archivo/carpeta pertenece a la Unidad compartida fija.
+3. **Permisos nativos de Google Drive** del usuario impersonado (`canEdit`, `canAddChildren`, `canTrash` según la operación).
+
+Motivo: renombrar, mover o enviar a la papelera es equivalente a editar estructura en Drive; quien ya tiene escritura sobre el ítem en Drive puede hacerlo, igual que en la UI de Google. Las acciones con impacto de **política intranet** (clasificación, aprobación, permisos, copia autorizada) sí requieren gobernanza explícita.
+
+Auditoría: rename/move/trash escriben `auditLogs` vía Admin SDK. Evidencia: `node backend/scripts/test-drive-rename-move-policy.mjs`.
+
 ***REMOVED******REMOVED*** Auth
 
 1. `Authorization: Bearer <Firebase ID token>`

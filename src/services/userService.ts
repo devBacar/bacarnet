@@ -7,14 +7,12 @@ import {
   getDocs,
   orderBy,
   query,
-  serverTimestamp,
-  setDoc,
   updateDoc,
   type DocumentData,
 } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { logAction } from './auditLogService'
-import { applyPendingUserSetupAfterRegister, patchUserManagedAreas, patchUserMemberAreas } from './usersApi'
+import { applyPendingUserSetupAfterRegister, bootstrapUserProfileAfterAuth, patchUserManagedAreas, patchUserMemberAreas } from './usersApi'
 import {
   resolveHomeWidgetPreferences,
   type HomeWidgetId,
@@ -331,28 +329,17 @@ export async function registerUser(
 ): Promise<string> {
   const normalizedEmail = email.trim().toLowerCase()
   const corporate = isCorporateEmail(normalizedEmail)
-  const accountType = resolveAccountType(normalizedEmail)
-  const accountStatus = corporate ? 'active' : 'pending_approval'
 
   const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
   const { uid } = credential.user
 
   await updateProfile(credential.user, { displayName: name.trim() })
 
-  await setDoc(doc(db, USERS_COLLECTION, uid), {
-    email: normalizedEmail,
+  await bootstrapUserProfileAfterAuth({
+    source: 'register',
     displayName: name.trim(),
     department,
     birthDate,
-    role: resolveRoleForEmail(normalizedEmail),
-    accountType,
-    accountStatus,
-    permissions: corporate ? getPermissionsForEmail(normalizedEmail) : EXTERNAL_PENDING_PERMISSIONS,
-    favoriteApps: [],
-    widgetPreferences: corporate
-      ? resolveHomeWidgetPreferences(undefined)
-      : { weather: true, dollar: true },
-    createdAt: serverTimestamp(),
   })
 
   if (corporate) {
@@ -371,72 +358,29 @@ export async function registerUser(
  * Nunca actualiza `role` (ni otros campos) de un documento existente.
  */
 export async function ensureGoogleUserProfile(user: User): Promise<boolean> {
-  const userRef = doc(db, USERS_COLLECTION, user.uid)
-  const snapshot = await getDoc(userRef)
-
+  const snapshot = await getDoc(doc(db, USERS_COLLECTION, user.uid))
   if (snapshot.exists()) {
     return false
   }
 
-  const email = user.email?.trim().toLowerCase() ?? ''
-  const corporate = isCorporateEmail(email)
-
-  await setDoc(userRef, {
-    email,
-    displayName:
-      user.displayName?.trim() ||
-      user.email?.split('@')[0] ||
-      'Usuario',
-    department: 'General',
-    role: resolveRoleForEmail(email),
-    accountType: resolveAccountType(email),
-    accountStatus: corporate ? 'active' : 'pending_approval',
-    permissions: corporate ? getPermissionsForEmail(email) : EXTERNAL_PENDING_PERMISSIONS,
-    favoriteApps: [],
-    widgetPreferences: corporate
-      ? resolveHomeWidgetPreferences(undefined)
-      : { weather: true, dollar: true },
-    createdAt: serverTimestamp(),
+  await bootstrapUserProfileAfterAuth({
+    source: 'google',
+    displayName: user.displayName?.trim() || user.email?.split('@')[0] || 'Usuario',
   })
 
   return true
 }
 
 /**
- * Solo para emails en SUPER_ADMIN_EMAILS.
- * Puede setear `role: 'super_admin'` si falta; no toca ni degrada `admin` / `user`.
+ * Sincroniza super admins designados vía backend (Admin SDK).
+ * Reemplaza escrituras cliente que violaban las rules.
  */
 export async function ensureSuperAdminPermissions(
-  uid: string,
+  _uid: string,
   email: string | null | undefined,
 ): Promise<void> {
   if (!isSuperAdminEmail(email)) return
-
-  const userRef = doc(db, USERS_COLLECTION, uid)
-  const snapshot = await getDoc(userRef)
-
-  if (!snapshot.exists()) return
-
-  const data = snapshot.data()
-  const current = data.permissions ?? {}
-  const needsPermissionUpdate =
-    current.super_admin !== true ||
-    current.manage_users !== true ||
-    current.manage_news !== true ||
-    current.manage_links !== true
-  const needsRoleUpdate = data.role !== 'super_admin'
-
-  if (!needsPermissionUpdate && !needsRoleUpdate) return
-
-  const patch: Record<string, unknown> = {}
-  if (needsPermissionUpdate) {
-    patch.permissions = SUPER_ADMIN_PERMISSIONS
-  }
-  if (needsRoleUpdate) {
-    patch.role = 'super_admin'
-  }
-
-  await updateDoc(userRef, patch)
+  await bootstrapUserProfileAfterAuth({ source: 'google' })
 }
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {

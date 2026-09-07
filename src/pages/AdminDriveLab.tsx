@@ -40,10 +40,7 @@ import {
 import { isInstallerUploadFile } from '../utils/installerUpload'
 import {
   approveDriveFile,
-  createDriveFile,
   moveDriveFile,
-  renameDriveFile,
-  trashDriveFile,
   updateDriveClassification,
   uploadDriveFile,
   type DriveClassification as Classification,
@@ -51,6 +48,7 @@ import {
   type DriveFileDto,
   type FolderAccessMode,
 } from '../services/driveApi'
+import { useDriveFolderMutations } from '../hooks/queries/useDriveFolderMutations'
 import {
   invalidateDriveFolderListing,
   useDriveFilesQuery,
@@ -161,7 +159,6 @@ export function AdminDriveLab() {
   ])
   const [showCreate, setShowCreate] = useState(false)
   const [showNewMenu, setShowNewMenu] = useState(false)
-  const [creating, setCreating] = useState(false)
   const [createName, setCreateName] = useState('')
   const [createType, setCreateType] = useState<DriveCreateType>('google_doc')
   const [createClassification, setCreateClassification] =
@@ -219,6 +216,11 @@ export function AdminDriveLab() {
       ? queryError.message
       : 'No se pudo cargar la carpeta'
     : null
+
+  const { trashMutation, renameMutation, createMutation } = useDriveFolderMutations(
+    user?.uid,
+    currentFolder.id,
+  )
 
   const refreshFolderListing = async () => {
     await invalidateDriveFolderListing(user?.uid, currentFolder.id)
@@ -344,50 +346,39 @@ export function AdminDriveLab() {
     }
   }, [showCreate, createType])
 
-  const handleCreate = async (event: FormEvent) => {
+  const handleCreate = (event: FormEvent) => {
     event.preventDefault()
     if (!resolvedFolderId || !createName.trim()) return
     if (createType === 'folder' && createFolderAccessMode === 'selected' && createFolderGrantEmails.length === 0) {
       toast.error('Elegí al menos una persona para el acceso específico')
       return
     }
-    setCreating(true)
-    try {
-      await createDriveFile({
-        name: createName.trim(),
-        type: createType,
-        parentFolderId: resolvedFolderId,
-        ...(createType === 'folder'
-          ? {
-              folderAccessMode: createFolderAccessMode,
-              privateFolder: createPrivateFolder,
-              ...(createFolderAccessMode === 'selected'
-                ? { initialGrantEmails: createFolderGrantEmails }
-                : {}),
-            }
-          : { classification: createClassification }),
-        reason: createReason.trim(),
-      })
-      toast.success(createType === 'folder' ? 'Carpeta creada en Drive' : 'Archivo creado en Drive')
-      setShowCreate(false)
-      setCreateName('')
-      setCreateReason('')
-      setCreateFolderAccessMode('restricted')
-      setCreateFolderGrantEmails([])
-      setCreateFolderGrantQuery('')
-      setCreatePrivateFolder(false)
-      await refreshFolderListing()
-    } catch (err) {
-      toast.error(
-        err instanceof Error
-          ? err.message
-          : createType === 'folder'
-            ? 'No se pudo crear la carpeta'
-            : 'No se pudo crear el archivo',
-      )
-    } finally {
-      setCreating(false)
+
+    const payload = {
+      name: createName.trim(),
+      type: createType,
+      parentFolderId: resolvedFolderId,
+      ...(createType === 'folder'
+        ? {
+            folderAccessMode: createFolderAccessMode,
+            privateFolder: createPrivateFolder,
+            ...(createFolderAccessMode === 'selected'
+              ? { initialGrantEmails: createFolderGrantEmails }
+              : {}),
+          }
+        : { classification: createClassification }),
+      reason: createReason.trim(),
     }
+
+    setShowCreate(false)
+    setCreateName('')
+    setCreateReason('')
+    setCreateFolderAccessMode('restricted')
+    setCreateFolderGrantEmails([])
+    setCreateFolderGrantQuery('')
+    setCreatePrivateFolder(false)
+
+    createMutation.mutate(payload)
   }
 
   const handleUpload = async (event: FormEvent) => {
@@ -477,15 +468,25 @@ export function AdminDriveLab() {
   const handleAction = async (event: FormEvent) => {
     event.preventDefault()
     if (!action) return
+
+    if (action.kind === 'trash') {
+      const file = action.file
+      setAction(null)
+      trashMutation.mutate({ fileId: file.id, reason: actionReason })
+      return
+    }
+
+    if (action.kind === 'rename') {
+      const file = action.file
+      const nextName = renameName.trim()
+      setAction(null)
+      renameMutation.mutate({ fileId: file.id, name: nextName })
+      return
+    }
+
     setActing(true)
     try {
-      if (action.kind === 'trash') {
-        await trashDriveFile(action.file.id, actionReason)
-        toast.success('Elemento enviado a la papelera')
-      } else if (action.kind === 'rename') {
-        await renameDriveFile(action.file.id, renameName)
-        toast.success('Nombre actualizado')
-      } else if (action.kind === 'approve') {
+      if (action.kind === 'approve') {
         await approveDriveFile(action.file.id, actionReason.trim())
         toast.success('Archivo aprobado')
       } else {
@@ -497,7 +498,7 @@ export function AdminDriveLab() {
         toast.success('Clasificación actualizada')
       }
       setAction(null)
-      await refreshFolderListing()
+      void refreshFolderListing()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo completar la acción')
     } finally {
@@ -1321,7 +1322,6 @@ export function AdminDriveLab() {
               <button
                 type="submit"
                 disabled={
-                  creating ||
                   !createName.trim() ||
                   !createReason.trim() ||
                   (createType === 'folder' &&
@@ -1330,11 +1330,7 @@ export function AdminDriveLab() {
                 }
                 className="btn-primary rounded-lg px-4 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {creating
-                  ? 'Creando…'
-                  : createType === 'folder'
-                    ? 'Crear carpeta'
-                    : 'Crear'}
+                {createType === 'folder' ? 'Crear carpeta' : 'Crear'}
               </button>
             </footer>
           </form>

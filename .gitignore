@@ -26,6 +26,9 @@ backend/.env.*
 !backend/.env.example
 backend/lib
 
+***REMOVED*** Backups locales de scripts E2E (no commitear)
+backend/.tmp/
+
 ***REMOVED*** Capacitor / Android
 android/.gradle
 android/app/build

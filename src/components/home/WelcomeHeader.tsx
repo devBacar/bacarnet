@@ -84,23 +84,25 @@ export function WelcomeHeader({
 
   return (
     <header
-      className={`relative overflow-hidden rounded-xl border ${
+      className={`relative rounded-xl border ${
         showWeather
           ? 'border-transparent shadow-md'
           : 'border-neutral-200 bg-white dark:border-zinc-800 dark:bg-zinc-900'
       }`}
     >
       {showWeather && weatherTheme ? (
-        <>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl"
+        >
           <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
+            className="absolute inset-0"
             style={{ background: weatherTheme.gradient }}
           />
-          <div className="weather-header-bg pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="weather-header-bg absolute inset-0 overflow-hidden">
             <WeatherCardDecor icon={weatherIcon} />
           </div>
-        </>
+        </div>
       ) : null}
 
       <div className="relative z-10 flex flex-col lg:flex-row lg:items-stretch">

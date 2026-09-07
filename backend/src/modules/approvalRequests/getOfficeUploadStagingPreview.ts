@@ -1,7 +1,11 @@
+import { FieldValue } from 'firebase-admin/firestore'
 import type { Request, Response } from 'express'
 import { adminDb } from '../../lib/firebase/admin.js'
 import { canResolveApprovalRequest } from './shared.js'
-import { buildStagingContentUrl } from './stagingPreviewToken.js'
+import {
+  buildStagingContentUrl,
+  createStagingPreviewNonce,
+} from './stagingPreviewToken.js'
 import { APPROVAL_REQUEST_KINDS, APPROVAL_REQUEST_STATUSES, type OfficeUploadRequestRecord } from './types.js'
 
 function publicAppBaseUrl(req: Request): string {
@@ -48,7 +52,13 @@ export async function getOfficeUploadStagingPreview(req: Request, res: Response)
     return
   }
 
-  const previewUrl = buildStagingContentUrl(requestId, publicAppBaseUrl(req))
+  const previewNonce = createStagingPreviewNonce()
+  await adminDb().collection('approvalRequests').doc(requestId).update({
+    stagingPreviewNonce: previewNonce,
+    stagingPreviewIssuedAt: FieldValue.serverTimestamp(),
+  })
+
+  const previewUrl = buildStagingContentUrl(requestId, publicAppBaseUrl(req), previewNonce)
   res.json({
     requestId,
     fileName: request.fileName,

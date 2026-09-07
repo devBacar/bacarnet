@@ -106,7 +106,7 @@ async function main() {
   const { createSignedStagingPreviewUrl } = await import(
     pathToFileURL(resolve(ROOT, 'backend/lib/lib/google/pendingUploadsStorage.js')).href
   )
-  const { buildStagingContentUrl } = await import(
+  const { buildStagingContentUrl, createStagingPreviewNonce } = await import(
     pathToFileURL(resolve(ROOT, 'backend/lib/modules/approvalRequests/stagingPreviewToken.js')).href
   )
 
@@ -166,9 +166,18 @@ async function main() {
 
     const snap = await db.collection('approvalRequests').doc(requestId).get()
     const stagingObjectPath = snap.get('stagingObjectPath')
-    const previewUrl = buildStagingContentUrl(requestId, publicBase)
-    console.log(`requestId=${requestId}`)
-    console.log(`previewUrl=${previewUrl.slice(0, 140)}…`)
+    const previewUrl = useApi ? null : await (async () => {
+      const nonce = createStagingPreviewNonce()
+      await db.collection('approvalRequests').doc(requestId).update({ stagingPreviewNonce: nonce })
+      return buildStagingContentUrl(requestId, publicBase, nonce)
+    })()
+
+    if (previewUrl) {
+      console.log(`requestId=${requestId}`)
+      console.log(`previewUrl=${previewUrl.replace(/([?&]t=)[^&]+/, '$1[REDACTED]').slice(0, 140)}…`)
+    } else {
+      console.log(`requestId=${requestId} (preview vía API)`)
+    }
 
     if (useApi) {
       const apiRes = await fetch(
@@ -189,24 +198,30 @@ async function main() {
       }
     }
 
-    const directProbe = await fetch(previewUrl)
-    allResults.push(
-      line(directProbe.ok, `${sample.label} proxy content HTTP`, String(directProbe.status)),
-    )
+    if (!useApi && previewUrl) {
+      const directProbe = await fetch(previewUrl)
+      allResults.push(
+        line(directProbe.ok, `${sample.label} proxy content HTTP`, String(directProbe.status)),
+      )
 
-    const probe = await probeSignedUrl(sample.label, previewUrl, sample.mimeType)
-    allResults.push(...probe.results)
-    console.log(`embed=${probe.embedUrl.slice(0, 100)}…\n`)
+      const probe = await probeSignedUrl(sample.label, previewUrl, sample.mimeType)
+      allResults.push(...probe.results)
+      console.log(`embed=${probe.embedUrl.slice(0, 100)}…\n`)
+    }
 
     if (useApi) continue
   }
 
   const passed = allResults.filter(Boolean).length
   console.log(`\n${passed}/${allResults.length} checks OK`)
-  console.log('\nURLs para verificación visual en navegador (proxy):')
-  for (const row of created) {
-    const previewUrl = buildStagingContentUrl(row.requestId, publicBase)
-    console.log(`${row.sample.label}: ${officeEmbedUrl(previewUrl)}`)
+  if (!useApi) {
+    console.log('\nURLs para verificación visual en navegador (proxy):')
+    for (const row of created) {
+      const nonce = createStagingPreviewNonce()
+      await db.collection('approvalRequests').doc(row.requestId).update({ stagingPreviewNonce: nonce })
+      const previewUrl = buildStagingContentUrl(row.requestId, publicBase, nonce)
+      console.log(`${row.sample.label}: ${officeEmbedUrl(previewUrl)}`)
+    }
   }
 
   if (passed !== allResults.length) process.exit(1)

@@ -56,7 +56,7 @@ export function HomeWidgetSettingsMenu({
   }
 
   return (
-    <div ref={panelRef} className="relative shrink-0">
+    <div ref={panelRef} className={`relative shrink-0 ${open ? 'z-50' : ''}`}>
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -76,7 +76,7 @@ export function HomeWidgetSettingsMenu({
         <div
           role="dialog"
           aria-label="Widgets de la home"
-          className="absolute top-full right-0 z-[60] mt-2 w-72 rounded-xl border border-neutral-200 bg-white p-4 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+          className="absolute top-full right-0 z-50 mt-2 w-72 max-h-[min(24rem,calc(100vh-6rem))] overflow-y-auto rounded-xl border border-neutral-200 bg-white p-4 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
         >
           <div className="mb-3 flex items-start justify-between gap-2">
             <div>

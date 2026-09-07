@@ -5,11 +5,12 @@ import { useAuth } from '../context'
 import { useGlobalSettings } from '../context/GlobalSettingsContext'
 import {
   updateGlobalSettings,
+  type GlobalModuleFlag,
   type GlobalSettings,
 } from '../services/configService'
 
 interface ModuleToggleProps {
-  id: 'resourcesEnabled' | 'directoryEnabled' | 'kudosEnabled' | 'pollsEnabled'
+  id: GlobalModuleFlag
   label: string
   description: string
   checked: boolean
@@ -46,19 +47,34 @@ function ModuleToggle({ id, label, description, checked, onChange }: ModuleToggl
 }
 
 const MODULE_TOGGLES: {
-  key: 'resourcesEnabled' | 'directoryEnabled' | 'kudosEnabled' | 'pollsEnabled'
+  key: GlobalModuleFlag
   label: string
   description: string
 }[] = [
   {
     key: 'resourcesEnabled',
-    label: 'Mostrar sección de Recursos',
+    label: 'Mostrar Archivos',
     description: 'Visible en la navegación y accesible la ruta /recursos para empleados.',
   },
   {
     key: 'directoryEnabled',
     label: 'Mostrar Contactos',
     description: 'Incluye la pestaña Contactos y el widget de cumpleaños en el inicio.',
+  },
+  {
+    key: 'boardsEnabled',
+    label: 'Mostrar Tableros',
+    description: 'Sección Mis Tableros en el inicio, enlace en la navegación y rutas /tableros.',
+  },
+  {
+    key: 'notificationsEnabled',
+    label: 'Mostrar Notificaciones',
+    description: 'Campana de notificaciones en la barra superior para todos los empleados.',
+  },
+  {
+    key: 'newsEnabled',
+    label: 'Mostrar Noticias',
+    description: 'Feed de noticias internas y widget de noticias externas en el inicio.',
   },
   {
     key: 'kudosEnabled',
@@ -90,10 +106,7 @@ export function ModuleSettings() {
     return null
   }
 
-  const handleToggle = (
-    key: 'resourcesEnabled' | 'directoryEnabled' | 'kudosEnabled' | 'pollsEnabled',
-    value: boolean,
-  ) => {
+  const handleToggle = (key: GlobalModuleFlag, value: boolean) => {
     setDraft((prev) => (prev ? { ...prev, [key]: value } : prev))
   }
 

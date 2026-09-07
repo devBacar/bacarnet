@@ -12,11 +12,23 @@ export const DEFAULT_DEPARTMENTS = [
   'RRHH',
 ] as const
 
+export type GlobalModuleFlag =
+  | 'resourcesEnabled'
+  | 'directoryEnabled'
+  | 'kudosEnabled'
+  | 'pollsEnabled'
+  | 'boardsEnabled'
+  | 'notificationsEnabled'
+  | 'newsEnabled'
+
 export interface GlobalSettings {
   resourcesEnabled: boolean
   directoryEnabled: boolean
   kudosEnabled: boolean
   pollsEnabled: boolean
+  boardsEnabled: boolean
+  notificationsEnabled: boolean
+  newsEnabled: boolean
   departments: string[]
 }
 
@@ -25,6 +37,9 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   directoryEnabled: true,
   kudosEnabled: true,
   pollsEnabled: true,
+  boardsEnabled: true,
+  notificationsEnabled: true,
+  newsEnabled: true,
   departments: [...DEFAULT_DEPARTMENTS],
 }
 
@@ -57,6 +72,10 @@ function mapDocToGlobalSettings(data: DocumentData): GlobalSettings {
     directoryEnabled: data.directoryEnabled ?? DEFAULT_GLOBAL_SETTINGS.directoryEnabled,
     kudosEnabled: data.kudosEnabled ?? DEFAULT_GLOBAL_SETTINGS.kudosEnabled,
     pollsEnabled: data.pollsEnabled ?? DEFAULT_GLOBAL_SETTINGS.pollsEnabled,
+    boardsEnabled: data.boardsEnabled ?? DEFAULT_GLOBAL_SETTINGS.boardsEnabled,
+    notificationsEnabled:
+      data.notificationsEnabled ?? DEFAULT_GLOBAL_SETTINGS.notificationsEnabled,
+    newsEnabled: data.newsEnabled ?? DEFAULT_GLOBAL_SETTINGS.newsEnabled,
     departments: normalizeDepartments(data.departments),
   }
 }
@@ -83,6 +102,9 @@ export async function updateGlobalSettings(settings: GlobalSettings): Promise<vo
       directoryEnabled: settings.directoryEnabled,
       kudosEnabled: settings.kudosEnabled,
       pollsEnabled: settings.pollsEnabled,
+      boardsEnabled: settings.boardsEnabled,
+      notificationsEnabled: settings.notificationsEnabled,
+      newsEnabled: settings.newsEnabled,
       departments: normalizeDepartments(settings.departments),
     },
     { merge: true },

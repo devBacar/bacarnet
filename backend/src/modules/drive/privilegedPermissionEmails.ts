@@ -1,7 +1,7 @@
 import { adminDb } from '../../lib/firebase/admin.js'
 import { getEnv } from '../../config/env.js'
 
-/** Cuenta de servicio + super_admin: ocultos en el modal de permisos para jefes de área. */
+/** Cuenta de servicio + super_admin: ocultos en el modal de permisos para todos los roles. */
 export async function resolvePrivilegedPermissionEmails(): Promise<Set<string>> {
   const { driveImpersonateEmail } = getEnv()
   const privileged = new Set<string>([driveImpersonateEmail])

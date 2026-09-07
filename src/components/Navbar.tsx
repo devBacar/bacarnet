@@ -1,10 +1,11 @@
 import { LogOut, Moon, Sun } from 'lucide-react'
 import { signOut } from 'firebase/auth'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { NotificationBell } from './NotificationBell'
 import { useAuth, useTheme } from '../context'
 import { useGlobalSettings } from '../context/GlobalSettingsContext'
 import { auth } from '../services/firebase'
-import { DEFAULT_PERMISSIONS, isSuperAdmin } from '../services/userService'
+import { DEFAULT_PERMISSIONS, isExternalAccount, isSuperAdmin } from '../services/userService'
 import { useBoardsVisibility } from '../hooks/useBoardsVisibility'
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -20,6 +21,7 @@ export function Navbar() {
   const { isDark, toggleTheme } = useTheme()
   const { settings } = useGlobalSettings()
   const permissions = userProfile?.permissions ?? DEFAULT_PERMISSIONS
+  const externalAccount = isExternalAccount(userProfile)
   const canAccessAdmin = isSuperAdmin(userProfile)
   const canAccessAudit = isSuperAdmin(userProfile)
   const boardsVisible = useBoardsVisibility()
@@ -55,9 +57,11 @@ export function Navbar() {
           <NavLink to="/intranet" end className={navLinkClass}>
             Inicio
           </NavLink>
-          <NavLink to="/accesos-directos" className={navLinkClass}>
-            Accesos directos
-          </NavLink>
+          {!externalAccount && permissions.view_links && (
+            <NavLink to="/accesos-directos" className={navLinkClass}>
+              Accesos directos
+            </NavLink>
+          )}
           {settings.directoryEnabled && permissions.view_directory && (
             <NavLink to="/directorio" className={navLinkClass}>
               Contactos
@@ -81,6 +85,8 @@ export function Navbar() {
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {!externalAccount && settings.notificationsEnabled && <NotificationBell />}
+
           <button
             type="button"
             onClick={toggleTheme}

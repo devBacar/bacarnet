@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { CoreAppIcon } from '../components/CoreAppIcon'
 import { useAuth } from '../context'
-import { getCoreApps, type CoreApp } from '../services/coreAppService'
+import { getCoreApps, type CoreApp, type CoreAppLinkKind } from '../services/coreAppService'
 import { toggleFavoriteApp } from '../services/userService'
 
 function AppsGridSkeleton() {
@@ -24,11 +24,13 @@ function AppCard({
   isFavorite,
   onToggleFavorite,
   toggling,
+  linkKind = 'app',
 }: {
   app: CoreApp
   isFavorite: boolean
   onToggleFavorite: () => void
   toggling: boolean
+  linkKind?: CoreAppLinkKind
 }) {
   return (
     <article className="relative overflow-hidden rounded-xl border border-neutral-200 bg-white transition-colors hover:border-brand-primary/40 dark:border-zinc-800 dark:bg-zinc-900">
@@ -59,6 +61,11 @@ function AppCard({
           )}
         </span>
         <h3 className="text-lg font-bold text-neutral-900 dark:text-gray-100">{app.title}</h3>
+        {linkKind === 'external_link' && (
+          <span className="mt-1 inline-flex w-fit rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500 dark:bg-zinc-800 dark:text-zinc-400">
+            Externo
+          </span>
+        )}
         <p className="mt-2 flex-1 text-sm leading-relaxed text-neutral-500 dark:text-gray-400">{app.description}</p>
       </a>
     </article>
@@ -97,6 +104,16 @@ export function AppsHub() {
     )
   }, [apps, search])
 
+  const internalApps = useMemo(
+    () => filteredApps.filter((app) => (app.linkKind ?? 'app') === 'app'),
+    [filteredApps],
+  )
+
+  const externalLinks = useMemo(
+    () => filteredApps.filter((app) => app.linkKind === 'external_link'),
+    [filteredApps],
+  )
+
   const handleToggleFavorite = async (appId: string) => {
     if (!user?.uid) return
 
@@ -113,6 +130,21 @@ export function AppsHub() {
     }
   }
 
+  const renderGrid = (items: CoreApp[], kind: CoreAppLinkKind) => (
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      {items.map((app) => (
+        <AppCard
+          key={app.id}
+          app={app}
+          linkKind={kind}
+          isFavorite={!!app.id && favoriteApps.includes(app.id)}
+          onToggleFavorite={() => app.id && void handleToggleFavorite(app.id)}
+          toggling={togglingId === app.id}
+        />
+      ))}
+    </div>
+  )
+
   return (
     <div className="w-full">
       <header className="mb-8 border-b border-neutral-200 dark:border-zinc-800 pb-8">
@@ -125,7 +157,7 @@ export function AppsHub() {
               Accesos directos
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-neutral-600 dark:text-gray-400">
-              Todas las aplicaciones internas. Usá la chincheta para anclar tus favoritas en el
+              Aplicaciones internas y enlaces externos. Usá la chincheta para anclar tus favoritas en el
               inicio.
             </p>
           </div>
@@ -185,23 +217,32 @@ export function AppsHub() {
         <>
           <p className="mb-4 text-sm text-neutral-500 dark:text-gray-400">
             {filteredApps.length}{' '}
-            {filteredApps.length === 1 ? 'herramienta' : 'herramientas'}
-            {search.trim() ? ' encontradas' : ' disponibles'}
+            {filteredApps.length === 1 ? 'acceso' : 'accesos'}
+            {search.trim() ? ' encontrados' : ' disponibles'}
             {favoriteApps.length > 0 && (
-              <span className="text-neutral-400"> · {favoriteApps.length} ancladas en tu inicio</span>
+              <span className="text-neutral-400"> · {favoriteApps.length} anclados en tu inicio</span>
             )}
           </p>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filteredApps.map((app) => (
-              <AppCard
-                key={app.id}
-                app={app}
-                isFavorite={!!app.id && favoriteApps.includes(app.id)}
-                onToggleFavorite={() => app.id && handleToggleFavorite(app.id)}
-                toggling={togglingId === app.id}
-              />
-            ))}
-          </div>
+
+          {internalApps.length > 0 && (
+            <section className={externalLinks.length > 0 ? 'mb-10' : undefined}>
+              {externalLinks.length > 0 && (
+                <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-neutral-500 dark:text-gray-400">
+                  Aplicaciones internas
+                </h2>
+              )}
+              {renderGrid(internalApps, 'app')}
+            </section>
+          )}
+
+          {externalLinks.length > 0 && (
+            <section>
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-neutral-500 dark:text-gray-400">
+                Enlaces externos
+              </h2>
+              {renderGrid(externalLinks, 'external_link')}
+            </section>
+          )}
         </>
       )}
     </div>

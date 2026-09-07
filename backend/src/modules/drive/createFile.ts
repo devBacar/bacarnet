@@ -6,6 +6,13 @@ import { logError } from '../../lib/log.js'
 import { writeAuditLogBestEffort } from '../audit/writeAuditLog.js'
 import { googleStatus, googleUserMessage } from './assertInSharedDrive.js'
 import {
+  applyFolderAccessOnCreate,
+  folderClassificationForMode,
+  isFolderAccessMode,
+  parseInitialGrantEmails,
+  type FolderAccessMode,
+} from './applyFolderAccessOnCreate.js'
+import {
   DEFAULT_CLASSIFICATION,
   parseClassificationInput,
   type FileClassification,
@@ -15,6 +22,11 @@ import {
 import { invalidateDriveMetadataForUser } from './driveMetadataCache.js'
 import { resolveDriveSubject } from './driveSubject.js'
 import { getAllowedUploadMimeTypes, getMinReasonLength } from './policy.js'
+import {
+  applyPrivateFolderLimitedAccess,
+  PrivateFolderNotSupportedError,
+  verifyPrivateFolderGovernanceAccess,
+} from './privateFolderLimitedAccess.js'
 import { resolveGoverningAreaId } from './resolveGoverningArea.js'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
@@ -112,8 +124,34 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
   const isFolderCreate = type === 'folder'
 
   let classification: FileClassification = DEFAULT_CLASSIFICATION
+  let folderAccessMode: FolderAccessMode = 'restricted'
+  let initialGrantEmails: string[] = []
+  const privateFolder = isFolderCreate && body.privateFolder === true
 
-  if (!isFolderCreate) {
+  if (isFolderCreate) {
+    const parsedMode = body.folderAccessMode
+    if (parsedMode !== undefined && parsedMode !== null && !isFolderAccessMode(parsedMode)) {
+      res.status(400).json({
+        error: "folderAccessMode debe ser 'restricted', 'selected' u 'organization'",
+      })
+      return
+    }
+    folderAccessMode = isFolderAccessMode(parsedMode) ? parsedMode : 'restricted'
+    if (privateFolder && folderAccessMode === 'organization') {
+      res.status(400).json({
+        error: 'Una carpeta privada no puede combinarse con acceso de dominio (organization)',
+      })
+      return
+    }
+    initialGrantEmails = parseInitialGrantEmails(body.initialGrantEmails)
+    if (folderAccessMode === 'selected' && initialGrantEmails.length === 0) {
+      res.status(400).json({
+        error: 'initialGrantEmails debe incluir al menos una persona cuando folderAccessMode es selected',
+      })
+      return
+    }
+    classification = folderClassificationForMode(folderAccessMode, privateFolder)
+  } else {
     const parsedClass = parseClassificationInput(body.classification)
     if (!parsedClass.ok) {
       res.status(400).json({ error: parsedClass.error })
@@ -184,11 +222,49 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
     const governingAreaId = await resolveGoverningAreaId(parentFolderId)
 
     if (isFolderCreate) {
+      let governanceDrive: Awaited<ReturnType<typeof getDrive>> | null = null
+      let privateAccessResult: Awaited<ReturnType<typeof applyPrivateFolderLimitedAccess>> | null =
+        null
+      let governanceCanReadPrivate = false
+
+      if (privateFolder) {
+        governanceDrive = await getDrive()
+        privateAccessResult = await applyPrivateFolderLimitedAccess({
+          governanceDrive,
+          folderId: id,
+          folderName: fileName,
+          parentFolderId,
+          creatorEmail: user.email,
+          actor: { uid: user.uid, email: user.email },
+          reason: reason.trim(),
+        })
+
+        governanceCanReadPrivate = await verifyPrivateFolderGovernanceAccess(governanceDrive, id)
+        if (!governanceCanReadPrivate) {
+          logError('Carpeta privada: datos@ no puede leer tras crear', {
+            folderId: id,
+            governanceGranted: privateAccessResult.governanceGranted,
+          })
+        }
+      }
+
       await writeFolderSidecarBestEffort(
         id,
         { uid: user.uid, email: user.email, displayName: user.displayName },
-        { governingAreaId },
+        { governingAreaId, classification },
       )
+
+      const accessResult = await applyFolderAccessOnCreate({
+        drive: privateFolder && governanceDrive ? governanceDrive : drive,
+        folderId: id,
+        folderName: fileName,
+        parentFolderId,
+        mode: folderAccessMode,
+        initialGrantEmails,
+        privateFolder,
+        actor: { uid: user.uid, email: user.email },
+        reason: reason.trim(),
+      })
 
       await writeAuditLogBestEffort({
         userId: user.uid,
@@ -200,7 +276,18 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
         parentFolderId,
         mimeType: createdMime,
         reason: reason.trim(),
-        metadata: { type, governingAreaId },
+        metadata: {
+          type,
+          governingAreaId,
+          classification,
+          folderAccessMode,
+          privateFolder,
+          initialGrantCount: initialGrantEmails.length,
+          grantedUserCount: accessResult.grantedUserCount,
+          domainGranted: accessResult.domainGranted,
+          privateAccess: privateAccessResult,
+          governanceCanReadPrivate,
+        },
       })
 
       invalidateDriveMetadataForUser(resolveDriveSubject(user), user.uid)
@@ -210,9 +297,15 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
         mimeType: createdMime,
         webViewLink,
         isFolder: true,
-        classification: null,
+        classification,
         status: null,
         governingAreaId,
+        folderAccessMode,
+        privateFolder,
+        grantedUserCount: accessResult.grantedUserCount,
+        domainGranted: accessResult.domainGranted,
+        privateAccess: privateAccessResult,
+        governanceCanReadPrivate,
         createdBy: {
           userId: user.uid,
           email: user.email,
@@ -266,6 +359,10 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
       },
     })
   } catch (err) {
+    if (err instanceof PrivateFolderNotSupportedError) {
+      res.status(409).json({ error: err.message, code: err.code })
+      return
+    }
     logError('Drive files.create falló', err)
     const status = googleStatus(err)
     const detail = googleUserMessage(err)

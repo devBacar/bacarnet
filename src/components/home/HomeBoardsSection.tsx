@@ -4,6 +4,7 @@ import { useAuth } from '../../context'
 import { useBoardsQuery } from '../../hooks/queries/useCatalogQueries'
 import { useBoardsVisibility } from '../../hooks/useBoardsVisibility'
 import { type BoardDto } from '../../services/boardsApi'
+import { HomeCollapsibleSection } from './HomeCollapsibleSection'
 
 function BoardCompactCard({ board }: { board: BoardDto }) {
   return (
@@ -54,23 +55,20 @@ export function HomeBoardsSection() {
   if (!loading && !error && boards.length === 0) return null
 
   return (
-    <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6 lg:p-8">
-      <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-lg font-bold text-neutral-900 dark:text-gray-100">Tableros</h2>
-          <p className="mt-1 text-sm text-neutral-500 dark:text-gray-400">
-            Paneles de consulta a los que tenés acceso
-          </p>
-        </div>
+    <HomeCollapsibleSection
+      title="Mis Tableros"
+      subtitle="Paneles de consulta a los que tenés acceso"
+      storageKey="boards"
+      headerAction={
         <Link
           to="/tableros"
-          className="inline-flex w-full items-center justify-center gap-1.5 text-sm font-semibold text-brand-primary transition-colors hover:opacity-90 sm:w-auto sm:justify-start"
+          className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-primary transition-colors hover:opacity-90"
         >
           Ver todos
           <ArrowRight className="h-4 w-4 shrink-0" />
         </Link>
-      </div>
-
+      }
+    >
       {loading ? (
         <BoardsSkeleton />
       ) : error ? (
@@ -84,6 +82,6 @@ export function HomeBoardsSection() {
           ))}
         </div>
       )}
-    </section>
+    </HomeCollapsibleSection>
   )
 }

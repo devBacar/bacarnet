@@ -121,6 +121,15 @@ service cloud.firestore {
           || (isAuthenticated() && request.auth.uid == userId && onlySelfPreferencesUpdate())
         );
       allow delete: if canManageUsers() || isAdmin();
+
+      match /notifications/{notificationId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow update: if isAuthenticated()
+          && request.auth.uid == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read == true;
+        allow create, delete: if false;
+      }
     }
 
     // Noticias / comunicados
@@ -202,6 +211,11 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Solicitudes de aprobación (acceso, etc.). Solo Admin SDK.
+    match /approvalRequests/{requestId} {
+      allow read, create, update, delete: if false;
+    }
+
     // Mapeo carpeta Drive de primer nivel → área intranet. Solo Admin SDK.
     match /driveFolderAreas/{driveTopLevelFolderId} {
       allow read: if isAuthenticated();
@@ -217,6 +231,15 @@ service cloud.firestore {
     match /global_settings/{document} {
       allow read: if isAuthenticated();
       allow create, update: if isAdmin() || isSuperAdmin();
+    }
+
+    // Chunks/metadata RAG-lite — solo backend (Admin SDK). Sin acceso cliente.
+    match /ragChunks/{chunkId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /ragIndexState/{areaId} {
+      allow read, create, update, delete: if false;
     }
 
     // Turnos — jefe manual por semana (lunes a domingo)

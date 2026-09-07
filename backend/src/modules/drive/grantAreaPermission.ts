@@ -10,7 +10,11 @@ import {
   governanceForbiddenMessage,
   resolveFileGoverningAreaId,
 } from './governDriveFile.js'
-import { grantUserDrivePermission, isPermissionRole } from './driveUserPermission.js'
+import {
+  DrivePermissionAlreadyInheritedError,
+  grantUserDrivePermission,
+  isPermissionRole,
+} from './driveUserPermission.js'
 import { getMinReasonLength } from './policy.js'
 import { getAreaDisplayName, resolveAreaMembers } from './resolveAreaMembers.js'
 
@@ -69,16 +73,19 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
     return
   }
 
-  const members = await resolveAreaMembers(governingAreaId)
+  const targetAreaIdRaw = typeof body.areaId === 'string' ? body.areaId.trim() : ''
+  const targetAreaId = targetAreaIdRaw || governingAreaId
+
+  const members = await resolveAreaMembers(targetAreaId)
   if (members.length === 0) {
     res.status(409).json({
-      error: 'No hay usuarios registrados en el área gobernante de este archivo',
-      governingAreaId,
+      error: 'No hay usuarios registrados en el área seleccionada',
+      areaId: targetAreaId,
     })
     return
   }
 
-  const areaName = (await getAreaDisplayName(governingAreaId)) ?? governingAreaId
+  const areaName = (await getAreaDisplayName(targetAreaId)) ?? targetAreaId
   const batchId = randomUUID()
   const drive = await getDrive()
   const trimmedReason = reason.trim()
@@ -87,6 +94,13 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
     uid: string
     email: string
     permissionId: string
+  }> = []
+  const skipped: Array<{
+    uid: string
+    email: string
+    code: string
+    reason: string
+    inheritedFrom: string | null
   }> = []
   const failures: Array<{ uid: string; email: string; error: string }> = []
 
@@ -115,7 +129,7 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
           type: 'user',
           areaFanOut: {
             batchId,
-            governingAreaId,
+            governingAreaId: targetAreaId,
             areaName,
           },
         },
@@ -127,6 +141,16 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
         permissionId: result.permissionId,
       })
     } catch (err) {
+      if (err instanceof DrivePermissionAlreadyInheritedError) {
+        skipped.push({
+          uid: member.uid,
+          email: member.email,
+          code: err.code,
+          reason: err.message,
+          inheritedFrom: err.inheritedFrom,
+        })
+        continue
+      }
       logError('Drive area fan-out grant falló para un miembro', err)
       failures.push({
         uid: member.uid,
@@ -137,11 +161,18 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
   }
 
   if (granted.length === 0) {
-    res.status(502).json({
-      error: 'No se pudo otorgar el permiso a ningún miembro del área',
+    res.status(skipped.length > 0 && failures.length === 0 ? 409 : 502).json({
+      error:
+        skipped.length > 0 && failures.length === 0
+          ? 'Ningún miembro recibió un permiso puntual nuevo (acceso heredado preexistente)'
+          : 'No se pudo otorgar el permiso a ningún miembro del área',
       governingAreaId,
       areaName,
       batchId,
+      grantedCount: 0,
+      skippedCount: skipped.length,
+      failedCount: failures.length,
+      skipped,
       failures,
     })
     return
@@ -154,8 +185,10 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
     areaName,
     role,
     grantedCount: granted.length,
+    skippedCount: skipped.length,
     failedCount: failures.length,
     granted,
+    skipped,
     failures,
   })
 }

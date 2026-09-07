@@ -1,26 +1,42 @@
-import { ExternalLink, Loader2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { ExternalLink, KeyRound, Loader2 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { RequestMorePermissionsModal } from '../components/RequestMorePermissionsModal'
 import { getDriveFile, type DriveFileDetailDto } from '../services/driveApi'
+import { recordDriveRecentOpen } from '../services/driveRecentFiles'
+import {
+  DRIVE_EXPLORER_DEFAULT_PATH,
+  type DriveDocumentViewerLocationState,
+} from '../utils/driveExplorerNavigation'
 import { resolveGoogleDriveViewer } from '../utils/googleDriveEmbed'
+import { useAuth } from '../context'
 
-const DEFAULT_RETURN = '/recursos'
+const DEFAULT_RETURN = DRIVE_EXPLORER_DEFAULT_PATH
 
-function useReturnPath(): string {
+function useViewerNavigation() {
   const location = useLocation()
-  const state = location.state as { returnTo?: string } | null
-  if (state?.returnTo && state.returnTo.startsWith('/')) {
-    return state.returnTo
-  }
-  return DEFAULT_RETURN
+  const state = location.state as DriveDocumentViewerLocationState | null
+  const returnTo =
+    state?.returnTo && state.returnTo.startsWith('/') ? state.returnTo : DEFAULT_RETURN
+  const driveBreadcrumb = state?.driveBreadcrumb
+  return { returnTo, driveBreadcrumb }
 }
 
 function DriveDocumentViewer({ fileId }: { fileId: string }) {
   const navigate = useNavigate()
-  const returnTo = useReturnPath()
+  const { user } = useAuth()
+  const { returnTo, driveBreadcrumb } = useViewerNavigation()
   const [file, setFile] = useState<DriveFileDetailDto | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showMorePermissions, setShowMorePermissions] = useState(false)
+
+  const goBack = useCallback(() => {
+    navigate(returnTo, {
+      replace: true,
+      state: driveBreadcrumb?.length ? { driveBreadcrumb } : undefined,
+    })
+  }, [navigate, returnTo, driveBreadcrumb])
 
   const viewer = useMemo(() => {
     if (!file) return null
@@ -32,12 +48,12 @@ function DriveDocumentViewer({ fileId }: { fileId: string }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      navigate(returnTo, { replace: true })
+      goBack()
     }
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [navigate, returnTo])
+  }, [goBack])
 
   useEffect(() => {
     const previousOverflow = document.documentElement.style.overflow
@@ -57,6 +73,12 @@ function DriveDocumentViewer({ fileId }: { fileId: string }) {
         const detail = await getDriveFile(fileId)
         if (cancelled) return
         setFile(detail)
+        recordDriveRecentOpen(user?.uid, {
+          id: detail.id,
+          name: detail.name,
+          mimeType: detail.mimeType,
+          isFolder: false,
+        })
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'No se pudo abrir el archivo')
@@ -69,18 +91,28 @@ function DriveDocumentViewer({ fileId }: { fileId: string }) {
     return () => {
       cancelled = true
     }
-  }, [fileId])
+  }, [fileId, user?.uid])
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-white dark:bg-zinc-950">
       <div className="absolute left-4 top-4 z-20 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => navigate(returnTo, { replace: true })}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200/80 bg-white/75 px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-white hover:text-neutral-900 dark:border-zinc-700/80 dark:bg-zinc-900/75 dark:text-zinc-200 dark:hover:bg-zinc-900 dark:hover:text-white"
+          onClick={goBack}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200/50 bg-white/35 px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm backdrop-blur-[2px] transition-all hover:border-neutral-200 hover:bg-white hover:shadow-md dark:border-zinc-700/50 dark:bg-zinc-900/35 dark:text-zinc-200 dark:hover:border-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-white"
         >
           ← Volver
         </button>
+        {file && !file.canEdit && (
+          <button
+            type="button"
+            onClick={() => setShowMorePermissions(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200/80 bg-white/75 px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-white dark:border-zinc-700/80 dark:bg-zinc-900/75 dark:text-zinc-200 dark:hover:bg-zinc-900"
+          >
+            <KeyRound className="h-4 w-4" />
+            Pedir más permisos
+          </button>
+        )}
       </div>
 
       {driveLink && (
@@ -110,6 +142,7 @@ function DriveDocumentViewer({ fileId }: { fileId: string }) {
           </div>
           <Link
             to={returnTo}
+            state={driveBreadcrumb?.length ? { driveBreadcrumb } : undefined}
             className="text-sm font-medium text-brand-primary hover:underline"
           >
             Volver a Archivos
@@ -144,6 +177,14 @@ function DriveDocumentViewer({ fileId }: { fileId: string }) {
           className="h-full w-full flex-1 border-0 bg-white"
           allow="clipboard-read; clipboard-write; fullscreen"
           referrerPolicy="strict-origin-when-cross-origin"
+        />
+      )}
+
+      {showMorePermissions && file && (
+        <RequestMorePermissionsModal
+          fileId={file.id}
+          fileName={file.name}
+          onClose={() => setShowMorePermissions(false)}
         />
       )}
     </div>

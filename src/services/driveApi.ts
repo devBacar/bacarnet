@@ -23,6 +23,7 @@ export interface DriveFileDto {
   capabilities: {
     canTrash: boolean
     canEdit: boolean
+    canRename: boolean
     canShare: boolean
     canAddChildren: boolean
   }
@@ -52,11 +53,16 @@ export interface ListDriveFilesResult {
 
 export type DriveCreateType = 'google_doc' | 'google_sheet' | 'folder'
 
+export type FolderAccessMode = 'restricted' | 'selected' | 'organization'
+
 export interface CreateDriveFileInput {
   name: string
   type: DriveCreateType
   parentFolderId: string
   classification?: DriveClassification
+  folderAccessMode?: FolderAccessMode
+  initialGrantEmails?: string[]
+  privateFolder?: boolean
   reason: string
 }
 
@@ -103,11 +109,13 @@ export interface ListDrivePermissionsResult {
   areaMembers: DriveAreaMemberDto[]
   permissions: DrivePermissionDto[]
   domainAccess: DriveDomainAccessDto | null
+  createdByEmail: string | null
+  createdByDisplayName: string | null
 }
 
 export interface GrantDrivePermissionInput {
   email: string
-  role: 'reader' | 'writer'
+  role: DrivePermissionRole
   reason: string
 }
 
@@ -159,7 +167,11 @@ export async function createDriveFile(
     parentFolderId: input.parentFolderId,
     reason: input.reason,
   }
-  if (input.type !== 'folder' && input.classification) {
+  if (input.type === 'folder') {
+    if (input.folderAccessMode) body.folderAccessMode = input.folderAccessMode
+    if (input.initialGrantEmails?.length) body.initialGrantEmails = input.initialGrantEmails
+    if (input.privateFolder) body.privateFolder = true
+  } else if (input.classification) {
     body.classification = input.classification
   }
   const res = await fetch('/api/drive/files', {
@@ -192,6 +204,30 @@ export async function trashDriveFile(fileId: string, reason?: string): Promise<v
     body: JSON.stringify(reason?.trim() ? { reason: reason.trim() } : {}),
   })
   await parseApiResponse<{ trashed: boolean }>(res)
+}
+
+export async function renameDriveFile(
+  fileId: string,
+  name: string,
+): Promise<{ id: string; name: string }> {
+  const res = await fetch(`/api/drive/files/${encodeURIComponent(fileId)}/rename`, {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: JSON.stringify({ name: name.trim() }),
+  })
+  return parseApiResponse(res)
+}
+
+export async function moveDriveFile(
+  fileId: string,
+  destinationFolderId: string,
+): Promise<{ id: string; parentFolderId: string; destinationFolderName: string }> {
+  const res = await fetch(`/api/drive/files/${encodeURIComponent(fileId)}/move`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ destinationFolderId }),
+  })
+  return parseApiResponse(res)
 }
 
 export async function approveDriveFile(fileId: string, reason: string): Promise<void> {
@@ -248,7 +284,7 @@ export async function grantDrivePermission(
 
 export async function grantDriveAreaPermission(
   fileId: string,
-  input: { role: 'reader' | 'writer'; reason: string },
+  input: { role: DrivePermissionRole; reason: string; areaId?: string },
 ): Promise<{
   batchId: string
   governingAreaId: string
@@ -265,6 +301,7 @@ export async function grantDriveAreaPermission(
     body: JSON.stringify({
       role: input.role,
       reason: input.reason.trim(),
+      ...(input.areaId ? { areaId: input.areaId } : {}),
     }),
   })
   return parseApiResponse(res)

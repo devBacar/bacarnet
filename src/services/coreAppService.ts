@@ -15,6 +15,8 @@ import { db } from './firebase'
 
 const CORE_APPS_COLLECTION = 'coreApps'
 
+export type CoreAppLinkKind = 'app' | 'external_link'
+
 export interface CoreApp {
   id?: string
   title: string
@@ -22,6 +24,7 @@ export interface CoreApp {
   url: string
   icon?: string
   imageUrl?: string
+  linkKind?: CoreAppLinkKind
   createdAt: Timestamp | Date
 }
 
@@ -41,6 +44,7 @@ function mapDocToCoreApp(id: string, data: DocumentData): CoreApp {
     url: data.url ?? '',
     icon: data.icon ?? undefined,
     imageUrl: data.imageUrl ?? undefined,
+    linkKind: data.linkKind === 'external_link' ? 'external_link' : 'app',
     createdAt,
   }
 }
@@ -87,6 +91,8 @@ export async function createCoreApp(data: CreateCoreAppInput): Promise<string> {
     payload.imageUrl = data.imageUrl.trim()
   }
 
+  payload.linkKind = data.linkKind === 'external_link' ? 'external_link' : 'app'
+
   const docRef = await addDoc(collection(db, CORE_APPS_COLLECTION), payload)
   return docRef.id
 }
@@ -101,6 +107,7 @@ export async function updateCoreApp(
     url: data.url.trim(),
     icon: data.icon?.trim() ?? null,
     imageUrl: data.imageUrl?.trim() ?? null,
+    linkKind: data.linkKind === 'external_link' ? 'external_link' : 'app',
   }
 
   await updateDoc(doc(db, CORE_APPS_COLLECTION, id), payload)

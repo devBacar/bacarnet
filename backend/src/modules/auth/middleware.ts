@@ -109,6 +109,70 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
   next()
 }
 
+/**
+ * Cuenta autenticada con perfil activo en Firestore. No exige dominio corporativo.
+ * Pieza liviana para endpoints futuros orientados a cuentas externas aprobadas.
+ */
+export async function requireActiveAccount(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const header = req.headers.authorization
+  if (!header || !header.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'No autenticado' })
+    return
+  }
+
+  const token = header.slice('Bearer '.length).trim()
+  if (!token) {
+    res.status(401).json({ error: 'No autenticado' })
+    return
+  }
+
+  try {
+    const decoded = await adminAuth().verifyIdToken(token)
+    const email = (decoded.email ?? '').trim().toLowerCase()
+    if (!decoded.email_verified) {
+      res.status(403).json({ error: 'El email no está verificado' })
+      return
+    }
+
+    const profile = await adminDb().collection('users').doc(decoded.uid).get()
+    if (!profile.exists) {
+      res.status(403).json({ error: 'Usuario no habilitado en la intranet' })
+      return
+    }
+
+    const accountStatus = profile.get('accountStatus')
+    if (accountStatus === 'pending_approval') {
+      res.status(403).json({ error: 'Cuenta pendiente de aprobación' })
+      return
+    }
+    if (accountStatus === 'rejected') {
+      res.status(403).json({ error: 'Cuenta rechazada' })
+      return
+    }
+
+    req.authedUser = {
+      uid: decoded.uid,
+      email,
+      displayName:
+        (typeof profile.get('displayName') === 'string' && profile.get('displayName').trim()) ||
+        (typeof decoded.name === 'string' && decoded.name.trim()) ||
+        email,
+      role: typeof profile.get('role') === 'string' ? profile.get('role') : undefined,
+      managedAreaIds: [],
+      actionGrants: normalizeActionGrants(profile.get('actionGrants')),
+      permissions: {},
+    }
+    next()
+  } catch (err) {
+    logError('Fallo al verificar cuenta activa', err)
+    res.status(401).json({ error: 'Token inválido' })
+  }
+}
+
 async function isResourcesModuleEnabled(): Promise<boolean> {
   const snap = await adminDb().collection('global_settings').doc('main').get()
   if (!snap.exists) return true

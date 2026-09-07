@@ -169,8 +169,8 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
         onClick={onClose}
       />
 
-      <aside className="relative flex h-full w-full max-w-lg flex-col bg-white shadow-2xl dark:bg-zinc-900">
-        <header className="flex items-start justify-between border-b border-neutral-200 px-6 py-5 dark:border-zinc-800">
+      <aside className="app-drawer-aside max-w-lg">
+        <header className="shrink-0 flex items-start justify-between border-b border-neutral-200 px-6 py-5 dark:border-zinc-800">
           <div>
             <p className="text-brand-primary text-xs font-semibold uppercase tracking-wide">
               {initial ? 'Editar pendiente' : 'Nueva configuración pendiente'}
@@ -184,8 +184,8 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
           </button>
         </header>
 
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col">
-          <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="app-drawer-scroll space-y-5 px-6 py-5">
             <div>
               <label htmlFor="pending-email" className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-gray-300">
                 Email
@@ -234,7 +234,7 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
                     <p className="mb-2 text-sm font-semibold text-neutral-900 dark:text-gray-100">
                       Áreas que gobierna
                     </p>
-                    <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-neutral-200 p-2 dark:border-zinc-800">
+                    <div className="space-y-1 rounded-lg border border-neutral-200 p-2 dark:border-zinc-800">
                       {areas.map((area) => (
                         <label key={area.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-50 dark:hover:bg-zinc-950">
                           <input
@@ -253,7 +253,7 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
                   <p className="mb-2 text-sm font-semibold text-neutral-900 dark:text-gray-100">
                     Áreas de pertenencia
                   </p>
-                  <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-neutral-200 p-2 dark:border-zinc-800">
+                  <div className="space-y-1 rounded-lg border border-neutral-200 p-2 dark:border-zinc-800">
                     {areas.map((area) => (
                       <label key={`member-${area.id}`} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-50 dark:hover:bg-zinc-950">
                         <input
@@ -289,7 +289,7 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
                     <p className="mb-2 text-sm font-semibold text-neutral-900 dark:text-gray-100">
                       Acceso a tableros
                     </p>
-                    <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-neutral-200 p-2 dark:border-zinc-800">
+                    <div className="space-y-1 rounded-lg border border-neutral-200 p-2 dark:border-zinc-800">
                       {boards.map((board) => (
                         <label key={board.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-50 dark:hover:bg-zinc-950">
                           <input
@@ -320,7 +320,7 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
             </div>
           </div>
 
-          <footer className="flex gap-3 border-t border-neutral-200 px-6 py-4 dark:border-zinc-800">
+          <footer className="app-drawer-footer flex gap-3 px-6 py-4">
             <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-neutral-300 px-4 py-2.5 text-sm font-medium dark:border-zinc-700">
               Cancelar
             </button>

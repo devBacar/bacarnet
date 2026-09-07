@@ -8,12 +8,14 @@ interface HomeWidgetSettingsMenuProps {
   userId: string
   preferences: HomeWidgetPreferences
   onUpdated: (next: HomeWidgetPreferences) => void
+  light?: boolean
 }
 
 export function HomeWidgetSettingsMenu({
   userId,
   preferences,
   onUpdated,
+  light = false,
 }: HomeWidgetSettingsMenuProps) {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -61,7 +63,11 @@ export function HomeWidgetSettingsMenu({
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label="Configurar widgets de la home"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-neutral-200 text-neutral-500 transition-colors hover:bg-neutral-50 hover:text-neutral-800 dark:border-zinc-700 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100"
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border transition-colors ${
+          light
+            ? 'border-white/30 text-white/80 hover:bg-white/15 hover:text-white'
+            : 'border-neutral-200 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-800 dark:border-zinc-700 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100'
+        }`}
       >
         <Settings2 className="h-4 w-4" />
       </button>

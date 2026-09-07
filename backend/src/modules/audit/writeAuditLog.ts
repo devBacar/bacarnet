@@ -1,10 +1,11 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { adminDb } from '../../lib/firebase/admin.js'
 import { logError } from '../../lib/log.js'
+import { emitNotificationsFromAuditBestEffort } from '../notifications/emitFromAudit.js'
 
 const AUDIT_LOGS_COLLECTION = 'auditLogs'
 
-export async function writeAuditLog(entry: {
+export type AuditLogEntry = {
   userId: string
   userEmail: string
   action:
@@ -18,6 +19,7 @@ export async function writeAuditLog(entry: {
     | 'managed_areas_change'
     | 'member_areas_change'
     | 'action_grants_change'
+    | 'password_reset'
     | 'classification_change'
     | 'authorized_copy'
     | 'approval'
@@ -25,6 +27,9 @@ export async function writeAuditLog(entry: {
     | 'board_access_grant'
     | 'board_access_revoke'
     | 'pending_setup_applied'
+    | 'external_account_approved'
+    | 'external_account_rejected'
+    | 'audit_correction'
   targetType: 'folder' | 'file' | 'resource' | 'user' | 'board'
   targetId: string
   targetName: string
@@ -32,7 +37,9 @@ export async function writeAuditLog(entry: {
   mimeType: string | null
   reason: string | null
   metadata?: Record<string, unknown>
-}): Promise<void> {
+}
+
+export async function writeAuditLog(entry: AuditLogEntry): Promise<void> {
   await adminDb()
     .collection(AUDIT_LOGS_COLLECTION)
     .add({
@@ -51,12 +58,13 @@ export async function writeAuditLog(entry: {
 }
 
 /** Nunca tira: la acción en Drive ya ocurrió. */
-export async function writeAuditLogBestEffort(
-  entry: Parameters<typeof writeAuditLog>[0],
-): Promise<void> {
+export async function writeAuditLogBestEffort(entry: AuditLogEntry): Promise<void> {
   try {
     await writeAuditLog(entry)
   } catch (err) {
     logError('auditLogs: falló el registro (el archivo en Drive no se revierte)', err)
+    return
   }
+
+  await emitNotificationsFromAuditBestEffort(entry)
 }

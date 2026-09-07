@@ -11,6 +11,7 @@ import {
   type DrivePermissionType,
 } from './classification.js'
 import {
+  DrivePermissionAlreadyInheritedError,
   grantUserDrivePermission,
   isPermissionRole,
 } from './driveUserPermission.js'
@@ -200,6 +201,17 @@ export async function grantDrivePermission(req: Request, res: Response): Promise
       domain: null,
     })
   } catch (err) {
+    if (err instanceof DrivePermissionAlreadyInheritedError) {
+      res.status(409).json({
+        error: err.message,
+        code: err.code,
+        permissionId: err.permissionId,
+        granteeEmail: err.email,
+        inheritedFrom: err.inheritedFrom,
+        driveRole: err.driveRole,
+      })
+      return
+    }
     logError('Drive permissions.create falló', err)
     const detail = googleUserMessage(err)
     res.status(502).json({

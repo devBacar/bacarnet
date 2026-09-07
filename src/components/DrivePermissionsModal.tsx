@@ -1,6 +1,8 @@
-import { Loader2, Search, Share2, Trash2, UserPlus, Users, X } from 'lucide-react'
+import { Loader2, Share2, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
+import { CollapsibleSection } from './access/CollapsibleSection'
+import { UserMultiPicker } from './access/UserMultiPicker'
 import {
   grantDriveAreaPermission,
   grantDrivePermission,
@@ -12,9 +14,11 @@ import {
   type DrivePermissionRole,
 } from '../services/driveApi'
 import { getAllUsers, type UserProfile } from '../services/userService'
+import { listAssignableRootAreas, type GoverningArea } from '../services/areaService'
+import { isPrivilegedAccessIdentity } from '../utils/privilegedAccess'
+import { isValidReason, REASON_REQUIRED_ERROR, REASON_REQUIRED_LABEL } from '../utils/reasonValidation'
 
 const ALLOWED_DOMAIN = 'bacarsa.com.ar'
-const MIN_REASON_LENGTH = 15
 
 const classificationLabel: Record<DriveClassification, string> = {
   RESTRINGIDO: 'Restringido',
@@ -22,9 +26,10 @@ const classificationLabel: Record<DriveClassification, string> = {
   USO_INTERNO: 'Uso interno',
 }
 
-const roleLabel: Record<'reader' | 'writer', string> = {
+const grantRoleLabel: Record<'reader' | 'commenter' | 'writer', string> = {
   reader: 'Lector',
-  writer: 'Escritor',
+  commenter: 'Comentarista',
+  writer: 'Editor',
 }
 
 function permissionRoleLabel(role: DrivePermissionRole): string {
@@ -46,37 +51,52 @@ export function DrivePermissionsModal({
   classification,
   onClose,
 }: DrivePermissionsModalProps) {
-  const effectiveClassification = classification ?? 'USO_INTERNO'
-  const isRestricted = effectiveClassification === 'RESTRINGIDO'
-
   const [permissions, setPermissions] = useState<DrivePermissionDto[]>([])
   const [domainAccess, setDomainAccess] = useState<
     Awaited<ReturnType<typeof listDrivePermissions>>['domainAccess']
   >(null)
+  const [resolvedClassification, setResolvedClassification] = useState<DriveClassification | null>(
+    classification,
+  )
+  const [createdByLabel, setCreatedByLabel] = useState<string | null>(null)
   const [governingAreaId, setGoverningAreaId] = useState<string | null>(null)
   const [governingAreaName, setGoverningAreaName] = useState<string | null>(null)
   const [areaMembers, setAreaMembers] = useState<DriveAreaMemberDto[]>([])
   const [allUsers, setAllUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
-  const [selectedEmail, setSelectedEmail] = useState('')
-  const [grantRole, setGrantRole] = useState<'reader' | 'writer'>('reader')
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([])
+  const [grantRole, setGrantRole] = useState<'reader' | 'commenter' | 'writer'>('reader')
   const [grantReason, setGrantReason] = useState('')
-  const [areaGrantRole, setAreaGrantRole] = useState<'reader' | 'writer'>('reader')
+  const [shareWithAreaEnabled, setShareWithAreaEnabled] = useState(false)
+  const [areaGrantRole, setAreaGrantRole] = useState<'reader' | 'commenter' | 'writer'>('reader')
   const [areaGrantReason, setAreaGrantReason] = useState('')
+  const [areaGrantTargetId, setAreaGrantTargetId] = useState('')
+  const [assignableAreas, setAssignableAreas] = useState<GoverningArea[]>([])
   const [revokeTarget, setRevokeTarget] = useState<DrivePermissionDto | null>(null)
   const [revokeReason, setRevokeReason] = useState('')
   const [acting, setActing] = useState(false)
 
+  const effectiveClassification = resolvedClassification ?? classification ?? 'USO_INTERNO'
+  const isRestricted = effectiveClassification === 'RESTRINGIDO'
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [access, users] = await Promise.all([listDrivePermissions(fileId), getAllUsers()])
+      const [access, users, areas] = await Promise.all([
+        listDrivePermissions(fileId),
+        getAllUsers(),
+        listAssignableRootAreas(),
+      ])
       setPermissions(access.permissions)
       setDomainAccess(access.domainAccess)
+      setResolvedClassification(access.classification)
+      setCreatedByLabel(access.createdByDisplayName || access.createdByEmail)
       setGoverningAreaId(access.governingAreaId)
       setGoverningAreaName(access.governingAreaName)
       setAreaMembers(access.areaMembers)
+      setAreaGrantTargetId(access.governingAreaId ?? areas[0]?.id ?? '')
+      setAssignableAreas(areas)
       setAllUsers(users)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo cargar los permisos')
@@ -101,45 +121,48 @@ export function DrivePermissionsModal({
     }
   }, [onClose])
 
+  const userRoleByEmail = useMemo(() => {
+    const map = new Map<string, UserProfile['role']>()
+    for (const user of allUsers) {
+      map.set(user.email.trim().toLowerCase(), user.role)
+    }
+    return map
+  }, [allUsers])
+
+  const visiblePermissions = useMemo(
+    () =>
+      permissions.filter(
+        (row) =>
+          !isPrivilegedAccessIdentity(row.emailAddress, userRoleByEmail.get(row.emailAddress)),
+      ),
+    [permissions, userRoleByEmail],
+  )
+
+  const directPermissions = useMemo(
+    () => visiblePermissions.filter((row) => !row.inherited),
+    [visiblePermissions],
+  )
+
+  const inheritedPermissions = useMemo(
+    () => visiblePermissions.filter((row) => row.inherited),
+    [visiblePermissions],
+  )
+
   const grantedEmails = useMemo(
     () => new Set(permissions.map((row) => row.emailAddress)),
     [permissions],
   )
 
-  const candidates = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase('es')
-    const typedEmail =
-      normalized.includes('@') && normalized.endsWith(`@${ALLOWED_DOMAIN}`) ? normalized : null
-
-    const fromDirectory = allUsers
-      .filter((user) => !grantedEmails.has(user.email.trim().toLowerCase()))
-      .filter((user) => {
-        if (!normalized) return true
-        const haystack = `${user.displayName ?? ''} ${user.email}`.toLocaleLowerCase('es')
-        return haystack.includes(normalized)
-      })
-      .slice(0, 8)
-
-    if (
-      typedEmail &&
-      !grantedEmails.has(typedEmail) &&
-      !fromDirectory.some((user) => user.email.toLowerCase() === typedEmail)
-    ) {
-      return [{ uid: typedEmail, email: typedEmail, displayName: typedEmail } as UserProfile, ...fromDirectory]
-    }
-
-    return fromDirectory
-  }, [allUsers, grantedEmails, query])
-
   const handleAreaGrant = async (event: FormEvent) => {
     event.preventDefault()
-    if (!governingAreaId || areaGrantReason.trim().length < MIN_REASON_LENGTH) return
+    if (!areaGrantTargetId || !isValidReason(areaGrantReason)) return
 
     setActing(true)
     try {
       const result = await grantDriveAreaPermission(fileId, {
         role: areaGrantRole,
         reason: areaGrantReason.trim(),
+        areaId: areaGrantTargetId,
       })
       const partial = result.failedCount > 0
       toast.success(
@@ -156,33 +179,62 @@ export function DrivePermissionsModal({
     }
   }
 
+  const selectedGrantAreaName =
+    assignableAreas.find((area) => area.id === areaGrantTargetId)?.name ??
+    governingAreaName ??
+    'el área seleccionada'
+  const showGoverningMemberPreview =
+    Boolean(governingAreaId) && areaGrantTargetId === governingAreaId && areaMembers.length > 0
+
   const handleGrant = async (event: FormEvent) => {
     event.preventDefault()
-    const email = selectedEmail.trim().toLowerCase()
-    if (!email || !grantReason.trim()) return
-    if (grantReason.trim().length < MIN_REASON_LENGTH) {
-      toast.error(`El motivo debe tener al menos ${MIN_REASON_LENGTH} caracteres`)
+    if (selectedEmails.length === 0 || !grantReason.trim()) return
+    if (!isValidReason(grantReason)) {
+      toast.error(REASON_REQUIRED_ERROR)
       return
     }
-    if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+
+    const invalidDomain = selectedEmails.find(
+      (email) => !email.endsWith(`@${ALLOWED_DOMAIN}`),
+    )
+    if (invalidDomain) {
       toast.error(`Solo se permiten emails @${ALLOWED_DOMAIN}`)
       return
     }
 
     setActing(true)
     try {
-      await grantDrivePermission(fileId, {
-        email,
-        role: grantRole,
-        reason: grantReason.trim(),
-      })
-      toast.success('Permiso otorgado')
-      setSelectedEmail('')
+      let grantedCount = 0
+      let failedCount = 0
+      for (const email of selectedEmails) {
+        try {
+          await grantDrivePermission(fileId, {
+            email,
+            role: grantRole,
+            reason: grantReason.trim(),
+          })
+          grantedCount += 1
+        } catch {
+          failedCount += 1
+        }
+      }
+
+      if (grantedCount === 0) {
+        toast.error('No se pudo otorgar el permiso a ninguna persona')
+      } else if (failedCount > 0) {
+        toast.success(`Permiso otorgado a ${grantedCount} persona(s); ${failedCount} fallo(s)`)
+      } else {
+        toast.success(
+          grantedCount === 1
+            ? 'Permiso otorgado'
+            : `Permiso otorgado a ${grantedCount} personas`,
+        )
+      }
+
+      setSelectedEmails([])
       setGrantReason('')
       setQuery('')
       await load()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo otorgar el permiso')
     } finally {
       setActing(false)
     }
@@ -191,8 +243,8 @@ export function DrivePermissionsModal({
   const handleRevoke = async (event: FormEvent) => {
     event.preventDefault()
     if (!revokeTarget || !revokeReason.trim()) return
-    if (revokeReason.trim().length < MIN_REASON_LENGTH) {
-      toast.error(`El motivo debe tener al menos ${MIN_REASON_LENGTH} caracteres`)
+    if (!isValidReason(revokeReason)) {
+      toast.error(REASON_REQUIRED_ERROR)
       return
     }
 
@@ -231,6 +283,11 @@ export function DrivePermissionsModal({
               Clasificación: {classificationLabel[effectiveClassification]}
               {isRestricted ? ' · solo personas puntuales' : ''}
             </p>
+            {createdByLabel ? (
+              <p className="mt-1 text-xs text-neutral-400 dark:text-zinc-500">
+                Creada en intranet por {createdByLabel}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
@@ -243,19 +300,22 @@ export function DrivePermissionsModal({
         </header>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-          <section>
-            <h3 className="mb-2 text-sm font-medium">Personas con acceso</h3>
+          <CollapsibleSection
+            title="Personas con acceso directo"
+            count={loading ? undefined : directPermissions.length}
+          >
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
               </div>
-            ) : permissions.length === 0 ? (
+            ) : directPermissions.length === 0 ? (
               <p className="rounded-lg border border-dashed border-neutral-200 px-4 py-6 text-center text-sm text-neutral-500 dark:border-zinc-700 dark:text-zinc-400">
-                Nadie tiene acceso directo todavía.
+                Nadie tiene acceso directo todavía. Quienes vean la carpeta lo hacen por herencia
+                desde la carpeta padre.
               </p>
             ) : (
-              <ul className="space-y-2">
-                {permissions.map((row) => (
+              <ul className="max-h-56 space-y-2 overflow-y-auto">
+                {directPermissions.map((row) => (
                   <li
                     key={row.id}
                     className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 px-3 py-2.5 dark:border-zinc-800"
@@ -266,61 +326,133 @@ export function DrivePermissionsModal({
                       </p>
                       <p className="truncate text-xs text-neutral-500 dark:text-zinc-400">
                         {row.emailAddress} · {permissionRoleLabel(row.role)}
-                        {row.inherited ? ' · heredado' : ''}
                       </p>
                     </div>
-                    {row.inherited ? (
-                      <span className="shrink-0 text-xs text-neutral-400 dark:text-zinc-500">
-                        No revocable
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setRevokeTarget(row)}
-                        className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-brand-tint dark:hover:bg-brand-primary-hover/30"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                        Quitar
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => setRevokeTarget(row)}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-danger hover:bg-brand-tint dark:hover:bg-brand-primary-hover/30"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Quitar
+                    </button>
                   </li>
                 ))}
               </ul>
             )}
 
-            {!loading && domainAccess && !isRestricted && (
+            {!loading && domainAccess && !domainAccess.inherited && !isRestricted ? (
               <p className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
-                Acceso de dominio @{domainAccess.domain} ({permissionRoleLabel(domainAccess.role)})
-                {domainAccess.inherited ? ', heredado' : ''}. Revocalo desde Google Drive si
-                corresponde.
+                Acceso de dominio @{domainAccess.domain} ({permissionRoleLabel(domainAccess.role)}).
+                Revocalo desde Google Drive si corresponde.
               </p>
-            )}
-          </section>
+            ) : null}
+          </CollapsibleSection>
 
-          {governingAreaId && governingAreaName && (
-            <section>
-              <h3 className="mb-2 text-sm font-medium">Compartir con todo el área</h3>
+          {!loading && inheritedPermissions.length > 0 ? (
+            <CollapsibleSection title="Acceso heredado" count={inheritedPermissions.length}>
               <p className="mb-3 text-xs text-neutral-500 dark:text-zinc-400">
-                Otorga acceso individual en Drive a{' '}
-                <span className="font-medium text-neutral-700 dark:text-zinc-200">
-                  {areaMembers.length} persona{areaMembers.length === 1 ? '' : 's'}
-                </span>{' '}
-                de {governingAreaName} (miembros + jefes del área).
+                Estas personas ya tenían acceso a la carpeta padre
+                {governingAreaName ? ` (${governingAreaName})` : ''}. Google Drive no permite
+                revocarlo desde acá; solo podés quitar acceso directo puntual.
               </p>
-              {areaMembers.length === 0 ? (
-                <p className="rounded-lg border border-dashed border-neutral-200 px-4 py-4 text-sm text-neutral-500 dark:border-zinc-700 dark:text-zinc-400">
-                  No hay usuarios con pertenencia a {governingAreaName}. Asignalos en Usuarios →
-                  editar perfil → Áreas de pertenencia.
+              <ul className="max-h-40 space-y-2 overflow-y-auto">
+                {inheritedPermissions.map((row) => (
+                  <li
+                    key={row.id}
+                    className="rounded-lg border border-neutral-200 px-3 py-2.5 dark:border-zinc-800"
+                  >
+                    <p className="truncate text-sm font-medium">
+                      {row.displayName || row.emailAddress}
+                    </p>
+                    <p className="truncate text-xs text-neutral-500 dark:text-zinc-400">
+                      {row.emailAddress} · {permissionRoleLabel(row.role)} · heredado
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              {!loading && domainAccess?.inherited ? (
+                <p className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-400">
+                  Acceso de dominio @{domainAccess.domain} ({permissionRoleLabel(domainAccess.role)}
+                  ), heredado desde la carpeta padre.
                 </p>
-              ) : (
-                <form onSubmit={handleAreaGrant} className="space-y-3 rounded-lg border border-neutral-200 bg-neutral-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-900/50">
-                  <ul className="max-h-28 space-y-1 overflow-y-auto text-xs text-neutral-600 dark:text-zinc-400">
-                    {areaMembers.map((member) => (
-                      <li key={member.uid} className="truncate">
-                        {member.displayName || member.email} · {member.email}
-                      </li>
-                    ))}
-                  </ul>
+              ) : null}
+            </CollapsibleSection>
+          ) : null}
+
+          {assignableAreas.length > 0 ? (
+            <section className="rounded-lg border border-neutral-200 dark:border-zinc-800">
+              <div className="flex items-start justify-between gap-4 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-medium">Compartir con todo el área</h3>
+                  <p className="mt-1 text-xs text-neutral-500 dark:text-zinc-400">
+                    Otorga acceso individual en Drive a todos los miembros y jefes del área
+                    elegida.
+                    {governingAreaName ? (
+                      <>
+                        {' '}
+                        Área gobernante:{' '}
+                        <span className="font-medium text-neutral-700 dark:text-zinc-200">
+                          {governingAreaName}
+                        </span>
+                        .
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={shareWithAreaEnabled}
+                  aria-label="Compartir con todo el área"
+                  onClick={() => setShareWithAreaEnabled((current) => !current)}
+                  className={`relative mt-0.5 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 ${
+                    shareWithAreaEnabled ? 'bg-brand-primary' : 'bg-neutral-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform dark:bg-zinc-900 ${
+                      shareWithAreaEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {shareWithAreaEnabled ? (
+                <form
+                  onSubmit={handleAreaGrant}
+                  className="space-y-3 border-t border-neutral-200 bg-neutral-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-900/50"
+                >
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-zinc-400">
+                      Área destino
+                    </span>
+                    <select
+                      value={areaGrantTargetId}
+                      onChange={(event) => setAreaGrantTargetId(event.target.value)}
+                      className="h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm outline-none input-brand-focus dark:border-zinc-700 dark:bg-zinc-950"
+                    >
+                      {assignableAreas.map((area) => (
+                        <option key={area.id} value={area.id}>
+                          {area.name}
+                          {area.id === governingAreaId ? ' (gobierna el archivo)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {showGoverningMemberPreview ? (
+                    <ul className="max-h-28 space-y-1 overflow-y-auto text-xs text-neutral-600 dark:text-zinc-400">
+                      {areaMembers.map((member) => (
+                        <li key={member.uid} className="truncate">
+                          {member.displayName || member.email} · {member.email}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-neutral-500 dark:text-zinc-400">
+                      Se compartirá con miembros y jefes de {selectedGrantAreaName}.
+                    </p>
+                  )}
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-zinc-400">
                       Rol
@@ -328,17 +460,18 @@ export function DrivePermissionsModal({
                     <select
                       value={areaGrantRole}
                       onChange={(event) =>
-                        setAreaGrantRole(event.target.value as 'reader' | 'writer')
+                        setAreaGrantRole(event.target.value as 'reader' | 'commenter' | 'writer')
                       }
                       className="h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm outline-none input-brand-focus dark:border-zinc-700 dark:bg-zinc-950"
                     >
-                      <option value="reader">{roleLabel.reader}</option>
-                      <option value="writer">{roleLabel.writer}</option>
+                      <option value="reader">{grantRoleLabel.reader}</option>
+                      <option value="commenter">{grantRoleLabel.commenter}</option>
+                      <option value="writer">{grantRoleLabel.writer}</option>
                     </select>
                   </label>
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-zinc-400">
-                      Motivo (mín. {MIN_REASON_LENGTH} caracteres)
+                      {REASON_REQUIRED_LABEL}
                     </span>
                     <textarea
                       required
@@ -350,70 +483,37 @@ export function DrivePermissionsModal({
                   </label>
                   <button
                     type="submit"
-                    disabled={
-                      acting || areaGrantReason.trim().length < MIN_REASON_LENGTH
-                    }
+                    disabled={acting || !areaGrantTargetId || !isValidReason(areaGrantReason)}
                     className="btn-primary inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Users className="h-4 w-4" />
-                    {acting
-                      ? 'Compartiendo…'
-                      : `Compartir con ${governingAreaName}`}
+                    {acting ? 'Compartiendo…' : `Compartir con ${selectedGrantAreaName}`}
                   </button>
                 </form>
-              )}
+              ) : null}
             </section>
-          )}
+          ) : null}
 
           <section>
-            <h3 className="mb-2 text-sm font-medium">Otorgar acceso a una persona</h3>
-            {isRestricted && (
+            <h3 className="mb-2 text-sm font-medium">Otorgar acceso a personas</h3>
+            {isRestricted ? (
               <p className="mb-3 rounded-lg alert-error px-3 py-2 text-xs text-danger">
                 Archivo restringido: solo podés compartir con personas puntuales de @
                 {ALLOWED_DOMAIN}. No hay link abierto ni acceso por dominio.
               </p>
-            )}
+            ) : null}
 
             <form onSubmit={handleGrant} className="space-y-3">
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-zinc-400">
-                  Buscar por nombre o email
-                </span>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                  <input
-                    value={query}
-                    onChange={(event) => {
-                      setQuery(event.target.value)
-                      setSelectedEmail('')
-                    }}
-                    placeholder={`nombre o usuario@${ALLOWED_DOMAIN}`}
-                    className="h-10 w-full rounded-lg border border-neutral-300 bg-white pl-9 pr-3 text-sm outline-none input-brand-focus dark:border-zinc-700 dark:bg-zinc-950"
-                  />
-                </div>
-              </label>
-
-              {candidates.length > 0 && (
-                <ul className="max-h-40 overflow-y-auto rounded-lg border border-neutral-200 dark:border-zinc-800">
-                  {candidates.map((user) => (
-                    <li key={user.uid}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedEmail(user.email)
-                          setQuery(user.displayName || user.email)
-                        }}
-                        className={`flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-neutral-50 dark:hover:bg-zinc-800 ${
-                          selectedEmail === user.email ? 'bg-blue-50 dark:bg-blue-950/30' : ''
-                        }`}
-                      >
-                        <span className="font-medium">{user.displayName || user.email}</span>
-                        <span className="text-xs text-neutral-500 dark:text-zinc-400">{user.email}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <UserMultiPicker
+                allUsers={allUsers}
+                excludeEmails={grantedEmails}
+                selectedEmails={selectedEmails}
+                onSelectedEmailsChange={setSelectedEmails}
+                query={query}
+                onQueryChange={setQuery}
+                placeholder={`nombre o usuario@${ALLOWED_DOMAIN}`}
+                allowedDomain={ALLOWED_DOMAIN}
+              />
 
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-zinc-400">
@@ -421,17 +521,20 @@ export function DrivePermissionsModal({
                 </span>
                 <select
                   value={grantRole}
-                  onChange={(event) => setGrantRole(event.target.value as 'reader' | 'writer')}
+                  onChange={(event) =>
+                    setGrantRole(event.target.value as 'reader' | 'commenter' | 'writer')
+                  }
                   className="h-10 w-full rounded-lg border border-neutral-300 bg-white px-3 text-sm outline-none input-brand-focus dark:border-zinc-700 dark:bg-zinc-950"
                 >
-                  <option value="reader">{roleLabel.reader}</option>
-                  <option value="writer">{roleLabel.writer}</option>
+                  <option value="reader">{grantRoleLabel.reader}</option>
+                  <option value="commenter">{grantRoleLabel.commenter}</option>
+                  <option value="writer">{grantRoleLabel.writer}</option>
                 </select>
               </label>
 
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-zinc-400">
-                  Motivo (mín. {MIN_REASON_LENGTH} caracteres)
+                  {REASON_REQUIRED_LABEL}
                 </span>
                 <textarea
                   required
@@ -446,20 +549,24 @@ export function DrivePermissionsModal({
                 type="submit"
                 disabled={
                   acting ||
-                  !selectedEmail ||
-                  grantReason.trim().length < MIN_REASON_LENGTH
+                  selectedEmails.length === 0 ||
+                  !isValidReason(grantReason)
                 }
                 className="btn-primary inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <UserPlus className="h-4 w-4" />
-                {acting ? 'Guardando…' : 'Otorgar permiso'}
+                {acting
+                  ? 'Guardando…'
+                  : selectedEmails.length > 1
+                    ? `Otorgar permiso a ${selectedEmails.length} personas`
+                    : 'Otorgar permiso'}
               </button>
             </form>
           </section>
         </div>
       </div>
 
-      {revokeTarget && (
+      {revokeTarget ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 p-4">
           <form
             onSubmit={handleRevoke}
@@ -471,7 +578,7 @@ export function DrivePermissionsModal({
             </p>
             <label className="mt-4 block">
               <span className="mb-1.5 block text-xs font-medium">
-                Motivo (mín. {MIN_REASON_LENGTH} caracteres)
+                {REASON_REQUIRED_LABEL}
               </span>
               <textarea
                 required
@@ -495,7 +602,7 @@ export function DrivePermissionsModal({
               </button>
               <button
                 type="submit"
-                disabled={acting || revokeReason.trim().length < MIN_REASON_LENGTH}
+                disabled={acting || !isValidReason(revokeReason)}
                 className="rounded-lg btn-danger px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
               >
                 {acting ? 'Revocando…' : 'Revocar'}
@@ -503,7 +610,7 @@ export function DrivePermissionsModal({
             </div>
           </form>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

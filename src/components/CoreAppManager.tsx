@@ -9,6 +9,7 @@ import {
   getCoreApps,
   updateCoreApp,
   type CoreApp,
+  type CoreAppLinkKind,
 } from '../services/coreAppService'
 
 const CORE_APP_ICONS = Object.entries(CORE_APP_ICON_MAP).map(([name, icon]) => ({
@@ -29,6 +30,7 @@ export function CoreAppManager() {
   const [description, setDescription] = useState('')
   const [url, setUrl] = useState('')
   const [icon, setIcon] = useState(CORE_APP_ICONS[0].name)
+  const [linkKind, setLinkKind] = useState<CoreAppLinkKind>('app')
 
   const loadApps = useCallback(async () => {
     try {
@@ -58,6 +60,7 @@ export function CoreAppManager() {
     setDescription('')
     setUrl('')
     setIcon(CORE_APP_ICONS[0].name)
+    setLinkKind('app')
   }
 
   const handleEdit = (app: CoreApp) => {
@@ -66,6 +69,7 @@ export function CoreAppManager() {
     setDescription(app.description)
     setUrl(app.url)
     setIcon(app.icon ?? CORE_APP_ICONS[0].name)
+    setLinkKind(app.linkKind ?? 'app')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -78,6 +82,7 @@ export function CoreAppManager() {
       description: description.trim(),
       url: url.trim(),
       icon,
+      linkKind,
     }
 
     try {
@@ -130,16 +135,52 @@ export function CoreAppManager() {
             </div>
             <div>
               <h2 className="text-lg font-semibold text-neutral-900 dark:text-gray-100">
-                {editingId ? 'Editar aplicación' : 'Nueva aplicación interna'}
+                {editingId
+                  ? linkKind === 'external_link'
+                    ? 'Editar enlace externo'
+                    : 'Editar aplicación'
+                  : linkKind === 'external_link'
+                    ? 'Nuevo enlace externo'
+                    : 'Nueva aplicación interna'}
               </h2>
               <p className="text-sm text-neutral-500 dark:text-gray-400">
-                Accesos principales visibles en el dashboard de la intranet
+                {linkKind === 'external_link'
+                  ? 'Accesos directos a sitios externos (ARCA, AFIP, etc.)'
+                  : 'Accesos principales visibles en el dashboard de la intranet'}
               </p>
             </div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 p-6">
+          <div>
+            <p className="mb-2 text-sm font-medium text-neutral-700 dark:text-gray-300">Tipo de acceso</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setLinkKind('app')}
+                className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                  linkKind === 'app'
+                    ? 'border-brand-primary bg-brand-tint text-brand-primary'
+                    : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50 dark:border-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-900'
+                }`}
+              >
+                Aplicación interna
+              </button>
+              <button
+                type="button"
+                onClick={() => setLinkKind('external_link')}
+                className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                  linkKind === 'external_link'
+                    ? 'border-brand-primary bg-brand-tint text-brand-primary'
+                    : 'border-neutral-300 text-neutral-600 hover:bg-neutral-50 dark:border-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-900'
+                }`}
+              >
+                Enlace externo
+              </button>
+            </div>
+          </div>
+
           <div className="grid gap-5 lg:grid-cols-2">
             <div>
               <label htmlFor="core-app-title" className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-gray-300">
@@ -228,7 +269,7 @@ export function CoreAppManager() {
               disabled={submitting}
               className="btn-primary rounded-lg px-6 py-2.5 text-sm font-semibold"
             >
-              {submitting ? 'Guardando...' : editingId ? 'Actualizar' : 'Registrar aplicación'}
+              {submitting ? 'Guardando...' : editingId ? 'Actualizar' : linkKind === 'external_link' ? 'Registrar enlace' : 'Registrar aplicación'}
             </button>
           </div>
         </form>

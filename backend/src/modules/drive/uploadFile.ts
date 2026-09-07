@@ -1,5 +1,4 @@
 import type { Request, Response } from 'express'
-import Busboy from 'busboy'
 import { Readable } from 'node:stream'
 import { getDrive } from '../../lib/google/driveClient.js'
 import { sanitizeDriveId } from '../../lib/google/driveIds.js'
@@ -12,76 +11,17 @@ import {
 } from './classification.js'
 import { invalidateDriveMetadataForUser } from './driveMetadataCache.js'
 import { resolveDriveSubject } from './driveSubject.js'
-import { getAllowedUploadMimeTypes, getMinReasonLength } from './policy.js'
+import { getAllowedUploadMimeTypes, getMinReasonLength, isOfficeUploadMime } from './policy.js'
+import {
+  isInstallerFilename,
+  isInstallerArea,
+  validateInstallerUpload,
+} from './installerUploadPolicy.js'
+import { parseMultipartUpload } from './parseMultipartUpload.js'
 import { resolveGoverningAreaId } from './resolveGoverningArea.js'
 
-const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 const BINARY_UPLOAD_MIMES = new Set(['application/pdf', 'image/png', 'image/jpeg'])
-
-type ParsedUpload = {
-  fields: Record<string, string>
-  file: {
-    originalname: string
-    mimetype: string
-    size: number
-    buffer: Buffer
-  } | null
-}
-
-async function parseMultipart(req: Request): Promise<ParsedUpload> {
-  return new Promise((resolve, reject) => {
-    const fields: Record<string, string> = {}
-    let file: ParsedUpload['file'] = null
-    let tooLarge = false
-    let parser: ReturnType<typeof Busboy>
-
-    try {
-      parser = Busboy({
-        headers: req.headers,
-        limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 10 },
-      })
-    } catch (err) {
-      reject(err)
-      return
-    }
-
-    parser.on('field', (name, value) => {
-      fields[name] = value
-    })
-    parser.on('file', (_fieldName, stream, info) => {
-      const chunks: Buffer[] = []
-      let size = 0
-      stream.on('data', (chunk: Buffer) => {
-        chunks.push(chunk)
-        size += chunk.length
-      })
-      stream.on('limit', () => {
-        tooLarge = true
-      })
-      stream.on('end', () => {
-        file = {
-          originalname: info.filename,
-          mimetype: info.mimeType,
-          size,
-          buffer: Buffer.concat(chunks),
-        }
-      })
-    })
-    parser.on('error', reject)
-    parser.on('finish', () => {
-      if (tooLarge) {
-        reject(new Error('UPLOAD_TOO_LARGE'))
-        return
-      }
-      resolve({ fields, file })
-    })
-
-    const rawBody = (req as Request & { rawBody?: Buffer }).rawBody
-    if (rawBody) parser.end(rawBody)
-    else req.pipe(parser)
-  })
-}
 
 export async function uploadDriveFile(req: Request, res: Response): Promise<void> {
   const user = req.authedUser
@@ -89,9 +29,9 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
     res.status(401).json({ error: 'No autenticado' })
     return
   }
-  let parsed: ParsedUpload
+  let parsed
   try {
-    parsed = await parseMultipart(req)
+    parsed = await parseMultipartUpload(req)
   } catch (err) {
     if (err instanceof Error && err.message === 'UPLOAD_TOO_LARGE') {
       res.status(413).json({ error: 'El archivo supera el límite de 25 MB' })
@@ -105,6 +45,15 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
   const fields = parsed.fields
   if (!uploadedFile) {
     res.status(400).json({ error: 'file es obligatorio' })
+    return
+  }
+
+  if (isOfficeUploadMime(uploadedFile.mimetype)) {
+    res.status(409).json({
+      error: 'Los archivos Office requieren aprobación previa del jefe de área',
+      code: 'office_requires_approval',
+      uploadRequestPath: '/api/approval-requests/office-upload',
+    })
     return
   }
 
@@ -129,18 +78,6 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
     return
   }
 
-  const allowedMimes = await getAllowedUploadMimeTypes()
-  if (
-    !BINARY_UPLOAD_MIMES.has(uploadedFile.mimetype) ||
-    !allowedMimes.includes(uploadedFile.mimetype)
-  ) {
-    res.status(403).json({
-      error: 'mimeType no permitido para upload',
-      allowedMimeTypes: allowedMimes,
-    })
-    return
-  }
-
   const driveSubject = resolveDriveSubject(user)
   const parent = await getFileInSharedDrive(parentFolderId, driveSubject)
   if (!parent.ok) {
@@ -154,6 +91,52 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
   if (parent.file.mimeType !== FOLDER_MIME) {
     res.status(400).json({ error: 'parentFolderId no es una carpeta' })
     return
+  }
+
+  const governingAreaId = await resolveGoverningAreaId(parentFolderId)
+  const installerUpload = isInstallerFilename(uploadedFile.originalname)
+
+  if (installerUpload) {
+    const installerCheck = validateInstallerUpload(
+      uploadedFile.mimetype,
+      uploadedFile.originalname,
+    )
+    if (!installerCheck.ok) {
+      res.status(403).json({ error: installerCheck.error, code: installerCheck.code })
+      return
+    }
+
+    if (!isInstallerArea(governingAreaId)) {
+      res.status(403).json({
+        error: 'Los instaladores solo pueden subirse dentro del área Sistemas',
+        code: 'installer_area_restricted',
+      })
+      return
+    }
+
+    const mime = uploadedFile.mimetype.trim().toLowerCase()
+    if (mime !== 'application/octet-stream') {
+      const allowedMimes = await getAllowedUploadMimeTypes()
+      if (!allowedMimes.includes(mime)) {
+        res.status(403).json({
+          error: 'mimeType no permitido para instaladores',
+          allowedMimeTypes: allowedMimes,
+        })
+        return
+      }
+    }
+  } else {
+    const allowedMimes = await getAllowedUploadMimeTypes()
+    if (
+      !BINARY_UPLOAD_MIMES.has(uploadedFile.mimetype) ||
+      !allowedMimes.includes(uploadedFile.mimetype)
+    ) {
+      res.status(403).json({
+        error: 'mimeType no permitido para upload',
+        allowedMimeTypes: allowedMimes,
+      })
+      return
+    }
   }
 
   const name =
@@ -178,7 +161,6 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
     })
 
     const id = created.data.id ?? ''
-    const governingAreaId = await resolveGoverningAreaId(parentFolderId)
     await writeFileClassificationBestEffort(
       id,
       classification,
@@ -246,4 +228,3 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
     })
   }
 }
-

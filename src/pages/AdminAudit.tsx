@@ -19,12 +19,14 @@ const ACTION_LABELS: Record<string, string> = {
   managed_areas_change: 'Cambio de áreas',
   member_areas_change: 'Cambio de pertenencia',
   action_grants_change: 'Excepción de gobernanza',
+  password_reset: 'Restablecer contraseña',
   classification_change: 'Clasificación',
   authorized_copy: 'Copia autorizada',
   approval: 'Aprobación',
   board_view: 'Vista de tablero',
   board_access_grant: 'Acceso a tablero',
   board_access_revoke: 'Revocar acceso a tablero',
+  audit_correction: 'Corrección de auditoría',
 }
 
 const ACTION_OPTIONS = [
@@ -44,6 +46,8 @@ const ACTION_OPTIONS = [
   'managed_areas_change',
   'member_areas_change',
   'action_grants_change',
+  'password_reset',
+  'audit_correction',
 ] as const
 
 function formatWhen(iso: string | null): string {
@@ -96,6 +100,12 @@ function metadataSummary(log: AuditLogDto): string | null {
     const parts = [email, role].filter(Boolean)
     if (parts.length) return parts.join(' · ')
   }
+  if (log.action === 'audit_correction') {
+    const corrects = typeof m.correctsAuditLogId === 'string' ? m.correctsAuditLogId : null
+    const grantee = typeof m.granteeEmail === 'string' ? m.granteeEmail : null
+    const parts = [corrects ? `corrige ${corrects.slice(0, 8)}…` : null, grantee].filter(Boolean)
+    if (parts.length) return parts.join(' · ')
+  }
   if (log.action === 'board_access_grant' || log.action === 'board_access_revoke') {
     const email = typeof m.granteeEmail === 'string' ? m.granteeEmail : null
     if (email) return email
@@ -106,7 +116,15 @@ function metadataSummary(log: AuditLogDto): string | null {
     if (from || to) return `${String(from ?? '—')} → ${String(to ?? '—')}`
   }
   if (typeof m.classification === 'string' && log.action === 'create') {
-    return m.classification
+    const mode =
+      typeof m.folderAccessMode === 'string'
+        ? {
+            restricted: 'solo autorizados',
+            selected: 'personas específicas',
+            organization: 'todos Bacarsa',
+          }[m.folderAccessMode] ?? m.folderAccessMode
+        : null
+    return [m.classification, mode].filter(Boolean).join(' · ')
   }
   return null
 }

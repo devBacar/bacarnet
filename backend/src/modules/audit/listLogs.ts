@@ -21,9 +21,11 @@ const ACTIONS = [
   'managed_areas_change',
   'member_areas_change',
   'action_grants_change',
+  'password_reset',
   'classification_change',
   'authorized_copy',
   'approval',
+  'audit_correction',
 ] as const
 
 function isFilterBy(value: string): value is FilterBy {

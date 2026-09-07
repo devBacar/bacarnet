@@ -299,8 +299,8 @@ function EditModal({ target, onClose, onSaved }: EditModalProps) {
         onClick={onClose}
       />
 
-      <div className="relative w-full max-w-md overflow-hidden rounded-xl bg-white dark:bg-zinc-900 shadow-2xl">
-        <header className="flex items-start justify-between border-b border-neutral-200 dark:border-zinc-800 px-6 py-5">
+      <div className="relative w-full max-w-md app-modal-panel shadow-2xl">
+        <header className="shrink-0 flex items-start justify-between border-b border-neutral-200 dark:border-zinc-800 px-6 py-5">
           <div>
             <p className="text-brand-primary text-xs font-semibold uppercase tracking-wide">
               {target.kind === 'folder' ? 'Editar carpeta' : 'Editar recurso'}

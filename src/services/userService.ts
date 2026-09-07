@@ -7,6 +7,7 @@ import {
   getDocs,
   orderBy,
   query,
+  serverTimestamp,
   setDoc,
   updateDoc,
   type DocumentData,
@@ -19,12 +20,21 @@ import {
   type HomeWidgetId,
   type HomeWidgetPreferences,
 } from '../constants/homeWidgets'
+import {
+  isCorporateEmail,
+  resolveAccountStatus,
+  resolveAccountType,
+  type AccountStatus,
+  type AccountType,
+} from '../utils/accountAccess'
 
 const USERS_COLLECTION = 'users'
 
 export type UserDepartment = string
 
 export type UserRole = 'super_admin' | 'admin' | 'user'
+
+export type { AccountStatus, AccountType }
 
 export type GovernanceAction =
   | 'approval'
@@ -75,6 +85,11 @@ export interface UserProfile {
   /** Widgets visibles en la tarjeta de bienvenida de la home. */
   widgetPreferences: HomeWidgetPreferences
   birthDate?: string
+  accountType?: AccountType
+  accountStatus?: AccountStatus
+  accountStatusReason?: string
+  accountReviewedAt?: string
+  accountReviewedBy?: { uid: string; email: string }
 }
 
 /** @deprecated Preferir `role: 'user'`. Se mantiene por compatibilidad. */
@@ -103,6 +118,34 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   manage_users: true,
   super_admin: true,
 }
+
+export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
+  view_directory: false,
+  view_drive: false,
+  view_links: false,
+  manage_news: false,
+  manage_links: false,
+  manage_users: false,
+  super_admin: false,
+}
+
+export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
+  view_directory: true,
+  view_drive: false,
+  view_links: false,
+  manage_news: false,
+  manage_links: false,
+  manage_users: false,
+  super_admin: false,
+}
+
+export {
+  isCorporateEmail,
+  isExternalAccount,
+  isAccountActive,
+  isAccountPending,
+  isAccountRejected,
+} from '../utils/accountAccess'
 
 const VALID_ROLES: readonly UserRole[] = ['super_admin', 'admin', 'user']
 
@@ -193,6 +236,11 @@ export function isUser(profile: UserProfile | null | undefined): boolean {
 function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
   const permissions = data.permissions ?? {}
   const role = resolveRoleFromUserData(data)
+  const accountType =
+    data.accountType === 'external' || data.accountType === 'corporate'
+      ? data.accountType
+      : resolveAccountType(typeof data.email === 'string' ? data.email : '')
+  const accountStatus = resolveAccountStatus(data.accountStatus)
 
   const profile: UserProfile = {
     uid,
@@ -200,6 +248,8 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
     displayName: data.displayName ?? '',
     department: (data.department as UserDepartment) ?? 'General',
     role,
+    accountType,
+    accountStatus,
     permissions: {
       view_directory: permissions.view_directory ?? DEFAULT_PERMISSIONS.view_directory,
       view_drive: permissions.view_drive ?? DEFAULT_PERMISSIONS.view_drive,
@@ -216,6 +266,40 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
       data.widgetPreferences as Partial<HomeWidgetPreferences> | undefined,
     ),
     birthDate: typeof data.birthDate === 'string' ? data.birthDate : undefined,
+  }
+
+  if (typeof data.accountStatusReason === 'string' && data.accountStatusReason.trim()) {
+    profile.accountStatusReason = data.accountStatusReason.trim()
+  }
+  if (data.accountReviewedBy && typeof data.accountReviewedBy === 'object') {
+    const reviewedBy = data.accountReviewedBy as Record<string, unknown>
+    if (
+      typeof reviewedBy.uid === 'string' &&
+      typeof reviewedBy.email === 'string'
+    ) {
+      profile.accountReviewedBy = {
+        uid: reviewedBy.uid,
+        email: reviewedBy.email,
+      }
+    }
+  }
+  if (data.accountReviewedAt?.toDate) {
+    profile.accountReviewedAt = data.accountReviewedAt.toDate().toISOString()
+  } else if (typeof data.accountReviewedAt === 'string') {
+    profile.accountReviewedAt = data.accountReviewedAt
+  }
+
+  if (accountType === 'external') {
+    profile.permissions =
+      accountStatus === 'active'
+        ? {
+            ...EXTERNAL_APPROVED_PERMISSIONS,
+            view_directory: permissions.view_directory === true,
+            view_drive: false,
+            view_links: false,
+            super_admin: false,
+          }
+        : { ...EXTERNAL_PENDING_PERMISSIONS }
   }
 
   if (role === 'admin' && Array.isArray(data.managedAreaIds)) {
@@ -245,25 +329,38 @@ export async function registerUser(
   department: UserDepartment,
   birthDate: string,
 ): Promise<string> {
-  const credential = await createUserWithEmailAndPassword(auth, email, password)
+  const normalizedEmail = email.trim().toLowerCase()
+  const corporate = isCorporateEmail(normalizedEmail)
+  const accountType = resolveAccountType(normalizedEmail)
+  const accountStatus = corporate ? 'active' : 'pending_approval'
+
+  const credential = await createUserWithEmailAndPassword(auth, normalizedEmail, password)
   const { uid } = credential.user
 
   await updateProfile(credential.user, { displayName: name.trim() })
 
   await setDoc(doc(db, USERS_COLLECTION, uid), {
-    email,
+    email: normalizedEmail,
     displayName: name.trim(),
     department,
     birthDate,
-    role: resolveRoleForEmail(email),
-    permissions: getPermissionsForEmail(email),
+    role: resolveRoleForEmail(normalizedEmail),
+    accountType,
+    accountStatus,
+    permissions: corporate ? getPermissionsForEmail(normalizedEmail) : EXTERNAL_PENDING_PERMISSIONS,
     favoriteApps: [],
+    widgetPreferences: corporate
+      ? resolveHomeWidgetPreferences(undefined)
+      : { weather: true, dollar: true },
+    createdAt: serverTimestamp(),
   })
 
-  try {
-    await applyPendingUserSetupAfterRegister()
-  } catch (err) {
-    console.error('No se pudo aplicar la configuración pendiente:', err)
+  if (corporate) {
+    try {
+      await applyPendingUserSetupAfterRegister()
+    } catch (err) {
+      console.error('No se pudo aplicar la configuración pendiente:', err)
+    }
   }
 
   return uid
@@ -281,16 +378,25 @@ export async function ensureGoogleUserProfile(user: User): Promise<boolean> {
     return false
   }
 
+  const email = user.email?.trim().toLowerCase() ?? ''
+  const corporate = isCorporateEmail(email)
+
   await setDoc(userRef, {
-    email: user.email ?? '',
+    email,
     displayName:
       user.displayName?.trim() ||
       user.email?.split('@')[0] ||
       'Usuario',
     department: 'General',
-    role: resolveRoleForEmail(user.email),
-    permissions: getPermissionsForEmail(user.email),
+    role: resolveRoleForEmail(email),
+    accountType: resolveAccountType(email),
+    accountStatus: corporate ? 'active' : 'pending_approval',
+    permissions: corporate ? getPermissionsForEmail(email) : EXTERNAL_PENDING_PERMISSIONS,
     favoriteApps: [],
+    widgetPreferences: corporate
+      ? resolveHomeWidgetPreferences(undefined)
+      : { weather: true, dollar: true },
+    createdAt: serverTimestamp(),
   })
 
   return true
@@ -375,15 +481,20 @@ export async function updateUserBasicInfo(
     displayName: string
     email: string
     department: UserDepartment
+    birthDate?: string
   },
 ): Promise<void> {
-  // Actualiza el documento en Firestore. Cambiar email/displayName en Firebase Auth
-  // de otros usuarios requiere Admin SDK o una Cloud Function en producción.
-  await updateDoc(doc(db, USERS_COLLECTION, uid), {
+  const payload: Record<string, string> = {
     displayName: data.displayName.trim(),
     email: data.email.trim(),
     department: data.department,
-  })
+  }
+  if (data.birthDate !== undefined) {
+    payload.birthDate = data.birthDate
+  }
+  // Actualiza el documento en Firestore. Cambiar email/displayName en Firebase Auth
+  // de otros usuarios requiere Admin SDK o una Cloud Function en producción.
+  await updateDoc(doc(db, USERS_COLLECTION, uid), payload)
 }
 
 export async function toggleFavoriteApp(userId: string, appId: string): Promise<string[]> {

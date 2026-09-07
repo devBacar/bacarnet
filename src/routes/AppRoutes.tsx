@@ -16,9 +16,14 @@ import {
   DriveDocumentViewerPage,
   Home,
   IntranetHub,
+  AccountPendingPage,
+  AccountRejectedPage,
+  OfficeUploadPreviewPage,
   Resources,
 } from '../pages'
+import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
 import { ProtectedRoute } from './ProtectedRoute'
+import { AccountStatusRoute } from './AccountStatusRoute'
 import { AdminRoute } from './AdminRoute'
 import { BoardsRoute } from './BoardsRoute'
 import { SuperAdminRoute } from './SuperAdminRoute'
@@ -29,9 +34,16 @@ export function AppRoutes() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
+        {import.meta.env.DEV ? (
+          <Route path="__dev/weather-utilities-preview" element={<WeatherUtilitiesPreview />} />
+        ) : null}
         <Route path="login" element={<Navigate to="/" replace />} />
 
         <Route element={<ProtectedRoute />}>
+          <Route path="cuenta-pendiente" element={<AccountPendingPage />} />
+          <Route path="cuenta-rechazada" element={<AccountRejectedPage />} />
+
+          <Route element={<AccountStatusRoute />}>
           <Route element={<BoardsRoute />}>
             <Route path="tableros/:boardId" element={<BoardViewerPage />} />
           </Route>
@@ -48,6 +60,7 @@ export function AppRoutes() {
             </Route>
             <Route element={<ModulePermissionRoute permission="view_drive" module="resourcesEnabled" />}>
               <Route path="recursos" element={<Resources />} />
+              <Route path="recursos/office-preview/:requestId" element={<OfficeUploadPreviewPage />} />
               <Route path="mis-areas" element={<Navigate to="/recursos" replace />} />
             </Route>
 
@@ -72,6 +85,7 @@ export function AppRoutes() {
               </Route>
               <Route path="usuarios" element={<Navigate to="/admin/users" replace />} />
             </Route>
+          </Route>
           </Route>
         </Route>
       </Routes>

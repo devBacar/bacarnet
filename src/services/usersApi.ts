@@ -100,3 +100,48 @@ export async function patchUserMemberAreas(
   if (!res.ok) throw new Error(await parseError(res))
   return (await res.json()) as { memberAreaIds: string[] }
 }
+
+/** Restablecer contraseña (solo super_admin). Devuelve contraseña temporal una sola vez. */
+export async function resetUserPassword(
+  uid: string,
+  reason: string,
+): Promise<{ uid: string; email: string; temporaryPassword: string }> {
+  const res = await authFetch(`/api/users/${encodeURIComponent(uid)}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  return (await res.json()) as { uid: string; email: string; temporaryPassword: string }
+}
+
+export interface PendingExternalAccountDto {
+  uid: string
+  email: string
+  displayName: string
+  department: string
+  accountType: 'external'
+  createdAt: string | null
+}
+
+export async function listPendingExternalAccounts(): Promise<PendingExternalAccountDto[]> {
+  const res = await authFetch('/api/users/pending-external-accounts', { method: 'GET' })
+  if (!res.ok) throw new Error(await parseError(res))
+  const body = (await res.json()) as { accounts: PendingExternalAccountDto[] }
+  return body.accounts ?? []
+}
+
+export async function approveExternalAccount(uid: string, reason: string): Promise<void> {
+  const res = await authFetch(`/api/users/${encodeURIComponent(uid)}/approve-external`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+}
+
+export async function rejectExternalAccount(uid: string, reason: string): Promise<void> {
+  const res = await authFetch(`/api/users/${encodeURIComponent(uid)}/reject-external`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+}

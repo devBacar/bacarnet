@@ -132,24 +132,24 @@ export async function writeFolderSidecarBestEffort(
   actor: { uid: string; email: string; displayName?: string },
   extras: {
     governingAreaId?: string | null
+    classification?: FileClassification
   },
 ): Promise<void> {
   try {
-    await adminDb()
-      .collection(DRIVE_FILES_COLLECTION)
-      .doc(folderId)
-      .set(
-        {
-          governingAreaId: extras.governingAreaId ?? null,
-          createdByUserId: actor.uid,
-          createdByEmail: actor.email,
-          createdByDisplayName: actor.displayName?.trim() || actor.email,
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedByUserId: actor.uid,
-          updatedByEmail: actor.email,
-        },
-        { merge: true },
-      )
+    const payload: Record<string, unknown> = {
+      governingAreaId: extras.governingAreaId ?? null,
+      createdByUserId: actor.uid,
+      createdByEmail: actor.email,
+      createdByDisplayName: actor.displayName?.trim() || actor.email,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedByUserId: actor.uid,
+      updatedByEmail: actor.email,
+    }
+    if (extras.classification) {
+      payload.classification = extras.classification
+    }
+
+    await adminDb().collection(DRIVE_FILES_COLLECTION).doc(folderId).set(payload, { merge: true })
   } catch (err) {
     logError('driveFiles: no se pudo guardar sidecar de carpeta', err)
   }

@@ -1,4 +1,5 @@
 export { AppProvider, useApp } from './AppContext'
 export { AuthProvider, useAuth } from './AuthContext'
 export { GlobalSettingsProvider, useGlobalSettings } from './GlobalSettingsContext'
+export { NotificationsProvider, useNotifications } from './NotificationsContext'
 export { ThemeProvider, useTheme } from './ThemeContext'

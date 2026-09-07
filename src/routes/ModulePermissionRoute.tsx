@@ -1,12 +1,12 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context'
 import { useGlobalSettings } from '../context/GlobalSettingsContext'
-import type { GlobalSettings } from '../services/configService'
+import type { GlobalModuleFlag } from '../services/configService'
 import type { UserPermissions } from '../services/userService'
 
 interface ModulePermissionRouteProps {
   permission: keyof UserPermissions
-  module: keyof GlobalSettings
+  module: GlobalModuleFlag
   redirectTo?: string
 }
 

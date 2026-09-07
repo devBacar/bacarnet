@@ -5,7 +5,7 @@
  *   node backend/scripts/test-usermanager-ui.mjs
  */
 
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { chromium } from 'playwright'
 import { getAuth } from 'firebase-admin/auth'
 import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
@@ -129,7 +129,6 @@ async function main() {
       role: beforeRole,
       managedAreaIds: beforeManaged,
     })
-    await getAuth().updateUser(adminUser.uid, { password: createHash('sha256').update(randomBytes(32)).digest('hex') })
     await browser.close()
   }
 

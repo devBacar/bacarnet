@@ -1,6 +1,6 @@
 import { adminDb } from '../../lib/firebase/admin.js'
 
-const DEFAULT_MIN_REASON = 15
+const DEFAULT_MIN_REASON = 1
 
 export async function getMinReasonLength(): Promise<number> {
   const snap = await adminDb().collection('appSettings').doc('global').get()
@@ -26,4 +26,18 @@ export async function getAllowedUploadMimeTypes(): Promise<string[]> {
   }
   mimes.sort((a, b) => a.localeCompare(b))
   return mimes
+}
+
+/** MIME de Office bloqueados en upload directo; requieren solicitud de aprobación. */
+export const OFFICE_UPLOAD_MIMES = new Set([
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/msword',
+  'application/vnd.ms-excel',
+  'application/vnd.ms-powerpoint',
+])
+
+export function isOfficeUploadMime(mimeType: string): boolean {
+  return OFFICE_UPLOAD_MIMES.has(mimeType.trim().toLowerCase())
 }

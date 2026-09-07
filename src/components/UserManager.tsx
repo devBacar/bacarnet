@@ -1,8 +1,9 @@
-import { KeyRound, Pencil, Settings2, Shield, Trash2, X } from 'lucide-react'
+import { Copy, KeyRound, LockKeyhole, Pencil, Settings2, Shield, Trash2, X } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { GovernanceExceptionsDrawer } from './GovernanceExceptionsDrawer'
 import { PendingUserSetupPanel } from './PendingUserSetupPanel'
+import { PendingExternalAccountsPanel } from './PendingExternalAccountsPanel'
 import { useAuth } from '../context'
 import { useDepartments } from '../hooks/useDepartments'
 import { listAssignableRootAreas, type GoverningArea } from '../services/areaService'
@@ -20,8 +21,8 @@ import {
   type UserPermissions,
   type UserProfile,
 } from '../services/userService'
-
-const MIN_REASON_LENGTH = 15
+import { resetUserPassword } from '../services/usersApi'
+import { isValidReason, REASON_REQUIRED_ERROR, REASON_REQUIRED_LABEL } from '../utils/reasonValidation'
 
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false
@@ -133,8 +134,8 @@ function UserPermissionsDrawer({ user, onClose, onSaved }: UserPermissionsDrawer
         onClick={onClose}
       />
 
-      <aside className="relative flex h-full w-full max-w-lg flex-col bg-white shadow-2xl dark:bg-zinc-900">
-        <header className="flex items-start justify-between border-b border-neutral-200 px-6 py-5 dark:border-zinc-800">
+      <aside className="app-drawer-aside max-w-lg">
+        <header className="shrink-0 flex items-start justify-between border-b border-neutral-200 px-6 py-5 dark:border-zinc-800">
           <div>
             <p className="text-brand-primary text-xs font-semibold uppercase tracking-wide">
               Permisos de módulos
@@ -154,7 +155,7 @@ function UserPermissionsDrawer({ user, onClose, onSaved }: UserPermissionsDrawer
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5">
+        <div className="app-drawer-scroll px-6 py-5">
           <p className="mb-3 text-sm font-semibold text-neutral-900 dark:text-gray-100">
             Acceso en la intranet
           </p>
@@ -171,7 +172,7 @@ function UserPermissionsDrawer({ user, onClose, onSaved }: UserPermissionsDrawer
           </div>
         </div>
 
-        <footer className="flex gap-3 border-t border-neutral-200 px-6 py-4 dark:border-zinc-800">
+        <footer className="app-drawer-footer flex gap-3 px-6 py-4">
           <button
             type="button"
             onClick={onClose}
@@ -209,15 +210,17 @@ function useDrawerEscape(onClose: () => void) {
 
 interface EditUserDrawerProps {
   user: UserProfile
+  canEditBirthDate: boolean
   onClose: () => void
   onSaved: (uid: string) => void
 }
 
-function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
+function EditUserDrawer({ user, canEditBirthDate, onClose, onSaved }: EditUserDrawerProps) {
   const { departments } = useDepartments()
   const [displayName, setDisplayName] = useState(user.displayName)
   const [email, setEmail] = useState(user.email)
   const [department, setDepartment] = useState(user.department)
+  const [birthDate, setBirthDate] = useState(user.birthDate ?? '')
   const [selectedMemberAreaIds, setSelectedMemberAreaIds] = useState<string[]>(
     () => [...(user.memberAreaIds ?? [])],
   )
@@ -263,8 +266,8 @@ function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
       const memberAreasChanged = !arraysEqual(selectedMemberAreaIds, initialMemberAreaIds)
 
       if (memberAreasChanged) {
-        if (memberAreasReason.trim().length < MIN_REASON_LENGTH) {
-          toast.error(`El motivo de áreas de pertenencia debe tener al menos ${MIN_REASON_LENGTH} caracteres`)
+        if (!isValidReason(memberAreasReason)) {
+          toast.error('El motivo de áreas de pertenencia es obligatorio')
           setSaving(false)
           return
         }
@@ -274,6 +277,7 @@ function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
         displayName,
         email,
         department,
+        ...(canEditBirthDate ? { birthDate } : {}),
       })
       if (user.role !== 'super_admin' && memberAreasChanged) {
         await updateMemberAreaIds(user.uid, selectedMemberAreaIds, memberAreasReason.trim())
@@ -298,8 +302,8 @@ function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
         onClick={onClose}
       />
 
-      <aside className="relative flex h-full w-full max-w-md flex-col bg-white dark:bg-zinc-900 shadow-2xl">
-        <header className="flex items-start justify-between border-b border-neutral-200 dark:border-zinc-800 px-6 py-5">
+      <aside className="app-drawer-aside max-w-md shadow-2xl">
+        <header className="shrink-0 flex items-start justify-between border-b border-neutral-200 dark:border-zinc-800 px-6 py-5">
           <div>
             <p className="text-brand-primary text-xs font-semibold uppercase tracking-wide">
               Editar usuario
@@ -316,8 +320,8 @@ function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
           </button>
         </header>
 
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col">
-          <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="app-drawer-scroll space-y-5 px-6 py-5">
             <div>
               <label
                 htmlFor="edit-display-name"
@@ -377,6 +381,24 @@ function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
               </select>
             </div>
 
+            {canEditBirthDate && (
+              <div>
+                <label
+                  htmlFor="edit-birth-date"
+                  className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-gray-300"
+                >
+                  Fecha de nacimiento
+                </label>
+                <input
+                  id="edit-birth-date"
+                  type="date"
+                  value={birthDate}
+                  onChange={(e) => setBirthDate(e.target.value)}
+                  className="input-brand-focus w-full rounded-lg border border-neutral-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2.5 text-sm [color-scheme:light] dark:[color-scheme:dark]"
+                />
+              </div>
+            )}
+
             {user.role !== 'super_admin' && (
               <div>
                 <p className="mb-2 text-sm font-medium text-neutral-700 dark:text-gray-300">
@@ -427,14 +449,14 @@ function EditUserDrawer({ user, onClose, onSaved }: EditUserDrawerProps) {
                   value={memberAreasReason}
                   onChange={(e) => setMemberAreasReason(e.target.value)}
                   rows={3}
-                  placeholder={`Obligatorio si modificás las áreas de pertenencia (mín. ${MIN_REASON_LENGTH} caracteres)`}
+                  placeholder="Obligatorio si modificás las áreas de pertenencia"
                   className="input-brand-focus w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 />
               </div>
             )}
           </div>
 
-          <footer className="flex gap-3 border-t border-neutral-200 dark:border-zinc-800 px-6 py-4">
+          <footer className="app-drawer-footer flex gap-3 px-6 py-4">
             <button
               type="button"
               onClick={onClose}
@@ -529,8 +551,8 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
       return
     }
 
-    if (needsManagedAreasUpdate && saveReason.trim().length < MIN_REASON_LENGTH) {
-      toast.error(`El motivo debe tener al menos ${MIN_REASON_LENGTH} caracteres`)
+    if (needsManagedAreasUpdate && !isValidReason(saveReason)) {
+      toast.error(REASON_REQUIRED_ERROR)
       return
     }
 
@@ -575,8 +597,8 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
         className="absolute inset-0 bg-black/40"
         onClick={onClose}
       />
-      <aside className="relative flex h-full w-full max-w-md flex-col bg-white shadow-xl dark:bg-zinc-900">
-        <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-4 dark:border-zinc-800">
+      <aside className="app-drawer-aside max-w-md shadow-xl">
+        <header className="shrink-0 flex items-center justify-between border-b border-neutral-200 px-6 py-4 dark:border-zinc-800">
           <div>
             <h3 className="text-lg font-semibold text-neutral-900 dark:text-gray-100">
               Gestionar rol
@@ -595,7 +617,7 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
           </button>
         </header>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <div className="app-drawer-scroll space-y-6 px-6 py-5">
           <div>
             <label
               htmlFor="assign-role"
@@ -653,7 +675,7 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
           )}
         </div>
 
-        <footer className="flex gap-3 border-t border-neutral-200 px-6 py-4 dark:border-zinc-800">
+        <footer className="app-drawer-footer flex gap-3 px-6 py-4">
           <button
             type="button"
             onClick={onClose}
@@ -712,7 +734,7 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
                   htmlFor="role-areas-reason"
                   className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-gray-300"
                 >
-                  Motivo (mín. {MIN_REASON_LENGTH} caracteres)
+                  {REASON_REQUIRED_LABEL}
                 </label>
                 <textarea
                   id="role-areas-reason"
@@ -744,6 +766,159 @@ function RoleAreasDrawer({ user, onClose, onSaved }: RoleAreasDrawerProps) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function PasswordResetDrawer({
+  user,
+  currentUid,
+  onClose,
+}: {
+  user: UserProfile
+  currentUid: string | undefined
+  onClose: () => void
+}) {
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [result, setResult] = useState<{ email: string; temporaryPassword: string } | null>(null)
+
+  const isSelf = user.uid === currentUid
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault()
+    if (isSelf) {
+      toast.error('No podés restablecer tu propia contraseña desde acá')
+      return
+    }
+    if (!isValidReason(reason)) {
+      toast.error(REASON_REQUIRED_ERROR)
+      return
+    }
+    setSaving(true)
+    try {
+      const out = await resetUserPassword(user.uid, reason.trim())
+      setResult({ email: out.email, temporaryPassword: out.temporaryPassword })
+      toast.success('Contraseña restablecida')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo restablecer la contraseña')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const copyPassword = async () => {
+    if (!result?.temporaryPassword) return
+    try {
+      await navigator.clipboard.writeText(result.temporaryPassword)
+      toast.success('Contraseña copiada')
+    } catch {
+      toast.error('No se pudo copiar')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div
+        role="dialog"
+        aria-labelledby="password-reset-title"
+        className="w-full max-w-md rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+      >
+        <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-zinc-800">
+          <h2 id="password-reset-title" className="text-lg font-semibold text-neutral-900 dark:text-gray-100">
+            Restablecer contraseña
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-zinc-800"
+            aria-label="Cerrar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="px-5 py-4">
+          <p className="text-sm text-neutral-600 dark:text-gray-400">
+            <span className="font-medium text-neutral-900 dark:text-gray-100">
+              {user.displayName || user.email}
+            </span>
+            <br />
+            {user.email}
+          </p>
+
+          {isSelf ? (
+            <p className="mt-4 text-sm text-amber-800 dark:text-amber-300">
+              No podés restablecer tu propia contraseña desde este panel.
+            </p>
+          ) : result ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm text-neutral-600 dark:text-gray-400">
+                Compartí esta contraseña temporal con la persona. No se volverá a mostrar.
+              </p>
+              <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950">
+                <p className="text-xs font-medium text-neutral-500 dark:text-gray-400">Contraseña temporal</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="flex-1 break-all text-sm font-semibold text-neutral-900 dark:text-gray-100">
+                    {result.temporaryPassword}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => void copyPassword()}
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-neutral-300 text-neutral-600 hover:bg-white dark:border-zinc-600 dark:text-gray-300 dark:hover:bg-zinc-800"
+                    aria-label="Copiar contraseña"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-white"
+              >
+                Listo
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={(e) => void handleSubmit(e)} className="mt-4 space-y-4">
+              <div>
+                <label
+                  htmlFor="password-reset-reason"
+                  className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-gray-300"
+                >
+                  {REASON_REQUIRED_LABEL}
+                </label>
+                <textarea
+                  id="password-reset-reason"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={3}
+                  className="input-brand-focus w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                  placeholder="Motivo del restablecimiento (ej. usuario olvidó su contraseña)"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={saving}
+                  className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-medium dark:border-zinc-600"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {saving ? 'Restableciendo…' : 'Restablecer contraseña'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -805,7 +980,9 @@ export function UserManager() {
   const canAssignRoles =
     isSuperAdmin(userProfile) || isSuperAdminEmail(userProfile?.email)
   const showPendingTab = isSuperAdmin(userProfile)
-  const [activePanel, setActivePanel] = useState<'registered' | 'pending'>('registered')
+  const [activePanel, setActivePanel] = useState<
+    'registered' | 'pending_setup' | 'external_approval'
+  >('registered')
   const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -813,6 +990,7 @@ export function UserManager() {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null)
   const [roleUser, setRoleUser] = useState<UserProfile | null>(null)
   const [exceptionsUser, setExceptionsUser] = useState<UserProfile | null>(null)
+  const [passwordResetUser, setPasswordResetUser] = useState<UserProfile | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [governingAreas, setGoverningAreas] = useState<GoverningArea[]>([])
 
@@ -912,20 +1090,33 @@ export function UserManager() {
           </button>
           <button
             type="button"
-            onClick={() => setActivePanel('pending')}
+            onClick={() => setActivePanel('pending_setup')}
             className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              activePanel === 'pending'
+              activePanel === 'pending_setup'
                 ? 'border-brand-primary text-brand-primary'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-gray-400 dark:hover:text-gray-200'
             }`}
           >
             Configuración pendiente
           </button>
+          <button
+            type="button"
+            onClick={() => setActivePanel('external_approval')}
+            className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+              activePanel === 'external_approval'
+                ? 'border-brand-primary text-brand-primary'
+                : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-gray-400 dark:hover:text-gray-200'
+            }`}
+          >
+            Cuentas pendientes
+          </button>
         </div>
       )}
 
-      {activePanel === 'pending' && showPendingTab ? (
+      {activePanel === 'pending_setup' && showPendingTab ? (
         <PendingUserSetupPanel />
+      ) : activePanel === 'external_approval' && showPendingTab ? (
+        <PendingExternalAccountsPanel />
       ) : (
         <>
       <div className="mb-6">
@@ -1057,6 +1248,17 @@ export function UserManager() {
                             <KeyRound className="h-4 w-4" />
                           </button>
                         )}
+                        {canAssignRoles && user.uid !== currentAuthUser?.uid && (
+                          <button
+                            type="button"
+                            onClick={() => setPasswordResetUser(user)}
+                            aria-label={`Restablecer contraseña de ${user.displayName}`}
+                            title="Restablecer contraseña"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-sky-50 hover:text-sky-700 dark:text-gray-400 dark:hover:bg-sky-950/40 dark:hover:text-sky-300"
+                          >
+                            <LockKeyhole className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleDelete(user)}
@@ -1085,6 +1287,7 @@ export function UserManager() {
       {editingUser && (
         <EditUserDrawer
           user={editingUser}
+          canEditBirthDate={showPendingTab}
           onClose={() => setEditingUser(null)}
           onSaved={handleSaved}
         />
@@ -1111,6 +1314,14 @@ export function UserManager() {
           user={exceptionsUser}
           onClose={() => setExceptionsUser(null)}
           onSaved={handleSaved}
+        />
+      )}
+
+      {passwordResetUser && canAssignRoles && (
+        <PasswordResetDrawer
+          user={passwordResetUser}
+          currentUid={currentAuthUser?.uid}
+          onClose={() => setPasswordResetUser(null)}
         />
       )}
         </>

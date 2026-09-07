@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express'
+import { adminDb } from '../../lib/firebase/admin.js'
 import { getDrive } from '../../lib/google/driveClient.js'
 import { sanitizeDriveId } from '../../lib/google/driveIds.js'
 import { logError } from '../../lib/log.js'
@@ -23,11 +24,7 @@ function toApiRole(driveRole: string | null | undefined): ApiPermissionRole {
   return 'reader'
 }
 
-function isInheritedPermission(
-  details: Array<{ inherited?: boolean | null }> | null | undefined,
-): boolean {
-  return (details ?? []).some((row) => row.inherited === true)
-}
+import { isInheritedPermission } from './driveUserPermission.js'
 
 export async function listDrivePermissions(req: Request, res: Response): Promise<void> {
   const user = req.authedUser
@@ -57,6 +54,15 @@ export async function listDrivePermissions(req: Request, res: Response): Promise
   const classification: FileClassification = await getStoredClassification(fileId)
   const areaName = governingAreaId ? await getAreaDisplayName(governingAreaId) : null
   const areaMembers = governingAreaId ? await resolveAreaMembers(governingAreaId) : []
+  const sidecarSnap = await adminDb().collection('driveFiles').doc(fileId).get()
+  const createdByEmail =
+    sidecarSnap.exists && typeof sidecarSnap.get('createdByEmail') === 'string'
+      ? sidecarSnap.get('createdByEmail').trim()
+      : null
+  const createdByDisplayName =
+    sidecarSnap.exists && typeof sidecarSnap.get('createdByDisplayName') === 'string'
+      ? sidecarSnap.get('createdByDisplayName').trim()
+      : null
 
   try {
     const drive = await getDrive()
@@ -123,13 +129,10 @@ export async function listDrivePermissions(req: Request, res: Response): Promise
 
     permissions.sort((a, b) => a.emailAddress.localeCompare(b.emailAddress, 'es'))
 
-    let visiblePermissions = permissions
-    if (user.role !== 'super_admin') {
-      const privilegedEmails = await resolvePrivilegedPermissionEmails()
-      visiblePermissions = permissions.filter(
-        (entry) => !isPrivilegedPermissionEmail(entry.emailAddress, privilegedEmails),
-      )
-    }
+    const privilegedEmails = await resolvePrivilegedPermissionEmails()
+    const visiblePermissions = permissions.filter(
+      (entry) => !isPrivilegedPermissionEmail(entry.emailAddress, privilegedEmails),
+    )
 
     res.json({
       fileId,
@@ -141,6 +144,8 @@ export async function listDrivePermissions(req: Request, res: Response): Promise
       areaMembers,
       permissions: visiblePermissions,
       domainAccess,
+      createdByEmail,
+      createdByDisplayName,
     })
   } catch (err) {
     logError('Drive permissions.list falló', err)

@@ -23,7 +23,7 @@ import { resolveGoverningAreaId } from './resolveGoverningArea.js'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 const FILE_FIELDS =
-  'nextPageToken, files(id, name, mimeType, parents, modifiedTime, createdTime, size, iconLink, webViewLink, shortcutDetails, lastModifyingUser(displayName,emailAddress), capabilities(canTrash,canEdit,canShare,canAddChildren))'
+  'nextPageToken, files(id, name, mimeType, parents, modifiedTime, createdTime, size, iconLink, webViewLink, shortcutDetails, lastModifyingUser(displayName,emailAddress), capabilities(canTrash,canEdit,canRename,canShare,canAddChildren))'
 
 function resolveFolderId(queryValue: unknown): string | null {
   const driveRoot = getSharedDriveRootId()
@@ -86,7 +86,7 @@ export async function listDriveFiles(req: Request, res: Response): Promise<void>
                   fileId: mapping.id,
                   supportsAllDrives: true,
                   fields:
-                    'id, name, mimeType, parents, modifiedTime, createdTime, size, iconLink, webViewLink, shortcutDetails, lastModifyingUser(displayName,emailAddress), capabilities(canTrash,canEdit,canShare,canAddChildren)',
+                    'id, name, mimeType, parents, modifiedTime, createdTime, size, iconLink, webViewLink, shortcutDetails, lastModifyingUser(displayName,emailAddress), capabilities(canTrash,canEdit,canRename,canShare,canAddChildren)',
                 })
                 return meta.data
               } catch (err) {
@@ -193,11 +193,14 @@ export async function listDriveFiles(req: Request, res: Response): Promise<void>
         capabilities: {
           canTrash: file.capabilities?.canTrash === true,
           canEdit: file.capabilities?.canEdit === true,
+          canRename: file.capabilities?.canRename === true,
           canShare: file.capabilities?.canShare === true,
           canAddChildren: file.capabilities?.canAddChildren === true,
         },
         classification: isFolder
-          ? null
+          ? isFileClassification(rawClassification)
+            ? rawClassification
+            : null
           : isFileClassification(rawClassification)
             ? rawClassification
             : DEFAULT_CLASSIFICATION,

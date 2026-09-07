@@ -9,8 +9,7 @@ import {
 } from '../services/governanceAccess'
 import { patchUserActionGrants, type GovernanceAction } from '../services/usersApi'
 import type { UserProfile } from '../services/userService'
-
-const MIN_REASON_LENGTH = 15
+import { isValidReason, REASON_REQUIRED_ERROR, REASON_REQUIRED_LABEL } from '../utils/reasonValidation'
 
 interface GovernanceExceptionsDrawerProps {
   user: UserProfile
@@ -93,8 +92,8 @@ export function GovernanceExceptionsDrawer({
       toast.error('Elegí un área')
       return
     }
-    if (reason.trim().length < MIN_REASON_LENGTH) {
-      toast.error(`El motivo debe tener al menos ${MIN_REASON_LENGTH} caracteres`)
+    if (!isValidReason(reason)) {
+      toast.error(REASON_REQUIRED_ERROR)
       return
     }
     setActing(true)
@@ -120,8 +119,8 @@ export function GovernanceExceptionsDrawer({
 
   const handleRevoke = async () => {
     if (!revokeTarget) return
-    if (reason.trim().length < MIN_REASON_LENGTH) {
-      toast.error(`El motivo debe tener al menos ${MIN_REASON_LENGTH} caracteres`)
+    if (!isValidReason(reason)) {
+      toast.error(REASON_REQUIRED_ERROR)
       return
     }
     setActing(true)
@@ -147,8 +146,8 @@ export function GovernanceExceptionsDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button type="button" aria-label="Cerrar" className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <aside className="relative flex h-full w-full max-w-md flex-col bg-white shadow-xl dark:bg-zinc-900">
-        <header className="flex items-start justify-between border-b border-neutral-200 px-6 py-5 dark:border-zinc-800">
+      <aside className="app-drawer-aside max-w-md shadow-xl">
+        <header className="shrink-0 flex items-start justify-between border-b border-neutral-200 px-6 py-5 dark:border-zinc-800">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
               Permisos individuales adicionales
@@ -167,7 +166,7 @@ export function GovernanceExceptionsDrawer({
           </button>
         </header>
 
-        <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">
+        <div className="app-drawer-scroll space-y-5 px-6 py-5">
           <p className="text-xs leading-relaxed text-neutral-500 dark:text-gray-400">
             Acciones puntuales sobre un área sin convertir a la persona en jefe completo. No
             reemplaza «Áreas que gobierna». El usuario aún necesita acceso de lectura en Drive para
@@ -285,7 +284,7 @@ export function GovernanceExceptionsDrawer({
               </div>
               <div>
                 <label htmlFor="grant-reason" className="mb-1 block text-sm font-medium">
-                  Motivo (mín. {MIN_REASON_LENGTH} caracteres)
+                  {REASON_REQUIRED_LABEL}
                 </label>
                 <textarea
                   id="grant-reason"
@@ -329,7 +328,7 @@ export function GovernanceExceptionsDrawer({
             </p>
             <div className="mt-4">
               <label htmlFor="revoke-reason" className="mb-1 block text-sm font-medium">
-                Motivo (mín. {MIN_REASON_LENGTH} caracteres)
+                {REASON_REQUIRED_LABEL}
               </label>
               <textarea
                 id="revoke-reason"

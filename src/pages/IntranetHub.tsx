@@ -2,21 +2,22 @@ import { ArrowRight } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HomeBoardsSection } from '../components/home/HomeBoardsSection'
+import { HomeCollapsibleSection } from '../components/home/HomeCollapsibleSection'
+import { HomeRecentFilesSection } from '../components/home/HomeRecentFilesSection'
+import { BirthdayConfetti } from '../components/home/BirthdayConfetti'
 import { WelcomeHeader } from '../components/home/WelcomeHeader'
 import { BannerPopup } from '../components/BannerPopup'
-import { BirthdayWidget } from '../components/BirthdayWidget'
 import { CalendarWidget } from '../components/CalendarWidget'
 import { CoreAppIcon } from '../components/CoreAppIcon'
-import { ExternalNewsWidget } from '../components/ExternalNewsWidget'
 import { GmailWidget } from '../components/GmailWidget'
-import { KudosWall } from '../components/KudosWall'
-import { NewsFeed } from '../components/NewsFeed'
 import { PollWidget } from '../components/PollWidget'
 import { DailyQuestionWidget } from '../components/DailyQuestionWidget'
 import { ShiftWidget } from '../components/ShiftWidget'
 import { useAuth } from '../context'
 import { useGlobalSettings } from '../context/GlobalSettingsContext'
 import { useLocalStorage } from '../hooks/useLocalStorage'
+import { isExternalAccount } from '../services/userService'
+import { isBirthdayToday } from '../utils/birthday'
 import { getActiveBanner, type Banner } from '../services/bannerService'
 import { getCoreApps, type CoreApp } from '../services/coreAppService'
 
@@ -141,8 +142,46 @@ export function IntranetHub() {
     )
   }
 
+  const externalAccount = isExternalAccount(userProfile)
+  const birthdayToday = isBirthdayToday(userProfile?.birthDate)
+
+  if (externalAccount && userProfile) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6 sm:space-y-8">
+        {birthdayToday && <BirthdayConfetti />}
+        <WelcomeHeader
+          userProfile={userProfile}
+          displayName={displayName}
+          onPreferencesUpdated={refreshProfile}
+          birthdayToday={birthdayToday}
+        />
+
+        {settings.directoryEnabled && userProfile.permissions.view_directory && (
+          <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6 lg:p-8">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-neutral-900 dark:text-gray-100">Contactos</h2>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-gray-400">
+                  Directorio de contactos de Bacarsa
+                </p>
+              </div>
+              <Link
+                to="/directorio"
+                className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-primary transition-colors hover:opacity-90"
+              >
+                Abrir directorio
+                <ArrowRight className="h-4 w-4 shrink-0" />
+              </Link>
+            </div>
+          </section>
+        )}
+      </div>
+    )
+  }
+
   return (
     <>
+      {birthdayToday && <BirthdayConfetti />}
       {bannerVisible && activeBanner && (
         <BannerPopup banner={activeBanner} onClose={handleCloseBanner} />
       )}
@@ -154,31 +193,29 @@ export function IntranetHub() {
               userProfile={userProfile}
               displayName={displayName}
               onPreferencesUpdated={refreshProfile}
+              birthdayToday={birthdayToday}
             />
           )}
 
           {(coreAppsLoading || pinnedCoreApps.length > 0 || coreAppsError) && (
-            <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6 lg:p-8">
-              <div className="mb-4 flex flex-col gap-3 sm:mb-5 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-                <div className="min-w-0">
-                  <h2 className="text-lg font-bold text-neutral-900 dark:text-gray-100">
-                    Mis Herramientas
-                  </h2>
-                  <p className="mt-1 text-sm text-neutral-500 dark:text-gray-400">
-                    {favoriteApps.length > 0
-                      ? 'Tus aplicaciones ancladas desde accesos directos'
-                      : 'Anclá tus favoritas en accesos directos · mostrando sugerencias por defecto'}
-                  </p>
-                </div>
+            <HomeCollapsibleSection
+              title="Mis Herramientas"
+              subtitle={
+                favoriteApps.length > 0
+                  ? 'Tus aplicaciones ancladas desde accesos directos'
+                  : 'Anclá tus favoritas en accesos directos · mostrando sugerencias por defecto'
+              }
+              storageKey="tools"
+              headerAction={
                 <Link
                   to="/accesos-directos"
-                  className="inline-flex w-full items-center justify-center gap-1.5 text-sm font-semibold text-brand-primary transition-colors hover:opacity-90 sm:w-auto sm:justify-start"
+                  className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-primary transition-colors hover:opacity-90"
                 >
                   Ver todos los accesos
                   <ArrowRight className="h-4 w-4 shrink-0" />
                 </Link>
-              </div>
-
+              }
+            >
               {coreAppsLoading ? (
                 <ToolsSkeleton />
               ) : coreAppsError ? (
@@ -199,14 +236,12 @@ export function IntranetHub() {
                   ))}
                 </div>
               )}
-            </section>
+            </HomeCollapsibleSection>
           )}
 
-          <HomeBoardsSection />
+          {settings.boardsEnabled && <HomeBoardsSection />}
 
-          <ExternalNewsWidget />
-
-          <NewsFeed variant="editorial" />
+          <HomeRecentFilesSection />
         </div>
 
         <aside className="min-w-0 space-y-6 lg:col-span-4 xl:col-span-3">
@@ -219,24 +254,6 @@ export function IntranetHub() {
           <CalendarWidget />
 
           {settings.pollsEnabled && <PollWidget />}
-
-          {settings.directoryEnabled && (
-            <section className="card-minimal overflow-hidden">
-              <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950 lg:px-5 lg:py-4">
-                <h2 className="text-sm font-semibold text-neutral-900 dark:text-gray-100">
-                  Cumpleaños del mes
-                </h2>
-                <p className="text-xs text-neutral-500 dark:text-gray-400">
-                  Compañeros que celebran en este mes
-                </p>
-              </div>
-              <div className="overflow-hidden p-4 lg:p-5">
-                <BirthdayWidget variant="hub" />
-              </div>
-            </section>
-          )}
-
-          {settings.kudosEnabled && <KudosWall variant="sidebar" />}
         </aside>
       </div>
     </>

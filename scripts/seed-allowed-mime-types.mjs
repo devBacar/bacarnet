@@ -31,6 +31,23 @@ const SEED = [
   { mimeType: 'application/pdf', label: 'PDF', allowed: true, isNativeGoogle: false },
   { mimeType: 'image/png', label: 'PNG', allowed: true, isNativeGoogle: false },
   { mimeType: 'image/jpeg', label: 'JPEG', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/x-msdownload', label: 'Instalador Windows (.exe)', allowed: true, isNativeGoogle: false },
+  {
+    mimeType: 'application/vnd.microsoft.portable-executable',
+    label: 'Ejecutable Windows (.exe)',
+    allowed: true,
+    isNativeGoogle: false,
+  },
+  { mimeType: 'application/x-dosexec', label: 'Ejecutable DOS/Windows (.exe)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/x-msi', label: 'Instalador Windows (.msi)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/vnd.ms-msi', label: 'Instalador MSI (.msi)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/x-apple-diskimage', label: 'Imagen disco Mac (.dmg)', allowed: true, isNativeGoogle: false },
+  {
+    mimeType: 'application/vnd.apple.installer+xml',
+    label: 'Instalador Mac (.pkg)',
+    allowed: true,
+    isNativeGoogle: false,
+  },
   {
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     label: 'Word (.docx)',

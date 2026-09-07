@@ -4,8 +4,35 @@ import { requireSuperAdmin, requireWorkspaceUser } from '../auth/middleware.js'
 import { applyPendingUserSetupForNewUser } from './applyPendingUserSetup.js'
 import { patchUserActionGrants } from './patchUserActionGrants.js'
 import { patchUserManagedAreas, patchUserMemberAreas } from './patchUserAreas.js'
+import { resetUserPassword } from './resetUserPassword.js'
+import {
+  approveExternalAccount,
+  listPendingExternalAccounts,
+  rejectExternalAccount,
+} from './reviewExternalAccount.js'
 
 export const usersRouter = Router()
+
+usersRouter.get(
+  '/pending-external-accounts',
+  requireWorkspaceUser,
+  requireSuperAdmin,
+  listPendingExternalAccounts,
+)
+
+usersRouter.post(
+  '/:uid/approve-external',
+  requireWorkspaceUser,
+  requireSuperAdmin,
+  approveExternalAccount,
+)
+
+usersRouter.post(
+  '/:uid/reject-external',
+  requireWorkspaceUser,
+  requireSuperAdmin,
+  rejectExternalAccount,
+)
 
 /** Respaldo del trigger Firestore: aplica pendingUserSetup al perfil autenticado (idempotente). */
 usersRouter.post(
@@ -50,4 +77,12 @@ usersRouter.patch(
   requireWorkspaceUser,
   requireSuperAdmin,
   patchUserMemberAreas,
+)
+
+/** Restablecer contraseña (solo super_admin, Admin SDK). */
+usersRouter.post(
+  '/:uid/reset-password',
+  requireWorkspaceUser,
+  requireSuperAdmin,
+  resetUserPassword,
 )

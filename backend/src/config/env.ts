@@ -55,6 +55,18 @@ export function getEnv() {
   const driveId = process.env.DRIVE_ID?.trim() || ''
   const boardsContainerFolderId = process.env.BOARDS_CONTAINER_FOLDER_ID?.trim() || ''
   const boardsSessionSecret = process.env.BOARDS_SESSION_SECRET?.trim() || ''
+  const pendingUploadsBucket =
+    process.env.PENDING_UPLOADS_BUCKET?.trim() || 'bacar-pending-uploads'
+  const ragStagingBucket = process.env.RAG_STAGING_BUCKET?.trim() || 'bacar-rag-staging'
+  const ragStagingLocation =
+    process.env.RAG_STAGING_LOCATION?.trim() || 'SOUTHAMERICA-EAST1'
+  const ragEmbeddingLocation =
+    process.env.RAG_EMBEDDING_LOCATION?.trim() || 'us-central1'
+  const gcpProjectId =
+    process.env.GCP_PROJECT_ID?.trim() ||
+    process.env.GOOGLE_CLOUD_PROJECT?.trim() ||
+    process.env.GCLOUD_PROJECT?.trim() ||
+    ''
 
   if (!allowedEmailDomain) {
     throw new Error('ALLOWED_EMAIL_DOMAIN está vacío')
@@ -75,6 +87,11 @@ export function getEnv() {
     driveId,
     boardsContainerFolderId,
     boardsSessionSecret,
+    pendingUploadsBucket,
+    ragStagingBucket,
+    ragStagingLocation,
+    ragEmbeddingLocation,
+    gcpProjectId,
   }
 }
 

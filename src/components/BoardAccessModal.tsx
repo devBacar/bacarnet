@@ -1,6 +1,8 @@
-import { KeyRound, Loader2, Search, Trash2, UserPlus, X } from 'lucide-react'
+import { KeyRound, Loader2, Trash2, UserPlus, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import toast from 'react-hot-toast'
+import { CollapsibleSection } from './access/CollapsibleSection'
+import { UserMultiPicker } from './access/UserMultiPicker'
 import {
   grantBoardAccess,
   listBoardAccess,
@@ -8,6 +10,7 @@ import {
   type BoardAccessUserDto,
 } from '../services/boardsApi'
 import { getAllUsers, type UserProfile } from '../services/userService'
+import { isPrivilegedAccessIdentity } from '../utils/privilegedAccess'
 
 interface BoardAccessModalProps {
   boardId: string
@@ -20,7 +23,7 @@ export function BoardAccessModal({ boardId, boardName, onClose }: BoardAccessMod
   const [allUsers, setAllUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
-  const [selectedEmail, setSelectedEmail] = useState('')
+  const [selectedEmails, setSelectedEmails] = useState<string[]>([])
   const [grantReason, setGrantReason] = useState('')
   const [revokeTarget, setRevokeTarget] = useState<BoardAccessUserDto | null>(null)
   const [revokeReason, setRevokeReason] = useState('')
@@ -55,32 +58,65 @@ export function BoardAccessModal({ boardId, boardName, onClose }: BoardAccessMod
     }
   }, [onClose])
 
-  const allowedIds = useMemo(() => new Set(allowedUsers.map((row) => row.uid)), [allowedUsers])
+  const userRoleByEmail = useMemo(() => {
+    const map = new Map<string, UserProfile['role']>()
+    for (const user of allUsers) {
+      map.set(user.email.trim().toLowerCase(), user.role)
+    }
+    return map
+  }, [allUsers])
 
-  const candidates = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase('es')
-    return allUsers
-      .filter((user) => user.role !== 'super_admin')
-      .filter((user) => !allowedIds.has(user.uid))
-      .filter((user) => {
-        if (!normalized) return true
-        const haystack = `${user.displayName ?? ''} ${user.email}`.toLocaleLowerCase('es')
-        return haystack.includes(normalized)
-      })
-      .slice(0, 8)
-  }, [allUsers, allowedIds, query])
+  const visibleAllowedUsers = useMemo(
+    () =>
+      allowedUsers.filter(
+        (row) => !isPrivilegedAccessIdentity(row.email, userRoleByEmail.get(row.email)),
+      ),
+    [allowedUsers, userRoleByEmail],
+  )
+
+  const grantedEmails = useMemo(
+    () => new Set(allowedUsers.map((row) => row.email.trim().toLowerCase())),
+    [allowedUsers],
+  )
 
   const handleGrant = async (event: FormEvent) => {
     event.preventDefault()
-    if (!selectedEmail || !grantReason.trim()) return
+    if (selectedEmails.length === 0 || !grantReason.trim()) return
+
     setActing(true)
     try {
-      const result = await grantBoardAccess(boardId, selectedEmail, grantReason.trim())
-      setAllowedUsers(result.allowedUsers)
-      setSelectedEmail('')
+      let grantedCount = 0
+      let skippedCount = 0
+      let failedCount = 0
+
+      for (const email of selectedEmails) {
+        try {
+          const result = await grantBoardAccess(boardId, email, grantReason.trim())
+          setAllowedUsers(result.allowedUsers)
+          if (result.granted) grantedCount += 1
+          else skippedCount += 1
+        } catch {
+          failedCount += 1
+        }
+      }
+
+      if (grantedCount === 0 && failedCount > 0) {
+        toast.error('No se pudo otorgar acceso')
+      } else if (failedCount > 0) {
+        toast.success(`Acceso otorgado a ${grantedCount}; ${failedCount} fallo(s)`)
+      } else if (skippedCount > 0 && grantedCount === 0) {
+        toast.success('Los usuarios seleccionados ya tenían acceso')
+      } else {
+        toast.success(
+          grantedCount === 1
+            ? 'Acceso otorgado'
+            : `Acceso otorgado a ${grantedCount} usuarios`,
+        )
+      }
+
+      setSelectedEmails([])
       setGrantReason('')
       setQuery('')
-      toast.success(result.granted ? 'Acceso otorgado' : 'El usuario ya tenía acceso')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo otorgar acceso')
     } finally {
@@ -123,7 +159,7 @@ export function BoardAccessModal({ boardId, boardName, onClose }: BoardAccessMod
             </div>
             <h2 className="text-lg font-semibold">{boardName}</h2>
             <p className="mt-1 text-sm text-neutral-500 dark:text-zinc-400">
-              Solo los usuarios listados pueden ver este tablero (super_admin siempre).
+              Solo los usuarios listados pueden ver este tablero.
             </p>
           </div>
           <button
@@ -137,19 +173,21 @@ export function BoardAccessModal({ boardId, boardName, onClose }: BoardAccessMod
         </header>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-          <section>
-            <h3 className="mb-2 text-sm font-medium">Usuarios autorizados</h3>
+          <CollapsibleSection
+            title="Usuarios autorizados"
+            count={loading ? undefined : visibleAllowedUsers.length}
+          >
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
               </div>
-            ) : allowedUsers.length === 0 ? (
+            ) : visibleAllowedUsers.length === 0 ? (
               <p className="rounded-lg border border-dashed border-neutral-200 px-4 py-6 text-center text-sm text-neutral-500 dark:border-zinc-700 dark:text-zinc-400">
                 Nadie tiene acceso todavía.
               </p>
             ) : (
-              <ul className="space-y-2">
-                {allowedUsers.map((row) => (
+              <ul className="max-h-56 space-y-2 overflow-y-auto">
+                {visibleAllowedUsers.map((row) => (
                   <li
                     key={row.uid}
                     className="flex items-center justify-between gap-3 rounded-lg border border-neutral-200 px-3 py-2.5 dark:border-zinc-800"
@@ -170,50 +208,20 @@ export function BoardAccessModal({ boardId, boardName, onClose }: BoardAccessMod
                 ))}
               </ul>
             )}
-          </section>
+          </CollapsibleSection>
 
           <section>
-            <h3 className="mb-2 text-sm font-medium">Agregar usuario</h3>
+            <h3 className="mb-2 text-sm font-medium">Agregar usuarios</h3>
             <form onSubmit={handleGrant} className="space-y-3">
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-zinc-400">
-                  Buscar
-                </span>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                  <input
-                    value={query}
-                    onChange={(event) => {
-                      setQuery(event.target.value)
-                      setSelectedEmail('')
-                    }}
-                    placeholder="Nombre o email"
-                    className="h-10 w-full rounded-lg border border-neutral-300 bg-white pl-9 pr-3 text-sm outline-none input-brand-focus dark:border-zinc-700 dark:bg-zinc-950"
-                  />
-                </div>
-              </label>
-
-              {candidates.length > 0 && (
-                <ul className="max-h-40 overflow-y-auto rounded-lg border border-neutral-200 dark:border-zinc-800">
-                  {candidates.map((user) => (
-                    <li key={user.uid}>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedEmail(user.email)
-                          setQuery(user.displayName || user.email)
-                        }}
-                        className={`flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-neutral-50 dark:hover:bg-zinc-800 ${
-                          selectedEmail === user.email ? 'bg-blue-50 dark:bg-blue-950/30' : ''
-                        }`}
-                      >
-                        <span className="font-medium">{user.displayName || user.email}</span>
-                        <span className="text-xs text-neutral-500 dark:text-zinc-400">{user.email}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <UserMultiPicker
+                allUsers={allUsers}
+                excludeEmails={grantedEmails}
+                selectedEmails={selectedEmails}
+                onSelectedEmailsChange={setSelectedEmails}
+                query={query}
+                onQueryChange={setQuery}
+                placeholder="Nombre o email"
+              />
 
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-neutral-500 dark:text-zinc-400">
@@ -230,18 +238,22 @@ export function BoardAccessModal({ boardId, boardName, onClose }: BoardAccessMod
 
               <button
                 type="submit"
-                disabled={acting || !selectedEmail || !grantReason.trim()}
+                disabled={acting || selectedEmails.length === 0 || !grantReason.trim()}
                 className="btn-primary inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <UserPlus className="h-4 w-4" />
-                {acting ? 'Guardando…' : 'Otorgar acceso'}
+                {acting
+                  ? 'Guardando…'
+                  : selectedEmails.length > 1
+                    ? `Otorgar acceso a ${selectedEmails.length} usuarios`
+                    : 'Otorgar acceso'}
               </button>
             </form>
           </section>
         </div>
       </div>
 
-      {revokeTarget && (
+      {revokeTarget ? (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 p-4">
           <form
             onSubmit={handleRevoke}
@@ -283,7 +295,7 @@ export function BoardAccessModal({ boardId, boardName, onClose }: BoardAccessMod
             </div>
           </form>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

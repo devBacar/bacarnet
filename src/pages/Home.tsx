@@ -1,12 +1,17 @@
 import { ArrowRight, Loader2 } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { BirthdayWidget } from '../components/BirthdayWidget'
 import { DailyWidgets } from '../components/DailyWidgets'
 import { GoogleIcon } from '../components/GoogleIcon'
 import { useAuth } from '../context'
 import { useDepartments } from '../hooks/useDepartments'
-import { registerUser } from '../services/userService'
+import {
+  isAccountPending,
+  isAccountRejected,
+  isCorporateEmail,
+  registerUser,
+} from '../services/userService'
 
 type AuthTab = 'login' | 'register'
 
@@ -32,12 +37,13 @@ function authErrorMessage(code: string): string {
 }
 
 export function Home() {
-  const { user, loading, login, loginWithGoogle } = useAuth()
+  const { user, userProfile, loading, profileLoading, login, loginWithGoogle } = useAuth()
   const { departments } = useDepartments()
 
   const [activeTab, setActiveTab] = useState<AuthTab>('login')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [registerSuccessExternal, setRegisterSuccessExternal] = useState(false)
 
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
@@ -88,6 +94,7 @@ export function Home() {
     e.preventDefault()
     setError('')
     setSubmitting(true)
+    setRegisterSuccessExternal(false)
 
     try {
       await registerUser(
@@ -97,6 +104,9 @@ export function Home() {
         registerDepartment,
         birthDate,
       )
+      if (!isCorporateEmail(registerEmail)) {
+        setRegisterSuccessExternal(true)
+      }
       setBirthDate('')
     } catch (err) {
       const code = (err as { code?: string }).code ?? ''
@@ -109,9 +119,17 @@ export function Home() {
   const displayName =
     user?.displayName || user?.email?.split('@')[0] || 'Usuario'
 
+  if (!loading && user && !profileLoading) {
+    if (isAccountPending(userProfile)) {
+      return <Navigate to="/cuenta-pendiente" replace />
+    }
+    if (isAccountRejected(userProfile)) {
+      return <Navigate to="/cuenta-rechazada" replace />
+    }
+  }
+
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden lg:flex-row">
-      {/* Mitad izquierda — información pública */}
       <section className="flex flex-1 flex-col overflow-y-auto bg-neutral-50 dark:bg-zinc-950 lg:w-1/2 lg:max-w-[50%]">
         <div className="flex flex-1 flex-col justify-center gap-8 px-6 py-10 sm:px-10 lg:px-14 lg:py-12">
           <header>
@@ -137,10 +155,9 @@ export function Home() {
         </div>
       </section>
 
-      {/* Mitad derecha — acceso */}
       <section className="auth-panel flex flex-1 flex-col lg:w-1/2 lg:max-w-[50%]">
         <div className="flex flex-1 flex-col items-center justify-center px-6 py-10 sm:px-10 lg:px-14">
-          {loading ? (
+          {loading || (user && profileLoading) ? (
             <div className="flex flex-col items-center gap-3 text-neutral-400">
               <Loader2 className="h-8 w-8 animate-spin text-brand-primary" />
               <p className="text-sm">Verificando sesión...</p>
@@ -170,7 +187,7 @@ export function Home() {
               <div className="mb-8">
                 <h2 className="text-2xl font-bold text-white">Acceso</h2>
                 <p className="mt-2 text-sm text-neutral-400">
-                  Ingresá o creá tu cuenta para acceder a la intranet.
+                  Ingresá o registrate para acceder a la intranet.
                 </p>
               </div>
 
@@ -205,6 +222,12 @@ export function Home() {
                 </button>
               </div>
 
+              {registerSuccessExternal && (
+                <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                  Tu cuenta quedó registrada y está pendiente de aprobación por un administrador.
+                </div>
+              )}
+
               {error && (
                 <div className="mb-4 rounded-lg alert-error px-4 py-3 text-sm">
                   {error}
@@ -233,68 +256,68 @@ export function Home() {
                   </div>
 
                   <form onSubmit={handleLogin} className="space-y-4">
-                  <div>
-                    <label
-                      htmlFor="login-email"
-                      className="mb-1.5 block text-sm font-medium text-neutral-300"
-                    >
-                      Correo electrónico
-                    </label>
-                    <input
-                      id="login-email"
-                      type="email"
-                      required
-                      autoComplete="email"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-sm text-white placeholder:text-neutral-500 input-dark-focus focus:outline-none"
-                      placeholder="usuario@empresa.com"
-                    />
-                  </div>
+                    <div>
+                      <label
+                        htmlFor="login-email"
+                        className="mb-1.5 block text-sm font-medium text-neutral-300"
+                      >
+                        Correo electrónico
+                      </label>
+                      <input
+                        id="login-email"
+                        type="email"
+                        required
+                        autoComplete="email"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-sm text-white placeholder:text-neutral-500 input-dark-focus focus:outline-none"
+                        placeholder="usuario@empresa.com"
+                      />
+                    </div>
 
-                  <div>
-                    <label
-                      htmlFor="login-password"
-                      className="mb-1.5 block text-sm font-medium text-neutral-300"
-                    >
-                      Contraseña
-                    </label>
-                    <input
-                      id="login-password"
-                      type="password"
-                      required
-                      autoComplete="current-password"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-sm text-white placeholder:text-neutral-500 input-dark-focus focus:outline-none"
-                      placeholder="••••••••"
-                    />
-                  </div>
+                    <div>
+                      <label
+                        htmlFor="login-password"
+                        className="mb-1.5 block text-sm font-medium text-neutral-300"
+                      >
+                        Contraseña
+                      </label>
+                      <input
+                        id="login-password"
+                        type="password"
+                        required
+                        autoComplete="current-password"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-sm text-white placeholder:text-neutral-500 input-dark-focus focus:outline-none"
+                        placeholder="••••••••"
+                      />
+                    </div>
 
-                  <div className="mb-4 flex items-center gap-2">
-                    <input
-                      id="login-remember"
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-brand dark:border-zinc-600 dark:bg-zinc-800"
-                    />
-                    <label
-                      htmlFor="login-remember"
-                      className="text-sm text-zinc-600 dark:text-zinc-400"
-                    >
-                      Recordarme en este equipo
-                    </label>
-                  </div>
+                    <div className="mb-4 flex items-center gap-2">
+                      <input
+                        id="login-remember"
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="h-4 w-4 rounded border-zinc-700 bg-zinc-900 accent-brand dark:border-zinc-600 dark:bg-zinc-800"
+                      />
+                      <label
+                        htmlFor="login-remember"
+                        className="text-sm text-zinc-600 dark:text-zinc-400"
+                      >
+                        Recordarme en este equipo
+                      </label>
+                    </div>
 
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="btn-primary w-full rounded-lg py-3 text-sm font-semibold"
-                  >
-                    {submitting ? 'Ingresando...' : 'Iniciar sesión'}
-                  </button>
-                </form>
+                    <button
+                      type="submit"
+                      disabled={submitting}
+                      className="btn-primary w-full rounded-lg py-3 text-sm font-semibold"
+                    >
+                      {submitting ? 'Ingresando...' : 'Iniciar sesión'}
+                    </button>
+                  </form>
                 </>
               ) : (
                 <form onSubmit={handleRegister} className="space-y-4">
@@ -394,6 +417,10 @@ export function Home() {
                       ))}
                     </select>
                   </div>
+
+                  <p className="text-xs leading-relaxed text-neutral-500">
+                    Emails fuera de @bacarsa.com.ar requieren aprobación manual antes de ingresar.
+                  </p>
 
                   <button
                     type="submit"

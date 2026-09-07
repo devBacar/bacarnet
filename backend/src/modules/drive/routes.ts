@@ -8,6 +8,8 @@ import { grantDrivePermission } from './grantPermission.js'
 import { listDriveFiles } from './listFiles.js'
 import { listDrivePermissions } from './listPermissions.js'
 import { revokeDrivePermission } from './revokePermission.js'
+import { moveDriveFile } from './moveFile.js'
+import { renameDriveFile } from './renameFile.js'
 import { trashDriveFile } from './trashFile.js'
 import { updateDriveFileClassification } from './updateClassification.js'
 import { updateDriveFileStatus } from './updateStatus.js'
@@ -22,6 +24,8 @@ driveRouter.get('/files/:fileId', getDriveFile)
 driveRouter.post('/files', createDriveFile)
 driveRouter.post('/files/upload', uploadDriveFile)
 driveRouter.post('/files/:fileId/trash', trashDriveFile)
+driveRouter.patch('/files/:fileId/rename', renameDriveFile)
+driveRouter.post('/files/:fileId/move', moveDriveFile)
 driveRouter.patch('/files/:fileId/classification', updateDriveFileClassification)
 driveRouter.patch('/files/:fileId/status', updateDriveFileStatus)
 driveRouter.get('/files/:fileId/permissions', listDrivePermissions)

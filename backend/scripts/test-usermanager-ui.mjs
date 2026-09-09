@@ -5,9 +5,9 @@
  *   node backend/scripts/test-usermanager-ui.mjs
  */
 
-import { randomBytes } from 'node:crypto'
 import { chromium } from 'playwright'
 import { getAuth } from 'firebase-admin/auth'
+import { generateEphemeralPassword } from './lib/testSecrets.mjs'
 import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
@@ -24,7 +24,7 @@ function line(ok, label, detail = '') {
 }
 
 async function setTemporaryPassword(uid) {
-  const tempPassword = `UiTest!${randomBytes(8).toString('hex')}`
+  const tempPassword = generateEphemeralPassword()
   await getAuth().updateUser(uid, { password: tempPassword })
   return tempPassword
 }

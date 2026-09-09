@@ -53,7 +53,12 @@ async function main() {
   const auth = getAuth()
 
   const testEmail = `bootstrap-test-${Date.now()}@bacarsa.com.ar`
-  const user = await auth.createUser({ email: testEmail, emailVerified: true, password: 'REDACTED' })
+  const { requireTestAccountPassword } = await import('./lib/testSecrets.mjs')
+  const user = await auth.createUser({
+    email: testEmail,
+    emailVerified: true,
+    password: requireTestAccountPassword(),
+  })
   const idToken = await exchangeCustomToken(await auth.createCustomToken(user.uid))
 
   let ok = true

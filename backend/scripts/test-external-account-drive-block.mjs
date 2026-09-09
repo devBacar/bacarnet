@@ -8,7 +8,11 @@
  */
 
 import { getAuth } from 'firebase-admin/auth'
+import { requireTestAccountPassword } from './lib/testSecrets.mjs'
 import { getTestIdToken, getAdminDb, initAdmin, loadTestEnv } from './get-test-token.mjs'
+
+loadTestEnv()
+const TEST_PASSWORD = requireTestAccountPassword()
 
 const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const TEST_EMAIL =
@@ -16,7 +20,6 @@ const TEST_EMAIL =
   'intranet-external-drive-test@example.com'
 
 initAdmin()
-loadTestEnv()
 
 const db = getAdminDb()
 const auth = getAuth()
@@ -27,7 +30,7 @@ try {
 } catch {
   authUser = await auth.createUser({
     email: TEST_EMAIL,
-    password: 'REDACTED',
+    password: TEST_PASSWORD,
     emailVerified: true,
     displayName: 'External Drive Block Test',
   })

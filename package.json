@@ -68,7 +68,9 @@
     "areas:seed": "node scripts/seed-drive-areas.mjs --apply",
     "legacy:audit": "node scripts/audit-legacy-folders.mjs --export=scripts/backups/legacy-folders-audit.json",
     "legacy:purge:dry-run": "node scripts/purge-legacy-folders.mjs",
-    "legacy:purge": "node scripts/purge-legacy-folders.mjs --apply"
+    "legacy:purge": "node scripts/purge-legacy-folders.mjs --apply",
+    "secrets:install-hook": "python -m pre_commit install",
+    "secrets:scan": "python -m ggshield secret scan repo ."
   },
   "dependencies": {
     "@capacitor/android": "^8.4.1",

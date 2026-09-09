@@ -1,7 +1,7 @@
 import { join } from 'node:path'
-import { randomBytes } from 'node:crypto'
 import { chromium, devices } from 'playwright'
 import { getAuth } from 'firebase-admin/auth'
+import { generateEphemeralPassword } from './lib/testSecrets.mjs'
 import { getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
@@ -10,7 +10,7 @@ const OUT = join(process.cwd(), 'mobile-audit-screenshots')
 
 async function main() {
   const admin = await getTestIdToken()
-  const pw = `MobAudit!${randomBytes(6).toString('hex')}`
+  const pw = generateEphemeralPassword()
   await getAuth().updateUser(admin.uid, { password: pw })
   const browser = await chromium.launch({ headless: true })
   const page = await (await browser.newContext({ ...devices['iPhone 13'], locale: 'es-AR' })).newPage()

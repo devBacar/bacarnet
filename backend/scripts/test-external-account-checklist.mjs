@@ -4,13 +4,16 @@
  */
 
 import { getAuth } from 'firebase-admin/auth'
-import { getTestIdToken, getAdminDb, initAdmin } from './get-test-token.mjs'
+import { requireTestAccountPassword } from './lib/testSecrets.mjs'
+import { getTestIdToken, getAdminDb, initAdmin, loadTestEnv } from './get-test-token.mjs'
+
+loadTestEnv()
+const PASSWORD = requireTestAccountPassword()
 
 const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const ts = Date.now()
 const EXTERNAL_EMAIL = `checklist-ext-${ts}@example.com`
 const CORPORATE_EMAIL = `checklist-corp-${ts}@bacarsa.com.ar`
-const PASSWORD = 'REDACTED'
 const APPROVE_REASON = 'Checklist producción: aprobación cuenta externa de prueba'
 
 initAdmin()

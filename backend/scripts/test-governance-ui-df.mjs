@@ -8,9 +8,9 @@
  *   node backend/scripts/test-governance-ui-df.mjs
  */
 
-import { randomBytes } from 'node:crypto'
 import { chromium } from 'playwright'
 import { getAuth } from 'firebase-admin/auth'
+import { generateEphemeralPassword } from './lib/testSecrets.mjs'
 import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
@@ -63,7 +63,7 @@ async function setTemporaryPassword(uid, email) {
   if (PASSWORD_PROTECTED_EMAILS.has(email.trim().toLowerCase())) {
     throw new Error(`Refusing to change password for protected account ${email}`)
   }
-  const tempPassword = `UiDf!${randomBytes(8).toString('hex')}`
+  const tempPassword = generateEphemeralPassword()
   await getAuth().updateUser(uid, { password: tempPassword })
   return tempPassword
 }

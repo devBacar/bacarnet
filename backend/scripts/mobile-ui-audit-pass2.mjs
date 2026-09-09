@@ -3,9 +3,9 @@
  */
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { randomBytes } from 'node:crypto'
 import { chromium, devices } from 'playwright'
 import { getAuth } from 'firebase-admin/auth'
+import { generateEphemeralPassword } from './lib/testSecrets.mjs'
 import { getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
@@ -13,7 +13,7 @@ const BASE = process.env.INTRANET_BASE?.trim() || 'https://bacarnet.web.app'
 const OUT = join(process.cwd(), 'mobile-audit-screenshots')
 
 async function setTemporaryPassword(uid) {
-  const tempPassword = `MobAudit!${randomBytes(6).toString('hex')}`
+  const tempPassword = generateEphemeralPassword()
   await getAuth().updateUser(uid, { password: tempPassword })
   return tempPassword
 }

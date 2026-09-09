@@ -4,8 +4,8 @@
  *   node backend/scripts/reset-user-password.mjs implementaciones.it@bacarsa.com.ar
  */
 
-import { randomBytes } from 'node:crypto'
 import { getAuth } from 'firebase-admin/auth'
+import { generateEphemeralPassword } from './lib/testSecrets.mjs'
 import { getAdminDb, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
@@ -17,8 +17,7 @@ if (!email) {
   process.exit(1)
 }
 
-const tempPassword =
-  fixedPassword || `BacarRestablecer!${randomBytes(4).toString('hex')}`
+const tempPassword = fixedPassword || generateEphemeralPassword()
 
 const q = await getAdminDb().collection('users').where('email', '==', email).limit(1).get()
 if (q.empty) {

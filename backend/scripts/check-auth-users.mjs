@@ -35,24 +35,21 @@ if (!q.empty) {
 }
 
 const apiKey = process.env.VITE_FIREBASE_API_KEY?.trim()
-if (apiKey) {
-  for (const password of [
-    process.env.CHECK_PASSWORD?.trim(),
-    'REDACTED',
-    'REDACTED',
-  ].filter(Boolean)) {
-    const res = await fetch(
-      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, returnSecureToken: true }),
-      },
-    )
-    const body = await res.json().catch(() => ({}))
-    console.log(
-      `signInWithPassword (${password.slice(0, 12)}…):`,
-      res.ok ? 'OK' : body.error?.message ?? res.status,
-    )
-  }
+const checkPassword = process.env.CHECK_PASSWORD?.trim()
+if (apiKey && checkPassword) {
+  const res = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${encodeURIComponent(apiKey)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: checkPassword, returnSecureToken: true }),
+    },
+  )
+  const body = await res.json().catch(() => ({}))
+  console.log(
+    'signInWithPassword (CHECK_PASSWORD):',
+    res.ok ? 'OK' : body.error?.message ?? res.status,
+  )
+} else if (apiKey) {
+  console.log('signInWithPassword: omitido (definí CHECK_PASSWORD en backend/.env.local para probar login)')
 }

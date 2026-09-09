@@ -1,0 +1,13 @@
+***REMOVED*** Instalación (una vez por clon del repo):
+***REMOVED***   pip install pre-commit ggshield
+***REMOVED***   pre-commit install
+***REMOVED***
+***REMOVED*** Escaneo manual de todo el repo:
+***REMOVED***   ggshield secret scan repo .
+
+repos:
+  - repo: https://github.com/GitGuardian/ggshield
+    rev: v1.54.0
+    hooks:
+      - id: ggshield
+        language_version: python3

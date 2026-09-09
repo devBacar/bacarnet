@@ -24,6 +24,7 @@ serviceAccount*.json
 backend/.env
 backend/.env.*
 !backend/.env.example
+!backend/.env.local.example
 backend/lib
 
 ***REMOVED*** Backups locales de scripts E2E (no commitear)

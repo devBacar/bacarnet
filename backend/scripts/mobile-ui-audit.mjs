@@ -5,9 +5,9 @@
 
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { randomBytes } from 'node:crypto'
 import { chromium, devices } from 'playwright'
 import { getAuth } from 'firebase-admin/auth'
+import { generateEphemeralPassword } from './lib/testSecrets.mjs'
 import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
@@ -18,7 +18,7 @@ const SAMPLE_FILE_ID =
   process.env.MOBILE_AUDIT_FILE_ID?.trim() || '11wsnXEQbrTYsK3pLDs_oazKSsp1koShC'
 
 async function setTemporaryPassword(uid) {
-  const tempPassword = `MobAudit!${randomBytes(6).toString('hex')}`
+  const tempPassword = generateEphemeralPassword()
   await getAuth().updateUser(uid, { password: tempPassword })
   return tempPassword
 }

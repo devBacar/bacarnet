@@ -1,6 +1,6 @@
-import { randomBytes } from 'node:crypto'
 import type { Request, Response } from 'express'
 import { getAuth } from 'firebase-admin/auth'
+import { generateTemporaryPassword } from '../../lib/generateTemporaryPassword.js'
 import { logError } from '../../lib/log.js'
 import { writeAuditLogBestEffort } from '../audit/writeAuditLog.js'
 import { getMinReasonLength } from '../drive/policy.js'
@@ -57,7 +57,7 @@ export async function resetUserPassword(req: Request, res: Response): Promise<vo
     return
   }
 
-  const temporaryPassword = `BacarRestablecer!${randomBytes(4).toString('hex')}`
+  const temporaryPassword = generateTemporaryPassword()
 
   try {
     await getAuth().updateUser(uid, {

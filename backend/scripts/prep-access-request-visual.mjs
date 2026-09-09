@@ -3,8 +3,8 @@
  *   node backend/scripts/prep-access-request-visual.mjs
  */
 
-import { randomBytes } from 'node:crypto'
 import { getAuth } from 'firebase-admin/auth'
+import { generateEphemeralPassword } from './lib/testSecrets.mjs'
 import { getAdminDb, getTestIdToken, loadTestEnv } from './get-test-token.mjs'
 
 loadTestEnv()
@@ -40,7 +40,7 @@ async function setTemporaryPassword(email) {
   const q = await db.collection('users').where('email', '==', email).limit(1).get()
   if (q.empty) throw new Error(`Usuario ${email} no encontrado`)
   const uid = q.docs[0].id
-  const tempPassword = `VisUi!${randomBytes(8).toString('hex')}`
+  const tempPassword = generateEphemeralPassword()
   await getAuth().updateUser(uid, { password: tempPassword })
   return { uid, tempPassword }
 }

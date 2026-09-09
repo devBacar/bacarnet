@@ -10,7 +10,11 @@
  */
 
 import { getAuth } from 'firebase-admin/auth'
-import { getTestIdToken, getAdminDb, initAdmin } from './get-test-token.mjs'
+import { requireTestAccountPassword } from './lib/testSecrets.mjs'
+import { getTestIdToken, getAdminDb, initAdmin, loadTestEnv } from './get-test-token.mjs'
+
+loadTestEnv()
+const TEST_PASSWORD = requireTestAccountPassword()
 
 const base = process.env.FUNCTIONS_API_BASE?.trim() || 'https://bacarnet.web.app'
 const PENDING_EMAIL = 'intranet-external-pending-test@example.com'
@@ -26,7 +30,7 @@ async function upsertAuthUser(email, displayName) {
   } catch {
     return auth.createUser({
       email,
-      password: 'REDACTED',
+      password: TEST_PASSWORD,
       emailVerified: true,
       displayName,
     })

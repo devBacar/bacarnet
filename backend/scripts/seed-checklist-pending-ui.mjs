@@ -1,7 +1,9 @@
 import { getAuth } from 'firebase-admin/auth'
+import { requireTestAccountPassword } from './lib/testSecrets.mjs'
 import { getAdminDb, initAdmin } from './get-test-token.mjs'
 
 initAdmin()
+const TEST_PASSWORD = requireTestAccountPassword()
 const email = 'checklist-pending-ui@example.com'
 const auth = getAuth()
 const db = getAdminDb()
@@ -10,7 +12,7 @@ try {
 } catch {}
 const u = await auth.createUser({
   email,
-  password: 'REDACTED',
+  password: TEST_PASSWORD,
   emailVerified: true,
   displayName: 'Pending UI Test',
 })

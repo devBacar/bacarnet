@@ -1,8 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { listAssignableRootAreas, listRootAreas } from '../../services/areaService'
+import {
+  fetchPublicAssignableRootAreas,
+  listAssignableRootAreas,
+  listRootAreas,
+} from '../../services/areaService'
 import { ensureBoardSession, fetchBoardsVisibility, listBoards } from '../../services/boardsApi'
 import { getLinks } from '../../services/linkService'
-import { getNews } from '../../services/newsService'
 import { CATALOG_STALE_MS } from '../../lib/queryClient'
 import { queryKeys } from '../../lib/queryKeys'
 
@@ -19,6 +22,16 @@ export function useAssignableAreasQuery(enabled = true) {
   return useQuery({
     queryKey: queryKeys.areas.assignable(),
     queryFn: listAssignableRootAreas,
+    enabled,
+    staleTime: CATALOG_STALE_MS,
+  })
+}
+
+/** Áreas reales para formularios públicos (p. ej. registro sin sesión). */
+export function usePublicAssignableAreasQuery(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.areas.publicAssignable(),
+    queryFn: fetchPublicAssignableRootAreas,
     enabled,
     staleTime: CATALOG_STALE_MS,
   })
@@ -50,15 +63,6 @@ export function useBoardsVisibilityQuery(
   })
 }
 
-export function useNewsQuery(includeExpired = false, enabled = true) {
-  return useQuery({
-    queryKey: queryKeys.news.list(includeExpired),
-    queryFn: () => getNews({ includeExpired }),
-    enabled,
-    staleTime: CATALOG_STALE_MS,
-  })
-}
-
 export function useLinksQuery(enabled = true) {
   return useQuery({
     queryKey: queryKeys.links.list(),
@@ -75,8 +79,6 @@ export function useInvalidateCatalog() {
       client.invalidateQueries({ queryKey: ['areas'] }),
     invalidateBoards: (uid: string | undefined) =>
       client.invalidateQueries({ queryKey: ['boards', 'list', uid ?? 'anon'] }),
-    invalidateNews: (includeExpired = false) =>
-      client.invalidateQueries({ queryKey: queryKeys.news.list(includeExpired) }),
     invalidateLinks: () =>
       client.invalidateQueries({ queryKey: queryKeys.links.list() }),
   }

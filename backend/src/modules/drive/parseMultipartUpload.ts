@@ -1,7 +1,8 @@
 import type { Request } from 'express'
 import Busboy from 'busboy'
+import { MULTIPART_UPLOAD_MAX_BYTES } from './uploadLimits.js'
 
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+export { MULTIPART_UPLOAD_MAX_BYTES as MAX_UPLOAD_BYTES }
 
 export type ParsedMultipartUpload = {
   fields: Record<string, string>
@@ -23,7 +24,7 @@ export async function parseMultipartUpload(req: Request): Promise<ParsedMultipar
     try {
       parser = Busboy({
         headers: req.headers,
-        limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 10 },
+        limits: { fileSize: MULTIPART_UPLOAD_MAX_BYTES, files: 1, fields: 10 },
       })
     } catch (err) {
       reject(err)
@@ -62,7 +63,12 @@ export async function parseMultipartUpload(req: Request): Promise<ParsedMultipar
     })
 
     const rawBody = (req as Request & { rawBody?: Buffer }).rawBody
-    if (rawBody) parser.end(rawBody)
-    else req.pipe(parser)
+    if (rawBody && rawBody.length > 0) {
+      parser.end(rawBody)
+    } else if (req.readable) {
+      req.pipe(parser)
+    } else {
+      reject(new Error('UPLOAD_BODY_UNAVAILABLE'))
+    }
   })
 }

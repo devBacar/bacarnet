@@ -143,3 +143,7 @@ export function ragSnapshotObjectPath(governingAreaId: string, version = 'curren
 export function ragManifestObjectPath(governingAreaId: string, version = 'current'): string {
   return `areas/${governingAreaId}/${version}/manifest.json`
 }
+
+export function ragChunksContentObjectPath(governingAreaId: string, version = 'current'): string {
+  return `areas/${governingAreaId}/${version}/chunks-content.json`
+}

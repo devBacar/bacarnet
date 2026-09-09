@@ -12,7 +12,7 @@ export function getWeatherCardTheme(icon: WeatherIcon): WeatherCardTheme {
   switch (icon) {
     case 'sun':
       return {
-        gradient: 'linear-gradient(125deg, ***REMOVED***ff7a6a 0%, ***REMOVED***ffb347 42%, ***REMOVED***ffe566 100%)',
+        gradient: 'linear-gradient(125deg, ***REMOVED***ff7a6a 0%, ***REMOVED***e88830 58%, ***REMOVED***c49828 100%)',
         timeColor: '***REMOVED***fff8dc',
         decorClass: 'weather-card-decor-sun',
         usesLightText: true,
@@ -26,7 +26,7 @@ export function getWeatherCardTheme(icon: WeatherIcon): WeatherCardTheme {
       }
     case 'mostly-clear':
       return {
-        gradient: 'linear-gradient(125deg, ***REMOVED***ff9a56 0%, ***REMOVED***ffc857 38%, ***REMOVED***ffeaa7 100%)',
+        gradient: 'linear-gradient(125deg, ***REMOVED***ff9a56 0%, ***REMOVED***e89830 52%, ***REMOVED***c09838 100%)',
         timeColor: '***REMOVED***fff8dc',
         decorClass: 'weather-card-decor-mostly-clear',
         usesLightText: true,

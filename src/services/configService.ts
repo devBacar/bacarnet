@@ -3,6 +3,7 @@ import { db } from './firebase'
 
 const GLOBAL_SETTINGS_COLLECTION = 'global_settings'
 const GLOBAL_SETTINGS_DOC_ID = 'main'
+const RAG_SETTINGS_DOC_ID = 'rag'
 
 export const DEFAULT_DEPARTMENTS = [
   'General',
@@ -15,31 +16,25 @@ export const DEFAULT_DEPARTMENTS = [
 export type GlobalModuleFlag =
   | 'resourcesEnabled'
   | 'directoryEnabled'
-  | 'kudosEnabled'
   | 'pollsEnabled'
   | 'boardsEnabled'
   | 'notificationsEnabled'
-  | 'newsEnabled'
 
 export interface GlobalSettings {
   resourcesEnabled: boolean
   directoryEnabled: boolean
-  kudosEnabled: boolean
   pollsEnabled: boolean
   boardsEnabled: boolean
   notificationsEnabled: boolean
-  newsEnabled: boolean
   departments: string[]
 }
 
 export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   resourcesEnabled: true,
   directoryEnabled: true,
-  kudosEnabled: true,
   pollsEnabled: true,
   boardsEnabled: true,
   notificationsEnabled: true,
-  newsEnabled: true,
   departments: [...DEFAULT_DEPARTMENTS],
 }
 
@@ -70,18 +65,20 @@ function mapDocToGlobalSettings(data: DocumentData): GlobalSettings {
   return {
     resourcesEnabled: data.resourcesEnabled ?? DEFAULT_GLOBAL_SETTINGS.resourcesEnabled,
     directoryEnabled: data.directoryEnabled ?? DEFAULT_GLOBAL_SETTINGS.directoryEnabled,
-    kudosEnabled: data.kudosEnabled ?? DEFAULT_GLOBAL_SETTINGS.kudosEnabled,
     pollsEnabled: data.pollsEnabled ?? DEFAULT_GLOBAL_SETTINGS.pollsEnabled,
     boardsEnabled: data.boardsEnabled ?? DEFAULT_GLOBAL_SETTINGS.boardsEnabled,
     notificationsEnabled:
       data.notificationsEnabled ?? DEFAULT_GLOBAL_SETTINGS.notificationsEnabled,
-    newsEnabled: data.newsEnabled ?? DEFAULT_GLOBAL_SETTINGS.newsEnabled,
     departments: normalizeDepartments(data.departments),
   }
 }
 
 function settingsDocRef() {
   return doc(db, GLOBAL_SETTINGS_COLLECTION, GLOBAL_SETTINGS_DOC_ID)
+}
+
+function ragSettingsDocRef() {
+  return doc(db, GLOBAL_SETTINGS_COLLECTION, RAG_SETTINGS_DOC_ID)
 }
 
 export async function getGlobalSettings(): Promise<GlobalSettings> {
@@ -94,21 +91,29 @@ export async function getGlobalSettings(): Promise<GlobalSettings> {
   return mapDocToGlobalSettings(snapshot.data())
 }
 
+export async function getRagAssistantGlobalEnabled(): Promise<boolean> {
+  const snapshot = await getDoc(ragSettingsDocRef())
+  if (!snapshot.exists()) return false
+  return snapshot.data().enabled === true
+}
+
 export async function updateGlobalSettings(settings: GlobalSettings): Promise<void> {
   await setDoc(
     settingsDocRef(),
     {
       resourcesEnabled: settings.resourcesEnabled,
       directoryEnabled: settings.directoryEnabled,
-      kudosEnabled: settings.kudosEnabled,
       pollsEnabled: settings.pollsEnabled,
       boardsEnabled: settings.boardsEnabled,
       notificationsEnabled: settings.notificationsEnabled,
-      newsEnabled: settings.newsEnabled,
       departments: normalizeDepartments(settings.departments),
     },
     { merge: true },
   )
+}
+
+export async function updateRagAssistantGlobalEnabled(enabled: boolean): Promise<void> {
+  await setDoc(ragSettingsDocRef(), { enabled }, { merge: true })
 }
 
 export async function updateDepartments(departments: string[]): Promise<void> {

@@ -13,6 +13,7 @@ export {
   isAdminOfArea,
   isSuperAdmin,
   isSuperAdminEmail,
+  hasRagAssistantAccess,
   isUser,
   registerUser,
   resolveRoleForEmail,
@@ -110,6 +111,7 @@ export {
 export {
   listRootAreas,
   listAssignableRootAreas,
+  fetchPublicAssignableRootAreas,
   isSharedAreasFolder,
   type GoverningArea,
 } from './areaService'

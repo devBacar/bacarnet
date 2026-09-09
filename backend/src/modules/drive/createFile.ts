@@ -204,6 +204,7 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
 
   try {
     const drive = await getDrive(driveSubject)
+    const governingAreaIdPromise = resolveGoverningAreaId(parentFolderId)
     const created = await drive.files.create({
       requestBody: {
         name,
@@ -219,9 +220,22 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
     const createdMime = created.data.mimeType ?? mimeType
     const webViewLink = created.data.webViewLink ?? null
 
-    const governingAreaId = await resolveGoverningAreaId(parentFolderId)
+    const governingAreaId = await governingAreaIdPromise
 
     if (isFolderCreate) {
+      const creator = {
+        displayName: user.displayName,
+        email: user.email,
+        source: 'intranet' as const,
+      }
+
+      await writeFolderSidecarBestEffort(
+        id,
+        { uid: user.uid, email: user.email, displayName: user.displayName },
+        { governingAreaId, classification },
+      )
+
+      // Carpetas privadas: permisos mínimos antes de responder (sin ellos la carpeta no es usable).
       let governanceDrive: Awaited<ReturnType<typeof getDrive>> | null = null
       let privateAccessResult: Awaited<ReturnType<typeof applyPrivateFolderLimitedAccess>> | null =
         null
@@ -248,49 +262,7 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
         }
       }
 
-      await writeFolderSidecarBestEffort(
-        id,
-        { uid: user.uid, email: user.email, displayName: user.displayName },
-        { governingAreaId, classification },
-      )
-
-      const accessResult = await applyFolderAccessOnCreate({
-        drive: privateFolder && governanceDrive ? governanceDrive : drive,
-        folderId: id,
-        folderName: fileName,
-        parentFolderId,
-        mode: folderAccessMode,
-        initialGrantEmails,
-        privateFolder,
-        actor: { uid: user.uid, email: user.email },
-        reason: reason.trim(),
-      })
-
-      await writeAuditLogBestEffort({
-        userId: user.uid,
-        userEmail: user.email,
-        action: 'create',
-        targetType: 'folder',
-        targetId: id,
-        targetName: fileName,
-        parentFolderId,
-        mimeType: createdMime,
-        reason: reason.trim(),
-        metadata: {
-          type,
-          governingAreaId,
-          classification,
-          folderAccessMode,
-          privateFolder,
-          initialGrantCount: initialGrantEmails.length,
-          grantedUserCount: accessResult.grantedUserCount,
-          domainGranted: accessResult.domainGranted,
-          privateAccess: privateAccessResult,
-          governanceCanReadPrivate,
-        },
-      })
-
-      invalidateDriveMetadataForUser(resolveDriveSubject(user), user.uid)
+      // Responder en cuanto la carpeta existe en Drive; permisos masivos y auditoría continúan después.
       res.status(201).json({
         id,
         name: fileName,
@@ -302,10 +274,11 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
         governingAreaId,
         folderAccessMode,
         privateFolder,
-        grantedUserCount: accessResult.grantedUserCount,
-        domainGranted: accessResult.domainGranted,
+        grantedUserCount: 0,
+        domainGranted: false,
         privateAccess: privateAccessResult,
         governanceCanReadPrivate,
+        creator,
         createdBy: {
           userId: user.uid,
           email: user.email,
@@ -313,6 +286,48 @@ export async function createDriveFile(req: Request, res: Response): Promise<void
           source: 'intranet',
         },
       })
+
+      try {
+        const accessResult = await applyFolderAccessOnCreate({
+          drive: privateFolder && governanceDrive ? governanceDrive : drive,
+          folderId: id,
+          folderName: fileName,
+          parentFolderId,
+          mode: folderAccessMode,
+          initialGrantEmails,
+          privateFolder,
+          actor: { uid: user.uid, email: user.email },
+          reason: reason.trim(),
+        })
+
+        await writeAuditLogBestEffort({
+          userId: user.uid,
+          userEmail: user.email,
+          action: 'create',
+          targetType: 'folder',
+          targetId: id,
+          targetName: fileName,
+          parentFolderId,
+          mimeType: createdMime,
+          reason: reason.trim(),
+          metadata: {
+            type,
+            governingAreaId,
+            classification,
+            folderAccessMode,
+            privateFolder,
+            initialGrantCount: initialGrantEmails.length,
+            grantedUserCount: accessResult.grantedUserCount,
+            domainGranted: accessResult.domainGranted,
+            privateAccess: privateAccessResult,
+            governanceCanReadPrivate,
+          },
+        })
+
+        invalidateDriveMetadataForUser(resolveDriveSubject(user), user.uid)
+      } catch (postErr) {
+        logError('Finalización post-respuesta al crear carpeta falló', postErr)
+      }
       return
     }
 

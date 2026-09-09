@@ -153,7 +153,7 @@ export function WelcomeHeader({
                 onUpdated={handlePreferencesUpdated}
                 light={showWeather && lightText}
               />
-              <div className="flex w-full flex-wrap items-end justify-end gap-3 sm:gap-4">
+              <div className="flex w-full flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-end">
                 {showWeather ? (
                   <WeatherCompactWidget weather={weather} theme={weatherTheme ?? undefined} />
                 ) : null}

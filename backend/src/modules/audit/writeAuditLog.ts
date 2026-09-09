@@ -30,6 +30,9 @@ export type AuditLogEntry = {
     | 'external_account_approved'
     | 'external_account_rejected'
     | 'audit_correction'
+    | 'assistant_email_sent'
+    | 'assistant_calendar_event_created'
+    | 'assistant_calendar_event_cancelled'
   targetType: 'folder' | 'file' | 'resource' | 'user' | 'board'
   targetId: string
   targetName: string

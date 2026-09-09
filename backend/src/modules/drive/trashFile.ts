@@ -18,6 +18,11 @@ const MEDIA_MIMES_OPTIONAL_REASON = new Set([
   'application/pdf',
   'image/png',
   'image/jpeg',
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+  'video/x-msvideo',
+  'video/mpeg',
 ])
 
 function trashRequiresReason(mimeType: string | null): boolean {

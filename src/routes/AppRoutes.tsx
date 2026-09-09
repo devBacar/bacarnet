@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { AdminLayout, PublicLayout } from '../components'
+import { AdminLayout, PublicLayout, RagAssistantHost } from '../components'
 import {
   AdminAudit,
   AdminContent,
@@ -14,11 +14,14 @@ import {
   BoardViewerPage,
   Directory,
   DriveDocumentViewerPage,
+  HelpCenter,
   Home,
   IntranetHub,
   AccountPendingPage,
   AccountRejectedPage,
   OfficeUploadPreviewPage,
+  RagAssistantRedirect,
+  RagPilotSistemas,
   Resources,
 } from '../pages'
 import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
@@ -26,6 +29,8 @@ import { ProtectedRoute } from './ProtectedRoute'
 import { AccountStatusRoute } from './AccountStatusRoute'
 import { AdminRoute } from './AdminRoute'
 import { BoardsRoute } from './BoardsRoute'
+import { CorporateAccountRoute } from './CorporateAccountRoute'
+import { RagPilotRoute } from './RagPilotRoute'
 import { SuperAdminRoute } from './SuperAdminRoute'
 import { ModulePermissionRoute } from './ModulePermissionRoute'
 
@@ -61,11 +66,18 @@ export function AppRoutes() {
             <Route element={<ModulePermissionRoute permission="view_drive" module="resourcesEnabled" />}>
               <Route path="recursos" element={<Resources />} />
               <Route path="recursos/office-preview/:requestId" element={<OfficeUploadPreviewPage />} />
+              <Route element={<RagPilotRoute />}>
+                <Route path="recursos/asistente-sistemas" element={<RagAssistantRedirect />} />
+              </Route>
               <Route path="mis-areas" element={<Navigate to="/recursos" replace />} />
             </Route>
 
             <Route element={<BoardsRoute />}>
               <Route path="tableros" element={<BoardList />} />
+            </Route>
+
+            <Route element={<CorporateAccountRoute />}>
+              <Route path="ayuda" element={<HelpCenter />} />
             </Route>
           </Route>
 
@@ -82,6 +94,7 @@ export function AppRoutes() {
               <Route path="users" element={<AdminUsers />} />
               <Route element={<SuperAdminRoute />}>
                 <Route path="auditoria" element={<AdminAudit />} />
+                <Route path="rag-pilot" element={<RagPilotSistemas />} />
               </Route>
               <Route path="usuarios" element={<Navigate to="/admin/users" replace />} />
             </Route>
@@ -89,6 +102,7 @@ export function AppRoutes() {
           </Route>
         </Route>
       </Routes>
+      <RagAssistantHost />
     </BrowserRouter>
   )
 }

@@ -1,7 +1,9 @@
 import type { drive_v3 } from 'googleapis'
 import { logError } from '../../lib/log.js'
+import { isBinaryDocumentMime, parseDocumentBuffer } from './parseDocumentBuffer.js'
 
-const MAX_TEXT_BYTES = 1_048_576
+const MAX_BINARY_BYTES = 15 * 1024 * 1024
+const MAX_TEXT_CHARS = 800_000
 
 const GOOGLE_EXPORT: Record<string, string> = {
   'application/vnd.google-apps.document': 'text/plain',
@@ -12,8 +14,10 @@ const GOOGLE_EXPORT: Record<string, string> = {
 const INDEXABLE_MIME_PREFIXES = ['text/']
 
 function isIndexableMime(mimeType: string): boolean {
-  if (GOOGLE_EXPORT[mimeType]) return true
-  return INDEXABLE_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix))
+  const mime = mimeType.trim().toLowerCase()
+  if (GOOGLE_EXPORT[mime]) return true
+  if (INDEXABLE_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix))) return true
+  return isBinaryDocumentMime(mime)
 }
 
 export function canExtractDriveText(mimeType: string): boolean {
@@ -41,6 +45,10 @@ async function downloadBuffer(
   return Buffer.from(res.data as ArrayBuffer)
 }
 
+function decodePlainTextBuffer(buffer: Buffer): string {
+  return buffer.toString('utf8').replace(/\u0000/g, '').trim()
+}
+
 export async function extractDriveText(
   drive: drive_v3.Drive,
   fileId: string,
@@ -55,11 +63,18 @@ export async function extractDriveText(
     if (buffer.length === 0) {
       return { ok: false, reason: 'Archivo vacío' }
     }
-    if (buffer.length > MAX_TEXT_BYTES) {
-      return { ok: false, reason: `Texto excede ${MAX_TEXT_BYTES} bytes` }
+    if (buffer.length > MAX_BINARY_BYTES) {
+      return { ok: false, reason: `Archivo binario excede ${MAX_BINARY_BYTES} bytes` }
     }
 
-    const text = buffer.toString('utf8').replace(/\u0000/g, '').trim()
+    let text = isBinaryDocumentMime(mimeType)
+      ? await parseDocumentBuffer(mimeType, buffer)
+      : decodePlainTextBuffer(buffer)
+
+    if (text.length > MAX_TEXT_CHARS) {
+      text = `${text.slice(0, MAX_TEXT_CHARS)}\n\n[… texto truncado para indexación …]`
+    }
+
     if (!text) {
       return { ok: false, reason: 'Sin texto extraíble' }
     }

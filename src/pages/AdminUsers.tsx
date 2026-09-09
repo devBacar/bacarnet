@@ -1,10 +1,10 @@
 import { ShieldAlert } from 'lucide-react'
-import { useState } from 'react'
 import { AdminTabs } from '../components/AdminTabs'
 import { CoreAppManager } from '../components/CoreAppManager'
 import { ModuleSettings } from '../components/ModuleSettings'
 import { UserManager } from '../components/UserManager'
 import { useAuth } from '../context'
+import { useUrlEnumParam } from '../hooks/useUrlSearchState'
 import { canManageUsers } from '../services/userService'
 
 const USER_TABS = [{ id: 'users', label: 'Usuarios' }] as const
@@ -21,10 +21,10 @@ export function AdminUsers() {
   const canManage = canManageUsers(userProfile?.permissions)
   const isSuperAdmin = userProfile?.permissions.super_admin === true
   const tabs = isSuperAdmin ? [...SUPER_ADMIN_TABS] : [...USER_TABS]
-  const [activeTab, setActiveTab] = useState<UsersTab>('users')
+  const [activeTab, setActiveTab] = useUrlEnumParam('tab', tabs.map((tab) => tab.id), 'users')
 
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full min-w-0 space-y-6">
       <header>
         <p className="text-brand-primary mb-1 text-sm font-medium uppercase tracking-wide">
           Administración

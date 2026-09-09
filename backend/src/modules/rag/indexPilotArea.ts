@@ -21,6 +21,7 @@ import {
   getRagConfig,
   ragManifestObjectPath,
   ragSnapshotObjectPath,
+  ragChunksContentObjectPath,
 } from './config.js'
 import { canExtractDriveText, extractDriveText } from './extractDriveText.js'
 import { embedTexts, encodeEmbeddingsSnapshot } from './embeddings.js'
@@ -200,6 +201,7 @@ export async function indexPilotArea(
 
   const manifestPath = ragManifestObjectPath(config.pilot.governingAreaId)
   const snapshotPath = ragSnapshotObjectPath(config.pilot.governingAreaId)
+  const contentsPath = ragChunksContentObjectPath(config.pilot.governingAreaId)
   const memoryEstimate = estimateRagMemoryUsage({
     chunkCount: draftChunks.length,
     embeddingDims: config.embeddingDims,
@@ -248,6 +250,16 @@ export async function indexPilotArea(
     const snapshot = encodeEmbeddingsSnapshot(vectors, config.embeddingDims)
     await uploadRagObject(snapshotPath, snapshot, 'application/octet-stream')
   }
+
+  const contentsPayload = draftChunks.map((chunk) => ({
+    id: chunk.id,
+    content: chunk.content,
+  }))
+  await uploadRagObject(
+    contentsPath,
+    JSON.stringify(contentsPayload),
+    'application/json',
+  )
 
   await uploadRagObject(manifestPath, JSON.stringify(manifest), 'application/json')
 

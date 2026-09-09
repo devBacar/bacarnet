@@ -19,9 +19,9 @@ import {
 } from './installerUploadPolicy.js'
 import { parseMultipartUpload } from './parseMultipartUpload.js'
 import { resolveGoverningAreaId } from './resolveGoverningArea.js'
+import { isAllowedBinaryUploadMime, normalizeUploadMime, BINARY_UPLOAD_MIMES } from './uploadMimePolicy.js'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
-const BINARY_UPLOAD_MIMES = new Set(['application/pdf', 'image/png', 'image/jpeg'])
 
 export async function uploadDriveFile(req: Request, res: Response): Promise<void> {
   const user = req.authedUser
@@ -34,7 +34,14 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
     parsed = await parseMultipartUpload(req)
   } catch (err) {
     if (err instanceof Error && err.message === 'UPLOAD_TOO_LARGE') {
-      res.status(413).json({ error: 'El archivo supera el límite de 25 MB' })
+      res.status(413).json({ error: 'El archivo supera el límite de 30 MB para subida directa' })
+      return
+    }
+    if (err instanceof Error && err.message === 'UPLOAD_BODY_UNAVAILABLE') {
+      res.status(400).json({
+        error: 'No se pudo leer el archivo. Los instaladores deben subirse con la versión actual de la intranet.',
+        code: 'use_staging_upload',
+      })
       return
     }
     res.status(400).json({ error: 'No se pudo leer la carga multipart' })
@@ -113,27 +120,13 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
       })
       return
     }
-
-    const mime = uploadedFile.mimetype.trim().toLowerCase()
-    if (mime !== 'application/octet-stream') {
-      const allowedMimes = await getAllowedUploadMimeTypes()
-      if (!allowedMimes.includes(mime)) {
-        res.status(403).json({
-          error: 'mimeType no permitido para instaladores',
-          allowedMimeTypes: allowedMimes,
-        })
-        return
-      }
-    }
   } else {
     const allowedMimes = await getAllowedUploadMimeTypes()
-    if (
-      !BINARY_UPLOAD_MIMES.has(uploadedFile.mimetype) ||
-      !allowedMimes.includes(uploadedFile.mimetype)
-    ) {
+    const mimeType = normalizeUploadMime(uploadedFile.mimetype, uploadedFile.originalname)
+    if (!isAllowedBinaryUploadMime(mimeType)) {
       res.status(403).json({
         error: 'mimeType no permitido para upload',
-        allowedMimeTypes: allowedMimes,
+        allowedMimeTypes: [...new Set([...allowedMimes, ...BINARY_UPLOAD_MIMES])].sort(),
       })
       return
     }
@@ -143,17 +136,20 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
     fields.name?.trim() ||
     uploadedFile.originalname
   const classification = parsedClassification.classification
+  const uploadMime = installerUpload
+    ? uploadedFile.mimetype
+    : normalizeUploadMime(uploadedFile.mimetype, uploadedFile.originalname)
 
   try {
     const drive = await getDrive(driveSubject)
     const created = await drive.files.create({
       requestBody: {
         name: name.slice(0, 255),
-        mimeType: uploadedFile.mimetype,
+        mimeType: uploadMime,
         parents: [parentFolderId],
       },
       media: {
-        mimeType: uploadedFile.mimetype,
+        mimeType: uploadMime,
         body: Readable.from(uploadedFile.buffer),
       },
       fields: 'id, name, mimeType, webViewLink, parents, modifiedTime, createdTime, size',
@@ -182,7 +178,7 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
       targetId: id,
       targetName: created.data.name ?? name,
       parentFolderId,
-      mimeType: created.data.mimeType ?? uploadedFile.mimetype,
+      mimeType: created.data.mimeType ?? uploadMime,
       reason,
       metadata: {
         type: 'upload',
@@ -197,7 +193,7 @@ export async function uploadDriveFile(req: Request, res: Response): Promise<void
     res.status(201).json({
       id,
       name: created.data.name ?? name,
-      mimeType: created.data.mimeType ?? uploadedFile.mimetype,
+      mimeType: created.data.mimeType ?? uploadMime,
       webViewLink: created.data.webViewLink ?? null,
       modifiedTime: created.data.modifiedTime ?? null,
       createdTime: created.data.createdTime ?? null,

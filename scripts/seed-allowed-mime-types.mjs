@@ -31,6 +31,11 @@ const SEED = [
   { mimeType: 'application/pdf', label: 'PDF', allowed: true, isNativeGoogle: false },
   { mimeType: 'image/png', label: 'PNG', allowed: true, isNativeGoogle: false },
   { mimeType: 'image/jpeg', label: 'JPEG', allowed: true, isNativeGoogle: false },
+  { mimeType: 'video/mp4', label: 'Video MP4 (.mp4)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'video/quicktime', label: 'Video QuickTime (.mov)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'video/webm', label: 'Video WebM (.webm)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'video/x-msvideo', label: 'Video AVI (.avi)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'video/mpeg', label: 'Video MPEG (.mpeg/.mpg)', allowed: true, isNativeGoogle: false },
   { mimeType: 'application/x-msdownload', label: 'Instalador Windows (.exe)', allowed: true, isNativeGoogle: false },
   {
     mimeType: 'application/vnd.microsoft.portable-executable',
@@ -69,6 +74,15 @@ const SEED = [
   { mimeType: 'application/msword', label: 'Word (.doc)', allowed: false, isNativeGoogle: false },
   { mimeType: 'application/vnd.ms-excel', label: 'Excel (.xls)', allowed: false, isNativeGoogle: false },
   { mimeType: 'application/vnd.ms-powerpoint', label: 'PowerPoint (.ppt)', allowed: false, isNativeGoogle: false },
+  { mimeType: 'application/vnd.oasis.opendocument.text', label: 'OpenDocument Texto (.odt)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/vnd.oasis.opendocument.spreadsheet', label: 'OpenDocument Hoja (.ods)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/vnd.oasis.opendocument.presentation', label: 'OpenDocument Presentación (.odp)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/zip', label: 'Archivo ZIP (.zip)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/x-zip-compressed', label: 'Archivo ZIP comprimido', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/x-iso9660-image', label: 'Imagen ISO (.iso)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/x-7z-compressed', label: 'Archivo 7-Zip (.7z)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'application/vnd.rar', label: 'Archivo RAR (.rar)', allowed: true, isNativeGoogle: false },
+  { mimeType: 'text/plain', label: 'Texto plano (.txt)', allowed: true, isNativeGoogle: false },
 ]
 
 function loadBackendEnv() {

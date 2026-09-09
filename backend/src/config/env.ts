@@ -29,6 +29,11 @@ const DEFAULT_DOMAIN = 'bacarsa.com.ar'
 const DEFAULT_IMPERSONATE = 'datos@bacarsa.com.ar'
 
 export const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive'] as const
+export const GMAIL_SEND_SCOPES = ['https://www.googleapis.com/auth/gmail.send'] as const
+export const GMAIL_READONLY_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'] as const
+export const CALENDAR_EVENTS_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+] as const
 
 export function getEnv() {
   const allowedEmailDomain = (

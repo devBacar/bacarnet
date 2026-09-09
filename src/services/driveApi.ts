@@ -1,4 +1,7 @@
 import { auth } from './firebase'
+import { isInstallerUploadFile } from '../utils/installerUpload'
+import { isArchiveUploadFile } from '../utils/archiveUpload'
+import { usesStagingUpload } from '../utils/uploadLimits'
 
 export type DriveClassification = 'USO_INTERNO' | 'CONFIDENCIAL' | 'RESTRINGIDO'
 export type DriveApprovalStatus = 'BORRADOR' | 'APROBADO'
@@ -183,6 +186,11 @@ export async function createDriveFile(
 }
 
 export async function uploadDriveFile(input: UploadDriveFileInput): Promise<void> {
+  if (usesStagingUpload(input.file) || isInstallerUploadFile(input.file) || isArchiveUploadFile(input.file)) {
+    await uploadDriveFileViaStaging(input)
+    return
+  }
+
   const form = new FormData()
   form.set('file', input.file)
   form.set('parentFolderId', input.parentFolderId)
@@ -195,6 +203,55 @@ export async function uploadDriveFile(input: UploadDriveFileInput): Promise<void
     body: form,
   })
   await parseApiResponse(res)
+}
+
+async function uploadDriveFileViaStaging(input: UploadDriveFileInput): Promise<void> {
+  const mimeType = input.file.type?.trim() || 'application/octet-stream'
+
+  const prepareRes = await fetch('/api/drive/files/upload/prepare', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({
+      fileName: input.file.name,
+      mimeType,
+      fileSize: input.file.size,
+      parentFolderId: input.parentFolderId,
+      classification: input.classification,
+      reason: input.reason,
+    }),
+  })
+  const prepared = await parseApiResponse<{
+    uploadId: string
+    objectPath: string
+    signedUrl: string
+  }>(prepareRes)
+
+  const putRes = await fetch(prepared.signedUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': mimeType },
+    body: input.file,
+  })
+  if (!putRes.ok) {
+    throw new Error(
+      `No se pudo enviar el archivo al almacenamiento temporal (${putRes.status}). ` +
+        'Si el error persiste, avisá a Sistemas (CORS del bucket).',
+    )
+  }
+
+  const completeRes = await fetch('/api/drive/files/upload/complete', {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({
+      uploadId: prepared.uploadId,
+      objectPath: prepared.objectPath,
+      fileName: input.file.name,
+      mimeType,
+      parentFolderId: input.parentFolderId,
+      classification: input.classification,
+      reason: input.reason,
+    }),
+  })
+  await parseApiResponse(completeRes)
 }
 
 export async function trashDriveFile(fileId: string, reason?: string): Promise<void> {

@@ -1,9 +1,10 @@
-import { ArrowRight, Link2, Newspaper, Users } from 'lucide-react'
+import { ArrowRight, BarChart3, Link2, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context'
-import { useLinksQuery, useNewsQuery } from '../hooks/queries/useCatalogQueries'
+import { useLinksQuery } from '../hooks/queries/useCatalogQueries'
 import { getCoreApps } from '../services/coreAppService'
+import { getPolls } from '../services/pollService'
 import { canManageUsers, getAllUsers } from '../services/userService'
 
 interface MetricCardProps {
@@ -33,26 +34,28 @@ function MetricCard({ label, value, icon, loading }: MetricCardProps) {
 
 export function AdminDashboard() {
   const { user, userProfile } = useAuth()
-  const { data: news = [], isLoading: loadingNews } = useNewsQuery(true)
   const { data: links = [], isLoading: loadingLinks } = useLinksQuery()
+  const [loadingPolls, setLoadingPolls] = useState(true)
+  const [pollsCount, setPollsCount] = useState(0)
   const [loadingCoreApps, setLoadingCoreApps] = useState(true)
   const [coreAppsCount, setCoreAppsCount] = useState(0)
   const [usersCount, setUsersCount] = useState<number | null>(null)
 
   const canViewUsers = canManageUsers(userProfile?.permissions)
-  const loading = loadingNews || loadingLinks || loadingCoreApps
-  const newsCount = news.length
+  const loading = loadingLinks || loadingPolls || loadingCoreApps
   const linksCount = links.length
 
   useEffect(() => {
     const loadMetrics = async () => {
       try {
-        const coreApps = await getCoreApps()
+        const [coreApps, polls] = await Promise.all([getCoreApps(), getPolls()])
         setCoreAppsCount(coreApps.length)
+        setPollsCount(polls.length)
       } catch (err) {
         console.error('Error al cargar métricas:', err)
       } finally {
         setLoadingCoreApps(false)
+        setLoadingPolls(false)
       }
 
       if (canViewUsers) {
@@ -64,7 +67,6 @@ export function AdminDashboard() {
           setUsersCount(null)
         }
       }
-
     }
 
     void loadMetrics()
@@ -102,9 +104,9 @@ export function AdminDashboard() {
           />
         )}
         <MetricCard
-          label="Noticias activas"
-          value={newsCount}
-          icon={<Newspaper className="h-5 w-5" />}
+          label="Encuestas cargadas"
+          value={pollsCount}
+          icon={<BarChart3 className="h-5 w-5" />}
           loading={loading}
         />
         <MetricCard
@@ -118,18 +120,18 @@ export function AdminDashboard() {
       {coreAppsCount > 0 && (
         <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-medium text-neutral-900 dark:text-gray-100">
-              {coreAppsCount} {coreAppsCount === 1 ? 'aplicación' : 'aplicaciones'} en el ecosistema
+            <p className="font-medium text-neutral-900 dark:text-gray-100">
+              {coreAppsCount} herramientas en el ecosistema
             </p>
-            <p className="mt-0.5 text-sm text-neutral-500 dark:text-gray-400">
-              Las tarjetas de acceso se muestran en la intranet de empleados, no en este panel.
+            <p className="text-sm text-neutral-500 dark:text-gray-400">
+              Apps publicadas en la home de empleados
             </p>
           </div>
           <Link
-            to="/intranet"
-            className="inline-flex shrink-0 items-center gap-2 text-sm font-semibold text-brand-primary transition-colors hover:opacity-90"
+            to="/admin/usuarios?tab=ecosystem"
+            className="inline-flex items-center gap-1 text-sm font-medium text-brand-primary hover:underline"
           >
-            Ver intranet
+            Gestionar ecosistema
             <ArrowRight className="h-4 w-4" />
           </Link>
         </div>

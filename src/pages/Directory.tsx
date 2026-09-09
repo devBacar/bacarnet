@@ -1,6 +1,7 @@
 import { Copy, Mail, Search, Users } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
+import { useUrlSearchParam } from '../hooks/useUrlSearchState'
 import { getContacts, type EmployeeContact } from '../services/contactService'
 
 function getInitials(name: string) {
@@ -40,7 +41,7 @@ export function Directory() {
   const [contacts, setContacts] = useState<EmployeeContact[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlSearchParam('q')
 
   useEffect(() => {
     getContacts()

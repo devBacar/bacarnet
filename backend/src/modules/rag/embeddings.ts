@@ -3,6 +3,7 @@ import { getEnv } from '../../config/env.js'
 import { initFirebaseAdmin } from '../../lib/firebase/admin.js'
 import { getApps } from 'firebase-admin/app'
 import { logError } from '../../lib/log.js'
+import type { AssistantUsageMeter } from './assistantUsageMeter.js'
 
 export const RAG_EMBEDDING_MODEL = 'text-embedding-005'
 const IAM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
@@ -25,6 +26,17 @@ async function resolveGcpProjectId(): Promise<string> {
 }
 
 async function getVertexAccessToken(): Promise<string> {
+  const env = getEnv()
+  if (env.driveServiceAccountKeyPath) {
+    const jwt = new google.auth.JWT({
+      keyFile: env.driveServiceAccountKeyPath,
+      scopes: [IAM_SCOPE],
+    })
+    const { token } = await jwt.getAccessToken()
+    if (!token) throw new Error('JWT no devolvió token para Vertex')
+    return token
+  }
+
   const googleAuth = new google.auth.GoogleAuth({ scopes: [IAM_SCOPE] })
   const client = await googleAuth.getClient()
   const { token } = await client.getAccessToken()
@@ -43,7 +55,10 @@ type EmbeddingResponse = {
   error?: { message?: string }
 }
 
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+export async function embedTexts(
+  texts: string[],
+  usageMeter?: AssistantUsageMeter,
+): Promise<number[][]> {
   if (texts.length === 0) return []
 
   const projectId = await resolveGcpProjectId()
@@ -90,6 +105,14 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
 
   if (vectors.length !== texts.length) {
     throw new Error(`Embeddings incompletos: ${vectors.length}/${texts.length}`)
+  }
+
+  if (usageMeter) {
+    const billableChars = texts.reduce((sum, text) => sum + text.length, 0)
+    usageMeter.recordEmbedding({
+      billableChars,
+      requestCount: Math.ceil(texts.length / BATCH_SIZE),
+    })
   }
 
   return vectors

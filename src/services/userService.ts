@@ -61,6 +61,8 @@ export interface UserPermissions {
   manage_users: boolean
   /** @deprecated Usar `role === 'super_admin'` / `isSuperAdmin(profile)`. */
   super_admin: boolean
+  /** Acceso al asistente RAG (chat flotante). super_admin siempre. */
+  rag_assistant: boolean
 }
 
 export interface UserProfile {
@@ -99,6 +101,7 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
   manage_links: false,
   manage_users: false,
   super_admin: false,
+  rag_assistant: false,
 }
 
 export const SUPER_ADMIN_EMAILS = [
@@ -115,6 +118,7 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   manage_links: true,
   manage_users: true,
   super_admin: true,
+  rag_assistant: true,
 }
 
 export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
@@ -125,6 +129,7 @@ export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
   manage_links: false,
   manage_users: false,
   super_admin: false,
+  rag_assistant: false,
 }
 
 export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
@@ -135,6 +140,7 @@ export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
   manage_links: false,
   manage_users: false,
   super_admin: false,
+  rag_assistant: false,
 }
 
 export {
@@ -218,12 +224,29 @@ export function isSuperAdmin(profile: UserProfile | null | undefined): boolean {
   return profile?.role === 'super_admin'
 }
 
+export function hasRagAssistantAccess(profile: UserProfile | null | undefined): boolean {
+  if (!profile) return false
+  if (isSuperAdmin(profile)) return true
+  return profile.permissions.rag_assistant === true
+}
+
 export function isAdminOfArea(
   profile: UserProfile | null | undefined,
   areaId: string,
 ): boolean {
   if (!profile || profile.role !== 'admin' || !areaId) return false
   return Array.isArray(profile.managedAreaIds) && profile.managedAreaIds.includes(areaId)
+}
+
+/** Miembro o admin del área indicada (`memberAreaIds` o `managedAreaIds`). */
+export function userBelongsToGoverningArea(
+  profile: UserProfile | null | undefined,
+  areaId: string,
+): boolean {
+  if (!profile || !areaId) return false
+  const memberIds = profile.memberAreaIds ?? []
+  const managedIds = profile.managedAreaIds ?? []
+  return memberIds.includes(areaId) || managedIds.includes(areaId)
 }
 
 export function isUser(profile: UserProfile | null | undefined): boolean {
@@ -256,6 +279,7 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
       manage_links: permissions.manage_links ?? false,
       manage_users: permissions.manage_users ?? false,
       super_admin: permissions.super_admin ?? false,
+      rag_assistant: permissions.rag_assistant ?? false,
     },
     favoriteApps: Array.isArray(data.favoriteApps)
       ? (data.favoriteApps as string[])
@@ -296,6 +320,7 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
             view_drive: false,
             view_links: false,
             super_admin: false,
+            rag_assistant: false,
           }
         : { ...EXTERNAL_PENDING_PERMISSIONS }
   }

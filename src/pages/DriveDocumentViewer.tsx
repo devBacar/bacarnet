@@ -1,11 +1,12 @@
 import { ExternalLink, KeyRound, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { RequestMorePermissionsModal } from '../components/RequestMorePermissionsModal'
 import { getDriveFile, type DriveFileDetailDto } from '../services/driveApi'
 import { recordDriveRecentOpen } from '../services/driveRecentFiles'
 import {
   DRIVE_EXPLORER_DEFAULT_PATH,
+  resolveDocumentViewerReturn,
   type DriveDocumentViewerLocationState,
 } from '../utils/driveExplorerNavigation'
 import { resolveGoogleDriveViewer } from '../utils/googleDriveEmbed'
@@ -15,11 +16,16 @@ const DEFAULT_RETURN = DRIVE_EXPLORER_DEFAULT_PATH
 
 function useViewerNavigation() {
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const state = location.state as DriveDocumentViewerLocationState | null
-  const returnTo =
-    state?.returnTo && state.returnTo.startsWith('/') ? state.returnTo : DEFAULT_RETURN
-  const driveBreadcrumb = state?.driveBreadcrumb
-  return { returnTo, driveBreadcrumb }
+  return useMemo(
+    () =>
+      resolveDocumentViewerReturn({
+        searchParams,
+        state,
+      }),
+    [searchParams, state],
+  )
 }
 
 function DriveDocumentViewer({ fileId }: { fileId: string }) {
@@ -93,47 +99,44 @@ function DriveDocumentViewer({ fileId }: { fileId: string }) {
     }
   }, [fileId, user?.uid])
 
+  const headerButtonClass =
+    'inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-neutral-200/80 bg-white/90 px-3 py-2 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors hover:bg-white dark:border-zinc-700/80 dark:bg-zinc-900/90 dark:hover:bg-zinc-900'
+
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-white dark:bg-zinc-950">
-      <div className="absolute left-4 top-4 z-20 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={goBack}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200/50 bg-white/35 px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm backdrop-blur-[2px] transition-all hover:border-neutral-200 hover:bg-white hover:shadow-md dark:border-zinc-700/50 dark:bg-zinc-900/35 dark:text-zinc-200 dark:hover:border-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-white"
-        >
-          ← Volver
-        </button>
-        {file && !file.canEdit && (
-          <button
-            type="button"
-            onClick={() => setShowMorePermissions(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200/80 bg-white/75 px-3 py-2 text-sm font-medium text-neutral-700 shadow-sm backdrop-blur-sm transition-colors hover:bg-white dark:border-zinc-700/80 dark:bg-zinc-900/75 dark:text-zinc-200 dark:hover:bg-zinc-900"
-          >
-            <KeyRound className="h-4 w-4" />
-            Pedir más permisos
+      <header className="relative z-20 shrink-0 border-b border-neutral-200/80 bg-white/95 px-3 py-2 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/95 sm:px-4">
+        <p className="min-w-0 truncate text-center text-sm font-medium text-neutral-800 dark:text-zinc-200 sm:text-left">
+          {loading ? 'Preparando documento…' : file?.name ?? 'Documento'}
+        </p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={goBack} className={headerButtonClass}>
+            ← Volver
           </button>
-        )}
-      </div>
-
-      {driveLink && (
-        <div className="absolute right-4 top-4 z-20">
-          <a
-            href={driveLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200/80 bg-white/75 px-3 py-2 text-sm font-medium text-brand-primary shadow-sm backdrop-blur-sm transition-colors hover:bg-white dark:border-zinc-700/80 dark:bg-zinc-900/75 dark:hover:bg-zinc-900"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Abrir en Google Drive
-          </a>
+          {file && !file.canEdit && (
+            <button
+              type="button"
+              onClick={() => setShowMorePermissions(true)}
+              className={`${headerButtonClass} text-neutral-700 dark:text-zinc-200`}
+            >
+              <KeyRound className="h-4 w-4" />
+              <span className="hidden min-[420px]:inline">Pedir más permisos</span>
+              <span className="min-[420px]:hidden">Permisos</span>
+            </button>
+          )}
+          {driveLink && (
+            <a
+              href={driveLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`${headerButtonClass} ml-auto text-brand-primary`}
+            >
+              <ExternalLink className="h-4 w-4 shrink-0" />
+              <span className="hidden min-[420px]:inline">Abrir en Google Drive</span>
+              <span className="min-[420px]:hidden">Drive</span>
+            </a>
+          )}
         </div>
-      )}
-
-      {file && (
-        <div className="pointer-events-none absolute left-1/2 top-4 z-10 max-w-[min(24rem,calc(100%-12rem))] -translate-x-1/2 truncate px-4 text-center text-sm font-medium text-neutral-600 dark:text-zinc-400">
-          {file.name}
-        </div>
-      )}
+      </header>
 
       {error ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-6">
@@ -163,7 +166,7 @@ function DriveDocumentViewer({ fileId }: { fileId: string }) {
               href={driveLink}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn-primary inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium"
+              className="btn-primary inline-flex min-h-11 items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium"
             >
               <ExternalLink className="h-4 w-4" />
               Abrir en Google Drive
@@ -174,7 +177,7 @@ function DriveDocumentViewer({ fileId }: { fileId: string }) {
         <iframe
           title={file?.name ?? 'Documento'}
           src={viewer.embedUrl}
-          className="h-full w-full flex-1 border-0 bg-white"
+          className="min-h-0 w-full flex-1 border-0 bg-white"
           allow="clipboard-read; clipboard-write; fullscreen"
           referrerPolicy="strict-origin-when-cross-origin"
         />

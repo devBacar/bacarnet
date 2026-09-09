@@ -46,6 +46,8 @@
     "rag:staging:setup": "node backend/scripts/setup-rag-staging-bucket.mjs --apply",
     "rag:index:sistemas": "npm --prefix backend run build && node backend/scripts/test-rag-index-sistemas.mjs",
     "rag:index:sistemas:apply": "npm --prefix backend run build && node backend/scripts/test-rag-index-sistemas.mjs --apply",
+    "rag:state": "npm --prefix backend run build && node backend/scripts/probe-rag-index-state.mjs",
+    "test:rag:phase5": "npm --prefix backend run build && node backend/scripts/test-rag-phase5.mjs",
     "audit:correct-inherited-grants": "node backend/scripts/audit-correct-inherited-grants.mjs",
     "test:boards": "node backend/scripts/test-boards.mjs",
     "boards:access:seed:dry-run": "npm --prefix backend run build && node backend/scripts/seed-board-access.mjs",
@@ -77,7 +79,9 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hot-toast": "^2.6.0",
-    "react-router-dom": "^7.18.0"
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.18.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",

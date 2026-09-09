@@ -1,9 +1,9 @@
-import { useState } from 'react'
 import { AdminTabs } from '../components/AdminTabs'
 import { ContactManager } from '../components/ContactManager'
 import { DepartmentManager } from '../components/DepartmentManager'
 import { ShieldAlert } from 'lucide-react'
 import { useAuth } from '../context'
+import { useUrlEnumParam } from '../hooks/useUrlSearchState'
 import { canManageDirectory } from '../services/userService'
 
 const DIRECTORY_TABS = [
@@ -11,12 +11,14 @@ const DIRECTORY_TABS = [
   { id: 'departments', label: 'Departamentos' },
 ] as const
 
-type DirectoryTab = (typeof DIRECTORY_TABS)[number]['id']
-
 export function AdminDirectory() {
   const { user, userProfile } = useAuth()
   const canManage = canManageDirectory(user?.email, userProfile?.permissions)
-  const [activeTab, setActiveTab] = useState<DirectoryTab>('contacts')
+  const [activeTab, setActiveTab] = useUrlEnumParam(
+    'tab',
+    DIRECTORY_TABS.map((tab) => tab.id),
+    'contacts',
+  )
 
   return (
     <div className="w-full space-y-6">
@@ -38,7 +40,7 @@ export function AdminDirectory() {
           <AdminTabs
             tabs={[...DIRECTORY_TABS]}
             activeTab={activeTab}
-            onChange={(id) => setActiveTab(id as DirectoryTab)}
+            onChange={(id) => setActiveTab(id as typeof activeTab)}
           />
 
           {activeTab === 'contacts' ? <ContactManager /> : <DepartmentManager />}

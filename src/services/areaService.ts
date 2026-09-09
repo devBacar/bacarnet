@@ -69,6 +69,32 @@ export function isSharedAreasFolder(name: string): boolean {
   return name.trim().toLowerCase() === 'compartido entre áreas'
 }
 
+interface PublicAssignableAreaResponse {
+  areas?: Array<{
+    id: string
+    name: string
+    governingAreaId?: string
+  }>
+}
+
+/** Catálogo público vía API (registro sin sesión; misma fuente que listAssignableRootAreas). */
+export async function fetchPublicAssignableRootAreas(): Promise<GoverningArea[]> {
+  const res = await fetch('/api/catalog/assignable-areas')
+  if (!res.ok) {
+    throw new Error('No se pudieron cargar las áreas')
+  }
+
+  const data = (await res.json()) as PublicAssignableAreaResponse
+  return (data.areas ?? []).map((area) => ({
+    id: area.id,
+    name: area.name,
+    governingAreaId: area.governingAreaId ?? area.id,
+    parentFolderId: null,
+    allowedUsers: [],
+    createdAt: new Date(),
+  }))
+}
+
 /** Áreas raíz asignables en perfiles (excluye legacy y "Compartido entre áreas"). */
 export async function listAssignableRootAreas(): Promise<GoverningArea[]> {
   const rootsQuery = query(collection(db, AREAS_COLLECTION), where('parentFolderId', '==', null))

@@ -48,15 +48,13 @@ function FxMarquee({
     </div>
   )
 
+  const containerClass = compact
+    ? 'relative w-full min-w-0 overflow-hidden sm:max-w-[16rem]'
+    : 'relative min-w-[9rem] max-w-[14rem] overflow-hidden sm:max-w-[16rem]'
+
   return (
-    <div
-      className={
-        compact
-          ? 'relative min-w-[9rem] max-w-[14rem] overflow-hidden sm:max-w-[16rem]'
-          : 'relative min-w-[9rem] max-w-[14rem] overflow-hidden sm:max-w-[16rem]'
-      }
-    >
-      {!compact ? (
+    <div className={containerClass}>
+      {!compact && !light ? (
         <>
           <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-3 bg-gradient-to-r from-white to-transparent dark:from-zinc-900" />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-3 bg-gradient-to-l from-white to-transparent dark:from-zinc-900" />
@@ -113,9 +111,9 @@ export function HomeDollarWidget({
 
   if (compact) {
     return (
-      <div className="relative z-10 inline-flex h-10 items-center gap-2 px-1" title="Cotizaciones en vivo">
+      <div className="relative z-10 w-full min-w-0 sm:inline-flex sm:h-10 sm:w-auto sm:items-center sm:gap-2 sm:px-1" title="Cotizaciones en vivo">
         <DollarSign
-          className={`h-4 w-4 shrink-0 ${light ? 'text-emerald-200' : 'text-emerald-600 dark:text-emerald-400'}`}
+          className={`hidden h-4 w-4 shrink-0 sm:inline ${light ? 'text-emerald-200' : 'text-emerald-600 dark:text-emerald-400'}`}
         />
         <FxMarquee quotes={quotes} compact light={light} />
       </div>

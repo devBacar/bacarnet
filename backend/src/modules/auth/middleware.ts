@@ -7,6 +7,7 @@ import { normalizeActionGrants, type ActionGrants } from '../drive/governanceAct
 export interface AuthedUserPermissions {
   super_admin?: boolean
   view_drive?: boolean
+  rag_assistant?: boolean
 }
 
 export interface AuthedUser {
@@ -123,6 +124,7 @@ export async function requireWorkspaceUser(
             super_admin:
               (permissionsRaw as Record<string, unknown>).super_admin === true,
             view_drive: (permissionsRaw as Record<string, unknown>).view_drive === true,
+            rag_assistant: (permissionsRaw as Record<string, unknown>).rag_assistant === true,
           }
         : {}
     const managedRaw = profile.get('managedAreaIds')

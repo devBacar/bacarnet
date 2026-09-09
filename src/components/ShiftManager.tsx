@@ -1,6 +1,7 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, Trash2 } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { useUrlEnumParam, useUrlWeekParam } from '../hooks/useUrlSearchState'
 import { AdminTabs } from './AdminTabs'
 import { JefeAnnualGrid } from './JefeAnnualGrid'
 import {
@@ -31,8 +32,18 @@ const SHIFT_TABS = [
 type ShiftTab = (typeof SHIFT_TABS)[number]['id']
 
 export function ShiftManager() {
-  const [activeTab, setActiveTab] = useState<ShiftTab>('jefes')
-  const [weekKey, setWeekKey] = useState(getWeekKey)
+  const [activeTab, setActiveTab] = useUrlEnumParam(
+    'tab',
+    SHIFT_TABS.map((tab) => tab.id),
+    'jefes',
+  )
+  const [weekKey, setWeekKeyParam] = useUrlWeekParam('semana')
+  const setWeekKey = useCallback(
+    (next: string | ((prev: string) => string)) => {
+      setWeekKeyParam(typeof next === 'function' ? next(weekKey) : next)
+    },
+    [setWeekKeyParam, weekKey],
+  )
   const [gridRefresh, setGridRefresh] = useState(0)
   const weeklyFormRef = useRef<HTMLElement>(null)
   const [jefeForm, setJefeForm] = useState({ firstName: '', lastName: '', internalPhone: '' })
@@ -48,6 +59,7 @@ export function ShiftManager() {
   const [overrideName, setOverrideName] = useState('')
   const [overrideReason, setOverrideReason] = useState('')
   const [overrideSaving, setOverrideSaving] = useState(false)
+  const [newMemberName, setNewMemberName] = useState('')
 
   const loadJefe = useCallback(async (key: string) => {
     setJefeLoading(true)
@@ -176,6 +188,60 @@ export function ShiftManager() {
   }
 
   const members = rotation?.members ?? [...DEFAULT_SYSTEMS_MEMBERS]
+
+  const moveMember = (index: number, direction: -1 | 1) => {
+    setRotation((current) => {
+      if (!current) return current
+      const nextIndex = index + direction
+      if (nextIndex < 0 || nextIndex >= current.members.length) return current
+
+      const nextMembers = [...current.members]
+      ;[nextMembers[index], nextMembers[nextIndex]] = [nextMembers[nextIndex], nextMembers[index]]
+
+      let nextAnchorIndex = current.anchorIndex
+      if (current.anchorIndex === index) {
+        nextAnchorIndex = nextIndex
+      } else if (current.anchorIndex === nextIndex) {
+        nextAnchorIndex = index
+      }
+
+      return { ...current, members: nextMembers, anchorIndex: nextAnchorIndex }
+    })
+  }
+
+  const removeMember = (index: number) => {
+    setRotation((current) => {
+      if (!current || current.members.length <= 1) return current
+
+      const nextMembers = current.members.filter((_, memberIndex) => memberIndex !== index)
+      let nextAnchorIndex = current.anchorIndex
+      if (index < current.anchorIndex) {
+        nextAnchorIndex -= 1
+      } else if (index === current.anchorIndex) {
+        nextAnchorIndex = Math.min(current.anchorIndex, nextMembers.length - 1)
+      }
+
+      return { ...current, members: nextMembers, anchorIndex: nextAnchorIndex }
+    })
+  }
+
+  const addMember = () => {
+    const trimmed = newMemberName.trim()
+    if (!trimmed) {
+      toast.error('Escribí un nombre para agregar')
+      return
+    }
+
+    setRotation((current) => {
+      if (!current) return current
+      if (current.members.some((name) => name.toLowerCase() === trimmed.toLowerCase())) {
+        toast.error('Esa persona ya está en la rotación')
+        return current
+      }
+      return { ...current, members: [...current.members, trimmed] }
+    })
+    setNewMemberName('')
+  }
 
   const handleGridSelectWeek = (key: string) => {
     setWeekKey(key)
@@ -310,9 +376,88 @@ export function ShiftManager() {
             Sistemas — rotación semanal
           </h2>
           <p className="mt-1 text-sm text-neutral-500 dark:text-gray-400">
-            Orden fijo: Manuel → Cristian → Marcos → Franco. Podés marcar excepciones puntuales.
+            Editá el orden base de la rotación y marcá excepciones puntuales por semana.
           </p>
         </header>
+
+        {rotation && (
+          <div className="mb-6 rounded-xl border border-neutral-200 p-4 dark:border-zinc-700">
+            <h3 className="text-sm font-semibold text-neutral-900 dark:text-gray-100">
+              Orden de la rotación
+            </h3>
+            <p className="mt-1 text-xs text-neutral-500 dark:text-gray-400">
+              La secuencia avanza semana a semana en este orden. Guardá los cambios con el botón
+              de abajo.
+            </p>
+            <ol className="mt-4 space-y-2">
+              {members.map((name, index) => (
+                <li
+                  key={`${name}-${index}`}
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950/50"
+                >
+                  <span className="min-w-[1.5rem] text-xs font-semibold text-neutral-400">
+                    {index + 1}.
+                  </span>
+                  <span className="flex-1 text-sm font-medium text-neutral-900 dark:text-gray-100">
+                    {name}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => moveMember(index, -1)}
+                      disabled={index === 0}
+                      aria-label={`Subir a ${name}`}
+                      className="rounded-lg border border-neutral-300 p-1.5 text-neutral-600 hover:bg-white disabled:opacity-40 dark:border-zinc-600 dark:text-gray-300 dark:hover:bg-zinc-800"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveMember(index, 1)}
+                      disabled={index === members.length - 1}
+                      aria-label={`Bajar a ${name}`}
+                      className="rounded-lg border border-neutral-300 p-1.5 text-neutral-600 hover:bg-white disabled:opacity-40 dark:border-zinc-600 dark:text-gray-300 dark:hover:bg-zinc-800"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeMember(index)}
+                      disabled={members.length <= 1}
+                      aria-label={`Quitar a ${name}`}
+                      className="rounded-lg border border-red-200 p-1.5 text-red-700 hover:bg-red-50 disabled:opacity-40 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/40"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <input
+                type="text"
+                value={newMemberName}
+                onChange={(e) => setNewMemberName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    addMember()
+                  }
+                }}
+                className={`${inputClassName} min-w-[12rem] flex-1`}
+                placeholder="Nombre para agregar a la rotación"
+              />
+              <button
+                type="button"
+                onClick={addMember}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-brand-primary px-4 py-3 text-sm font-semibold text-brand-primary transition-colors hover:bg-brand-tint dark:hover:bg-brand-primary-hover/30"
+              >
+                <Plus className="h-4 w-4" />
+                Agregar
+              </button>
+            </div>
+          </div>
+        )}
 
         {rotation && (
           <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

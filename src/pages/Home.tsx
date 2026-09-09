@@ -1,11 +1,9 @@
 import { ArrowRight, Loader2 } from 'lucide-react'
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { BirthdayWidget } from '../components/BirthdayWidget'
-import { DailyWidgets } from '../components/DailyWidgets'
 import { GoogleIcon } from '../components/GoogleIcon'
 import { useAuth } from '../context'
-import { useDepartments } from '../hooks/useDepartments'
+import { usePublicAssignableAreasQuery } from '../hooks/queries/useCatalogQueries'
 import {
   isAccountPending,
   isAccountRejected,
@@ -38,7 +36,9 @@ function authErrorMessage(code: string): string {
 
 export function Home() {
   const { user, userProfile, loading, profileLoading, login, loginWithGoogle } = useAuth()
-  const { departments } = useDepartments()
+  const { data: assignableAreas = [], isLoading: assignableAreasLoading } =
+    usePublicAssignableAreasQuery()
+  const registrationDepartments = assignableAreas.map((area) => area.name)
 
   const [activeTab, setActiveTab] = useState<AuthTab>('login')
   const [error, setError] = useState('')
@@ -52,14 +52,17 @@ export function Home() {
   const [registerName, setRegisterName] = useState('')
   const [registerEmail, setRegisterEmail] = useState('')
   const [registerPassword, setRegisterPassword] = useState('')
-  const [registerDepartment, setRegisterDepartment] = useState('General')
+  const [registerDepartment, setRegisterDepartment] = useState('')
   const [birthDate, setBirthDate] = useState('')
 
   useEffect(() => {
-    if (departments.length > 0 && !departments.includes(registerDepartment)) {
-      setRegisterDepartment(departments[0])
+    if (
+      registrationDepartments.length > 0 &&
+      !registrationDepartments.includes(registerDepartment)
+    ) {
+      setRegisterDepartment(registrationDepartments[0])
     }
-  }, [departments, registerDepartment])
+  }, [registrationDepartments, registerDepartment])
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault()
@@ -145,13 +148,9 @@ export function Home() {
               Simplificando tu trabajo diario
             </h1>
             <p className="mt-3 max-w-md text-base leading-relaxed text-neutral-600 dark:text-gray-400">
-              Información del día, cumpleaños del mes y acceso seguro a las
-              herramientas de la empresa.
+              Acceso seguro a las herramientas de la empresa.
             </p>
           </header>
-
-          <DailyWidgets variant="minimal" />
-          <BirthdayWidget variant="minimal" />
         </div>
       </section>
 
@@ -406,15 +405,22 @@ export function Home() {
                     <select
                       id="register-department"
                       required
+                      disabled={assignableAreasLoading || registrationDepartments.length === 0}
                       value={registerDepartment}
                       onChange={(e) => setRegisterDepartment(e.target.value)}
-                      className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-sm text-white input-dark-focus focus:outline-none"
+                      className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-sm text-white input-dark-focus focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {departments.map((dept) => (
-                        <option key={dept} value={dept}>
-                          {dept}
-                        </option>
-                      ))}
+                      {assignableAreasLoading ? (
+                        <option value="">Cargando áreas...</option>
+                      ) : registrationDepartments.length === 0 ? (
+                        <option value="">No hay áreas disponibles</option>
+                      ) : (
+                        registrationDepartments.map((dept) => (
+                          <option key={dept} value={dept}>
+                            {dept}
+                          </option>
+                        ))
+                      )}
                     </select>
                   </div>
 

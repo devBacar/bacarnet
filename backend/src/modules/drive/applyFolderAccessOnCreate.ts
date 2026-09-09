@@ -76,7 +76,7 @@ export async function applyFolderAccessOnCreate(input: {
       })
       domainGranted = Boolean(created.data.id)
       if (domainGranted) {
-        await writeAuditLogBestEffort({
+        void writeAuditLogBestEffort({
           userId: input.actor.uid,
           userEmail: input.actor.email,
           action: 'permission_grant',
@@ -102,44 +102,50 @@ export async function applyFolderAccessOnCreate(input: {
   }
 
   if (input.mode === 'selected') {
-    for (const email of input.initialGrantEmails) {
-      if (!isEmailInAllowedDomain(email, domain)) {
-        skippedUserCount += 1
-        continue
-      }
-      try {
-        const result = await grantUserDrivePermission(input.drive, input.folderId, email, grantRole, {
-          sendNotificationEmail: false,
-        })
-        grantedUserCount += 1
-        await writeAuditLogBestEffort({
-          userId: input.actor.uid,
-          userEmail: input.actor.email,
-          action: 'permission_grant',
-          targetType: 'folder',
-          targetId: input.folderId,
-          targetName: input.folderName,
-          parentFolderId: input.parentFolderId,
-          mimeType: 'application/vnd.google-apps.folder',
-          reason: input.reason,
-          metadata: {
-            type: 'user',
-            granteeEmail: result.emailAddress,
-            role: grantRole,
-            driveRole: result.driveRole,
-            permissionId: result.permissionId,
-            source: 'folder_create',
-          },
-        })
-      } catch (err) {
-        if (err instanceof DrivePermissionAlreadyInheritedError) {
-          skippedUserCount += 1
-          continue
+    const grantResults = await Promise.all(
+      input.initialGrantEmails.map(async (email) => {
+        if (!isEmailInAllowedDomain(email, domain)) {
+          return 'skipped' as const
         }
-        logError('No se pudo otorgar acceso puntual al crear carpeta', err)
-        skippedUserCount += 1
-      }
-    }
+        try {
+          const result = await grantUserDrivePermission(
+            input.drive,
+            input.folderId,
+            email,
+            grantRole,
+            { sendNotificationEmail: false },
+          )
+          void writeAuditLogBestEffort({
+            userId: input.actor.uid,
+            userEmail: input.actor.email,
+            action: 'permission_grant',
+            targetType: 'folder',
+            targetId: input.folderId,
+            targetName: input.folderName,
+            parentFolderId: input.parentFolderId,
+            mimeType: 'application/vnd.google-apps.folder',
+            reason: input.reason,
+            metadata: {
+              type: 'user',
+              granteeEmail: result.emailAddress,
+              role: grantRole,
+              driveRole: result.driveRole,
+              permissionId: result.permissionId,
+              source: 'folder_create',
+            },
+          })
+          return 'granted' as const
+        } catch (err) {
+          if (err instanceof DrivePermissionAlreadyInheritedError) {
+            return 'skipped' as const
+          }
+          logError('No se pudo otorgar acceso puntual al crear carpeta', err)
+          return 'skipped' as const
+        }
+      }),
+    )
+    grantedUserCount = grantResults.filter((result) => result === 'granted').length
+    skippedUserCount = grantResults.filter((result) => result === 'skipped').length
   }
 
   return { grantedUserCount, domainGranted, skippedUserCount }

@@ -1,250 +1,258 @@
-rules_version = '2';
-
-service cloud.firestore {
-  match /databases/{database}/documents {
-
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isVerifiedAuth() {
-      return request.auth != null && request.auth.token.email_verified == true;
-    }
-
-    function isVerifiedCorporate() {
-      return isVerifiedAuth()
-        && request.auth.token.email.matches('.*@bacarsa\\.com\\.ar$');
-    }
-
-    function callerUserDocExists() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-
-    function callerUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function isExternalActiveUser() {
-      return isVerifiedAuth()
-        && callerUserDocExists()
-        && callerUserData().accountType == 'external'
-        && callerUserData().accountStatus == 'active';
-    }
-
-    function hasCallerPermission(field) {
-      return callerUserDocExists()
-        && callerUserData().permissions is map
-        && callerUserData().permissions[field] == true;
-    }
-
-    function isSuperAdmin() {
-      return isAuthenticated()
-        && callerUserDocExists()
-        && callerUserData().permissions.super_admin == true;
-    }
-
-    function canManageUsers() {
-      return isAuthenticated()
-        && callerUserDocExists()
-        && (
-          callerUserData().permissions.super_admin == true
-          || callerUserData().permissions.manage_users == true
-        );
-    }
-
-    function canManageNews() {
-      return isSuperAdmin() || hasCallerPermission('manage_news');
-    }
-
-    function canManageLinks() {
-      return isSuperAdmin() || hasCallerPermission('manage_links');
-    }
-
-    // Contenido intranet: solo corporativo verificado.
-    function canReadIntranetContent() {
-      return isVerifiedCorporate();
-    }
-
-    // Directorio: corporativo o externa activa con view_directory explícito.
-    function canReadDirectory() {
-      return isVerifiedCorporate()
-        || (isExternalActiveUser() && hasCallerPermission('view_directory'));
-    }
-
-    // Admin de área (role explícito). Necesita listar users para asignar carpetas (Fase 2).
-    function isAreaAdmin() {
-      return isAuthenticated()
-        && callerUserDocExists()
-        && callerUserData().role == 'admin';
-    }
-
-    function callerManagedAreaIds() {
-      return callerUserData().managedAreaIds;
-    }
-
-    function isAreaAdminOf(areaId) {
-      return isAreaAdmin()
-        && areaId is string
-        && callerManagedAreaIds() is list
-        && areaId in callerManagedAreaIds();
-    }
-
-    function onlySelfPreferencesUpdate() {
-      let keys = request.resource.data.diff(resource.data).affectedKeys();
-      return keys.hasOnly(['favoriteApps'])
-        || keys.hasOnly(['widgetPreferences'])
-        || keys.hasOnly(['favoriteApps', 'widgetPreferences']);
-    }
-
-    // managedAreaIds, memberAreaIds y actionGrants solo vía Admin SDK (backend super_admin).
-    function userGovernanceFieldsUnchanged() {
-      let before = resource.data;
-      let after = request.resource.data;
-      return after.get('managedAreaIds', null) == before.get('managedAreaIds', null)
-        && after.get('memberAreaIds', null) == before.get('memberAreaIds', null)
-        && after.get('actionGrants', null) == before.get('actionGrants', null);
-    }
-
-    // Append-only. Lectura: super_admin (panel). Escritura solo Admin SDK.
-    match /auditLogs/{document} {
-      allow create: if false;
-      allow get, list: if isSuperAdmin();
-      allow update, delete: if false;
-    }
-
-    // Perfiles de usuario y permisos
-    match /users/{userId} {
-      allow get: if isVerifiedAuth()
-        && (
-          request.auth.uid == userId
-          || isSuperAdmin()
-          || isAreaAdmin()
-        );
-      allow list: if isSuperAdmin() || isAreaAdmin();
-      allow create: if false;
-      allow update: if userGovernanceFieldsUnchanged()
-        && (
-          canManageUsers()
-          || (isAuthenticated() && request.auth.uid == userId && onlySelfPreferencesUpdate())
-        );
-      allow delete: if canManageUsers();
-
-      match /notifications/{notificationId} {
-        allow read: if isVerifiedAuth() && request.auth.uid == userId;
-        allow update: if isVerifiedAuth()
-          && request.auth.uid == userId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
-          && request.resource.data.read == true;
-        allow create, delete: if false;
-      }
-    }
-
-    match /news/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, update, delete: if canManageNews();
-    }
-
-    match /links/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, update, delete: if canManageLinks();
-    }
-
-    match /coreApps/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, update, delete: if isSuperAdmin();
-    }
-
-    match /contacts/{document} {
-      allow read: if canReadDirectory();
-      allow create, update, delete: if isSuperAdmin();
-    }
-
-    match /pendingUserSetup/{email} {
-      allow read, create, update, delete: if isSuperAdmin();
-    }
-
-    match /sharedFiles/{document} {
-      allow read, create, update, delete: if false;
-    }
-
-    function onlyPollVotesUpdate() {
-      return request.auth != null
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
-    }
-
-    match /polls/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, delete: if canManageNews();
-      allow update: if canManageNews() || (canReadIntranetContent() && onlyPollVotesUpdate());
-    }
-
-    match /dailyQuestions/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, delete: if canManageNews();
-      allow update: if canManageNews() || (canReadIntranetContent() && onlyPollVotesUpdate());
-    }
-
-    match /kudos/{document} {
-      allow read: if canReadIntranetContent();
-      allow create: if canReadIntranetContent();
-      allow update, delete: if canManageNews();
-    }
-
-    match /banners/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, update, delete: if canManageNews();
-    }
-
-    match /folders/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, update, delete: if false;
-    }
-
-    match /driveFiles/{fileId} {
-      allow read: if false;
-      allow create, update, delete: if false;
-    }
-
-    match /approvalRequests/{requestId} {
-      allow read, create, update, delete: if false;
-    }
-
-    match /driveFolderAreas/{driveTopLevelFolderId} {
-      allow read: if canReadIntranetContent();
-      allow create, update, delete: if false;
-    }
-
-    match /resourceItems/{document} {
-      allow read, create, update, delete: if false;
-    }
-
-    match /global_settings/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, update: if isSuperAdmin();
-    }
-
-    match /ragChunks/{chunkId} {
-      allow read, create, update, delete: if false;
-    }
-
-    match /ragIndexState/{areaId} {
-      allow read, create, update, delete: if false;
-    }
-
-    match /shiftJefeAssignments/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, update, delete: if isSuperAdmin();
-    }
-
-    match /shift_settings/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, update, delete: if isSuperAdmin();
-    }
-
-    match /shiftSystemsOverrides/{document} {
-      allow read: if canReadIntranetContent();
-      allow create, update, delete: if isSuperAdmin();
-    }
-  }
-}
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isVerifiedAuth() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isVerifiedCorporate() {
+      return isVerifiedAuth()
+        && request.auth.token.email.matches('.*@bacarsa\\.com\\.ar$');
+    }
+
+    function callerUserDocExists() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function callerUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isExternalActiveUser() {
+      return isVerifiedAuth()
+        && callerUserDocExists()
+        && callerUserData().accountType == 'external'
+        && callerUserData().accountStatus == 'active';
+    }
+
+    function hasCallerPermission(field) {
+      return callerUserDocExists()
+        && callerUserData().permissions is map
+        && callerUserData().permissions[field] == true;
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated()
+        && callerUserDocExists()
+        && callerUserData().permissions.super_admin == true;
+    }
+
+    function canManageUsers() {
+      return isAuthenticated()
+        && callerUserDocExists()
+        && (
+          callerUserData().permissions.super_admin == true
+          || callerUserData().permissions.manage_users == true
+        );
+    }
+
+    function canManageNews() {
+      return isSuperAdmin() || hasCallerPermission('manage_news');
+    }
+
+    function canManageLinks() {
+      return isSuperAdmin() || hasCallerPermission('manage_links');
+    }
+
+    // Contenido intranet: solo corporativo verificado.
+    function canReadIntranetContent() {
+      return isVerifiedCorporate();
+    }
+
+    // Directorio: corporativo o externa activa con view_directory explícito.
+    function canReadDirectory() {
+      return isVerifiedCorporate()
+        || (isExternalActiveUser() && hasCallerPermission('view_directory'));
+    }
+
+    // Admin de área (role explícito). Necesita listar users para asignar carpetas (Fase 2).
+    function isAreaAdmin() {
+      return isAuthenticated()
+        && callerUserDocExists()
+        && callerUserData().role == 'admin';
+    }
+
+    function callerManagedAreaIds() {
+      return callerUserData().managedAreaIds;
+    }
+
+    function isAreaAdminOf(areaId) {
+      return isAreaAdmin()
+        && areaId is string
+        && callerManagedAreaIds() is list
+        && areaId in callerManagedAreaIds();
+    }
+
+    function onlySelfPreferencesUpdate() {
+      let keys = request.resource.data.diff(resource.data).affectedKeys();
+      return keys.hasOnly(['favoriteApps'])
+        || keys.hasOnly(['widgetPreferences'])
+        || keys.hasOnly(['favoriteApps', 'widgetPreferences']);
+    }
+
+    // managedAreaIds, memberAreaIds y actionGrants solo vía Admin SDK (backend super_admin).
+    function userGovernanceFieldsUnchanged() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return after.get('managedAreaIds', null) == before.get('managedAreaIds', null)
+        && after.get('memberAreaIds', null) == before.get('memberAreaIds', null)
+        && after.get('actionGrants', null) == before.get('actionGrants', null);
+    }
+
+    // Append-only. Lectura: super_admin (panel). Escritura solo Admin SDK.
+    match /auditLogs/{document} {
+      allow create: if false;
+      allow get, list: if isSuperAdmin();
+      allow update, delete: if false;
+    }
+
+    // Perfiles de usuario y permisos
+    match /users/{userId} {
+      allow get: if isVerifiedAuth()
+        && (
+          request.auth.uid == userId
+          || isSuperAdmin()
+          || isAreaAdmin()
+        );
+      allow list: if isSuperAdmin() || isAreaAdmin();
+      allow create: if false;
+      allow update: if userGovernanceFieldsUnchanged()
+        && (
+          canManageUsers()
+          || (isAuthenticated() && request.auth.uid == userId && onlySelfPreferencesUpdate())
+        );
+      allow delete: if canManageUsers();
+
+      match /notifications/{notificationId} {
+        allow read: if isVerifiedAuth() && request.auth.uid == userId;
+        allow update: if isVerifiedAuth()
+          && request.auth.uid == userId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
+          && request.resource.data.read == true;
+        allow create, delete: if false;
+      }
+    }
+
+    match /news/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, update, delete: if canManageNews();
+    }
+
+    match /links/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, update, delete: if canManageLinks();
+    }
+
+    match /coreApps/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /contacts/{document} {
+      allow read: if canReadDirectory();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /pendingUserSetup/{email} {
+      allow read, create, update, delete: if isSuperAdmin();
+    }
+
+    match /sharedFiles/{document} {
+      allow read, create, update, delete: if false;
+    }
+
+    function onlyPollVotesUpdate() {
+      return request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes']);
+    }
+
+    match /polls/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, delete: if canManageNews();
+      allow update: if canManageNews() || (canReadIntranetContent() && onlyPollVotesUpdate());
+    }
+
+    match /dailyQuestions/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, delete: if canManageNews();
+      allow update: if canManageNews() || (canReadIntranetContent() && onlyPollVotesUpdate());
+    }
+
+    match /kudos/{document} {
+      allow read: if canReadIntranetContent();
+      allow create: if canReadIntranetContent();
+      allow update, delete: if canManageNews();
+    }
+
+    match /banners/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, update, delete: if canManageNews();
+    }
+
+    match /folders/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, update, delete: if false;
+    }
+
+    match /driveFiles/{fileId} {
+      allow read: if false;
+      allow create, update, delete: if false;
+    }
+
+    match /approvalRequests/{requestId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /driveFolderAreas/{driveTopLevelFolderId} {
+      allow read: if canReadIntranetContent();
+      allow create, update, delete: if false;
+    }
+
+    match /resourceItems/{document} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /global_settings/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, update: if isSuperAdmin();
+    }
+
+    match /ragChunks/{chunkId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /ragIndexState/{areaId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /assistantInteractions/{interactionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /assistantCorrections/{correctionId} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /shiftJefeAssignments/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /shift_settings/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, update, delete: if isSuperAdmin();
+    }
+
+    match /shiftSystemsOverrides/{document} {
+      allow read: if canReadIntranetContent();
+      allow create, update, delete: if isSuperAdmin();
+    }
+  }
+}
 

@@ -1,11 +1,12 @@
 import { Copy, KeyRound, LockKeyhole, Pencil, Settings2, Shield, Trash2, X } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { useUrlEnumParam } from '../hooks/useUrlSearchState'
 import toast from 'react-hot-toast'
 import { GovernanceExceptionsDrawer } from './GovernanceExceptionsDrawer'
 import { PendingUserSetupPanel } from './PendingUserSetupPanel'
 import { PendingExternalAccountsPanel } from './PendingExternalAccountsPanel'
 import { useAuth } from '../context'
-import { useDepartments } from '../hooks/useDepartments'
+import { useAssignableAreasQuery } from '../hooks/queries/useCatalogQueries'
 import { listAssignableRootAreas, type GoverningArea } from '../services/areaService'
 import { countActionGrantEntries } from '../services/governanceAccess'
 import {
@@ -32,7 +33,7 @@ function arraysEqual(a: string[], b: string[]): boolean {
 }
 
 const PERMISSION_FIELDS: {
-  key: 'view_directory' | 'view_drive'
+  key: 'view_directory' | 'view_drive' | 'rag_assistant'
   label: string
   description: string
 }[] = [
@@ -45,6 +46,11 @@ const PERMISSION_FIELDS: {
     key: 'view_drive',
     label: 'Ver archivos',
     description: 'Muestra Archivos en la barra y permite /recursos',
+  },
+  {
+    key: 'rag_assistant',
+    label: 'Asistente BacarNet',
+    description: 'Muestra el chat del asistente RAG (piloto Sistemas)',
   },
 ]
 
@@ -121,7 +127,10 @@ function UserPermissionsDrawer({ user, onClose, onSaved }: UserPermissionsDrawer
     }
   }
 
-  const togglePermission = (key: 'view_directory' | 'view_drive', value: boolean) => {
+  const togglePermission = (
+    key: 'view_directory' | 'view_drive' | 'rag_assistant',
+    value: boolean,
+  ) => {
     setPermissions((prev) => ({ ...prev, [key]: value }))
   }
 
@@ -216,7 +225,7 @@ interface EditUserDrawerProps {
 }
 
 function EditUserDrawer({ user, canEditBirthDate, onClose, onSaved }: EditUserDrawerProps) {
-  const { departments } = useDepartments()
+  const { data: areas = [], isLoading: loadingAreas } = useAssignableAreasQuery()
   const [displayName, setDisplayName] = useState(user.displayName)
   const [email, setEmail] = useState(user.email)
   const [department, setDepartment] = useState(user.department)
@@ -225,31 +234,17 @@ function EditUserDrawer({ user, canEditBirthDate, onClose, onSaved }: EditUserDr
     () => [...(user.memberAreaIds ?? [])],
   )
   const [memberAreasReason, setMemberAreasReason] = useState('')
-  const [areas, setAreas] = useState<GoverningArea[]>([])
-  const [loadingAreas, setLoadingAreas] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  useDrawerEscape(onClose)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoadingAreas(true)
-    listAssignableRootAreas()
-      .then((folders) => {
-        if (cancelled) return
-        setAreas(folders)
-      })
-      .catch((err) => {
-        console.error('Error al cargar áreas:', err)
-        if (!cancelled) setAreas([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingAreas(false)
-      })
-    return () => {
-      cancelled = true
+  const departmentOptions = useMemo(() => {
+    const names = areas.map((area) => area.name)
+    if (department.trim() && !names.includes(department)) {
+      return [department, ...names]
     }
-  }, [])
+    return names
+  }, [areas, department])
+
+  useDrawerEscape(onClose)
 
   const toggleMemberArea = (folderId: string) => {
     setSelectedMemberAreaIds((prev) =>
@@ -370,14 +365,21 @@ function EditUserDrawer({ user, canEditBirthDate, onClose, onSaved }: EditUserDr
               <select
                 id="edit-department"
                 value={department}
+                disabled={loadingAreas || departmentOptions.length === 0}
                 onChange={(e) => setDepartment(e.target.value)}
-                className="input-brand-focus w-full rounded-lg border border-neutral-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2.5 text-sm"
+                className="input-brand-focus w-full rounded-lg border border-neutral-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {departments.map((dept) => (
-                  <option key={dept} value={dept}>
-                    {dept}
-                  </option>
-                ))}
+                {loadingAreas ? (
+                  <option value={department}>Cargando áreas...</option>
+                ) : departmentOptions.length === 0 ? (
+                  <option value={department}>{department || 'Sin áreas disponibles'}</option>
+                ) : (
+                  departmentOptions.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
@@ -923,6 +925,119 @@ function PasswordResetDrawer({
   )
 }
 
+function UserRoleBadge({ role }: { role: UserProfile['role'] }) {
+  if (role === 'super_admin') {
+    return (
+      <span className="inline-flex rounded-full bg-brand-primary/10 px-2.5 py-0.5 text-xs font-semibold text-brand-primary">
+        Super admin
+      </span>
+    )
+  }
+  if (role === 'admin') {
+    return (
+      <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+        Admin de área
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600 dark:bg-zinc-800 dark:text-gray-400">
+      Usuario
+    </span>
+  )
+}
+
+function RegisteredUserActions({
+  user,
+  canAssignRoles,
+  currentUid,
+  deletingId,
+  onEdit,
+  onRole,
+  onPermissions,
+  onExceptions,
+  onPasswordReset,
+  onDelete,
+}: {
+  user: UserProfile
+  canAssignRoles: boolean
+  currentUid: string | undefined
+  deletingId: string | null
+  onEdit: () => void
+  onRole: () => void
+  onPermissions: () => void
+  onExceptions: () => void
+  onPasswordReset: () => void
+  onDelete: () => void
+}) {
+  const actionClass =
+    'inline-flex h-11 w-11 items-center justify-center rounded-lg text-neutral-600 transition-colors md:h-8 md:w-8 dark:text-gray-400'
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={`Editar ${user.displayName}`}
+        className={`${actionClass} hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-zinc-800 dark:hover:text-gray-100`}
+      >
+        <Pencil className="h-4 w-4" />
+      </button>
+      {canAssignRoles && user.role !== 'super_admin' && (
+        <button
+          type="button"
+          onClick={onRole}
+          aria-label={`Gestionar rol de ${user.displayName}`}
+          className={`${actionClass} hover:bg-amber-50 hover:text-amber-800 dark:hover:bg-amber-950/40 dark:hover:text-amber-300`}
+        >
+          <Shield className="h-4 w-4" />
+        </button>
+      )}
+      {canAssignRoles && user.role !== 'super_admin' && (
+        <button
+          type="button"
+          onClick={onPermissions}
+          aria-label={`Permisos de módulos de ${user.displayName}`}
+          className={`${actionClass} hover:border-brand-primary/25 hover:bg-brand-tint hover:text-brand-primary dark:hover:border-brand-primary/40 dark:hover:bg-brand-primary-hover/40`}
+        >
+          <Settings2 className="h-4 w-4" />
+        </button>
+      )}
+      {canAssignRoles && user.role !== 'super_admin' && (
+        <button
+          type="button"
+          onClick={onExceptions}
+          aria-label={`Excepciones de gobernanza de ${user.displayName}`}
+          title="Excepciones de gobernanza"
+          className={`${actionClass} hover:bg-violet-50 hover:text-violet-700 dark:hover:bg-violet-950/40 dark:hover:text-violet-300`}
+        >
+          <KeyRound className="h-4 w-4" />
+        </button>
+      )}
+      {canAssignRoles && user.uid !== currentUid && (
+        <button
+          type="button"
+          onClick={onPasswordReset}
+          aria-label={`Restablecer contraseña de ${user.displayName}`}
+          title="Restablecer contraseña"
+          className={`${actionClass} hover:bg-sky-50 hover:text-sky-700 dark:hover:bg-sky-950/40 dark:hover:text-sky-300`}
+        >
+          <LockKeyhole className="h-4 w-4" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onDelete}
+        disabled={deletingId === user.uid}
+        aria-label={`Eliminar ${user.displayName}`}
+        className={`${actionClass} text-brand-primary hover:bg-brand-tint disabled:opacity-50`}
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </>
+  )
+}
+
 function ManagedAreasCell({
   user,
   areaNameById,
@@ -980,9 +1095,11 @@ export function UserManager() {
   const canAssignRoles =
     isSuperAdmin(userProfile) || isSuperAdminEmail(userProfile?.email)
   const showPendingTab = isSuperAdmin(userProfile)
-  const [activePanel, setActivePanel] = useState<
-    'registered' | 'pending_setup' | 'external_approval'
-  >('registered')
+  const [activePanel, setActivePanel] = useUrlEnumParam(
+    'panel',
+    ['registered', 'pending_setup', 'external_approval'],
+    'registered',
+  )
   const [users, setUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -1074,13 +1191,14 @@ export function UserManager() {
   }
 
   return (
-    <section className="w-full">
+    <section className="w-full min-w-0">
       {showPendingTab && (
-        <div className="mb-6 flex gap-2 border-b border-neutral-200 dark:border-zinc-800">
+        <div className="mb-6 max-w-full overflow-x-auto overscroll-x-contain border-b border-neutral-200 dark:border-zinc-800">
+          <div className="inline-flex min-w-full gap-2">
           <button
             type="button"
             onClick={() => setActivePanel('registered')}
-            className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            className={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
               activePanel === 'registered'
                 ? 'border-brand-primary text-brand-primary'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-gray-400 dark:hover:text-gray-200'
@@ -1091,25 +1209,28 @@ export function UserManager() {
           <button
             type="button"
             onClick={() => setActivePanel('pending_setup')}
-            className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            className={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
               activePanel === 'pending_setup'
                 ? 'border-brand-primary text-brand-primary'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-gray-400 dark:hover:text-gray-200'
             }`}
           >
-            Configuración pendiente
+            <span className="sm:hidden">Conf. pend.</span>
+            <span className="hidden sm:inline">Configuración pendiente</span>
           </button>
           <button
             type="button"
             onClick={() => setActivePanel('external_approval')}
-            className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            className={`shrink-0 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
               activePanel === 'external_approval'
                 ? 'border-brand-primary text-brand-primary'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:text-gray-400 dark:hover:text-gray-200'
             }`}
           >
-            Cuentas pendientes
+            <span className="sm:hidden">Cuentas pend.</span>
+            <span className="hidden sm:inline">Cuentas pendientes</span>
           </button>
+          </div>
         </div>
       )}
 
@@ -1126,11 +1247,78 @@ export function UserManager() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-neutral-200 dark:border-zinc-800 bg-white dark:bg-zinc-900">
-        <div className="overflow-x-auto">
+      <div className="overflow-hidden rounded-lg border border-neutral-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="md:hidden">
+          {loading ? (
+            <TableSkeleton />
+          ) : error ? (
+            <p className="px-4 py-12 text-center text-sm text-danger">{error}</p>
+          ) : users.length === 0 ? (
+            <p className="px-4 py-12 text-center text-sm text-neutral-500 dark:text-gray-400">
+              No hay usuarios registrados.
+            </p>
+          ) : (
+            <ul className="divide-y divide-neutral-100 dark:divide-zinc-800">
+              {users.map((user) => (
+                <li key={user.uid} className="p-4">
+                  <p className="font-semibold text-neutral-900 dark:text-gray-100">
+                    {user.displayName || '—'}
+                  </p>
+                  <p className="mt-1 break-all text-sm text-neutral-600 dark:text-gray-400">{user.email}</p>
+
+                  <dl className="mt-3 space-y-2.5 text-sm">
+                    <div>
+                      <dt className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-gray-400">
+                        Departamento
+                      </dt>
+                      <dd className="mt-0.5 text-neutral-700 dark:text-gray-300">{user.department || '—'}</dd>
+                    </div>
+                    {canAssignRoles ? (
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-gray-400">
+                          Rol
+                        </dt>
+                        <dd className="mt-1">
+                          <UserRoleBadge role={user.role} />
+                        </dd>
+                      </div>
+                    ) : null}
+                    {canAssignRoles ? (
+                      <div>
+                        <dt className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-gray-400">
+                          Gobierna
+                        </dt>
+                        <dd className="mt-1">
+                          <ManagedAreasCell user={user} areaNameById={areaNameById} />
+                        </dd>
+                      </div>
+                    ) : null}
+                  </dl>
+
+                  <div className="mt-4 flex flex-wrap gap-1">
+                    <RegisteredUserActions
+                      user={user}
+                      canAssignRoles={canAssignRoles}
+                      currentUid={currentAuthUser?.uid}
+                      deletingId={deletingId}
+                      onEdit={() => setEditingUser(user)}
+                      onRole={() => setRoleUser(user)}
+                      onPermissions={() => setPermissionsUser(user)}
+                      onExceptions={() => setExceptionsUser(user)}
+                      onPasswordReset={() => setPasswordResetUser(user)}
+                      onDelete={() => void handleDelete(user)}
+                    />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[960px] border-collapse text-left text-sm">
             <thead>
-              <tr className="border-b border-neutral-200 dark:border-zinc-800 bg-neutral-50 dark:bg-zinc-950">
+              <tr className="border-b border-neutral-200 bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-950">
                 <th className="px-5 py-3.5 font-semibold text-neutral-700 dark:text-gray-300">Nombre</th>
                 <th className="px-5 py-3.5 font-semibold text-neutral-700 dark:text-gray-300">Email</th>
                 <th className="px-5 py-3.5 font-semibold text-neutral-700 dark:text-gray-300">Departamento</th>
@@ -1176,7 +1364,7 @@ export function UserManager() {
                 users.map((user, index) => (
                   <tr
                     key={user.uid}
-                    className={`border-b border-neutral-100 dark:border-zinc-800 transition-colors hover:bg-neutral-50 dark:bg-zinc-950/80 ${
+                    className={`border-b border-neutral-100 transition-colors hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-950/80 dark:hover:bg-zinc-900/40 ${
                       index === users.length - 1 ? 'border-b-0' : ''
                     }`}
                   >
@@ -1187,19 +1375,7 @@ export function UserManager() {
                     <td className="px-5 py-4 text-neutral-600 dark:text-gray-400">{user.department}</td>
                     {canAssignRoles && (
                       <td className="px-5 py-4">
-                        {user.role === 'super_admin' ? (
-                          <span className="inline-flex rounded-full bg-brand-primary/10 px-2.5 py-0.5 text-xs font-semibold text-brand-primary">
-                            Super admin
-                          </span>
-                        ) : user.role === 'admin' ? (
-                          <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-                            Admin de área
-                          </span>
-                        ) : (
-                          <span className="inline-flex rounded-full bg-neutral-100 px-2.5 py-0.5 text-xs font-medium text-neutral-600 dark:bg-zinc-800 dark:text-gray-400">
-                            Usuario
-                          </span>
-                        )}
+                        <UserRoleBadge role={user.role} />
                       </td>
                     )}
                     {canAssignRoles && (
@@ -1209,65 +1385,18 @@ export function UserManager() {
                     )}
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditingUser(user)}
-                          aria-label={`Editar ${user.displayName}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-600 dark:text-gray-400 transition-colors hover:bg-neutral-100 dark:bg-zinc-800 hover:text-neutral-900 dark:text-gray-100"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </button>
-                        {canAssignRoles && user.role !== 'super_admin' && (
-                          <button
-                            type="button"
-                            onClick={() => setRoleUser(user)}
-                            aria-label={`Gestionar rol de ${user.displayName}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-amber-50 hover:text-amber-800 dark:text-gray-400 dark:hover:bg-amber-950/40 dark:hover:text-amber-300"
-                          >
-                            <Shield className="h-4 w-4" />
-                          </button>
-                        )}
-                        {canAssignRoles && user.role !== 'super_admin' && (
-                          <button
-                            type="button"
-                            onClick={() => setPermissionsUser(user)}
-                            aria-label={`Permisos de módulos de ${user.displayName}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:border-brand-primary/25 hover:bg-brand-tint hover:text-brand-primary dark:text-gray-400 dark:hover:border-brand-primary/40 dark:hover:bg-brand-primary-hover/40"
-                          >
-                            <Settings2 className="h-4 w-4" />
-                          </button>
-                        )}
-                        {canAssignRoles && user.role !== 'super_admin' && (
-                          <button
-                            type="button"
-                            onClick={() => setExceptionsUser(user)}
-                            aria-label={`Excepciones de gobernanza de ${user.displayName}`}
-                            title="Excepciones de gobernanza"
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-violet-50 hover:text-violet-700 dark:text-gray-400 dark:hover:bg-violet-950/40 dark:hover:text-violet-300"
-                          >
-                            <KeyRound className="h-4 w-4" />
-                          </button>
-                        )}
-                        {canAssignRoles && user.uid !== currentAuthUser?.uid && (
-                          <button
-                            type="button"
-                            onClick={() => setPasswordResetUser(user)}
-                            aria-label={`Restablecer contraseña de ${user.displayName}`}
-                            title="Restablecer contraseña"
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-neutral-600 transition-colors hover:bg-sky-50 hover:text-sky-700 dark:text-gray-400 dark:hover:bg-sky-950/40 dark:hover:text-sky-300"
-                          >
-                            <LockKeyhole className="h-4 w-4" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(user)}
-                          disabled={deletingId === user.uid}
-                          aria-label={`Eliminar ${user.displayName}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-brand-primary transition-colors hover:bg-brand-tint disabled:opacity-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        <RegisteredUserActions
+                          user={user}
+                          canAssignRoles={canAssignRoles}
+                          currentUid={currentAuthUser?.uid}
+                          deletingId={deletingId}
+                          onEdit={() => setEditingUser(user)}
+                          onRole={() => setRoleUser(user)}
+                          onPermissions={() => setPermissionsUser(user)}
+                          onExceptions={() => setExceptionsUser(user)}
+                          onPasswordReset={() => setPasswordResetUser(user)}
+                          onDelete={() => void handleDelete(user)}
+                        />
                       </div>
                     </td>
                   </tr>

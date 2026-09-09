@@ -1,4 +1,4 @@
-export { defaultRagConfig, getRagConfig, clearRagConfigCache, ragSnapshotObjectPath, ragManifestObjectPath } from './config.js'
+export { defaultRagConfig, getRagConfig, clearRagConfigCache, ragSnapshotObjectPath, ragManifestObjectPath, ragChunksContentObjectPath } from './config.js'
 export {
   RAG_CHUNK_CHARS,
   RAG_CHUNK_OVERLAP_CHARS,
@@ -19,6 +19,9 @@ export { estimateChunksFromTextBytes, estimateRagMemoryUsage } from './memoryEst
 export { buildRegulatoryBlockResponse, isExcludedGoverningArea, regulatoryAreaLabel } from './regulatoryArea.js'
 export { resolveSearchSubject } from './resolveSearchSubject.js'
 export { indexPilotArea, verifyNoExcludedChunks } from './indexPilotArea.js'
+export { askDriveRag } from './askDriveRag.js'
+export { getDriveRagStatus, reindexDriveRag } from './reindexDriveRag.js'
+export { loadRagCorpus, getRagIndexState, clearRagCorpusCache } from './loadRagCorpus.js'
 export type { IndexPilotAreaOptions } from './indexPilotArea.js'
 export type {
   RagConfig,

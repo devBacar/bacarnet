@@ -3,7 +3,6 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
-  FileImage,
   FileSpreadsheet,
   FileText,
   Folder,
@@ -25,8 +24,9 @@ import {
 } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { DriveFileIcon } from '../components/DriveFileIcon'
 import { DriveFolderPickerModal } from '../components/DriveFolderPickerModal'
 import { DrivePermissionsModal } from '../components/DrivePermissionsModal'
 import { DriveRecentPanel } from '../components/DriveRecentPanel'
@@ -38,11 +38,23 @@ import {
   isOfficeUploadFile,
 } from '../services/approvalRequestsService'
 import { isInstallerUploadFile } from '../utils/installerUpload'
+import { formatFileSize, formatUploadSizeLimit, isWithinUploadLimit, partitionUploadFilesByLimit, STAGING_UPLOAD_MAX_BYTES, uploadFileLabel, usesStagingUpload } from '../utils/uploadLimits'
+import {
+  isFolderUploadSelection,
+  isSkippedUploadFile,
+  summarizeFolderUpload,
+} from '../utils/folderUploadPlan'
+import {
+  ensureFolderUploadTree,
+  resolveFolderUploadParentId,
+} from '../utils/runFolderUpload'
+import { runWithConcurrency, type QueueProgress } from '../utils/uploadQueue'
 import {
   approveDriveFile,
   moveDriveFile,
   updateDriveClassification,
   uploadDriveFile,
+  getDriveFile,
   type DriveClassification as Classification,
   type DriveCreateType,
   type DriveFileDto,
@@ -58,8 +70,14 @@ import { canPerformGovernanceAction } from '../services/governanceAccess'
 import { getAllUsers, type UserProfile } from '../services/userService'
 import { canOpenDriveEmbedded } from '../utils/googleDriveEmbed'
 import {
-  DRIVE_EXPLORER_DEFAULT_PATH,
+  buildDocumentViewerSearch,
+  buildExplorerPath,
+  buildExplorerSearchParams,
+  DRIVE_FOLDER_PATH_PARAM,
+  explorerSearchEqual,
   parseDriveBreadcrumb,
+  parseDriveExplorerUiFromSearch,
+  resolveInitialDriveBreadcrumb,
   type DriveBreadcrumbItem,
 } from '../utils/driveExplorerNavigation'
 
@@ -67,22 +85,6 @@ type FileKind = 'folder' | 'document' | 'spreadsheet' | 'pdf' | 'image'
 
 type BreadcrumbItem = DriveBreadcrumbItem
 type FileAction = 'trash' | 'approve' | 'classification' | 'rename'
-
-const kindIcon: Record<FileKind, typeof FileText> = {
-  folder: Folder,
-  document: FileText,
-  spreadsheet: FileSpreadsheet,
-  pdf: FileText,
-  image: FileImage,
-}
-
-const kindColor: Record<FileKind, string> = {
-  folder: 'text-amber-500',
-  document: 'text-blue-600 dark:text-blue-400',
-  spreadsheet: 'text-emerald-600 dark:text-emerald-400',
-  pdf: 'text-danger',
-  image: 'text-violet-600 dark:text-violet-400',
-}
 
 const classificationStyle: Record<Classification, string> = {
   RESTRINGIDO:
@@ -118,6 +120,10 @@ const allClassifications: Classification[] = ['USO_INTERNO', 'CONFIDENCIAL', 'RE
 const allKinds: FileKind[] = ['folder', 'document', 'spreadsheet', 'pdf', 'image']
 const allStatuses: StatusFilter[] = ['BORRADOR', 'APROBADO']
 
+type BulkUploadProgress = QueueProgress & { phase: 'folders' | 'files' }
+
+type UploadPickerMode = 'files' | 'folder'
+
 function kindFor(file: DriveFileDto): FileKind {
   if (file.isFolder) return 'folder'
   if (file.mimeType === 'application/vnd.google-apps.spreadsheet') return 'spreadsheet'
@@ -140,23 +146,155 @@ function formatModified(value: string | null): string {
   }).format(date)
 }
 
+function DriveExplorerFilters({
+  activeFilterCount,
+  clearFilters,
+  filterClassifications,
+  filterKinds,
+  filterStatuses,
+  setFilterClassifications,
+  setFilterKinds,
+  setFilterStatuses,
+  toggleFilter,
+  hideTitle = false,
+}: {
+  activeFilterCount: number
+  clearFilters: () => void
+  filterClassifications: Set<Classification>
+  filterKinds: Set<FileKind>
+  filterStatuses: Set<StatusFilter>
+  setFilterClassifications: (next: Set<Classification>) => void
+  setFilterKinds: (next: Set<FileKind>) => void
+  setFilterStatuses: (next: Set<StatusFilter>) => void
+  toggleFilter: <T,>(current: Set<T>, value: T, setter: (next: Set<T>) => void) => void
+  hideTitle?: boolean
+}) {
+  return (
+    <>
+      {!hideTitle && (
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-neutral-900 dark:text-zinc-100">Filtros</p>
+          {activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs font-medium text-brand-primary hover:underline"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+      )}
+      {hideTitle && activeFilterCount > 0 && (
+        <div className="mb-3 flex justify-end">
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="text-xs font-medium text-brand-primary hover:underline"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+      )}
+      <div className="space-y-4">
+        <fieldset>
+          <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-zinc-500">
+            Clasificación
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {allClassifications.map((value) => (
+              <label
+                key={value}
+                className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs dark:border-zinc-700"
+              >
+                <input
+                  type="checkbox"
+                  checked={filterClassifications.has(value)}
+                  onChange={() =>
+                    toggleFilter(filterClassifications, value, setFilterClassifications)
+                  }
+                  className="accent-brand-primary"
+                />
+                {classificationLabel[value]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-zinc-500">
+            Tipo
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {allKinds.map((value) => (
+              <label
+                key={value}
+                className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs dark:border-zinc-700"
+              >
+                <input
+                  type="checkbox"
+                  checked={filterKinds.has(value)}
+                  onChange={() => toggleFilter(filterKinds, value, setFilterKinds)}
+                  className="accent-brand-primary"
+                />
+                {kindFilterLabel[value]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-zinc-500">
+            Estado
+          </legend>
+          <div className="flex flex-wrap gap-2">
+            {allStatuses.map((value) => (
+              <label
+                key={value}
+                className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs dark:border-zinc-700"
+              >
+                <input
+                  type="checkbox"
+                  checked={filterStatuses.has(value)}
+                  onChange={() => toggleFilter(filterStatuses, value, setFilterStatuses)}
+                  className="accent-brand-primary"
+                />
+                {statusFilterLabel[value]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </div>
+    </>
+  )
+}
+
 export function AdminDriveLab() {
   const { user, userProfile } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const isSuperAdmin = userProfile?.role === 'super_admin'
-  const [query, setQuery] = useState('')
-  const [view, setView] = useState<'list' | 'grid'>('list')
+  const initialUi = parseDriveExplorerUiFromSearch(new URLSearchParams(location.search))
+  const [query, setQuery] = useState(initialUi.query)
+  const [view, setView] = useState<'list' | 'grid'>(initialUi.view)
   const [showFilters, setShowFilters] = useState(false)
+  const [mobileDriveTab, setMobileDriveTab] = useState<'explorer' | 'recientes'>('explorer')
   const [filterClassifications, setFilterClassifications] = useState<Set<Classification>>(
-    () => new Set(),
+    () => new Set([...initialUi.filterClassifications].filter((v): v is Classification => allClassifications.includes(v as Classification))),
   )
-  const [filterKinds, setFilterKinds] = useState<Set<FileKind>>(() => new Set())
-  const [filterStatuses, setFilterStatuses] = useState<Set<StatusFilter>>(() => new Set())
+  const [filterKinds, setFilterKinds] = useState<Set<FileKind>>(() =>
+    new Set([...initialUi.filterKinds].filter((v): v is FileKind => allKinds.includes(v as FileKind))),
+  )
+  const [filterStatuses, setFilterStatuses] = useState<Set<StatusFilter>>(() =>
+    new Set([...initialUi.filterStatuses].filter((v): v is StatusFilter => allStatuses.includes(v as StatusFilter))),
+  )
   const filtersRef = useRef<HTMLDivElement>(null)
-  const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>([
-    { id: null, name: 'bacarsa' },
-  ])
+  const [breadcrumb, setBreadcrumb] = useState<BreadcrumbItem[]>(() =>
+    resolveInitialDriveBreadcrumb({
+      stateBreadcrumb: (location.state as { driveBreadcrumb?: DriveBreadcrumbItem[] } | null)
+        ?.driveBreadcrumb,
+      pathParam: new URLSearchParams(location.search).get(DRIVE_FOLDER_PATH_PARAM),
+    }),
+  )
   const [showCreate, setShowCreate] = useState(false)
   const [showNewMenu, setShowNewMenu] = useState(false)
   const [createName, setCreateName] = useState('')
@@ -171,8 +309,10 @@ export function AdminDriveLab() {
   const [createPrivateFolder, setCreatePrivateFolder] = useState(false)
   const [createDirectoryUsers, setCreateDirectoryUsers] = useState<UserProfile[]>([])
   const [showUpload, setShowUpload] = useState(false)
+  const [uploadPickerMode, setUploadPickerMode] = useState<UploadPickerMode>('files')
   const [uploading, setUploading] = useState(false)
-  const [uploadFileValue, setUploadFileValue] = useState<File | null>(null)
+  const [uploadFiles, setUploadFiles] = useState<File[]>([])
+  const [uploadProgress, setUploadProgress] = useState<BulkUploadProgress | null>(null)
   const [uploadClassification, setUploadClassification] =
     useState<Classification>('USO_INTERNO')
   const [uploadReason, setUploadReason] = useState('')
@@ -195,8 +335,68 @@ export function AdminDriveLab() {
     )
     if (!restored) return
     setBreadcrumb(restored)
-    navigate(`${location.pathname}${location.search}`, { replace: true, state: {} })
-  }, [location.pathname, location.search, location.state, navigate])
+    navigate(
+      buildExplorerPath(location.pathname, restored, {
+        query,
+        view,
+        filterClassifications,
+        filterKinds,
+        filterStatuses,
+      }),
+      { replace: true, state: {} },
+    )
+  }, [location.pathname, location.search, location.state, navigate, query, view, filterClassifications, filterKinds, filterStatuses])
+
+  useEffect(() => {
+    const expected = buildExplorerSearchParams({
+      breadcrumb,
+      ui: { query, view, filterClassifications, filterKinds, filterStatuses },
+    })
+    if (explorerSearchEqual(searchParams, expected)) return
+    setSearchParams(expected, { replace: true })
+  }, [
+    breadcrumb,
+    query,
+    view,
+    filterClassifications,
+    filterKinds,
+    filterStatuses,
+    searchParams,
+    setSearchParams,
+  ])
+
+  useEffect(() => {
+    const pending = breadcrumb.filter(
+      (crumb): crumb is { id: string; name: string } =>
+        typeof crumb.id === 'string' && crumb.name === '…',
+    )
+    if (pending.length === 0) return
+
+    let cancelled = false
+    void (async () => {
+      const names = new Map<string, string>()
+      await Promise.all(
+        pending.map(async (crumb) => {
+          try {
+            const detail = await getDriveFile(crumb.id)
+            names.set(crumb.id, detail.name)
+          } catch {
+            names.set(crumb.id, crumb.id.slice(0, 12))
+          }
+        }),
+      )
+      if (cancelled) return
+      setBreadcrumb((current) =>
+        current.map((crumb) =>
+          crumb.id && names.has(crumb.id) ? { ...crumb, name: names.get(crumb.id)! } : crumb,
+        ),
+      )
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [breadcrumb])
 
   const currentFolder = breadcrumb[breadcrumb.length - 1]
   const isAtDriveRoot = currentFolder.id === null
@@ -280,6 +480,10 @@ export function AdminDriveLab() {
   }, [files, query, filterClassifications, filterKinds, filterStatuses])
 
   const openItem = (file: DriveFileDto) => {
+    if (file.id.startsWith('optimistic-')) {
+      toast('La carpeta se está creando, esperá un momento…', { icon: '⏳' })
+      return
+    }
     if (file.isFolder) {
       setBreadcrumb((current) => [...current, { id: file.id, name: file.name }])
       setQuery('')
@@ -288,12 +492,8 @@ export function AdminDriveLab() {
 
     if (canOpenDriveEmbedded(file.mimeType)) {
       recordDriveRecentOpen(user?.uid, file)
-      navigate(`/recursos/documento/${file.id}`, {
-        state: {
-          returnTo: DRIVE_EXPLORER_DEFAULT_PATH,
-          driveBreadcrumb: breadcrumb,
-        },
-      })
+      const docSearch = buildDocumentViewerSearch(location.pathname, breadcrumb)
+      navigate(`/recursos/documento/${file.id}?${docSearch.toString()}`)
       return
     }
 
@@ -308,12 +508,8 @@ export function AdminDriveLab() {
       mimeType: entry.mimeType,
       isFolder: false,
     })
-    navigate(`/recursos/documento/${entry.id}`, {
-      state: {
-        returnTo: DRIVE_EXPLORER_DEFAULT_PATH,
-        driveBreadcrumb: breadcrumb,
-      },
-    })
+    const docSearch = buildDocumentViewerSearch(location.pathname, breadcrumb)
+    navigate(`/recursos/documento/${entry.id}?${docSearch.toString()}`)
   }
 
   const navigateToCrumb = (index: number) => {
@@ -381,45 +577,180 @@ export function AdminDriveLab() {
     createMutation.mutate(payload)
   }
 
+  const UPLOAD_CONCURRENCY = 1
+
+  const usableUploadFiles = useMemo(
+    () => uploadFiles.filter((file) => !isSkippedUploadFile(file)),
+    [uploadFiles],
+  )
+
+  const folderUploadSummary = useMemo(
+    () => summarizeFolderUpload(usableUploadFiles),
+    [usableUploadFiles],
+  )
+
+  const isFolderUpload =
+    uploadPickerMode === 'folder' && isFolderUploadSelection(usableUploadFiles)
+
+  const uploadSingleFile = async (file: File, parentFolderId = resolvedFolderId) => {
+    if (!parentFolderId) throw new Error('Carpeta destino no disponible')
+
+    if (isOfficeUploadFile(file)) {
+      await createOfficeUploadRequest({
+        file,
+        parentFolderId,
+        classification: uploadClassification,
+        reason: uploadReason.trim(),
+      })
+      return 'office' as const
+    }
+
+    await uploadDriveFile({
+      file,
+      parentFolderId,
+      classification: uploadClassification,
+      reason: uploadReason.trim(),
+    })
+    return isInstallerUploadFile(file) ? ('installer' as const) : ('direct' as const)
+  }
+
   const handleUpload = async (event: FormEvent) => {
     event.preventDefault()
-    if (!resolvedFolderId || !uploadFileValue) return
+    if (!resolvedFolderId || usableUploadFiles.length === 0) return
+
+    if (uploadPickerMode === 'folder' && !isFolderUploadSelection(usableUploadFiles)) {
+      toast.error('Elegí una carpeta del disco (no archivos sueltos) para importar la estructura')
+      return
+    }
+
+    const { accepted: filesToUpload, tooLarge } = partitionUploadFilesByLimit(usableUploadFiles)
+
+    if (tooLarge.length > 0) {
+      const preview = tooLarge
+        .slice(0, 3)
+        .map((file) => `${uploadFileLabel(file)} (${formatFileSize(file.size)})`)
+        .join(' · ')
+      const suffix =
+        tooLarge.length > 3 ? ` · y ${tooLarge.length - 3} más` : ''
+
+      if (filesToUpload.length === 0) {
+        toast.error(
+          `Ningún archivo se puede subir: ${tooLarge.length} superan ${formatUploadSizeLimit(STAGING_UPLOAD_MAX_BYTES)}. ${preview}${suffix}`,
+          { duration: 10000 },
+        )
+        return
+      }
+
+      toast(
+        `Se omitirán ${tooLarge.length} archivo(s) >${formatUploadSizeLimit(STAGING_UPLOAD_MAX_BYTES)} y se importará el resto (${filesToUpload.length}). ${preview}${suffix}`,
+        { icon: '⚠️', duration: 10000 },
+      )
+    }
+
+    const folderSummaryForUpload = summarizeFolderUpload(filesToUpload)
+
     setUploading(true)
+    setUploadProgress({
+      phase: isFolderUpload ? 'folders' : 'files',
+      completed: 0,
+      total: isFolderUpload ? folderSummaryForUpload.folderCount : filesToUpload.length,
+      inFlight: 0,
+    })
+
     try {
-      if (isOfficeUploadFile(uploadFileValue)) {
-        await createOfficeUploadRequest({
-          file: uploadFileValue,
-          parentFolderId: resolvedFolderId,
-          classification: uploadClassification,
+      let folderCache = new Map<string, string>()
+
+      if (isFolderUpload) {
+        folderCache = await ensureFolderUploadTree({
+          files: filesToUpload,
+          rootParentFolderId: resolvedFolderId,
           reason: uploadReason.trim(),
+          onFolderProgress: (completed, total) => {
+            setUploadProgress({
+              phase: 'folders',
+              completed,
+              total,
+              inFlight: completed < total ? 1 : 0,
+            })
+          },
         })
-        toast.success('Solicitud enviada — un jefe de área debe aprobar la subida')
-      } else if (isInstallerUploadFile(uploadFileValue)) {
-        await uploadDriveFile({
-          file: uploadFileValue,
-          parentFolderId: resolvedFolderId,
-          classification: uploadClassification,
-          reason: uploadReason.trim(),
-        })
-        toast.success('Instalador subido a Drive')
-        await refreshFolderListing()
-      } else {
-        await uploadDriveFile({
-          file: uploadFileValue,
-          parentFolderId: resolvedFolderId,
-          classification: uploadClassification,
-          reason: uploadReason.trim(),
-        })
-        toast.success('Archivo subido a Drive')
+      }
+
+      setUploadProgress({
+        phase: 'files',
+        completed: 0,
+        total: filesToUpload.length,
+        inFlight: 0,
+      })
+
+      const results = await runWithConcurrency(
+        filesToUpload,
+        UPLOAD_CONCURRENCY,
+        (file) =>
+          uploadSingleFile(
+            file,
+            isFolderUpload
+              ? resolveFolderUploadParentId(resolvedFolderId, file, folderCache)
+              : resolvedFolderId,
+          ),
+        (progress) => setUploadProgress({ phase: 'files', ...progress }),
+      )
+
+      const failed = results.filter((entry) => !entry.ok)
+      const officeCount = results.filter((entry) => entry.ok && entry.result === 'office').length
+      const installerCount = results.filter(
+        (entry) => entry.ok && entry.result === 'installer',
+      ).length
+      const directCount = results.filter(
+        (entry) => entry.ok && entry.result === 'direct',
+      ).length
+
+      if (officeCount + installerCount + directCount > 0) {
         await refreshFolderListing()
       }
-      setShowUpload(false)
-      setUploadFileValue(null)
-      setUploadReason('')
+
+      if (failed.length === 0) {
+        if (isFolderUpload) {
+          toast.success(
+            `Carpeta importada: ${filesToUpload.length} archivo(s)${tooLarge.length > 0 ? ` · ${tooLarge.length} omitido(s) >${formatUploadSizeLimit(STAGING_UPLOAD_MAX_BYTES)}` : ''}`,
+          )
+        } else if (usableUploadFiles.length === 1 && officeCount === 1) {
+          toast.success('Solicitud enviada — un jefe de área debe aprobar la subida')
+        } else if (usableUploadFiles.length === 1 && installerCount === 1) {
+          toast.success('Instalador subido a Drive')
+        } else if (usableUploadFiles.length === 1) {
+          toast.success('Archivo subido a Drive')
+        } else {
+          toast.success(`${results.length} archivo(s) procesados correctamente`)
+        }
+        setShowUpload(false)
+        setUploadFiles([])
+        setUploadReason('')
+        setUploadPickerMode('files')
+      } else if (failed.length < results.length) {
+        const detail = failed
+          .slice(0, 3)
+          .map((entry) => `${entry.item.name}: ${entry.error.message}`)
+          .join(' · ')
+        toast.error(
+          `${failed.length} de ${results.length} fallaron (${results.length - failed.length} OK). ${detail}`,
+          { duration: 8000 },
+        )
+        setUploadFiles(failed.map((entry) => entry.item))
+      } else {
+        const detail = failed[0]?.error.message ?? 'No se pudo completar la operación'
+        toast.error(
+          failed.length === 1
+            ? detail
+            : `${failed.length} archivos fallaron. Ej.: ${detail}`,
+          { duration: 8000 },
+        )
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo completar la operación')
     } finally {
       setUploading(false)
+      setUploadProgress(null)
     }
   }
 
@@ -784,7 +1115,7 @@ export function AdminDriveLab() {
             type="button"
             onClick={() => setShowFilters((open) => !open)}
             aria-expanded={showFilters}
-            className={`inline-flex h-9 items-center gap-2 rounded-lg border px-3 text-sm transition-colors hover:bg-neutral-50 dark:hover:bg-zinc-900 ${
+            className={`inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm transition-colors hover:bg-neutral-50 dark:hover:bg-zinc-900 ${
               activeFilterCount > 0
                 ? 'border-brand-primary/40 bg-brand-tint text-brand-primary dark:border-brand-primary/30'
                 : 'border-neutral-200 text-neutral-600 dark:border-zinc-800 dark:text-zinc-400'
@@ -799,94 +1130,64 @@ export function AdminDriveLab() {
             )}
           </button>
           {showFilters && (
-            <div className="absolute right-0 top-full z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-neutral-900 dark:text-zinc-100">Filtros</p>
-                {activeFilterCount > 0 && (
+            <>
+              {createPortal(
+                <>
                   <button
                     type="button"
-                    onClick={clearFilters}
-                    className="text-xs font-medium text-brand-primary hover:underline"
-                  >
-                    Limpiar
-                  </button>
-                )}
+                    aria-label="Cerrar filtros"
+                    className="fixed inset-0 z-[70] bg-neutral-900/40 lg:hidden"
+                    onClick={() => setShowFilters(false)}
+                  />
+                  <div className="fixed inset-x-0 bottom-0 z-[80] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl border border-neutral-200 bg-white p-4 pb-6 shadow-2xl dark:border-zinc-800 dark:bg-zinc-950 lg:hidden">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-neutral-900 dark:text-zinc-100">Filtros</p>
+                      <button
+                        type="button"
+                        onClick={() => setShowFilters(false)}
+                        aria-label="Cerrar panel de filtros"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-neutral-500 hover:bg-neutral-100 dark:hover:bg-zinc-800"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <DriveExplorerFilters
+                      activeFilterCount={activeFilterCount}
+                      clearFilters={clearFilters}
+                      filterClassifications={filterClassifications}
+                      filterKinds={filterKinds}
+                      filterStatuses={filterStatuses}
+                      setFilterClassifications={setFilterClassifications}
+                      setFilterKinds={setFilterKinds}
+                      setFilterStatuses={setFilterStatuses}
+                      toggleFilter={toggleFilter}
+                      hideTitle
+                    />
+                  </div>
+                </>,
+                document.body,
+              )}
+              <div className="absolute right-0 top-full z-30 mt-2 hidden w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-neutral-200 bg-white p-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 lg:block">
+                <DriveExplorerFilters
+                  activeFilterCount={activeFilterCount}
+                  clearFilters={clearFilters}
+                  filterClassifications={filterClassifications}
+                  filterKinds={filterKinds}
+                  filterStatuses={filterStatuses}
+                  setFilterClassifications={setFilterClassifications}
+                  setFilterKinds={setFilterKinds}
+                  setFilterStatuses={setFilterStatuses}
+                  toggleFilter={toggleFilter}
+                />
               </div>
-              <div className="space-y-4">
-                <fieldset>
-                  <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-zinc-500">
-                    Clasificación
-                  </legend>
-                  <div className="flex flex-wrap gap-2">
-                    {allClassifications.map((value) => (
-                      <label
-                        key={value}
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs dark:border-zinc-700"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={filterClassifications.has(value)}
-                          onChange={() =>
-                            toggleFilter(filterClassifications, value, setFilterClassifications)
-                          }
-                          className="accent-brand-primary"
-                        />
-                        {classificationLabel[value]}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                <fieldset>
-                  <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-zinc-500">
-                    Tipo
-                  </legend>
-                  <div className="flex flex-wrap gap-2">
-                    {allKinds.map((value) => (
-                      <label
-                        key={value}
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs dark:border-zinc-700"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={filterKinds.has(value)}
-                          onChange={() => toggleFilter(filterKinds, value, setFilterKinds)}
-                          className="accent-brand-primary"
-                        />
-                        {kindFilterLabel[value]}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-                <fieldset>
-                  <legend className="mb-2 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-zinc-500">
-                    Estado
-                  </legend>
-                  <div className="flex flex-wrap gap-2">
-                    {allStatuses.map((value) => (
-                      <label
-                        key={value}
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs dark:border-zinc-700"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={filterStatuses.has(value)}
-                          onChange={() => toggleFilter(filterStatuses, value, setFilterStatuses)}
-                          className="accent-brand-primary"
-                        />
-                        {statusFilterLabel[value]}
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              </div>
-            </div>
+            </>
           )}
           <div className="flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
             <button
               type="button"
               onClick={() => setView('list')}
               aria-label="Vista de lista"
-              className={`rounded-md p-1.5 ${view === 'list' ? 'bg-neutral-100 text-neutral-900 dark:bg-zinc-800 dark:text-white' : 'text-neutral-400'}`}
+              className={`inline-flex h-11 w-11 items-center justify-center rounded-md ${view === 'list' ? 'bg-neutral-100 text-neutral-900 dark:bg-zinc-800 dark:text-white' : 'text-neutral-400'}`}
             >
               <List className="h-4 w-4" />
             </button>
@@ -894,7 +1195,7 @@ export function AdminDriveLab() {
               type="button"
               onClick={() => setView('grid')}
               aria-label="Vista de cuadrícula"
-              className={`rounded-md p-1.5 ${view === 'grid' ? 'bg-neutral-100 text-neutral-900 dark:bg-zinc-800 dark:text-white' : 'text-neutral-400'}`}
+              className={`inline-flex h-11 w-11 items-center justify-center rounded-md ${view === 'grid' ? 'bg-neutral-100 text-neutral-900 dark:bg-zinc-800 dark:text-white' : 'text-neutral-400'}`}
             >
               <Grid2X2 className="h-4 w-4" />
             </button>
@@ -902,14 +1203,47 @@ export function AdminDriveLab() {
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col gap-6 xl:flex-row xl:items-start">
-        <div className="min-w-0 flex-[7] pb-2">
-        <section className="overflow-visible rounded-xl border border-neutral-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+      <div
+        className="mb-4 flex rounded-lg border border-neutral-200 p-1 dark:border-zinc-800 xl:hidden"
+        role="tablist"
+        aria-label="Secciones de archivos"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobileDriveTab === 'explorer'}
+          onClick={() => setMobileDriveTab('explorer')}
+          className={`min-h-11 flex-1 rounded-md px-3 text-sm font-medium transition-colors ${
+            mobileDriveTab === 'explorer'
+              ? 'bg-neutral-100 text-neutral-900 dark:bg-zinc-800 dark:text-white'
+              : 'text-neutral-500 dark:text-zinc-400'
+          }`}
+        >
+          Explorador
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mobileDriveTab === 'recientes'}
+          onClick={() => setMobileDriveTab('recientes')}
+          className={`min-h-11 flex-1 rounded-md px-3 text-sm font-medium transition-colors ${
+            mobileDriveTab === 'recientes'
+              ? 'bg-neutral-100 text-neutral-900 dark:bg-zinc-800 dark:text-white'
+              : 'text-neutral-500 dark:text-zinc-400'
+          }`}
+        >
+          Recientes
+        </button>
+      </div>
+
+      <div className="mt-6 flex flex-col gap-6 xl:mt-0 xl:flex-row xl:items-start">
+        <div className={`min-w-0 flex-[7] pb-2 ${mobileDriveTab === 'recientes' ? 'hidden xl:block' : ''}`}>
+        <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
           {view === 'list' && (
-            <div className="grid grid-cols-[minmax(250px,2fr)_minmax(120px,0.8fr)_minmax(160px,1fr)_minmax(72px,auto)] border-b border-neutral-200 bg-neutral-50/70 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-neutral-500 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-500">
+            <div className="hidden border-b border-neutral-200 bg-neutral-50/70 px-4 py-2.5 text-xs font-medium uppercase tracking-wide text-neutral-500 md:grid md:grid-cols-[minmax(0,2fr)_minmax(120px,0.8fr)_minmax(160px,1fr)_auto] dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-500">
               <span>Nombre</span>
-              <span className="hidden md:block">Propietario</span>
-              <span className="hidden sm:block">Última modificación</span>
+              <span>Propietario</span>
+              <span>Última modificación</span>
               <span />
             </div>
           )}
@@ -943,8 +1277,6 @@ export function AdminDriveLab() {
           ) : view === 'grid' ? (
             <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
               {visibleFiles.map((file) => {
-                const kind = kindFor(file)
-                const Icon = kindIcon[kind]
                 const menuOpen = activeMenuId === file.id
                 return (
                   <div
@@ -954,7 +1286,7 @@ export function AdminDriveLab() {
                   >
                     <div className="mb-3 flex items-start justify-between gap-2">
                       <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm dark:bg-zinc-950">
-                        <Icon className={`h-8 w-8 ${kindColor[kind]}`} />
+                        <DriveFileIcon file={file} size="md" />
                       </span>
                       <div className="flex shrink-0 items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
                         {canManagePermissions(file) && (
@@ -1021,63 +1353,65 @@ export function AdminDriveLab() {
               })}
             </div>
           ) : (
-            <ul className="divide-y divide-neutral-100 overflow-visible dark:divide-zinc-800">
+            <ul className="divide-y divide-neutral-100 dark:divide-zinc-800">
               {visibleFiles.map((file) => {
-                const kind = kindFor(file)
-                const Icon = kindIcon[kind]
                 const menuOpen = activeMenuId === file.id
+                const fileBadges = !file.isFolder ? (
+                  <>
+                    {file.classification && (
+                      <span
+                        className={`rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${classificationStyle[file.classification]}`}
+                      >
+                        {classificationLabel[file.classification]}
+                      </span>
+                    )}
+                    {file.status && (
+                      <span
+                        className={`rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                          file.status === 'APROBADO'
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : 'border-neutral-200 bg-white text-neutral-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400'
+                        }`}
+                      >
+                        {file.status === 'APROBADO' ? 'Aprobado' : 'Borrador'}
+                      </span>
+                    )}
+                    {file.directAccess && (
+                      <span className="rounded-md border border-brand-primary/20 bg-brand-tint px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
+                        Acceso directo
+                      </span>
+                    )}
+                  </>
+                ) : null
+
                 return (
                   <li
                     key={file.id}
                     onDoubleClick={() => openItem(file)}
-                    className="grid min-h-16 grid-cols-[minmax(250px,2fr)_minmax(120px,0.8fr)_minmax(160px,1fr)_minmax(72px,auto)] items-center overflow-visible px-4 transition-colors hover:bg-neutral-50 dark:hover:bg-zinc-900/70"
+                    className="flex min-h-11 items-center gap-2 px-3 py-2 transition-colors hover:bg-neutral-50 dark:hover:bg-zinc-900/70 md:grid md:min-h-16 md:grid-cols-[minmax(0,2fr)_minmax(120px,0.8fr)_minmax(160px,1fr)_auto] md:items-center md:gap-0 md:px-4 md:py-0"
                   >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Icon className={`h-5 w-5 shrink-0 ${kindColor[kind]}`} />
-                      <div className="min-w-0">
+                    <div className="flex min-w-0 flex-1 items-center gap-3 md:min-w-0">
+                      <DriveFileIcon file={file} size="sm" />
+                      <div className="min-w-0 flex-1">
                         <button
                           type="button"
                           onClick={() => openItem(file)}
-                          className="block max-w-full truncate text-left text-sm font-medium hover:text-brand-primary"
+                          className="block w-full truncate text-left text-sm font-medium hover:text-brand-primary"
                         >
                           {file.name}
                         </button>
-                        {!file.isFolder && (
-                          <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            {file.classification && (
-                              <span
-                                className={`rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${classificationStyle[file.classification]}`}
-                              >
-                                {classificationLabel[file.classification]}
-                              </span>
-                            )}
-                            {file.status && (
-                              <span
-                                className={`rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                  file.status === 'APROBADO'
-                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300'
-                                    : 'border-neutral-200 bg-white text-neutral-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400'
-                                }`}
-                              >
-                                {file.status === 'APROBADO' ? 'Aprobado' : 'Borrador'}
-                              </span>
-                            )}
-                            {file.directAccess && (
-                              <span className="rounded-md border border-brand-primary/20 bg-brand-tint px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-primary">
-                                Acceso directo
-                              </span>
-                            )}
-                          </div>
-                        )}
+                        {fileBadges ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">{fileBadges}</div>
+                        ) : null}
                       </div>
                     </div>
                     <span className="hidden truncate text-sm text-neutral-500 dark:text-zinc-400 md:block">
                       {file.ownerLabel}
                     </span>
-                    <span className="hidden text-sm text-neutral-500 dark:text-zinc-400 sm:block">
+                    <span className="hidden text-sm text-neutral-500 dark:text-zinc-400 md:block">
                       {formatModified(file.modifiedTime)}
                     </span>
-                    <div className="relative ml-auto flex items-center justify-end gap-0.5">
+                    <div className="flex shrink-0 items-center justify-end gap-0.5 md:ml-auto">
                       {canManagePermissions(file) && (
                         <button
                           type="button"
@@ -1087,7 +1421,7 @@ export function AdminDriveLab() {
                           }}
                           aria-label={`Permisos de ${file.name}`}
                           title="Permisos"
-                          className="rounded-full p-2 text-neutral-400 hover:bg-neutral-100 hover:text-brand-primary dark:hover:bg-zinc-800 dark:hover:text-brand-primary"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-brand-primary dark:hover:bg-zinc-800 dark:hover:text-brand-primary"
                         >
                           <Share2 className="h-4 w-4" />
                         </button>
@@ -1098,7 +1432,7 @@ export function AdminDriveLab() {
                           onClick={(event) => toggleRowMenu(file, event.currentTarget)}
                           aria-label={`Más acciones para ${file.name}`}
                           aria-expanded={menuOpen}
-                          className="rounded-full p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                         >
                           <MoreVertical className="h-4 w-4" />
                         </button>
@@ -1116,7 +1450,7 @@ export function AdminDriveLab() {
         </p>
         </div>
 
-        <aside className="min-w-0 flex-[3] xl:sticky xl:top-28 xl:self-start xl:max-h-[calc(100dvh-8rem)]">
+        <aside className={`min-w-0 flex-[3] ${mobileDriveTab === 'explorer' ? 'hidden xl:block' : ''} xl:sticky xl:top-28 xl:self-start xl:max-h-[calc(100dvh-8rem)]`}>
           <DriveRecentPanel uid={user?.uid} onOpen={openRecentFile} />
         </aside>
       </div>
@@ -1342,9 +1676,17 @@ export function AdminDriveLab() {
           <form onSubmit={handleUpload} className="app-modal-panel max-w-md">
             <header className="shrink-0 flex items-center justify-between border-b border-neutral-200 px-5 py-4 dark:border-zinc-800">
               <div>
-                <h2 className="font-semibold">Subir archivo</h2>
+                <h2 className="font-semibold">
+                  {isFolderUpload
+                    ? `Importar carpeta (${folderUploadSummary.fileCount} archivos)`
+                    : usableUploadFiles.length > 1
+                      ? `Subir ${usableUploadFiles.length} archivos`
+                      : 'Subir archivo'}
+                </h2>
                 <p className="mt-0.5 text-xs text-neutral-500 dark:text-zinc-400">
-                  PDF, PNG, JPEG (subida directa) · Word/Excel/PowerPoint (requieren aprobación)
+                  {uploadPickerMode === 'folder'
+                    ? 'Se crean subcarpetas y se sube cada archivo a su ruta · 1 archivo por vez'
+                    : 'Instaladores (.exe) siempre por carga optimizada · otros archivos grandes >20 MB igual'}
                 </p>
               </div>
               <button
@@ -1357,16 +1699,116 @@ export function AdminDriveLab() {
               </button>
             </header>
             <div className="app-modal-scroll space-y-4 px-5 py-5">
+              <div className="flex rounded-lg border border-neutral-200 p-1 dark:border-zinc-700">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadPickerMode('files')
+                    setUploadFiles([])
+                  }}
+                  className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    uploadPickerMode === 'files'
+                      ? 'bg-brand-primary text-white'
+                      : 'text-neutral-600 hover:bg-neutral-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  Archivos sueltos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setUploadPickerMode('folder')
+                    setUploadFiles([])
+                  }}
+                  className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    uploadPickerMode === 'folder'
+                      ? 'bg-brand-primary text-white'
+                      : 'text-neutral-600 hover:bg-neutral-100 dark:text-zinc-300 dark:hover:bg-zinc-800'
+                  }`}
+                >
+                  Carpeta completa
+                </button>
+              </div>
               <label className="block">
-                <span className="mb-1.5 block text-sm font-medium">Archivo</span>
+                <span className="mb-1.5 block text-sm font-medium">
+                  {uploadPickerMode === 'folder' ? 'Carpeta del disco' : 'Archivos'}
+                </span>
                 <input
+                  key={uploadPickerMode}
                   required
+                  multiple={uploadPickerMode === 'files'}
+                  {...(uploadPickerMode === 'folder'
+                    ? ({ webkitdirectory: '', directory: '' } as Record<string, string>)
+                    : {})}
                   type="file"
-                  accept="application/pdf,image/png,image/jpeg,.exe,.msi,.dmg,.pkg,application/x-msdownload,application/vnd.microsoft.portable-executable,application/x-msi,application/x-apple-diskimage,application/vnd.apple.installer+xml,application/octet-stream,.doc,.docx,.xls,.xlsx,.ppt,.pptx,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                  onChange={(event) => setUploadFileValue(event.target.files?.[0] ?? null)}
+                  accept="application/pdf,image/png,image/jpeg,video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm,.avi,.exe,.msi,.dmg,.pkg,.zip,.iso,.7z,.rar,.txt,application/x-msdownload,application/vnd.microsoft.portable-executable,application/x-msi,application/x-apple-diskimage,application/vnd.apple.installer+xml,application/zip,application/x-iso9660-image,application/x-7z-compressed,application/vnd.rar,text/plain,application/octet-stream,.doc,.docx,.odt,.ods,.odp,.xls,.xlsx,.ppt,.pptx,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.presentation"
+                  onChange={(event) =>
+                    setUploadFiles(Array.from(event.target.files ?? []))
+                  }
                   className="block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-neutral-100 file:px-3 file:py-1.5 file:text-sm file:font-medium dark:border-zinc-700 dark:bg-zinc-950 dark:file:bg-zinc-800"
                 />
               </label>
+              {usableUploadFiles.length > 0 && (
+                <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900/50">
+                  <p className="text-xs font-medium text-neutral-600 dark:text-zinc-300">
+                    {isFolderUpload && folderUploadSummary.rootName
+                      ? `${folderUploadSummary.rootName} · ${folderUploadSummary.fileCount} archivo(s) · ${folderUploadSummary.folderCount} subcarpeta(s) · ${formatFileSize(folderUploadSummary.totalBytes)}${
+                          usableUploadFiles.some((file) => !isWithinUploadLimit(file))
+                            ? ` · ${usableUploadFiles.filter((file) => !isWithinUploadLimit(file)).length} >${formatUploadSizeLimit(STAGING_UPLOAD_MAX_BYTES)} (se omitirán)`
+                            : ''
+                        }`
+                      : `${usableUploadFiles.length} seleccionado${usableUploadFiles.length === 1 ? '' : 's'} · 1 por vez (estable)`}
+                  </p>
+                  <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-neutral-500 dark:text-zinc-400">
+                    {usableUploadFiles.slice(0, 12).map((file) => (
+                      <li
+                        key={`${file.webkitRelativePath || file.name}-${file.size}-${file.lastModified}`}
+                        className="flex justify-between gap-2"
+                      >
+                        <span className="truncate">
+                          {file.webkitRelativePath || file.name}
+                        </span>
+                        <span className="shrink-0 tabular-nums">
+                          {formatFileSize(file.size)}
+                          {usesStagingUpload(file) ? ' · grande' : ''}
+                        </span>
+                      </li>
+                    ))}
+                    {usableUploadFiles.length > 12 && (
+                      <li className="text-neutral-400 dark:text-zinc-500">
+                        … y {usableUploadFiles.length - 12} más
+                      </li>
+                    )}
+                  </ul>
+                  {isFolderUpload && (
+                    <p className="mt-2 text-[11px] text-neutral-500 dark:text-zinc-400">
+                      Los .doc/.docx/.xlsx dentro de la carpeta generan solicitud de aprobación del jefe de área.
+                    </p>
+                  )}
+                </div>
+              )}
+              {uploadProgress && (
+                <div>
+                  <div className="mb-1 flex justify-between text-xs text-neutral-500 dark:text-zinc-400">
+                    <span>
+                      {uploadProgress.phase === 'folders'
+                        ? 'Creando carpetas'
+                        : 'Subiendo archivos'}
+                    </span>
+                    <span>
+                      {uploadProgress.completed}/{uploadProgress.total}
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-neutral-200 dark:bg-zinc-800">
+                    <div
+                      className="h-full bg-brand-primary transition-all"
+                      style={{
+                        width: `${Math.round((uploadProgress.completed / uploadProgress.total) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
               <label className="block">
                 <span className="mb-1.5 block text-sm font-medium">Clasificación</span>
                 <select
@@ -1402,14 +1844,20 @@ export function AdminDriveLab() {
               </button>
               <button
                 type="submit"
-                disabled={uploading || !uploadFileValue || !uploadReason.trim()}
+                disabled={uploading || usableUploadFiles.length === 0 || !uploadReason.trim()}
                 className="btn-primary rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
               >
                 {uploading
-                  ? 'Enviando…'
-                  : uploadFileValue && isOfficeUploadFile(uploadFileValue)
-                    ? 'Solicitar aprobación'
-                    : 'Subir'}
+                  ? uploadProgress?.phase === 'folders'
+                    ? `Creando carpetas ${uploadProgress.completed}/${uploadProgress.total}…`
+                    : `Enviando ${uploadProgress?.completed ?? 0}/${uploadProgress?.total ?? usableUploadFiles.length}…`
+                  : isFolderUpload
+                    ? `Importar ${folderUploadSummary.fileCount} archivos`
+                    : usableUploadFiles.length > 1
+                      ? `Subir ${usableUploadFiles.length} archivos`
+                      : usableUploadFiles[0] && isOfficeUploadFile(usableUploadFiles[0])
+                        ? 'Solicitar aprobación'
+                        : 'Subir archivo'}
               </button>
             </footer>
           </form>

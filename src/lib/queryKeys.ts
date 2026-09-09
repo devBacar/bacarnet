@@ -6,6 +6,7 @@ export const queryKeys = {
   areas: {
     root: () => ['areas', 'root'] as const,
     assignable: () => ['areas', 'assignable'] as const,
+    publicAssignable: () => ['areas', 'public-assignable'] as const,
   },
   boards: {
     list: (uid: string | undefined) => ['boards', 'list', uid ?? 'anon'] as const,

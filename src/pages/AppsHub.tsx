@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { CoreAppIcon } from '../components/CoreAppIcon'
 import { useAuth } from '../context'
+import { useUrlSearchParam } from '../hooks/useUrlSearchState'
 import { getCoreApps, type CoreApp, type CoreAppLinkKind } from '../services/coreAppService'
 import { toggleFavoriteApp } from '../services/userService'
 
@@ -77,7 +78,7 @@ export function AppsHub() {
   const [apps, setApps] = useState<CoreApp[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useUrlSearchParam('q')
   const [togglingId, setTogglingId] = useState<string | null>(null)
 
   const favoriteApps = userProfile?.favoriteApps ?? []

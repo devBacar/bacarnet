@@ -143,7 +143,12 @@ export function useDriveFolderMutations(uid: string | undefined, folderId: strin
                     ...created,
                     id: created.id,
                     isFolder: created.mimeType === 'application/vnd.google-apps.folder',
-                    ownerLabel: created.creator?.displayName ?? file.ownerLabel,
+                    ownerLabel:
+                      created.creator?.displayName ??
+                      created.creator?.email ??
+                      file.ownerLabel === 'Creando…'
+                        ? '—'
+                        : file.ownerLabel,
                   }
                 : file,
             ),

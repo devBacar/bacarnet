@@ -1,10 +1,17 @@
 import { ChevronLeft, ChevronRight, Phone, Shield, UserCog } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
+import { useUrlWeekParam } from '../hooks/useUrlSearchState'
 import { getWeekShiftSnapshot, type WeekShiftSnapshot } from '../services/shiftService'
 import { addWeeks, getWeekKey } from '../utils/weekUtils'
 
 export function ShiftWidget() {
-  const [weekKey, setWeekKey] = useState(getWeekKey)
+  const [weekKey, setWeekKeyParam] = useUrlWeekParam('semana')
+  const setWeekKey = useCallback(
+    (next: string | ((prev: string) => string)) => {
+      setWeekKeyParam(typeof next === 'function' ? next(weekKey) : next)
+    },
+    [setWeekKeyParam, weekKey],
+  )
   const [snapshot, setSnapshot] = useState<WeekShiftSnapshot | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)

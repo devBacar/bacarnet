@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spike Web Speech API — BacarNet RAG</title>
+    <style>
+      :root {
+        font-family: Roboto, system-ui, sans-serif;
+        color: ***REMOVED***202124;
+        background: ***REMOVED***f8f9fa;
+      }
+      body {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 1.5rem;
+      }
+      h1 {
+        color: ***REMOVED***1e3a5f;
+        font-size: 1.35rem;
+      }
+      .card {
+        background: ***REMOVED***fff;
+        border: 1px solid ***REMOVED***dadce0;
+        border-radius: 12px;
+        padding: 1rem;
+        margin: 1rem 0;
+      }
+      button {
+        background: ***REMOVED***1e3a5f;
+        color: ***REMOVED***fff;
+        border: 0;
+        border-radius: 8px;
+        padding: 0.55rem 1rem;
+        margin: 0.25rem 0.5rem 0.25rem 0;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      textarea {
+        width: 100%;
+        min-height: 80px;
+        border: 1px solid ***REMOVED***dadce0;
+        border-radius: 8px;
+        padding: 0.5rem;
+        font: inherit;
+      }
+      .log {
+        white-space: pre-wrap;
+        font-size: 0.9rem;
+        background: ***REMOVED***f1f3f4;
+        border-radius: 8px;
+        padding: 0.75rem;
+        min-height: 4rem;
+      }
+      .ok {
+        color: ***REMOVED***137333;
+      }
+      .warn {
+        color: ***REMOVED***b06000;
+      }
+      .bad {
+        color: ***REMOVED***b42318;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Spike: Web Speech API (STT + TTS)</h1>
+    <p>
+      Probá en <strong>Chrome o Edge</strong>. Requiere micrófono para dictado. Esta página no usa
+      Google Cloud — todo corre en el navegador.
+    </p>
+
+    <div class="card">
+      <h2>1. Dictado (SpeechRecognition)</h2>
+      <p id="stt-support"></p>
+      <button id="btn-stt" type="button">🎤 Escuchar (es-AR)</button>
+      <button id="btn-stt-stop" type="button" disabled>Detener</button>
+      <p><strong>Transcripción:</strong></p>
+      <div id="stt-log" class="log"></div>
+      <p><strong>Frases sugeridas para probar:</strong></p>
+      <ul>
+        <li>¿Cuántos archivos hay en Sistemas por tipo?</li>
+        <li>¿Cómo instalo el driver ASR de Queclink?</li>
+        <li>¿Quién subió el manual de cámaras?</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>2. Voz de respuesta (speechSynthesis)</h2>
+      <textarea id="tts-text">
+En Sistemas hay 78 archivos en total: 22 de texto, 7 de video, 4 comprimidos y 3 PDF. La primera consulta de inventario puede tardar hasta un minuto.</textarea
+      >
+      <button id="btn-tts" type="button">🔊 Leer respuesta</button>
+      <button id="btn-tts-stop" type="button">Silenciar</button>
+      <p id="tts-voice"></p>
+    </div>
+
+    <div class="card">
+      <h2>3. Notas de calidad</h2>
+      <div id="notes" class="log"></div>
+    </div>
+
+    <script>
+      const sttSupport = document.getElementById('stt-support')
+      const sttLog = document.getElementById('stt-log')
+      const notes = document.getElementById('notes')
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      let recognition = null
+
+      function note(text, cls) {
+        const line = document.createElement('div')
+        line.className = cls || ''
+        line.textContent = text
+        notes.appendChild(line)
+      }
+
+      if (!SpeechRecognition) {
+        sttSupport.innerHTML = '<span class="bad">SpeechRecognition no disponible en este navegador.</span>'
+        document.getElementById('btn-stt').disabled = true
+        note('STT: no soportado — habría que usar Cloud STT.', 'bad')
+      } else {
+        sttSupport.innerHTML = '<span class="ok">SpeechRecognition disponible.</span>'
+        recognition = new SpeechRecognition()
+        recognition.lang = 'es-AR'
+        recognition.interimResults = true
+        recognition.continuous = false
+
+        recognition.onresult = (event) => {
+          let text = ''
+          for (let i = event.resultIndex; i < event.results.length; i += 1) {
+            text += event.results[i][0].transcript
+          }
+          sttLog.textContent = text
+        }
+        recognition.onerror = (event) => {
+          sttLog.textContent = `Error STT: ${event.error}`
+          document.getElementById('btn-stt').disabled = false
+          document.getElementById('btn-stt-stop').disabled = true
+        }
+        recognition.onend = () => {
+          document.getElementById('btn-stt').disabled = false
+          document.getElementById('btn-stt-stop').disabled = true
+        }
+
+        document.getElementById('btn-stt').onclick = () => {
+          sttLog.textContent = 'Escuchando…'
+          document.getElementById('btn-stt').disabled = true
+          document.getElementById('btn-stt-stop').disabled = false
+          recognition.start()
+        }
+        document.getElementById('btn-stt-stop').onclick = () => recognition.stop()
+      }
+
+      const voices = () => speechSynthesis.getVoices()
+      function pickSpanishVoice() {
+        const list = voices()
+        return (
+          list.find((v) => v.lang.toLowerCase().startsWith('es-ar')) ||
+          list.find((v) => v.lang.toLowerCase().startsWith('es-')) ||
+          list[0]
+        )
+      }
+
+      speechSynthesis.onvoiceschanged = () => {
+        const v = pickSpanishVoice()
+        document.getElementById('tts-voice').textContent = v
+          ? `Voz TTS: ${v.name} (${v.lang})`
+          : 'Sin voces españolas detectadas.'
+      }
+
+      document.getElementById('btn-tts').onclick = () => {
+        speechSynthesis.cancel()
+        const utter = new SpeechSynthesisUtterance(document.getElementById('tts-text').value)
+        const voice = pickSpanishVoice()
+        if (voice) utter.voice = voice
+        utter.lang = voice?.lang || 'es-AR'
+        utter.rate = 1
+        speechSynthesis.speak(utter)
+      }
+      document.getElementById('btn-tts-stop').onclick = () => speechSynthesis.cancel()
+
+      note(`Navegador: ${navigator.userAgent}`, '')
+      note('TTS: gratuito vía speechSynthesis; calidad robótica pero usable para piloto.', 'warn')
+      note('STT: gratuito; precisión variable con términos técnicos (Queclink, ASR).', 'warn')
+      note('Recomendación piloto: STT nativo + TTS nativo; Cloud TTS solo si molesta la voz.', 'ok')
+    </script>
+  </body>
+</html>

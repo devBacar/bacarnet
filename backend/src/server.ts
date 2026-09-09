@@ -6,6 +6,7 @@ import { driveRouter } from './modules/drive/routes.js'
 import { usersRouter } from './modules/users/routes.js'
 import { notificationsRouter } from './modules/notifications/routes.js'
 import { approvalRequestsRouter } from './modules/approvalRequests/routes.js'
+import { catalogRouter } from './modules/areas/routes.js'
 import {
   handleOfficeUploadStagingContentPreflight,
   serveOfficeUploadStagingContent,
@@ -37,6 +38,8 @@ app.use(
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
+
+app.use('/api/catalog', catalogRouter)
 
 app.use('/api/drive', driveRouter)
 app.use('/api/boards', boardsRouter)

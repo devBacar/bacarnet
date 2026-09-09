@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight, ScrollText } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import {
   fetchAuditLogs,
   type AuditFilterBy,
@@ -133,11 +134,42 @@ function hasMetadata(log: AuditLogDto): boolean {
   return Object.keys(log.metadata ?? {}).length > 0
 }
 
+function parseAuditFilterBy(raw: string | null): '' | AuditFilterBy {
+  if (raw === 'userId' || raw === 'targetId' || raw === 'action') return raw
+  return ''
+}
+
+function readAuditFiltersFromUrl(params: URLSearchParams) {
+  return {
+    filterBy: parseAuditFilterBy(params.get('filterBy')),
+    value: params.get('valor') ?? '',
+    startDate: params.get('desde') ?? '',
+    endDate: params.get('hasta') ?? '',
+  }
+}
+
+function writeAuditFiltersToUrl(
+  params: URLSearchParams,
+  filters: ReturnType<typeof readAuditFiltersFromUrl>,
+) {
+  params.delete('filterBy')
+  params.delete('valor')
+  params.delete('desde')
+  params.delete('hasta')
+  if (filters.filterBy) params.set('filterBy', filters.filterBy)
+  if (filters.value.trim()) params.set('valor', filters.value.trim())
+  if (filters.startDate) params.set('desde', filters.startDate)
+  if (filters.endDate) params.set('hasta', filters.endDate)
+}
+
 export function AdminAudit() {
-  const [filterBy, setFilterBy] = useState<'' | AuditFilterBy>('')
-  const [value, setValue] = useState('')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [filterBy, setFilterBy] = useState<'' | AuditFilterBy>(
+    () => readAuditFiltersFromUrl(searchParams).filterBy,
+  )
+  const [value, setValue] = useState(() => readAuditFiltersFromUrl(searchParams).value)
+  const [startDate, setStartDate] = useState(() => readAuditFiltersFromUrl(searchParams).startDate)
+  const [endDate, setEndDate] = useState(() => readAuditFiltersFromUrl(searchParams).endDate)
   const [logs, setLogs] = useState<AuditLogDto[]>([])
   const [nextPageToken, setNextPageToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -181,6 +213,13 @@ export function AdminAudit() {
     void load()
   }, [])
 
+  const applyFilters = () => {
+    const next = new URLSearchParams(searchParams)
+    writeAuditFiltersToUrl(next, { filterBy, value, startDate, endDate })
+    setSearchParams(next, { replace: true })
+    void load()
+  }
+
   return (
     <div className="w-full space-y-6">
       <header>
@@ -197,7 +236,7 @@ export function AdminAudit() {
         className="flex flex-wrap items-end gap-3 rounded-lg border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
         onSubmit={(e) => {
           e.preventDefault()
-          void load()
+          applyFilters()
         }}
       >
         <label className="flex min-w-[10rem] flex-col gap-1 text-xs font-medium text-neutral-600 dark:text-gray-400">

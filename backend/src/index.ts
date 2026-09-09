@@ -22,8 +22,8 @@ setGlobalOptions({
 export const api = onRequest(
   {
     cors: false,
-    timeoutSeconds: 60,
-    memory: '256MiB',
+    timeoutSeconds: 900,
+    memory: '2GiB',
     invoker: 'public',
     secrets: [boardsSessionSecret],
   },

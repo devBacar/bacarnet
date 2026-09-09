@@ -4,13 +4,15 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../context'
 import { useGlobalSettings } from '../context/GlobalSettingsContext'
 import {
+  getRagAssistantGlobalEnabled,
   updateGlobalSettings,
+  updateRagAssistantGlobalEnabled,
   type GlobalModuleFlag,
   type GlobalSettings,
 } from '../services/configService'
 
 interface ModuleToggleProps {
-  id: GlobalModuleFlag
+  id: string
   label: string
   description: string
   checked: boolean
@@ -59,7 +61,7 @@ const MODULE_TOGGLES: {
   {
     key: 'directoryEnabled',
     label: 'Mostrar Contactos',
-    description: 'Incluye la pestaña Contactos y el widget de cumpleaños en el inicio.',
+    description: 'Incluye la pestaña Contactos en la navegación y el bloque de contactos en el inicio.',
   },
   {
     key: 'boardsEnabled',
@@ -72,18 +74,8 @@ const MODULE_TOGGLES: {
     description: 'Campana de notificaciones en la barra superior para todos los empleados.',
   },
   {
-    key: 'newsEnabled',
-    label: 'Mostrar Noticias',
-    description: 'Feed de noticias internas y widget de noticias externas en el inicio.',
-  },
-  {
-    key: 'kudosEnabled',
-    label: 'Mostrar Reconocimientos (Kudos)',
-    description: 'Muro de reconocimientos y envío de kudos en el dashboard principal.',
-  },
-  {
     key: 'pollsEnabled',
-    label: 'Mostrar Encuestas Rápidas',
+    label: 'Mostrar Encuestas',
     description: 'Widget de encuesta activa en la columna lateral del inicio.',
   },
 ]
@@ -94,6 +86,8 @@ export function ModuleSettings() {
   const isSuperAdmin = userProfile?.permissions.super_admin === true
 
   const [draft, setDraft] = useState<GlobalSettings | null>(null)
+  const [ragAssistantEnabled, setRagAssistantEnabled] = useState(false)
+  const [loadingRagFlag, setLoadingRagFlag] = useState(true)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -101,6 +95,20 @@ export function ModuleSettings() {
       setDraft(liveSettings)
     }
   }, [liveSettings, loading])
+
+  useEffect(() => {
+    if (!isSuperAdmin) {
+      setLoadingRagFlag(false)
+      return
+    }
+
+    void getRagAssistantGlobalEnabled()
+      .then(setRagAssistantEnabled)
+      .catch((err) => {
+        console.error('Error al cargar rag.enabled:', err)
+      })
+      .finally(() => setLoadingRagFlag(false))
+  }, [isSuperAdmin])
 
   if (!isSuperAdmin) {
     return null
@@ -115,7 +123,10 @@ export function ModuleSettings() {
 
     setSaving(true)
     try {
-      await updateGlobalSettings(draft)
+      await Promise.all([
+        updateGlobalSettings(draft),
+        updateRagAssistantGlobalEnabled(ragAssistantEnabled),
+      ])
       toast.success('Configuración global guardada')
     } catch (err) {
       console.error('Error al guardar configuración:', err)
@@ -160,7 +171,7 @@ export function ModuleSettings() {
           </div>
         )}
 
-        {loading ? (
+        {loading || loadingRagFlag ? (
           <div className="flex items-center justify-center py-12">
             <div className="spinner-brand h-8 w-8 animate-spin rounded-full border-4" />
           </div>
@@ -179,6 +190,13 @@ export function ModuleSettings() {
                   onChange={(value) => handleToggle(key, value)}
                 />
               ))}
+              <ModuleToggle
+                id="ragAssistantEnabled"
+                label="Habilitar Asistente BacarNet"
+                description="Activa el piloto global del asistente. Cada usuario también necesita el permiso «Asistente BacarNet» en su perfil."
+                checked={ragAssistantEnabled}
+                onChange={setRagAssistantEnabled}
+              />
             </div>
 
             <div className="flex justify-end border-t border-neutral-100 dark:border-zinc-800 pt-6">

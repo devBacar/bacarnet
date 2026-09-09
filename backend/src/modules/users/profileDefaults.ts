@@ -18,6 +18,7 @@ export const EXTERNAL_PENDING_PERMISSIONS = {
   manage_links: false,
   manage_users: false,
   super_admin: false,
+  rag_assistant: false,
 } as const
 
 export const DEFAULT_PERMISSIONS = {
@@ -28,6 +29,7 @@ export const DEFAULT_PERMISSIONS = {
   manage_links: false,
   manage_users: false,
   super_admin: false,
+  rag_assistant: false,
 } as const
 
 export const SUPER_ADMIN_PERMISSIONS = {
@@ -38,6 +40,7 @@ export const SUPER_ADMIN_PERMISSIONS = {
   manage_links: true,
   manage_users: true,
   super_admin: true,
+  rag_assistant: true,
 } as const
 
 export type BootstrapSource = 'register' | 'google'

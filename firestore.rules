@@ -253,6 +253,31 @@ service cloud.firestore {
       allow read: if canReadIntranetContent();
       allow create, update, delete: if isSuperAdmin();
     }
+
+    // Mesa de ayuda Sistemas: solo Admin SDK (backend). Sin acceso cliente.
+    match /helpdeskTeam/{document} {
+      allow read, write: if false;
+    }
+
+    match /helpdeskTickets/{ticketId} {
+      allow read, write: if false;
+
+      match /reuniones/{reunionId} {
+        allow read, write: if false;
+      }
+
+      match /notas/{notaId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /helpdeskEmailLog/{document} {
+      allow read, write: if false;
+    }
+
+    match /helpdeskUsedTokens/{document} {
+      allow read, write: if false;
+    }
   }
 }
 

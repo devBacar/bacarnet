@@ -7,6 +7,7 @@ import { usersRouter } from './modules/users/routes.js'
 import { notificationsRouter } from './modules/notifications/routes.js'
 import { approvalRequestsRouter } from './modules/approvalRequests/routes.js'
 import { catalogRouter } from './modules/areas/routes.js'
+import { helpdeskRouter } from './modules/helpdesk/routes.js'
 import {
   handleOfficeUploadStagingContentPreflight,
   serveOfficeUploadStagingContent,
@@ -26,6 +27,12 @@ app.use(
     origin: [
       'http://localhost:5173',
       'http://127.0.0.1:5173',
+      'http://localhost:5174',
+      'http://127.0.0.1:5174',
+      'http://localhost:5175',
+      'http://127.0.0.1:5175',
+      'http://localhost:5176',
+      'http://127.0.0.1:5176',
       'https://bacarnet.web.app',
       'https://bacarnet.firebaseapp.com',
       'https://intranet-bacar.web.app',
@@ -40,6 +47,7 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.use('/api/catalog', catalogRouter)
+app.use('/api/helpdesk', helpdeskRouter)
 
 app.use('/api/drive', driveRouter)
 app.use('/api/boards', boardsRouter)

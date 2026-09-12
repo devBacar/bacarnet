@@ -47,3 +47,12 @@ export async function listAssignableRootAreas(): Promise<AssignableRootArea[]> {
   areas.sort((a, b) => a.name.localeCompare(b.name, 'es'))
   return areas
 }
+
+/** Resuelve id de área raíz asignable por `folders.name` (case-insensitive). */
+export async function findAssignableRootAreaIdByName(areaNombre: string): Promise<string | null> {
+  const needle = areaNombre.trim().toLowerCase()
+  if (!needle) return null
+  const areas = await listAssignableRootAreas()
+  const hit = areas.find((a) => a.name.trim().toLowerCase() === needle)
+  return hit?.id ?? null
+}

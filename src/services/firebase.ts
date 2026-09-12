@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app'
 import { getAnalytics } from 'firebase/analytics'
-import { getAuth } from 'firebase/auth'
+import { getAuth, signInWithCustomToken } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
@@ -19,8 +19,11 @@ const auth = getAuth(app)
 const db = getFirestore(app)
 
 if (import.meta.env.DEV) {
-  // @ts-ignore
+  // @ts-expect-error helpers locales para scripts Playwright / depuración
   window.__getIdToken = () => auth.currentUser?.getIdToken()
+  // @ts-expect-error helpers locales para scripts Playwright / depuración
+  window.__e2eSignInWithCustomToken = (customToken: string) =>
+    signInWithCustomToken(auth, customToken)
 }
 
 export { app, analytics, auth, db }

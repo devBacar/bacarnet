@@ -15,14 +15,17 @@ import {
   Directory,
   DriveDocumentViewerPage,
   HelpCenter,
+  HelpdeskSolicitud,
   Home,
   IntranetHub,
+  MisSolicitudesSistemas,
   AccountPendingPage,
   AccountRejectedPage,
   OfficeUploadPreviewPage,
   RagAssistantRedirect,
   RagPilotSistemas,
   Resources,
+  SistemasMesaAyuda,
 } from '../pages'
 import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
 import { ProtectedRoute } from './ProtectedRoute'
@@ -39,6 +42,7 @@ export function AppRoutes() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="support" element={<HelpdeskSolicitud />} />
         {import.meta.env.DEV ? (
           <Route path="__dev/weather-utilities-preview" element={<WeatherUtilitiesPreview />} />
         ) : null}
@@ -77,6 +81,8 @@ export function AppRoutes() {
             </Route>
 
             <Route element={<CorporateAccountRoute />}>
+              <Route path="mis-solicitudes-sistemas" element={<MisSolicitudesSistemas />} />
+              <Route path="sistemas/mesa-ayuda" element={<SistemasMesaAyuda />} />
               <Route path="ayuda" element={<HelpCenter />} />
             </Route>
           </Route>

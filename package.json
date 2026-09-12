@@ -23,6 +23,7 @@
     "governing-area:remove-root:dry-run": "node scripts/remove-root-area-id.mjs --dry-run",
     "governing-area:remove-root": "node scripts/remove-root-area-id.mjs",
     "test:rules:users": "node scripts/test-users-rules.mjs",
+    "test:rules:helpdesk": "node scripts/test-helpdesk-rules.mjs",
     "functions:build": "npm --prefix backend run build",
     "functions:serve": "npm --prefix backend run build && npx firebase emulators:start --only functions --project bacar-web",
     "token:test": "node backend/scripts/get-test-token.mjs",
@@ -96,6 +97,7 @@
     "@vitejs/plugin-react": "^4.5.2",
     "firebase-admin": "^13.6.0",
     "oxlint": "^1.69.0",
+    "playwright": "^1.63.0",
     "tailwindcss": "^4.3.1",
     "typescript": "~6.0.2",
     "vite": "^6.3.5"

@@ -1,6 +1,7 @@
 import { google, type calendar_v3, type gmail_v1 } from 'googleapis'
 import {
   CALENDAR_EVENTS_SCOPES,
+  CALENDAR_READONLY_SCOPES,
   GMAIL_READONLY_SCOPES,
   GMAIL_SEND_SCOPES,
   getEnv,
@@ -141,5 +142,10 @@ export async function getGmailReadonly(subject: string): Promise<gmail_v1.Gmail>
 
 export async function getCalendar(subject: string): Promise<calendar_v3.Calendar> {
   const auth = await getWorkspaceAuth(subject, CALENDAR_EVENTS_SCOPES)
+  return google.calendar({ version: 'v3', auth })
+}
+
+export async function getCalendarReadonly(subject: string): Promise<calendar_v3.Calendar> {
+  const auth = await getWorkspaceAuth(subject, CALENDAR_READONLY_SCOPES)
   return google.calendar({ version: 'v3', auth })
 }

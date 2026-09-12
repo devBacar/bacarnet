@@ -1,4 +1,4 @@
-import { BookOpen, BookUser, Home, HardDrive, LayoutDashboard, Link2, LogOut, Menu, Moon, ScrollText, Sun } from 'lucide-react'
+import { BookOpen, BookUser, Headphones, Home, HardDrive, LayoutDashboard, Link2, LogOut, Menu, Moon, ScrollText, Sun } from 'lucide-react'
 
 import { useMemo, useState } from 'react'
 
@@ -103,6 +103,10 @@ export function Navbar() {
     }
 
     if (!externalAccount) {
+
+      items.push({ to: '/mis-solicitudes-sistemas', label: 'Mis solicitudes', icon: Headphones })
+
+      items.push({ to: '/sistemas/mesa-ayuda', label: 'Mesa de ayuda', icon: Headphones })
 
       items.push({ to: '/ayuda', label: 'Ayuda', icon: BookOpen })
 
@@ -263,6 +267,26 @@ export function Navbar() {
             <NavLink to="/admin/auditoria" className={navLinkClass}>
 
               Auditoría
+
+            </NavLink>
+
+          )}
+
+          {!externalAccount && (
+
+            <NavLink to="/mis-solicitudes-sistemas" className={navLinkClass}>
+
+              Mis solicitudes
+
+            </NavLink>
+
+          )}
+
+          {!externalAccount && (
+
+            <NavLink to="/sistemas/mesa-ayuda" className={navLinkClass}>
+
+              Mesa de ayuda
 
             </NavLink>
 

@@ -27,12 +27,16 @@ loadLocalEnvFiles()
 
 const DEFAULT_DOMAIN = 'bacarsa.com.ar'
 const DEFAULT_IMPERSONATE = 'datos@bacarsa.com.ar'
+const DEFAULT_PUBLIC_APP_URL = 'https://bacarnet.web.app'
 
 export const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive'] as const
 export const GMAIL_SEND_SCOPES = ['https://www.googleapis.com/auth/gmail.send'] as const
 export const GMAIL_READONLY_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'] as const
 export const CALENDAR_EVENTS_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
+] as const
+export const CALENDAR_READONLY_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.readonly',
 ] as const
 
 export function getEnv() {
@@ -60,6 +64,17 @@ export function getEnv() {
   const driveId = process.env.DRIVE_ID?.trim() || ''
   const boardsContainerFolderId = process.env.BOARDS_CONTAINER_FOLDER_ID?.trim() || ''
   const boardsSessionSecret = process.env.BOARDS_SESSION_SECRET?.trim() || ''
+  const helpdeskTokenSecret = process.env.HELPDESK_TOKEN_SECRET?.trim() || ''
+  const helpdeskN8nApiKey = process.env.HELPDESK_N8N_API_KEY?.trim() || ''
+  /** API key saliente hacia webhooks n8n (distinta de HELPDESK_N8N_API_KEY entrante). */
+  const helpdeskN8nOutboundApiKey = process.env.HELPDESK_N8N_OUTBOUND_API_KEY?.trim() || ''
+  const helpdeskN8nWebhookSolicitudCreada =
+    process.env.HELPDESK_N8N_WEBHOOK_SOLICITUD_CREADA?.trim() || ''
+  const helpdeskN8nWebhookEstadoCambiado =
+    process.env.HELPDESK_N8N_WEBHOOK_ESTADO_CAMBIADO?.trim() || ''
+  const helpdeskN8nWebhookRecordatorio =
+    process.env.HELPDESK_N8N_WEBHOOK_RECORDATORIO?.trim() || ''
+  const publicAppUrl = (process.env.PUBLIC_APP_URL ?? DEFAULT_PUBLIC_APP_URL).trim().replace(/\/+$/, '')
   const pendingUploadsBucket =
     process.env.PENDING_UPLOADS_BUCKET?.trim() || 'bacar-pending-uploads'
   const ragStagingBucket = process.env.RAG_STAGING_BUCKET?.trim() || 'bacar-rag-staging'
@@ -92,6 +107,13 @@ export function getEnv() {
     driveId,
     boardsContainerFolderId,
     boardsSessionSecret,
+    helpdeskTokenSecret,
+    helpdeskN8nApiKey,
+    helpdeskN8nOutboundApiKey,
+    helpdeskN8nWebhookSolicitudCreada,
+    helpdeskN8nWebhookEstadoCambiado,
+    helpdeskN8nWebhookRecordatorio,
+    publicAppUrl,
     pendingUploadsBucket,
     ragStagingBucket,
     ragStagingLocation,

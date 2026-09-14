@@ -6,6 +6,7 @@ export interface JefeAreaRow {
   email?: string
   nombre?: string
   area?: string
+  link?: string
   enviado?: boolean
   respondido?: boolean
   fecha_envio?: string | number | Date | null
@@ -110,6 +111,13 @@ export async function runScheduledReminder(input?: {
       if (input?.postWebhook) {
         await input.postWebhook(row)
       } else {
+        const email = typeof row.email === 'string' ? row.email.trim() : ''
+        const nombre = typeof row.nombre === 'string' ? row.nombre.trim() : ''
+        const area = typeof row.area === 'string' ? row.area.trim() : ''
+        const link = typeof row.link === 'string' ? row.link.trim() : ''
+        if (!email || !nombre || !area || !link) {
+          throw new Error('fila elegible sin email, nombre, area o link')
+        }
         const response = await fetch(config.webhookUrl, {
           method: 'POST',
           headers: {
@@ -117,7 +125,7 @@ export async function runScheduledReminder(input?: {
             Accept: 'application/json',
             ...(config.outboundApiKey ? { 'X-Api-Key': config.outboundApiKey } : {}),
           },
-          body: JSON.stringify({ evento: 'recordatorio', jefeArea: row }),
+          body: JSON.stringify({ email, nombre, area, link }),
         })
         if (!response.ok) throw new Error(`webhook respondió ${response.status}`)
       }

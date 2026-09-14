@@ -1,4 +1,4 @@
-import { defineSecret, defineString } from 'firebase-functions/params'
+import { defineSecret } from 'firebase-functions/params'
 import { setGlobalOptions } from 'firebase-functions/v2'
 import { onRequest } from 'firebase-functions/v2/https'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
@@ -15,9 +15,8 @@ const helpdeskN8nWebhookEstadoCambiado = defineSecret(
   'HELPDESK_N8N_WEBHOOK_' + 'ESTADO_CAMBIADO',
 )
 const n8nMgmtApiKey = defineSecret('N8N_MGMT_API_KEY')
-const helpdeskN8nWebhookRecordatorio = defineString(
-  'HELPDESK_N8N_WEBHOOK_RECORDATORIO',
-  { default: '' },
+const helpdeskN8nWebhookRecordatorio = defineSecret(
+  'HELPDESK_N8N_WEBHOOK_' + 'RECORDATORIO',
 )
 
 const adminMode = initFirebaseAdmin()
@@ -86,11 +85,9 @@ export const recordarSolicitudesHelpdesk = onSchedule(
     timeZone: 'America/Argentina/Buenos_Aires',
     timeoutSeconds: 300,
     memory: '256MiB',
-    secrets: [n8nMgmtApiKey, helpdeskN8nOutboundApiKey],
+    secrets: [n8nMgmtApiKey, helpdeskN8nOutboundApiKey, helpdeskN8nWebhookRecordatorio],
   },
   async () => {
-    process.env.HELPDESK_N8N_WEBHOOK_RECORDATORIO =
-      helpdeskN8nWebhookRecordatorio.value()
     const { runScheduledReminder } = await import(
       './modules/helpdesk/scheduledReminder.js'
     )

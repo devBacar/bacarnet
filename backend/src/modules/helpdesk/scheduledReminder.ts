@@ -21,6 +21,20 @@ export interface ScheduledReminderSummary {
   errores: number
 }
 
+export function reminderWebhookBody(row: JefeAreaRow): {
+  email: string
+  nombre: string
+  area: string
+  link: string
+} | null {
+  const email = typeof row.email === 'string' ? row.email.trim() : ''
+  const nombre = typeof row.nombre === 'string' ? row.nombre.trim() : ''
+  const area = typeof row.area === 'string' ? row.area.trim() : ''
+  const link = typeof row.link === 'string' ? row.link.trim() : ''
+  if (!email || !nombre || !area || !link) return null
+  return { email, nombre, area, link }
+}
+
 export function isReminderEligible(row: JefeAreaRow, now = new Date()): boolean {
   if (row.enviado !== true || row.respondido !== false || !row.fecha_envio) return false
   const sentAt = new Date(row.fecha_envio).getTime()
@@ -111,11 +125,8 @@ export async function runScheduledReminder(input?: {
       if (input?.postWebhook) {
         await input.postWebhook(row)
       } else {
-        const email = typeof row.email === 'string' ? row.email.trim() : ''
-        const nombre = typeof row.nombre === 'string' ? row.nombre.trim() : ''
-        const area = typeof row.area === 'string' ? row.area.trim() : ''
-        const link = typeof row.link === 'string' ? row.link.trim() : ''
-        if (!email || !nombre || !area || !link) {
+        const body = reminderWebhookBody(row)
+        if (!body) {
           throw new Error('fila elegible sin email, nombre, area o link')
         }
         const response = await fetch(config.webhookUrl, {
@@ -125,7 +136,7 @@ export async function runScheduledReminder(input?: {
             Accept: 'application/json',
             ...(config.outboundApiKey ? { 'X-Api-Key': config.outboundApiKey } : {}),
           },
-          body: JSON.stringify({ email, nombre, area, link }),
+          body: JSON.stringify(body),
         })
         if (!response.ok) throw new Error(`webhook respondió ${response.status}`)
       }

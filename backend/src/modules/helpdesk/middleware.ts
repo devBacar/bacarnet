@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 import { isActiveHelpdeskTeamMemberByEmail } from './repository.js'
 
-const FORBIDDEN_MESSAGE = 'No tenés acceso a la mesa de ayuda de Sistemas'
+const FORBIDDEN_MESSAGE = 'No tenés acceso al panel de Desarrollo de Sistemas'
 
 /** Requiere req.authedUser (usar después de requireWorkspaceUser). */
 export async function requireHelpdeskTeamMember(

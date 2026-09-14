@@ -55,7 +55,7 @@ async function expect403(url, token, label) {
   })
   record(
     label,
-    res.status === 403 && body.error?.includes('mesa de ayuda'),
+    res.status === 403 && body.error?.includes('panel de Desarrollo'),
     `status ${res.status}`,
   )
 }

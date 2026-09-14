@@ -1,5 +1,5 @@
 import { CalendarClock, CheckCircle2, Headphones, Loader2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import { useSearchParams } from 'react-router-dom'
 import {
@@ -34,9 +34,9 @@ function formatHourLabel(hour: number): string {
   return `${String(hour).padStart(2, '0')}:00`
 }
 
-function HelpdeskPageShell({ children }: { children: React.ReactNode }) {
+function HelpdeskPageShell({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-white text-brand-body dark:bg-zinc-950">
+    <div className="min-h-screen bg-[var(--color-surface-page)] text-brand-body dark:bg-zinc-950">
       <main className="layout-container py-8 sm:py-10">
         <div className="mx-auto w-full max-w-4xl space-y-8">{children}</div>
       </main>
@@ -47,16 +47,18 @@ function HelpdeskPageShell({ children }: { children: React.ReactNode }) {
 function HelpdeskHeader() {
   return (
     <header className="space-y-3">
-      <div className="flex items-center gap-2 text-brand-primary">
-        <Headphones className="h-6 w-6" aria-hidden />
-        <p className="text-xs font-semibold uppercase tracking-[0.14em]">Sistemas · Helpdesk</p>
+      <div className="flex items-center gap-3 text-brand-primary">
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-tint/50 text-brand-primary dark:bg-brand-tint/20">
+          <Headphones className="h-5 w-5" aria-hidden />
+        </span>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em]">Sistemas · Desarrollo</p>
       </div>
       <h1 className="text-2xl font-semibold tracking-tight text-heading sm:text-3xl">
         Solicitar primera reunión
       </h1>
       <p className="max-w-2xl text-sm leading-relaxed text-body-muted">
-        Contanos la problemática, indicá la urgencia y elegí un horario para la reunión inicial con
-        el equipo de Sistemas.
+        Contanos en qué podemos ayudarte, estamos a disposición. Agendá una reunión con nosotros y
+        nos das más detalles.
       </p>
     </header>
   )
@@ -69,7 +71,7 @@ function StatusPanel({
 }: {
   tone: 'error' | 'success'
   title: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
   const isError = tone === 'error'
   return (
@@ -77,7 +79,7 @@ function StatusPanel({
       className={
         isError
           ? 'rounded-xl border border-red-200 bg-red-50 p-6 dark:border-red-900/50 dark:bg-red-950/30'
-          : 'rounded-xl border border-neutral-200 bg-neutral-50 p-6 dark:border-zinc-800 dark:bg-zinc-900/60'
+          : 'card-minimal p-6'
       }
     >
       <div className="flex items-start gap-3">
@@ -108,10 +110,11 @@ export function HelpdeskSolicitud() {
   const [selectedSlot, setSelectedSlot] = useState<{ fecha: string; hora: string } | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const availabilityRequestRef = useRef(0)
 
   const slotMap = useMemo(() => {
     const map = new Map<string, HelpdeskSlotDisponibilidad>()
-    for (const slot of slots) {
+    for (const slot of slots ?? []) {
       map.set(slotKey(slot.fecha, slot.hora), slot)
     }
     return map
@@ -125,13 +128,15 @@ export function HelpdeskSolicitud() {
   const loadAvailability = useCallback(
     async (offset: number, options?: { clearSelection?: boolean }) => {
       if (!token) return
+      const requestId = ++availabilityRequestRef.current
       setLoadingAvailability(true)
       if (options?.clearSelection !== false) {
         setSelectedSlot(null)
       }
       try {
         const data = await fetchDisponibilidadInicial(token, offset)
-        setSlots(data.slots)
+        if (requestId !== availabilityRequestRef.current) return
+        setSlots(Array.isArray(data.slots) ? data.slots : [])
         setFatalError(null)
       } catch (err) {
         if (err instanceof HelpdeskApiError && err.status === 401) {
@@ -143,7 +148,9 @@ export function HelpdeskSolicitud() {
           err instanceof HelpdeskApiError ? err.message : HELPDESK_GENERIC_ERROR_MESSAGE
         toast.error(message)
       } finally {
-        setLoadingAvailability(false)
+        if (requestId === availabilityRequestRef.current) {
+          setLoadingAvailability(false)
+        }
       }
     },
     [token],
@@ -235,7 +242,7 @@ export function HelpdeskSolicitud() {
       <HelpdeskHeader />
 
       <div className="space-y-6">
-        <section className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
+        <section className="card-minimal p-5 sm:p-6">
           <label htmlFor="helpdesk-problematica" className="block text-sm font-semibold text-heading">
             ¿Qué necesitás resolver?
           </label>
@@ -249,11 +256,11 @@ export function HelpdeskSolicitud() {
             rows={5}
             required
             placeholder="Ej.: No puedo acceder a… / Necesitamos integrar…"
-            className="input-brand-focus mt-3 w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2.5 text-sm text-heading placeholder:text-neutral-400 dark:border-zinc-700 dark:bg-zinc-950 dark:placeholder:text-zinc-500"
+            className="input-brand-focus input-surface mt-3 w-full resize-y rounded-lg px-3 py-2.5 text-sm shadow-sm"
           />
         </section>
 
-        <section className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
+        <section className="card-minimal p-5 sm:p-6">
           <p className="text-sm font-semibold text-heading">Urgencia</p>
           <p className="mt-1 text-sm text-body-muted">Elegí la opción que mejor describa la situación.</p>
           <div className="mt-4 flex flex-wrap gap-2">
@@ -278,7 +285,7 @@ export function HelpdeskSolicitud() {
           </div>
         </section>
 
-        <section className="rounded-xl border border-neutral-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
+        <section className="card-minimal p-5 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-heading">Horario de reunión</p>
@@ -290,7 +297,7 @@ export function HelpdeskSolicitud() {
               type="button"
               disabled={loadingAvailability}
               onClick={() => setSemanaOffset((prev) => prev + 1)}
-              className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:border-brand-primary/30 hover:bg-brand-tint/30 hover:text-brand-primary disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-300"
+              className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-medium text-neutral-700 transition-colors hover:border-brand-primary/30 hover:bg-brand-tint/30 hover:text-brand-primary disabled:pointer-events-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-300"
             >
               Semana siguiente
             </button>
@@ -299,8 +306,9 @@ export function HelpdeskSolicitud() {
           <div className="relative mt-6 overflow-x-auto">
             {loadingAvailability ? (
               <div
-                className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/75 dark:bg-zinc-900/75"
+                className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80"
                 aria-live="polite"
+                aria-busy="true"
               >
                 <div className="flex items-center gap-2 text-sm text-body-muted">
                   <Loader2 className="h-5 w-5 animate-spin text-brand-primary" aria-hidden />
@@ -356,8 +364,8 @@ export function HelpdeskSolicitud() {
                                 !entry.libre
                                   ? 'cursor-not-allowed border-neutral-100 bg-neutral-100 text-neutral-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-600'
                                   : isSelected
-                                    ? 'border-brand-primary bg-brand-primary text-white'
-                                    : 'border-neutral-200 bg-white text-brand-primary hover:border-brand-primary/40 hover:bg-brand-tint/40 dark:border-zinc-700 dark:bg-zinc-950'
+                                    ? 'border-brand-primary bg-brand-primary text-white shadow-sm ring-2 ring-brand ring-offset-1 dark:ring-offset-zinc-900'
+                                    : 'border-neutral-200 bg-white text-brand-primary hover:border-brand-primary/40 hover:bg-brand-tint/40 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:bg-brand-tint/20'
                               }`}
                             >
                               {entry.libre ? (isSelected ? 'Elegido' : 'Libre') : 'Ocupado'}

@@ -118,7 +118,7 @@ export function SistemasMesaAyuda() {
           <ShieldX className="mx-auto h-10 w-10 text-brand-primary" aria-hidden />
           <h1 className="mt-4 text-xl font-semibold text-heading">No tenés acceso</h1>
           <p className="mt-2 text-sm leading-relaxed text-body-muted">
-            La mesa de ayuda de Sistemas es solo para el equipo interno. Si creés que deberías
+            El panel de Desarrollo de Sistemas es solo para el equipo interno. Si creés que deberías
             entrar, contactá a Dirección de Sistemas.
           </p>
         </div>
@@ -131,10 +131,10 @@ export function SistemasMesaAyuda() {
       <header className="scroll-mt-24 space-y-3">
         <div className="flex items-center gap-2 text-brand-primary">
           <Headphones className="h-6 w-6" aria-hidden />
-          <p className="text-xs font-semibold uppercase tracking-[0.14em]">Sistemas</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em]">Sistemas · Desarrollo</p>
         </div>
         <h1 className="text-2xl font-semibold tracking-tight text-heading sm:text-3xl">
-          Mesa de ayuda
+          Solicitudes
         </h1>
         <p className="max-w-2xl text-sm text-body-muted">
           Panel interno para gestionar solicitudes de áreas, reuniones y seguimiento.

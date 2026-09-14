@@ -86,6 +86,9 @@ const reminderSummary = await runScheduledReminder({
     {
       id: 1,
       email: 'elegible@bacarsa.com.ar',
+      nombre: 'Jefe Elegible',
+      area: 'Sistemas',
+      link: 'https://bacarnet.web.app/support?t=existing-token',
       enviado: true,
       respondido: false,
       fecha_envio: '2026-09-10T11:59:59.000Z',
@@ -107,6 +110,15 @@ const reminderSummary = await runScheduledReminder({
   ],
   postWebhook: async (row) => {
     posted.push(row.id)
+    const { reminderWebhookBody } = await import('../lib/modules/helpdesk/scheduledReminder.js')
+    const body = reminderWebhookBody(row)
+    if (
+      !body ||
+      body.link !== 'https://bacarnet.web.app/support?t=existing-token' ||
+      Object.keys(body).join(',') !== 'email,nombre,area,link'
+    ) {
+      throw new Error(`body inválido: ${JSON.stringify(body)}`)
+    }
   },
 })
 

@@ -106,7 +106,7 @@ export function Navbar() {
 
       items.push({ to: '/mis-solicitudes-sistemas', label: 'Mis solicitudes', icon: Headphones })
 
-      items.push({ to: '/sistemas/mesa-ayuda', label: 'Mesa de ayuda', icon: Headphones })
+      items.push({ to: '/sistemas/mesa-ayuda', label: 'Desarrollo', icon: Headphones })
 
       items.push({ to: '/ayuda', label: 'Ayuda', icon: BookOpen })
 
@@ -286,7 +286,7 @@ export function Navbar() {
 
             <NavLink to="/sistemas/mesa-ayuda" className={navLinkClass}>
 
-              Mesa de ayuda
+              Desarrollo
 
             </NavLink>
 

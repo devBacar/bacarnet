@@ -26,6 +26,7 @@ export async function attachCalendarEventToReunion(input: {
       calendarOrganizerEmail: input.organizerEmail.trim().toLowerCase(),
       calendarError: false,
       calendarErrorMessage: null,
+      estado: 'confirmada',
     })
   } catch (err) {
     console.error('helpdesk: fallo al crear evento de Calendar', err)

@@ -140,12 +140,12 @@ async function runTeamMemberFlow(assigneeId) {
     await page.getByTestId('helpdesk-mesa-detail').waitFor({ timeout: 30_000 })
 
     const estadoSelect = page.locator('select').filter({ hasText: 'Reunión inicial agendada' }).first()
-    await estadoSelect.selectOption({ label: 'En proceso de planificación' })
+    await estadoSelect.selectOption({ label: 'Realizando análisis' })
     await page.waitForTimeout(800)
     const detailText = await page.getByTestId('helpdesk-mesa-detail').innerText()
     record(
       'Cambio de estado reflejado en detalle',
-      detailText.includes('En proceso de planificación'),
+      detailText.includes('Realizando análisis'),
     )
 
     await page.getByTestId('helpdesk-mesa-nota-input').fill(E2E_NOTA)

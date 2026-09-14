@@ -10,6 +10,7 @@ import { chromium } from 'playwright'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const SCRIPTS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), 'output/support-grilla-horarios.png')
+const OUT_FULL = resolve(dirname(fileURLToPath(import.meta.url)), 'output/support-form-branded.png')
 const VITE_PORT = 5174
 const API_PORT = 8799
 const VITE_ORIGIN = `http://127.0.0.1:${VITE_PORT}`
@@ -88,7 +89,9 @@ try {
   }
   mkdirSync(dirname(OUT), { recursive: true })
   await page.locator('section').filter({ hasText: 'Horario de reunión' }).screenshot({ path: OUT })
+  await page.screenshot({ path: OUT_FULL, fullPage: true })
   console.log(OUT)
+  console.log(OUT_FULL)
 } finally {
   await browser.close()
   vite.kill('SIGTERM')

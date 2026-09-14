@@ -215,7 +215,7 @@ export function HelpdeskSolicitud() {
   if (submitted) {
     return (
       <HelpdeskPageShell>
-        <StatusPanel tone="success" title="Solicitud enviada">
+        <StatusPanel tone="success" title="Proyecto enviado">
           <p>
             Recibimos tu pedido. Te va a llegar la invitación de la reunión por correo con el
             horario que elegiste.
@@ -394,7 +394,7 @@ export function HelpdeskSolicitud() {
                 Enviando…
               </>
             ) : (
-              'Enviar solicitud'
+              'Enviar proyecto'
             )}
           </button>
         </div>

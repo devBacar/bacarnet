@@ -1,27 +1,40 @@
 import { HELPDESK_TICKET_ESTADOS } from '../../constants/helpdeskEstados'
 
+import { HelpdeskCanceledBanner } from './HelpdeskCanceledBanner'
+
 export function HelpdeskTicketTimeline({
   estadoIdx,
   editable = false,
   onChangeEstado,
   disabled = false,
+  cancelado = false,
+  canceladoMotivo,
+  canceladoPor,
 }: {
   estadoIdx: number
   editable?: boolean
   onChangeEstado?: (estadoIdx: number) => void
   disabled?: boolean
+  cancelado?: boolean
+  canceladoMotivo?: string | null
+  canceladoPor?: string | null
 }) {
   const safeIdx = Math.min(Math.max(0, estadoIdx), HELPDESK_TICKET_ESTADOS.length - 1)
+  const timelineFrozen = cancelado
 
   return (
-    <div className="mt-2">
+    <div className="relative mt-2">
+      {cancelado ? (
+        <HelpdeskCanceledBanner motivo={canceladoMotivo} canceladoPor={canceladoPor} />
+      ) : null}
+      <div className={timelineFrozen ? 'pointer-events-none opacity-90' : undefined}>
       {editable ? (
         <div className="mb-3 flex flex-wrap items-end gap-3">
           <label className="block text-xs font-semibold uppercase tracking-wide text-body-muted">
             Cambiar estado
             <select
               value={safeIdx}
-              disabled={disabled}
+              disabled={disabled || timelineFrozen}
               onChange={(e) => onChangeEstado?.(Number.parseInt(e.target.value, 10))}
               className="input-brand-focus mt-1 block w-full min-w-[12rem] rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-heading dark:border-zinc-700 dark:bg-zinc-950"
             >
@@ -91,6 +104,7 @@ export function HelpdeskTicketTimeline({
           )
         })}
       </ol>
+      </div>
     </div>
   )
 }

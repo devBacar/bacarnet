@@ -1,6 +1,11 @@
 import { CalendarDays, Headphones, Loader2, Mail } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
+import { HelpdeskProblematicaText } from '../components/helpdesk/HelpdeskProblematicaText'
+import { HelpdeskBitacoraSection } from '../components/helpdesk/HelpdeskBitacoraSection'
+import { HelpdeskTicketTimeline } from '../components/helpdesk/HelpdeskTicketTimeline'
+import { HelpdeskMinutaDiagnosticoView } from '../components/helpdesk/HelpdeskMinutaDiagnosticoView'
+import { HELPDESK_REUNION_TIPO_INICIAL } from '../constants/helpdeskReunion'
 import {
   fetchMisSolicitudes,
   HelpdeskApiError,
@@ -8,16 +13,6 @@ import {
   type HelpdeskMisSolicitudTicket,
   type HelpdeskUrgencia,
 } from '../services/helpdeskApi'
-
-/** Debe coincidir con HELPDESK_TICKET_ESTADOS del backend. */
-const TICKET_ESTADOS = [
-  'Solicitud recibida',
-  'Reunión inicial agendada',
-  'En proceso de planificación',
-  'En proceso de desarrollo',
-  'En proceso de implementación',
-  'Finalizada',
-] as const
 
 function formatCreatedAt(iso: string | null): string {
   if (!iso) return '—'
@@ -57,71 +52,6 @@ function reunionEstadoLabel(estado: string): string {
   }
 }
 
-function TicketTimeline({ estadoIdx }: { estadoIdx: number }) {
-  const safeIdx = Math.min(Math.max(0, estadoIdx), TICKET_ESTADOS.length - 1)
-
-  return (
-    <div className="mt-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Estado del pedido</p>
-      <ol className="mt-3 flex flex-wrap gap-2 sm:flex-nowrap sm:gap-0">
-        {TICKET_ESTADOS.map((label, index) => {
-          const completed = index < safeIdx
-          const current = index === safeIdx
-          const pending = index > safeIdx
-          return (
-            <li
-              key={label}
-              className="flex min-w-[4.5rem] flex-1 flex-col items-center gap-1.5 text-center sm:min-w-0"
-            >
-              <div className="flex w-full items-center">
-                {index > 0 ? (
-                  <span
-                    className={`hidden h-0.5 flex-1 sm:block ${
-                      index <= safeIdx ? 'bg-brand-primary' : 'bg-neutral-200 dark:bg-zinc-700'
-                    }`}
-                    aria-hidden
-                  />
-                ) : (
-                  <span className="hidden flex-1 sm:block" aria-hidden />
-                )}
-                <span
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-                    current
-                      ? 'border-brand-primary bg-brand-primary text-white'
-                      : completed
-                        ? 'border-brand-primary bg-brand-tint/60 text-brand-primary'
-                        : 'border-neutral-200 bg-white text-neutral-400 dark:border-zinc-700 dark:bg-zinc-900'
-                  }`}
-                  aria-current={current ? 'step' : undefined}
-                >
-                  {completed ? '✓' : index + 1}
-                </span>
-                {index < TICKET_ESTADOS.length - 1 ? (
-                  <span
-                    className={`hidden h-0.5 flex-1 sm:block ${
-                      index < safeIdx ? 'bg-brand-primary' : 'bg-neutral-200 dark:bg-zinc-700'
-                    }`}
-                    aria-hidden
-                  />
-                ) : (
-                  <span className="hidden flex-1 sm:block" aria-hidden />
-                )}
-              </div>
-              <span
-                className={`px-0.5 text-[10px] leading-tight sm:text-[11px] ${
-                  current ? 'font-semibold text-heading' : pending ? 'text-body-muted' : 'text-brand-primary'
-                }`}
-              >
-                {label}
-              </span>
-            </li>
-          )
-        })}
-      </ol>
-    </div>
-  )
-}
-
 function SolicitudCard({ ticket }: { ticket: HelpdeskMisSolicitudTicket }) {
   const assignee =
     ticket.asignadoNombre?.trim() ||
@@ -139,7 +69,7 @@ function SolicitudCard({ ticket }: { ticket: HelpdeskMisSolicitudTicket }) {
             <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Área</p>
             <h2 className="text-lg font-semibold text-heading">{ticket.areaNombre}</h2>
             <p className="text-sm text-body-muted">
-              Solicitud del {formatCreatedAt(ticket.createdAt)}
+              Proyecto del {formatCreatedAt(ticket.createdAt)}
             </p>
           </div>
           <span
@@ -148,10 +78,23 @@ function SolicitudCard({ ticket }: { ticket: HelpdeskMisSolicitudTicket }) {
             Urgencia {urgenciaLabel(ticket.urgencia)}
           </span>
         </div>
-        <TicketTimeline estadoIdx={ticket.estadoIdx} />
+        <HelpdeskTicketTimeline
+          estadoIdx={ticket.estadoIdx}
+          cancelado={ticket.cancelado === true}
+          canceladoMotivo={ticket.canceladoMotivo}
+          canceladoPor={ticket.canceladoPor}
+        />
       </div>
 
       <div className="space-y-4 px-4 py-4 sm:px-5">
+        {ticket.problematica?.trim() ? (
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">
+              Problemática
+            </p>
+            <HelpdeskProblematicaText text={ticket.problematica} className="mt-1" />
+          </div>
+        ) : null}
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">
             Referente Sistemas
@@ -178,11 +121,54 @@ function SolicitudCard({ ticket }: { ticket: HelpdeskMisSolicitudTicket }) {
                   <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-brand-primary dark:bg-zinc-900">
                     {reunionEstadoLabel(reunion.estado)}
                   </span>
+                  {reunion.tipo === HELPDESK_REUNION_TIPO_INICIAL &&
+                  reunion.minutaDiagnostico ? (
+                    <div
+                      className="mt-2 w-full basis-full rounded-md border border-neutral-200 bg-white px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900"
+                      data-testid="helpdesk-mis-proyectos-minuta"
+                    >
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-body-muted">
+                        Minuta de diagnóstico
+                      </p>
+                      <HelpdeskMinutaDiagnosticoView
+                        minuta={reunion.minutaDiagnostico}
+                        areaNombre={ticket.areaNombre}
+                        legacyMinutaTexto={reunion.minuta?.texto}
+                        legacyMinutaMeta={
+                          reunion.minuta
+                            ? `${reunion.minuta.autorNombre} · ${formatCreatedAt(reunion.minuta.updatedAt)}`
+                            : null
+                        }
+                      />
+                    </div>
+                  ) : reunion.minuta ? (
+                    <div
+                      className="mt-2 w-full basis-full rounded-md border border-neutral-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                      data-testid="helpdesk-mis-proyectos-minuta"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">
+                        Minuta
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-heading">
+                        {reunion.minuta.texto}
+                      </p>
+                      <p className="mt-2 text-xs text-body-muted">
+                        {reunion.minuta.autorNombre} ·{' '}
+                        {formatCreatedAt(reunion.minuta.updatedAt)}
+                      </p>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>
           )}
         </div>
+
+        <HelpdeskBitacoraSection
+          ticketId={ticket.id}
+          estadoIdx={ticket.estadoIdx}
+          mode="mis-proyectos"
+        />
       </div>
     </article>
   )
@@ -226,7 +212,7 @@ export function MisSolicitudesSistemas() {
           <p className="text-xs font-semibold uppercase tracking-[0.14em]">Sistemas · Desarrollo</p>
         </div>
         <h1 className="text-2xl font-semibold tracking-tight text-heading sm:text-3xl">
-          Mis solicitudes
+          Mis proyectos
         </h1>
         <p className="max-w-2xl text-sm leading-relaxed text-body-muted">
           Seguimiento de los pedidos que iniciaste con el equipo de Sistemas. Acá ves el estado y
@@ -237,14 +223,14 @@ export function MisSolicitudesSistemas() {
       {loading ? (
         <div className="flex items-center justify-center gap-2 py-16 text-sm text-body-muted">
           <Loader2 className="h-5 w-5 animate-spin text-brand-primary" aria-hidden />
-          Cargando solicitudes…
+          Cargando proyectos…
         </div>
       ) : tickets.length === 0 ? (
         <section className="rounded-xl border border-neutral-200 bg-neutral-50 p-6 dark:border-zinc-800 dark:bg-zinc-950/60">
           <div className="flex items-start gap-3">
             <Mail className="mt-0.5 h-6 w-6 shrink-0 text-brand-primary" aria-hidden />
             <div className="space-y-2">
-              <h2 className="text-lg font-semibold text-heading">Todavía no tenés solicitudes</h2>
+              <h2 className="text-lg font-semibold text-heading">Todavía no tenés proyectos</h2>
               <p className="text-sm leading-relaxed text-body-muted">
                 Cuando Sistemas te invite a cargar un pedido por correo, vas a poder seguirlo desde
                 esta pantalla. Si creés que deberías ver algo acá, contactá al equipo de Sistemas.

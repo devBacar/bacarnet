@@ -56,3 +56,6 @@ body*.json
 
 # Added by ggshield
 .cache_ggshield
+
+# Mapa local para git filter-repo (contiene contraseñas literales; nunca commitear)
+scripts/git-filter-repo-passwords.txt

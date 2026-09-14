@@ -4,14 +4,30 @@
 import { mkdirSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { spawn } from 'node:child_process'
 import { Timestamp } from 'firebase-admin/firestore'
 import { getAuth } from 'firebase-admin/auth'
 import { chromium } from 'playwright'
 import { getAdminDb, getTestIdToken, initAdmin, loadTestEnv } from './get-test-token.mjs'
 import { deleteHelpdeskTicketFull } from './helpdesk-e2e-cleanup.mjs'
 
-const PROD_APP = 'https://bacarnet.web.app'
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+const PROD_API =
+  process.env.FUNCTIONS_API_BASE?.replace(/\/+$/, '') ||
+  'https://southamerica-east1-bacar-web.cloudfunctions.net/api'
+const VITE_PORT = 5191
+const VITE = `http://127.0.0.1:${VITE_PORT}`
 const OUT = resolve(dirname(fileURLToPath(import.meta.url)), 'output/prod-minuta-ia')
+
+async function waitOk(url) {
+  for (let i = 0; i < 120; i++) {
+    try {
+      if ((await fetch(url)).ok) return
+    } catch {}
+    await new Promise((r) => setTimeout(r, 400))
+  }
+  throw new Error(`timeout ${url}`)
+}
 
 loadTestEnv()
 initAdmin()
@@ -67,15 +83,24 @@ await reunionRef.set({
   createdAt: Timestamp.now(),
 })
 
+const vite = spawn(
+  'npx',
+  ['vite', '--host', '127.0.0.1', '--port', String(VITE_PORT), '--strictPort'],
+  {
+    cwd: ROOT,
+    env: { ...process.env, VITE_API_BASE_URL: PROD_API },
+    shell: true,
+    stdio: 'ignore',
+  },
+)
+
 try {
+  await waitOk(VITE)
   mkdirSync(OUT, { recursive: true })
   const browser = await chromium.launch({ headless: true })
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } })
   const customToken = await getAuth().createCustomToken(uid)
-  await page.addInitScript(() => {
-    sessionStorage.setItem('__allow_e2e_signin', '1')
-  })
-  await page.goto(`${PROD_APP}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
+  await page.goto(`${VITE}/intranet`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
   await page.waitForFunction(() => typeof window.__e2eSignInWithCustomToken === 'function', {
     timeout: 120_000,
   })
@@ -83,10 +108,10 @@ try {
     await window.__e2eSignInWithCustomToken(t)
   }, customToken)
   await page.getByText('Sesión activa').waitFor({ timeout: 120_000 })
-  await page.goto(`${PROD_APP}/intranet`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${VITE}/intranet`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('link', { name: 'Aprobaciones pendientes' }).waitFor({ timeout: 60_000 })
   await page.screenshot({ path: resolve(OUT, 'prod-navbar-aprobaciones-link.png') })
-  await page.goto(`${PROD_APP}/sistemas/mesa-ayuda`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${VITE}/sistemas/mesa-ayuda`, { waitUntil: 'domcontentloaded' })
   await page.getByTestId('helpdesk-mesa-panel').waitFor({ timeout: 120_000 })
   await page.getByTestId('helpdesk-mesa-ticket-row').filter({ hasText: 'E2E PROD Minuta IA' }).first().click()
   await page.getByTestId('helpdesk-mesa-detail').waitFor()
@@ -104,11 +129,12 @@ try {
   await page.getByTestId('helpdesk-minuta-diagnostico-form').screenshot({
     path: resolve(OUT, 'prod-minuta-form-closeup.png'),
   })
-  await page.goto(`${PROD_APP}/aprobaciones-pendientes`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${VITE}/aprobaciones-pendientes`, { waitUntil: 'domcontentloaded' })
   await page.getByTestId('aprobaciones-pendientes-page').waitFor({ timeout: 60_000 })
   await page.screenshot({ path: resolve(OUT, 'prod-navbar-aprobaciones-page.png'), fullPage: true })
   await browser.close()
-  console.log('Screenshots OK en', OUT)
+  console.log('Screenshots OK en', OUT, '(Vite dev + API prod; no login helper en hosting)')
 } finally {
+  vite.kill('SIGTERM')
   await deleteHelpdeskTicketFull(ticketId)
 }

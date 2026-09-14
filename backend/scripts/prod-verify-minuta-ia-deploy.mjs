@@ -95,44 +95,7 @@ try {
     ),
   )
 
-  mkdirSync(OUT, { recursive: true })
-  const browser = await chromium.launch({ headless: true })
-  const page = await browser.newPage({ viewport: { width: 1400, height: 900 } })
-  const customToken = await getAuth().createCustomToken(uid)
-  await page.addInitScript(() => {
-    sessionStorage.setItem('__allow_e2e_signin', '1')
-  })
-  await page.goto(`${PROD_APP}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 })
-  await page.waitForFunction(() => typeof window.__e2eSignInWithCustomToken === 'function', {
-    timeout: 120_000,
-  })
-  await page.evaluate(async (t) => {
-    await window.__e2eSignInWithCustomToken(t)
-  }, customToken)
-  await page.getByText('Sesión activa').waitFor({ timeout: 120_000 })
-  await page.goto(`${PROD_APP}/intranet`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('link', { name: 'Aprobaciones pendientes' }).waitFor({ timeout: 60_000 })
-  await page.screenshot({ path: resolve(OUT, 'prod-navbar-aprobaciones-link.png'), fullPage: false })
-  await page.goto(`${PROD_APP}/sistemas/mesa-ayuda`, { waitUntil: 'domcontentloaded' })
-  await page.getByTestId('helpdesk-mesa-panel').waitFor({ timeout: 120_000 })
-  const row = page.getByTestId('helpdesk-mesa-ticket-row').filter({ hasText: 'E2E PROD Minuta IA' }).first()
-  await row.waitFor({ timeout: 120_000 })
-  await row.click()
-  await page.getByTestId('helpdesk-mesa-detail').waitFor()
-  await page.getByTestId('helpdesk-minuta-diagnostico-form').waitFor({ timeout: 60_000 })
-  await page.screenshot({ path: resolve(OUT, 'prod-mesa-minuta-estructurada.png'), fullPage: true })
-
-  const iaBanner = page.getByTestId('helpdesk-minuta-ia-banner')
-  if (await iaBanner.count()) {
-    await iaBanner.screenshot({ path: resolve(OUT, 'prod-minuta-ia-banner.png') })
-  }
-
-  await page.goto(`${PROD_APP}/aprobaciones-pendientes`, { waitUntil: 'domcontentloaded' })
-  await page.getByTestId('aprobaciones-pendientes-page').waitFor({ timeout: 60_000 })
-  await page.screenshot({ path: resolve(OUT, 'prod-navbar-aprobaciones-page.png'), fullPage: true })
-
-  await browser.close()
-  console.log('Screenshots en', OUT)
+  console.log('Verificación UI en hosting omitida (sin helper de login en prod). Usá prod-screenshots-minuta-navbar.mjs con Vite dev.')
 } finally {
   if (ticketId) {
     const ok = await deleteHelpdeskTicketFull(ticketId)

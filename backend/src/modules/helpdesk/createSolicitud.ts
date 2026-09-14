@@ -16,6 +16,7 @@ import {
 } from './repository.js'
 import { notificarN8n } from './n8nWebhooks.js'
 import { ticketPayloadForN8n } from './serializeTicket.js'
+import { attachMinutaDiagnosticoDraftOnTicketCreate } from './generateMinutaDiagnosticoDraft.js'
 import {
   isJointSlotFree,
   isValidSlotLabel,
@@ -117,6 +118,14 @@ export async function createSolicitudHandler(req: Request, res: Response): Promi
       },
     })
 
+    await attachMinutaDiagnosticoDraftOnTicketCreate({
+      ticketId,
+      reunionId,
+      problematica,
+      areaNombre: claims.areaNombre,
+      urgencia,
+    })
+
     const francoEmail = participantesTeamIds
       .map((id) => primeraReunionTeam.find((m) => m.id === id)?.email)
       .find((e): e is string => Boolean(e))
@@ -152,6 +161,17 @@ export async function createSolicitudHandler(req: Request, res: Response): Promi
         asignadoATeamId: responsablePrincipal.id,
       }),
       reunionId,
+      reunionFecha: fechaStr,
+      reunionHora: horaStr,
+    })
+
+    await notificarN8n('aviso_interno', {
+      tipoAviso: 'ticket_creado',
+      destinatarioEmail: 'admin@bacarsa.com.ar',
+      ticketId,
+      area: claims.areaNombre,
+      problematica,
+      urgencia,
       reunionFecha: fechaStr,
       reunionHora: horaStr,
     })

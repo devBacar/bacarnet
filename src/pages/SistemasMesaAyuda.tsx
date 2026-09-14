@@ -127,8 +127,8 @@ export function SistemasMesaAyuda() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-8" data-testid="helpdesk-mesa-panel">
-      <header className="space-y-3">
+    <div className="mx-auto w-full max-w-7xl space-y-8 pb-8" data-testid="helpdesk-mesa-panel">
+      <header className="scroll-mt-24 space-y-3">
         <div className="flex items-center gap-2 text-brand-primary">
           <Headphones className="h-6 w-6" aria-hidden />
           <p className="text-xs font-semibold uppercase tracking-[0.14em]">Sistemas</p>
@@ -254,7 +254,10 @@ export function SistemasMesaAyuda() {
           )}
         </section>
 
-        <section className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5 xl:min-h-[24rem]">
+        <section
+          className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5 xl:sticky xl:top-20 xl:z-[1] xl:max-h-[calc(100dvh-5.5rem)] xl:min-h-[24rem] xl:overflow-y-auto xl:overscroll-contain"
+          data-testid="helpdesk-mesa-detail-scroll"
+        >
           {selectedTicketId ? (
             <HelpdeskPanelTicketDetail
               ticketId={selectedTicketId}

@@ -153,7 +153,78 @@ async function runTeamMemberFlow(assigneeId) {
     await page.getByText(E2E_NOTA).waitFor({ timeout: 30_000 })
     record('Nota agregada visible en detalle', true)
 
-    await page.screenshot({ path: SCREENSHOT_PANEL, fullPage: true })
+    const layoutCheck = await page.evaluate(() => {
+      function overlaps(a, b) {
+        return !(a.bottom <= b.top || a.top >= b.bottom)
+      }
+      const mesaH1 = document.querySelector('[data-testid="helpdesk-mesa-panel"] h1')
+      const ticketH2 = document.querySelector('[data-testid="helpdesk-mesa-detail"] h2')
+      if (!mesaH1 || !ticketH2) return { ok: false, reason: 'missing headings' }
+      const checks = []
+      for (const y of [0, 200, 400, 600, 900]) {
+        window.scrollTo(0, y)
+        const a = mesaH1.getBoundingClientRect()
+        const b = ticketH2.getBoundingClientRect()
+        checks.push({ y, overlap: overlaps(a, b), mesaTop: a.top, ticketTop: b.top })
+      }
+      const pageScrollable = document.documentElement.scrollHeight > window.innerHeight + 24
+      const scrollBefore = window.scrollY
+      window.scrollTo(0, scrollBefore + 400)
+      const pageScrollDelta = window.scrollY - scrollBefore
+      const detailPane = document.querySelector('[data-testid="helpdesk-mesa-detail-scroll"]')
+      let detailScrollable = false
+      let detailScrollDelta = 0
+      let detailOverflowY = ''
+      let detailDimensions = null
+      if (detailPane instanceof HTMLElement) {
+        detailScrollable = detailPane.scrollHeight > detailPane.clientHeight + 8
+        detailOverflowY = getComputedStyle(detailPane).overflowY
+        detailDimensions = {
+          scrollHeight: detailPane.scrollHeight,
+          clientHeight: detailPane.clientHeight,
+        }
+        const before = detailPane.scrollTop
+        detailPane.scrollTop = before > 0 ? Math.max(0, before - 240) : 240
+        detailScrollDelta = Math.abs(detailPane.scrollTop - before)
+      }
+      return {
+        ok: !checks.some((c) => c.overlap),
+        checks,
+        pageScrollable,
+        pageScrollDelta,
+        detailScrollable,
+        detailScrollDelta,
+        detailOverflowY,
+        detailDimensions,
+      }
+    })
+    record(
+      'Encabezados Mesa de ayuda y Ticket no se superponen',
+      layoutCheck.ok,
+      layoutCheck.ok ? undefined : JSON.stringify(layoutCheck.checks?.filter((c) => c.overlap)),
+    )
+    const scrollOk =
+      (layoutCheck.pageScrollable && layoutCheck.pageScrollDelta > 20) ||
+      (layoutCheck.detailScrollable && layoutCheck.detailScrollDelta > 20) ||
+      (!layoutCheck.pageScrollable && !layoutCheck.detailScrollable)
+    record(
+      'Scroll (página o panel detalle) responde',
+      scrollOk,
+      `pageΔ=${layoutCheck.pageScrollDelta} detailΔ=${layoutCheck.detailScrollDelta} overflow=${layoutCheck.detailOverflowY} dims=${JSON.stringify(layoutCheck.detailDimensions)}`,
+    )
+
+    await page.evaluate(() => window.scrollTo(0, 320))
+    await page.waitForTimeout(300)
+    const ticketHeaderVisible = await page.evaluate(() => {
+      const h2 = document.querySelector('[data-testid="helpdesk-mesa-detail"] h2')
+      if (!h2) return false
+      const r = h2.getBoundingClientRect()
+      const nav = document.querySelector('header.sticky')
+      const navBottom = nav?.getBoundingClientRect().bottom ?? 0
+      return r.top >= navBottom - 2 && r.bottom <= window.innerHeight && r.height > 0
+    })
+    record('Encabezado Ticket visible bajo navbar', ticketHeaderVisible)
+    await page.screenshot({ path: SCREENSHOT_PANEL, fullPage: false })
     record('Screenshot panel guardado', existsSync(SCREENSHOT_PANEL), SCREENSHOT_PANEL)
   } finally {
     await browser.close()

@@ -179,9 +179,9 @@ export function HelpdeskPanelTicketDetail({
 
   return (
     <div className="space-y-6" data-testid="helpdesk-mesa-detail">
-      <div className="space-y-2 border-b border-neutral-100 pb-4 dark:border-zinc-800">
+      <div className="sticky top-0 z-10 -mx-4 space-y-2 border-b border-neutral-100 bg-white px-4 pb-4 pt-0 dark:border-zinc-800 dark:bg-zinc-900 sm:-mx-5 sm:px-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Ticket</p>
             <h2 className="text-xl font-semibold text-heading">{ticket.areaNombre}</h2>
             <p className="mt-1 text-sm text-body-muted">

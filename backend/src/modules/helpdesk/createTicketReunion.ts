@@ -7,6 +7,7 @@ import {
   getHelpdeskTeamMemberById,
   getHelpdeskTicketById,
 } from './repository.js'
+import { notificarN8n } from './n8nWebhooks.js'
 import { isJointSlotFree, isValidSlotLabel, parseSlotLabels } from './slotScheduling.js'
 
 export async function createTicketReunionHandler(req: Request, res: Response): Promise<void> {
@@ -83,6 +84,19 @@ export async function createTicketReunionHandler(req: Request, res: Response): P
       description: ticket.problematica,
       startISO,
       endISO,
+    })
+
+    await notificarN8n('aviso_interno', {
+      tipoAviso: 'reunion_creada',
+      destinatarioEmail: member.email,
+      destinatarioNombre: member.nombre,
+      ticketId,
+      area: ticket.areaNombre,
+      problematica: ticket.problematica,
+      urgencia: ticket.urgencia,
+      reunionTipo: tipo,
+      reunionFecha: fechaStr,
+      reunionHora: horaStr,
     })
 
     res.status(201).json({ reunionId, ticketId })

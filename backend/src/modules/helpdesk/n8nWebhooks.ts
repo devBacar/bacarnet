@@ -1,6 +1,11 @@
 import { getEnv } from '../../config/env.js'
 
-export type HelpdeskN8nEvento = 'solicitud_creada' | 'estado_cambiado' | 'recordatorio'
+export type HelpdeskN8nEvento =
+  | 'solicitud_creada'
+  | 'estado_cambiado'
+  | 'recordatorio'
+  | 'aviso_interno'
+  | 'analisis_pendiente_aprobacion'
 
 export interface HelpdeskN8nNotifyResult {
   ok: boolean
@@ -25,6 +30,10 @@ function webhookUrlForEvento(evento: HelpdeskN8nEvento): string {
       return env.helpdeskN8nWebhookEstadoCambiado
     case 'recordatorio':
       return env.helpdeskN8nWebhookRecordatorio
+    case 'aviso_interno':
+      return env.helpdeskN8nWebhookAvisoInterno
+    case 'analisis_pendiente_aprobacion':
+      return env.helpdeskN8nWebhookAnalisisPendiente
     default:
       return ''
   }
@@ -36,6 +45,9 @@ function buildRequestBody(
 ): Record<string, unknown> {
   if (evento === 'estado_cambiado') {
     return payload
+  }
+  if (evento === 'analisis_pendiente_aprobacion') {
+    return { evento, ...payload }
   }
   return { evento, ...payload }
 }

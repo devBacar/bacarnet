@@ -83,7 +83,7 @@ function MoonDecor() {
         ))}
       </svg>
       <svg className="absolute -right-2 -top-2 h-[110%] w-[65%]" viewBox="0 0 200 200" fill="none">
-        <circle cx="165" cy="35" r="22" fill="***REMOVED***fde047" />
+        <circle cx="165" cy="35" r="22" fill="#fde047" />
         <circle cx="165" cy="35" r="38" stroke="rgb(30 45 90 / 0.7)" strokeWidth="8" />
         <circle cx="165" cy="35" r="56" stroke="rgb(25 38 80 / 0.5)" strokeWidth="10" />
         <circle cx="165" cy="35" r="76" stroke="rgb(20 32 70 / 0.35)" strokeWidth="12" />

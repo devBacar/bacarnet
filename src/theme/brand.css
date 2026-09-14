@@ -4,40 +4,40 @@
  */
 :root {
   /* Marca — azul marino */
-  --color-primary: ***REMOVED***1e3a5f;
-  --color-primary-hover: ***REMOVED***152d4a;
-  --color-primary-light: ***REMOVED***e8eef5;
-  --color-primary-muted: ***REMOVED***c5d4e4;
-  --color-primary-text: ***REMOVED***1e3a5f;
+  --color-primary: #1e3a5f;
+  --color-primary-hover: #152d4a;
+  --color-primary-light: #e8eef5;
+  --color-primary-muted: #c5d4e4;
+  --color-primary-text: #1e3a5f;
   --color-primary-ring: rgb(30 58 95 / 0.18);
 
   /* Superficies auth (panel oscuro del login) */
-  --color-auth-panel: ***REMOVED***0f1929;
-  --color-auth-panel-elevated: ***REMOVED***162236;
-  --color-auth-panel-border: ***REMOVED***243247;
+  --color-auth-panel: #0f1929;
+  --color-auth-panel-elevated: #162236;
+  --color-auth-panel-border: #243247;
 
   /* Errores / destructivo (no es color de marca) */
-  --color-danger: ***REMOVED***b42318;
-  --color-danger-bg: ***REMOVED***fef3f2;
-  --color-danger-border: ***REMOVED***fecdca;
-  --color-danger-text: ***REMOVED***b42318;
+  --color-danger: #b42318;
+  --color-danger-bg: #fef3f2;
+  --color-danger-border: #fecdca;
+  --color-danger-text: #b42318;
 
   /* Tipografía y superficies */
-  --color-text: ***REMOVED***202124;
-  --color-text-muted: ***REMOVED***5f6368;
-  --color-text-subtle: ***REMOVED***80868b;
-  --color-border: ***REMOVED***dadce0;
-  --color-border-strong: ***REMOVED***bdc1c6;
+  --color-text: #202124;
+  --color-text-muted: #5f6368;
+  --color-text-subtle: #80868b;
+  --color-border: #dadce0;
+  --color-border-strong: #bdc1c6;
 
   --font-sans: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
 
   /* Navbar y layout */
-  --color-navbar-bg: ***REMOVED***ffffff;
-  --color-navbar-border: ***REMOVED***dadce0;
-  --color-surface: ***REMOVED***ffffff;
-  --color-surface-elevated: ***REMOVED***ffffff;
-  --color-surface-muted: ***REMOVED***f8f9fa;
-  --color-surface-page: ***REMOVED***f8f9fa;
+  --color-navbar-bg: #ffffff;
+  --color-navbar-border: #dadce0;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-muted: #f8f9fa;
+  --color-surface-page: #f8f9fa;
 
   --layout-max-width: 100%;
   --layout-padding-x: 1.5rem;
@@ -45,33 +45,33 @@
 }
 
 .dark {
-  --color-primary: ***REMOVED***5b8fd4;
-  --color-primary-hover: ***REMOVED***7ba3e0;
+  --color-primary: #5b8fd4;
+  --color-primary-hover: #7ba3e0;
   --color-primary-light: rgb(30 58 95 / 0.22);
   --color-primary-muted: rgb(30 58 95 / 0.35);
-  --color-primary-text: ***REMOVED***93b4e0;
+  --color-primary-text: #93b4e0;
   --color-primary-ring: rgb(91 143 212 / 0.35);
 
-  --color-auth-panel: ***REMOVED***0a1018;
-  --color-auth-panel-elevated: ***REMOVED***111827;
-  --color-auth-panel-border: ***REMOVED***1e293b;
+  --color-auth-panel: #0a1018;
+  --color-auth-panel-elevated: #111827;
+  --color-auth-panel-border: #1e293b;
 
   --color-danger-bg: rgb(180 35 24 / 0.12);
   --color-danger-border: rgb(180 35 24 / 0.35);
-  --color-danger-text: ***REMOVED***f87171;
+  --color-danger-text: #f87171;
 
-  --color-text: ***REMOVED***e8eaed;
-  --color-text-muted: ***REMOVED***9aa0a6;
-  --color-text-subtle: ***REMOVED***80868b;
-  --color-border: ***REMOVED***3c4043;
-  --color-border-strong: ***REMOVED***5f6368;
+  --color-text: #e8eaed;
+  --color-text-muted: #9aa0a6;
+  --color-text-subtle: #80868b;
+  --color-border: #3c4043;
+  --color-border-strong: #5f6368;
 
-  --color-navbar-bg: ***REMOVED***202124;
-  --color-navbar-border: ***REMOVED***3c4043;
-  --color-surface: ***REMOVED***202124;
-  --color-surface-elevated: ***REMOVED***292a2d;
-  --color-surface-muted: ***REMOVED***292a2d;
-  --color-surface-page: ***REMOVED***171717;
+  --color-navbar-bg: #202124;
+  --color-navbar-border: #3c4043;
+  --color-surface: #202124;
+  --color-surface-elevated: #292a2d;
+  --color-surface-muted: #292a2d;
+  --color-surface-page: #171717;
 }
 
 @media (min-width: 1024px) {
@@ -129,7 +129,7 @@
 
 .btn-primary {
   background-color: var(--color-primary);
-  color: ***REMOVED***ffffff;
+  color: #ffffff;
   transition: background-color 0.15s ease;
 }
 
@@ -144,12 +144,12 @@
 
 .btn-danger {
   background-color: var(--color-danger);
-  color: ***REMOVED***ffffff;
+  color: #ffffff;
   transition: background-color 0.15s ease;
 }
 
 .btn-danger:hover:not(:disabled) {
-  background-color: ***REMOVED***912018;
+  background-color: #912018;
 }
 
 .input-brand-focus:focus {
@@ -248,7 +248,7 @@
 }
 
 .rag-assistant-fab {
-  background: linear-gradient(135deg, ***REMOVED***1e3a5f 0%, ***REMOVED***2d5a8a 100%);
+  background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8a 100%);
   animation: rag-fab-pulse 8s ease-in-out infinite;
 }
 

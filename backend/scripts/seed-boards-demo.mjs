@@ -49,8 +49,8 @@ const HTML = `<!DOCTYPE html>
 </body>
 </html>`
 
-const CSS = `body { font-family: system-ui, sans-serif; margin: 2rem; background: ***REMOVED***f8fafc; color: ***REMOVED***0f172a; }
-main { max-width: 40rem; padding: 1.5rem; border: 1px solid ***REMOVED***cbd5e1; border-radius: 12px; background: white; }`
+const CSS = `body { font-family: system-ui, sans-serif; margin: 2rem; background: #f8fafc; color: #0f172a; }
+main { max-width: 40rem; padding: 1.5rem; border: 1px solid #cbd5e1; border-radius: 12px; background: white; }`
 
 const JS = `document.getElementById('status').textContent = 'JS ejecutado: ' + new Date().toLocaleString('es-AR');`
 

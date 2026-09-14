@@ -60,6 +60,14 @@
         { "fieldPath": "category", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "analisis",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "aprobadoresEmails", "arrayConfig": "CONTAINS" }
+      ]
     }
   ],
   "fieldOverrides": []

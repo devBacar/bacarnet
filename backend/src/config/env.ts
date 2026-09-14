@@ -74,6 +74,10 @@ export function getEnv() {
     process.env.HELPDESK_N8N_WEBHOOK_ESTADO_CAMBIADO?.trim() || ''
   const helpdeskN8nWebhookRecordatorio =
     process.env.HELPDESK_N8N_WEBHOOK_RECORDATORIO?.trim() || ''
+  const helpdeskN8nWebhookAvisoInterno =
+    process.env.HELPDESK_N8N_WEBHOOK_AVISO_INTERNO?.trim() || ''
+  const helpdeskN8nWebhookAnalisisPendiente =
+    process.env.HELPDESK_N8N_WEBHOOK_ANALISIS_PENDIENTE?.trim() || ''
   const n8nManagementCredential = process.env.N8N_MGMT_API_KEY?.trim() || ''
   const n8nMgmtApiBase =
     process.env.N8N_MGMT_API_BASE?.trim().replace(/\/+$/, '') ||
@@ -119,6 +123,8 @@ export function getEnv() {
     helpdeskN8nWebhookSolicitudCreada,
     helpdeskN8nWebhookEstadoCambiado,
     helpdeskN8nWebhookRecordatorio,
+    helpdeskN8nWebhookAvisoInterno,
+    helpdeskN8nWebhookAnalisisPendiente,
     n8nManagementCredential,
     n8nMgmtApiBase,
     n8nJefesAreasTableId,

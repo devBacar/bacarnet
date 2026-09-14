@@ -1,6 +1,7 @@
 import { Headphones, Loader2, ShieldX } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
+import { HelpdeskCampanaAuditoria } from '../components/helpdesk/HelpdeskCampanaAuditoria'
 import { HelpdeskPanelTicketDetail } from '../components/helpdesk/HelpdeskPanelTicketDetail'
 import {
   formatHelpdeskDateTime,
@@ -19,6 +20,7 @@ import {
 } from '../services/helpdeskApi'
 
 type AccessState = 'loading' | 'forbidden' | 'ready'
+type PanelTab = 'proyectos' | 'auditoria'
 
 function computeKpis(tickets: HelpdeskPanelTicket[]) {
   const now = Date.now()
@@ -51,6 +53,7 @@ export function SistemasMesaAyuda() {
   const [filterEstado, setFilterEstado] = useState<string>('')
   const [filterUrgencia, setFilterUrgencia] = useState<string>('')
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
+  const [panelTab, setPanelTab] = useState<PanelTab>('proyectos')
 
   const loadTickets = useCallback(async () => {
     setTicketsLoading(true)
@@ -134,13 +137,47 @@ export function SistemasMesaAyuda() {
           <p className="text-xs font-semibold uppercase tracking-[0.14em]">Sistemas · Desarrollo</p>
         </div>
         <h1 className="text-2xl font-semibold tracking-tight text-heading sm:text-3xl">
-          Solicitudes
+          Proyectos
         </h1>
         <p className="max-w-2xl text-sm text-body-muted">
-          Panel interno para gestionar solicitudes de áreas, reuniones y seguimiento.
+          Panel interno para gestionar proyectos de áreas, reuniones y seguimiento.
         </p>
       </header>
 
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Secciones del panel">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={panelTab === 'proyectos'}
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+            panelTab === 'proyectos'
+              ? 'bg-brand-primary text-white'
+              : 'border border-neutral-200 bg-white text-heading hover:border-brand-primary/30 dark:border-zinc-700 dark:bg-zinc-900'
+          }`}
+          onClick={() => setPanelTab('proyectos')}
+        >
+          Proyectos
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={panelTab === 'auditoria'}
+          data-testid="helpdesk-campana-auditoria-tab"
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+            panelTab === 'auditoria'
+              ? 'bg-brand-primary text-white'
+              : 'border border-neutral-200 bg-white text-heading hover:border-brand-primary/30 dark:border-zinc-700 dark:bg-zinc-900'
+          }`}
+          onClick={() => setPanelTab('auditoria')}
+        >
+          Auditoría de campaña
+        </button>
+      </div>
+
+      {panelTab === 'auditoria' ? (
+        <HelpdeskCampanaAuditoria />
+      ) : (
+        <>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Activos</p>
@@ -233,7 +270,7 @@ export function SistemasMesaAyuda() {
                         <div>
                           <p className="font-semibold text-heading">{ticket.areaNombre}</p>
                           <p className="text-sm text-body-muted">
-                            {ticket.estado ?? HELPDESK_TICKET_ESTADOS[ticket.estadoIdx]}
+                            {HELPDESK_TICKET_ESTADOS[ticket.estadoIdx] ?? ticket.estado}
                           </p>
                           <p className="mt-1 text-xs text-body-muted">
                             {ticket.asignadoNombre ?? 'Sin asignar'} ·{' '}
@@ -263,6 +300,10 @@ export function SistemasMesaAyuda() {
               ticketId={selectedTicketId}
               teamMembers={teamMembers}
               onTicketUpdated={() => void loadTickets()}
+              onTicketDeleted={(deletedId) => {
+                setSelectedTicketId(null)
+                setTickets((prev) => prev.filter((t) => t.id !== deletedId))
+              }}
             />
           ) : (
             <p className="flex h-full min-h-[12rem] items-center justify-center text-sm text-body-muted">
@@ -271,6 +312,8 @@ export function SistemasMesaAyuda() {
           )}
         </section>
       </div>
+        </>
+      )}
     </div>
   )
 }

@@ -7,14 +7,21 @@ export const HELPDESK_USED_TOKENS_COLLECTION = 'helpdeskUsedTokens'
 
 export const HELPDESK_REUNIONES_SUBCOLLECTION = 'reuniones'
 export const HELPDESK_NOTAS_SUBCOLLECTION = 'notas'
+export const HELPDESK_ANALISIS_SUBCOLLECTION = 'analisis'
+export const HELPDESK_BITACORA_SUBCOLLECTION = 'bitacora'
+
+/** Carpeta Drive "Proyectos - análisis" (Sistemas). Override: HELPDESK_ANALISIS_DRIVE_FOLDER_ID */
+export const HELPDESK_ANALISIS_DRIVE_FOLDER_ID_DEFAULT = '1SUza1HVVaLOR5GPyeDXlxDMpYue5NYvL'
+
+export const HELPDESK_ANALISIS_DEFAULT_APROBADOR = 'pablo.magnin@bacarsa.com.ar'
 
 export const HELPDESK_TICKET_ESTADOS = [
-  'Solicitud recibida',
+  'Proyecto recibido',
   'Reunión inicial agendada',
-  'En proceso de planificación',
-  'En proceso de desarrollo',
+  'Realizando análisis',
+  'En proceso de planificación y desarrollo',
   'En proceso de implementación',
-  'Finalizada',
+  'Finalizado',
 ] as const
 
 export type HelpdeskTicketEstadoLabel = (typeof HELPDESK_TICKET_ESTADOS)[number]
@@ -63,10 +70,87 @@ export interface HelpdeskTicket {
   urgencia: HelpdeskUrgencia
   estadoIdx: number
   asignadoATeamId: string | null
+  cancelado?: boolean
+  canceladoMotivo?: string | null
+  canceladoPor?: string | null
+  canceladoFecha?: Timestamp | null
   createdAt?: Timestamp
 }
 
+export type HelpdeskAnalisisEstado = 'pendiente' | 'aprobado' | 'rechazado'
+
+export type HelpdeskBitacoraTipo = 'avance' | 'comentario'
+
+export interface HelpdeskBitacoraEntrada {
+  autorNombre: string
+  autorEmail: string
+  tipo: HelpdeskBitacoraTipo
+  texto: string
+  adjuntoDriveLink?: string | null
+  createdAt?: Timestamp
+}
+
+export interface HelpdeskAnalisis {
+  archivoDriveId: string
+  archivoDriveLink: string
+  subidoPorNombre: string
+  subidoPorEmail: string
+  subidoFecha: Timestamp
+  aprobadoresEmails: string[]
+  estado: HelpdeskAnalisisEstado
+  decididoPorEmail?: string | null
+  decididoFecha?: Timestamp | null
+  comentarioDecision?: string | null
+}
+
 export type HelpdeskReunionEstado = 'pendiente' | 'confirmada' | 'rechazada'
+
+export interface HelpdeskReunionMinuta {
+  texto: string
+  autorNombre: string
+  updatedAt?: Timestamp
+}
+
+export type HelpdeskMinutaImpacto = 'Alto' | 'Medio' | 'Bajo'
+export type HelpdeskMinutaFactibilidad = 'Alta' | 'Media' | 'Baja'
+export type HelpdeskMinutaUrgenciaIniciativa = 'Crítico' | 'Deseable' | 'Posponible'
+export type HelpdeskMinutaVeredicto = 'Viable' | 'Viable con condiciones' | 'No viable'
+
+export interface HelpdeskMinutaProcesoEvaluado {
+  procesoEvaluado: string
+  descripcionBreve: string
+  problemasIdentificados: string
+  metricasActuales: string
+}
+
+export interface HelpdeskMinutaIniciativa {
+  nombre: string
+  beneficioEsperado: string
+  recursosRequeridos: string
+  impactoEstimado: HelpdeskMinutaImpacto
+  factibilidad: HelpdeskMinutaFactibilidad
+  costoEsfuerzo: HelpdeskMinutaImpacto
+  urgencia: HelpdeskMinutaUrgenciaIniciativa
+  veredicto: HelpdeskMinutaVeredicto
+}
+
+export interface HelpdeskMinutaDiagnostico {
+  fecha: string
+  facilitador: string
+  participantes: string
+  objetivoSesion: string
+  alcance: string
+  procesosEvaluados: HelpdeskMinutaProcesoEvaluado[]
+  iniciativasPropuestas: HelpdeskMinutaIniciativa[]
+  proyectosAprobados: string
+  responsables: string
+  accionesInmediatas: string
+  fechaSeguimiento?: string
+  /** Borrador automático al crear ticket; pasa a false al guardar edición de Sistemas. */
+  generadoPorIA?: boolean
+  autorNombre?: string
+  updatedAt?: Timestamp
+}
 
 export interface HelpdeskReunion {
   tipo: string
@@ -80,6 +164,8 @@ export interface HelpdeskReunion {
   calendarOrganizerEmail?: string | null
   calendarError?: boolean
   calendarErrorMessage?: string | null
+  minuta?: HelpdeskReunionMinuta | null
+  minutaDiagnostico?: HelpdeskMinutaDiagnostico | null
   createdAt?: Timestamp
 }
 

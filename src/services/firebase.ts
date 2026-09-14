@@ -18,10 +18,15 @@ const analytics = getAnalytics(app)
 const auth = getAuth(app)
 const db = getFirestore(app)
 
-if (import.meta.env.DEV) {
-  // @ts-expect-error helpers locales para scripts Playwright / depuración
+const e2eAuthAllowed =
+  import.meta.env.DEV ||
+  (typeof sessionStorage !== 'undefined' &&
+    sessionStorage.getItem('__allow_e2e_signin') === '1')
+
+if (e2eAuthAllowed) {
+  // @ts-expect-error helpers locales para scripts Playwright / depuración controlada
   window.__getIdToken = () => auth.currentUser?.getIdToken()
-  // @ts-expect-error helpers locales para scripts Playwright / depuración
+  // @ts-expect-error helpers locales para scripts Playwright / depuración controlada
   window.__e2eSignInWithCustomToken = (customToken: string) =>
     signInWithCustomToken(auth, customToken)
 }

@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express'
 import { logError } from '../../lib/log.js'
+import { listHelpdeskAnalisisForTicket } from './analisisRepository.js'
+import { serializeHelpdeskAnalisis } from './helpdeskDriveUpload.js'
 import {
   getHelpdeskTeamMemberById,
   getHelpdeskTicketById,
@@ -23,10 +25,11 @@ export async function getTicketDetailHandler(req: Request, res: Response): Promi
       return
     }
 
-    const [reuniones, notas, emailLog] = await Promise.all([
+    const [reuniones, notas, emailLog, analisis] = await Promise.all([
       listHelpdeskReunionesForTicket(ticketId),
       listHelpdeskNotasForTicket(ticketId),
       listHelpdeskEmailLogForTicket(ticketId),
+      listHelpdeskAnalisisForTicket(ticketId),
     ])
 
     let asignadoNombre: string | null = null
@@ -40,6 +43,7 @@ export async function getTicketDetailHandler(req: Request, res: Response): Promi
         ...serializeHelpdeskTicket(ticket, reuniones, emailLog),
         asignadoNombre,
         notas: notas.map(serializeHelpdeskNota),
+        analisis: analisis.map(serializeHelpdeskAnalisis),
       },
     })
   } catch (err) {

@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit'
 import { requireWorkspaceUser } from '../auth/middleware.js'
 import { createSolicitudHandler } from './createSolicitud.js'
 import { createTicketReunionHandler } from './createTicketReunion.js'
+import { getCampanaAuditoriaHandler } from './getCampanaAuditoria.js'
 import { getCampanaEnlacesHandler } from './getCampanaEnlaces.js'
 import { postCampanaGenerarEnlaceHandler } from './postCampanaGenerarEnlace.js'
 import { getDisponibilidadInicialHandler } from './getDisponibilidadInicial.js'
@@ -15,9 +16,17 @@ import { requireHelpdeskTeamMember } from './middleware.js'
 import { requireHelpdeskN8nApiKey } from './n8nAuthMiddleware.js'
 import { patchTicketAsignadoHandler } from './patchTicketAsignado.js'
 import { patchTicketEstadoHandler } from './patchTicketEstado.js'
+import { patchReunionMinutaHandler } from './patchReunionMinuta.js'
 import { postTicketNotaHandler } from './postTicketNota.js'
 import { postWebhookCorreoEnviadoHandler } from './postWebhookCorreoEnviado.js'
 import { syncReunionEstadoHandler } from './syncReunionEstado.js'
+import { patchTicketCancelacionHandler } from './patchTicketCancelacion.js'
+import { postTicketAnalisisHandler } from './postTicketAnalisis.js'
+import { getAnalisisPendientesHandler } from './getAnalisisPendientes.js'
+import { patchAnalisisDecisionHandler } from './patchAnalisisDecision.js'
+import { getTicketBitacoraHandler } from './getTicketBitacora.js'
+import { postTicketBitacoraHandler } from './postTicketBitacora.js'
+import { deleteTicketHandler } from './deleteTicket.js'
 
 export const helpdeskRouter = Router()
 
@@ -75,6 +84,15 @@ helpdeskRouter.post(
 const helpdeskTeamPanel = [requireWorkspaceUser, requireHelpdeskTeamMember]
 
 helpdeskRouter.get('/tickets/mias', requireWorkspaceUser, listMisTicketsHandler)
+helpdeskRouter.get('/tickets/:ticketId/bitacora', requireWorkspaceUser, getTicketBitacoraHandler)
+helpdeskRouter.post('/tickets/:ticketId/bitacora', requireWorkspaceUser, postTicketBitacoraHandler)
+helpdeskRouter.get('/analisis-pendientes', requireWorkspaceUser, getAnalisisPendientesHandler)
+helpdeskRouter.patch(
+  '/tickets/:ticketId/analisis/:analisisId/decision',
+  requireWorkspaceUser,
+  patchAnalisisDecisionHandler,
+)
+helpdeskRouter.get('/campana/auditoria', ...helpdeskTeamPanel, getCampanaAuditoriaHandler)
 helpdeskRouter.get('/team', ...helpdeskTeamPanel, getTeamHandler)
 helpdeskRouter.get(
   '/disponibilidad/:teamMemberId',
@@ -83,8 +101,19 @@ helpdeskRouter.get(
 )
 helpdeskRouter.get('/tickets', ...helpdeskTeamPanel, listTicketsHandler)
 helpdeskRouter.get('/tickets/:ticketId', ...helpdeskTeamPanel, getTicketDetailHandler)
+helpdeskRouter.delete('/tickets/:ticketId', ...helpdeskTeamPanel, deleteTicketHandler)
 
 helpdeskRouter.patch('/tickets/:ticketId/estado', ...helpdeskTeamPanel, patchTicketEstadoHandler)
+helpdeskRouter.patch(
+  '/tickets/:ticketId/cancelacion',
+  ...helpdeskTeamPanel,
+  patchTicketCancelacionHandler,
+)
+helpdeskRouter.post(
+  '/tickets/:ticketId/analisis',
+  ...helpdeskTeamPanel,
+  postTicketAnalisisHandler,
+)
 helpdeskRouter.patch(
   '/tickets/:ticketId/asignado',
   ...helpdeskTeamPanel,
@@ -96,6 +125,12 @@ helpdeskRouter.post(
   '/tickets/:ticketId/reuniones',
   ...helpdeskTeamPanel,
   createTicketReunionHandler,
+)
+
+helpdeskRouter.patch(
+  '/tickets/:ticketId/reuniones/:reunionId/minuta',
+  ...helpdeskTeamPanel,
+  patchReunionMinutaHandler,
 )
 
 helpdeskRouter.get(

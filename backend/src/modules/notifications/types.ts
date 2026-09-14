@@ -19,6 +19,7 @@ export type PassiveNotificationType =
 export const ACTIONABLE_NOTIFICATION_TYPES = {
   ACCESS_REQUEST: 'access_request',
   OFFICE_UPLOAD_REQUEST: 'office_upload_request',
+  HELPDESK_ANALISIS_PENDIENTE: 'helpdesk_analisis_pendiente',
 } as const
 
 export type ActionableNotificationType =

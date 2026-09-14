@@ -26,6 +26,19 @@ export function serializeHelpdeskReunion(reunion: HelpdeskReunion & { id: string
     calendarOrganizerEmail: reunion.calendarOrganizerEmail ?? null,
     calendarError: reunion.calendarError ?? null,
     calendarErrorMessage: reunion.calendarErrorMessage ?? null,
+    minuta: reunion.minuta
+      ? {
+          texto: reunion.minuta.texto,
+          autorNombre: reunion.minuta.autorNombre,
+          updatedAt: timestampToIso(reunion.minuta.updatedAt),
+        }
+      : null,
+    minutaDiagnostico: reunion.minutaDiagnostico
+      ? {
+          ...reunion.minutaDiagnostico,
+          updatedAt: timestampToIso(reunion.minutaDiagnostico.updatedAt),
+        }
+      : null,
     createdAt: timestampToIso(reunion.createdAt),
   }
 }
@@ -61,6 +74,10 @@ export function serializeHelpdeskTicket(
     estadoIdx: ticket.estadoIdx,
     estado: helpdeskEstadoLabelFromIdx(ticket.estadoIdx),
     asignadoATeamId: ticket.asignadoATeamId,
+    cancelado: ticket.cancelado === true,
+    canceladoMotivo: ticket.canceladoMotivo ?? null,
+    canceladoPor: ticket.canceladoPor ?? null,
+    canceladoFecha: timestampToIso(ticket.canceladoFecha ?? undefined),
     createdAt: timestampToIso(ticket.createdAt),
     reuniones: reuniones.map(serializeHelpdeskReunion),
     emailLog: emailLog.map(serializeHelpdeskEmailLog),

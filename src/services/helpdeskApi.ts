@@ -1,4 +1,5 @@
 import { auth } from './firebase'
+import type { HelpdeskMinutaDiagnostico } from '../types/helpdeskMinutaDiagnostico'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -36,18 +37,30 @@ export interface HelpdeskReunionResumen {
   fecha: string
   hora: string
   estado: HelpdeskReunionEstado
+  minuta: {
+    texto: string
+    autorNombre: string
+    updatedAt: string | null
+  } | null
+  minutaDiagnostico: HelpdeskMinutaDiagnostico | null
   createdAt: string | null
 }
+
+export const HELPDESK_ANALISIS_DEFAULT_APROBADOR = 'pablo.magnin@bacarsa.com.ar'
 
 export interface HelpdeskMisSolicitudTicket {
   id: string
   areaNombre: string
+  problematica: string
   urgencia: HelpdeskUrgencia
   estadoIdx: number
   estado: string | null
   createdAt: string | null
   asignadoATeamId: string | null
   asignadoNombre: string | null
+  cancelado?: boolean
+  canceladoMotivo?: string | null
+  canceladoPor?: string | null
   reuniones: HelpdeskReunionResumen[]
 }
 
@@ -181,6 +194,24 @@ export interface HelpdeskPanelTicket {
   problematica: string
   reuniones: HelpdeskReunionResumen[]
   emailLog: HelpdeskEmailLogEntry[]
+  cancelado?: boolean
+  canceladoMotivo?: string | null
+  canceladoPor?: string | null
+  canceladoFecha?: string | null
+}
+
+export interface HelpdeskAnalisisDto {
+  id: string
+  archivoDriveId: string
+  archivoDriveLink: string
+  subidoPorNombre: string
+  subidoPorEmail: string
+  subidoFecha: string
+  aprobadoresEmails: string[]
+  estado: 'pendiente' | 'aprobado' | 'rechazado'
+  decididoPorEmail: string | null
+  decididoFecha: string | null
+  comentarioDecision: string | null
 }
 
 export interface HelpdeskNotaDto {
@@ -192,6 +223,20 @@ export interface HelpdeskNotaDto {
 
 export interface HelpdeskTicketDetail extends HelpdeskPanelTicket {
   notas: HelpdeskNotaDto[]
+  analisis: HelpdeskAnalisisDto[]
+}
+
+export interface HelpdeskAnalisisPendienteItem {
+  ticketId: string
+  analisisId: string
+  analisis: HelpdeskAnalisisDto
+  ticket: {
+    id: string
+    areaNombre: string
+    problematica: string
+    requesterNombre: string
+    estadoIdx: number
+  }
 }
 
 async function authFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -287,6 +332,28 @@ export async function postHelpdeskTicketReunion(
   })
 }
 
+export async function deleteHelpdeskTicket(
+  ticketId: string,
+): Promise<{ ticketId: string; deleted: boolean }> {
+  return authFetch(`/api/helpdesk/tickets/${encodeURIComponent(ticketId)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function patchHelpdeskReunionMinuta(
+  ticketId: string,
+  reunionId: string,
+  payload: { texto: string } | { minutaDiagnostico: HelpdeskMinutaDiagnostico },
+): Promise<{ ticketId: string; reunionId: string }> {
+  return authFetch(
+    `/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/reuniones/${encodeURIComponent(reunionId)}/minuta`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
 export async function fetchMisSolicitudes(): Promise<HelpdeskMisSolicitudesResponse> {
   const res = await fetch(helpdeskUrl('/api/helpdesk/tickets/mias'), {
     method: 'GET',
@@ -296,6 +363,105 @@ export async function fetchMisSolicitudes(): Promise<HelpdeskMisSolicitudesRespo
     },
   })
   return handleHelpdeskResponse<HelpdeskMisSolicitudesResponse>(res)
+}
+
+export interface HelpdeskCampanaAuditoriaRow {
+  nombre: string | null
+  area: string | null
+  email: string | null
+  enviado: boolean | null
+  fecha_envio: string | null
+  respondido: boolean | null
+  fecha_respuesta: string | null
+  link: string | null
+}
+
+export async function fetchCampanaAuditoria(): Promise<{ rows: HelpdeskCampanaAuditoriaRow[] }> {
+  return authFetch('/api/helpdesk/campana/auditoria')
+}
+
+export async function patchHelpdeskTicketCancelacion(
+  ticketId: string,
+  payload: { cancelado: boolean; motivo?: string },
+): Promise<{ ticketId: string; cancelado: boolean }> {
+  return authFetch(`/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/cancelacion`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function postHelpdeskTicketAnalisis(
+  ticketId: string,
+  file: File,
+  aprobadoresEmails: string,
+): Promise<{ analisisId: string }> {
+  const token = await authHeaders()
+  const form = new FormData()
+  form.append('file', file)
+  form.append('aprobadoresEmails', aprobadoresEmails)
+  const res = await fetch(helpdeskUrl(`/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/analisis`), {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      ...token,
+    },
+    body: form,
+  })
+  const body = await handleHelpdeskResponse<{ analisisId: string }>(res)
+  return body
+}
+
+export async function fetchAnalisisPendientes(): Promise<{ items: HelpdeskAnalisisPendienteItem[] }> {
+  return authFetch('/api/helpdesk/analisis-pendientes')
+}
+
+export interface HelpdeskBitacoraEntradaDto {
+  id: string
+  autorNombre: string
+  autorEmail: string
+  tipo: 'avance' | 'comentario'
+  texto: string
+  adjuntoDriveLink: string | null
+  createdAt: string | null
+}
+
+export async function fetchHelpdeskTicketBitacora(
+  ticketId: string,
+): Promise<{ entradas: HelpdeskBitacoraEntradaDto[] }> {
+  return authFetch(`/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/bitacora`)
+}
+
+export async function postHelpdeskTicketBitacora(
+  ticketId: string,
+  input: { texto: string; file?: File },
+): Promise<{ entradaId: string; ticketId: string; tipo: string }> {
+  const token = await authHeaders()
+  const form = new FormData()
+  form.append('texto', input.texto)
+  if (input.file) form.append('file', input.file)
+  const res = await fetch(
+    helpdeskUrl(`/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/bitacora`),
+    {
+      method: 'POST',
+      headers: { Accept: 'application/json', ...token },
+      body: form,
+    },
+  )
+  return handleHelpdeskResponse(res)
+}
+
+export async function patchAnalisisDecision(
+  ticketId: string,
+  analisisId: string,
+  payload: { decision: 'aprobado' | 'rechazado'; comentario?: string },
+): Promise<{ ticketId: string; analisisId: string; decision: string }> {
+  return authFetch(
+    `/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/analisis/${encodeURIComponent(analisisId)}/decision`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    },
+  )
 }
 
 export async function crearSolicitud(

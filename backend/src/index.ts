@@ -18,6 +18,10 @@ const n8nMgmtApiKey = defineSecret('N8N_MGMT_API_KEY')
 const helpdeskN8nWebhookRecordatorio = defineSecret(
   'HELPDESK_N8N_WEBHOOK_' + 'RECORDATORIO',
 )
+const helpdeskN8nWebhookAvisoInterno = defineSecret('HELPDESK_N8N_WEBHOOK_AVISO_INTERNO')
+const helpdeskN8nWebhookAnalisisPendiente = defineSecret(
+  'HELPDESK_N8N_WEBHOOK_ANALISIS_PENDIENTE',
+)
 
 const adminMode = initFirebaseAdmin()
 logCredentialDiagnostics(adminMode)
@@ -56,6 +60,9 @@ export const api = onRequest(
       helpdeskN8nOutboundApiKey,
       helpdeskN8nWebhookSolicitudCreada,
       helpdeskN8nWebhookEstadoCambiado,
+      n8nMgmtApiKey,
+      helpdeskN8nWebhookAvisoInterno,
+      helpdeskN8nWebhookAnalisisPendiente,
     ],
   },
   async (req, res) => {

@@ -15,6 +15,7 @@ import {
   HELPDESK_USED_TOKENS_COLLECTION,
   type HelpdeskEmailLog,
   type HelpdeskEmailLogTipo,
+  type HelpdeskMinutaDiagnostico,
   type HelpdeskReunion,
   type HelpdeskTicket,
   type HelpdeskTeamMember,
@@ -228,6 +229,43 @@ export async function updateHelpdeskReunion(
     .update(patch)
 }
 
+export async function updateHelpdeskReunionMinuta(input: {
+  ticketId: string
+  reunionId: string
+  autorNombre: string
+  texto?: string
+  minutaDiagnostico?: HelpdeskMinutaDiagnostico | null
+}): Promise<void> {
+  const patch: Record<string, unknown> = {}
+
+  if (input.texto !== undefined) {
+    patch.minuta = input.texto.trim()
+      ? {
+          texto: input.texto.trim(),
+          autorNombre: input.autorNombre,
+          updatedAt: FieldValue.serverTimestamp(),
+        }
+      : null
+  }
+
+  if (input.minutaDiagnostico !== undefined) {
+    patch.minutaDiagnostico = input.minutaDiagnostico
+      ? {
+          ...input.minutaDiagnostico,
+          autorNombre: input.autorNombre,
+          updatedAt: FieldValue.serverTimestamp(),
+        }
+      : null
+  }
+
+  await adminDb()
+    .collection(HELPDESK_TICKETS_COLLECTION)
+    .doc(input.ticketId)
+    .collection(HELPDESK_REUNIONES_SUBCOLLECTION)
+    .doc(input.reunionId)
+    .update(patch)
+}
+
 export async function createHelpdeskTicket(
   input: Omit<HelpdeskTicket, 'createdAt'>,
 ): Promise<string> {
@@ -250,6 +288,13 @@ export async function getHelpdeskTicketById(
 export async function updateHelpdeskTicket(
   ticketId: string,
   patch: Partial<Pick<HelpdeskTicket, 'estadoIdx' | 'asignadoATeamId'>>,
+): Promise<void> {
+  await adminDb().collection(HELPDESK_TICKETS_COLLECTION).doc(ticketId).update(patch)
+}
+
+export async function updateHelpdeskTicketCancelacion(
+  ticketId: string,
+  patch: Record<string, unknown>,
 ): Promise<void> {
   await adminDb().collection(HELPDESK_TICKETS_COLLECTION).doc(ticketId).update(patch)
 }

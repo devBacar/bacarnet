@@ -316,6 +316,7 @@ export function NotificationBell() {
             : 'Notificaciones'
         }
         aria-expanded={open}
+        data-testid="notification-bell-button"
         className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:border-zinc-700 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100"
       >
         <Bell className="h-4 w-4" />

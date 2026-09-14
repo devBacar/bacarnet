@@ -19,6 +19,7 @@ import {
   Home,
   IntranetHub,
   MisSolicitudesSistemas,
+  AprobacionesPendientes,
   AccountPendingPage,
   AccountRejectedPage,
   OfficeUploadPreviewPage,
@@ -82,6 +83,7 @@ export function AppRoutes() {
 
             <Route element={<CorporateAccountRoute />}>
               <Route path="mis-solicitudes-sistemas" element={<MisSolicitudesSistemas />} />
+              <Route path="aprobaciones-pendientes" element={<AprobacionesPendientes />} />
               <Route path="sistemas/mesa-ayuda" element={<SistemasMesaAyuda />} />
               <Route path="ayuda" element={<HelpCenter />} />
             </Route>

@@ -1,4 +1,4 @@
-import { BookOpen, BookUser, Headphones, Home, HardDrive, LayoutDashboard, Link2, LogOut, Menu, Moon, ScrollText, Sun } from 'lucide-react'
+import { BookOpen, BookUser, ClipboardCheck, Headphones, Home, HardDrive, LayoutDashboard, Link2, LogOut, Menu, Moon, ScrollText, Sun } from 'lucide-react'
 
 import { useMemo, useState } from 'react'
 
@@ -104,7 +104,9 @@ export function Navbar() {
 
     if (!externalAccount) {
 
-      items.push({ to: '/mis-solicitudes-sistemas', label: 'Mis solicitudes', icon: Headphones })
+      items.push({ to: '/mis-solicitudes-sistemas', label: 'Mis proyectos', icon: Headphones })
+
+      items.push({ to: '/aprobaciones-pendientes', label: 'Aprobaciones pendientes', icon: ClipboardCheck })
 
       items.push({ to: '/sistemas/mesa-ayuda', label: 'Desarrollo', icon: Headphones })
 
@@ -276,7 +278,17 @@ export function Navbar() {
 
             <NavLink to="/mis-solicitudes-sistemas" className={navLinkClass}>
 
-              Mis solicitudes
+              Mis proyectos
+
+            </NavLink>
+
+          )}
+
+          {!externalAccount && (
+
+            <NavLink to="/aprobaciones-pendientes" className={navLinkClass}>
+
+              Aprobaciones pendientes
 
             </NavLink>
 

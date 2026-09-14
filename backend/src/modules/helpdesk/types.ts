@@ -44,6 +44,7 @@ export interface HelpdeskTeamMember {
   rol: string
   activo: boolean
   primeraReunion: boolean
+  responsablePrincipal: boolean
 }
 
 export interface HelpdeskTeamMemberRecord extends HelpdeskTeamMember {

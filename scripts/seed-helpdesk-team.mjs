@@ -17,20 +17,45 @@ const COLLECTION = 'helpdeskTeam'
 
 const MEMBERS = [
   {
-    nombre: 'Mauro Martínez',
+    nombre: 'Mauro Martinez',
     email: 'admin@bacarsa.com.ar',
-    rol: 'Dirección de Sistemas',
+    rol: 'Desarrollador',
     primeraReunion: true,
+    responsablePrincipal: true,
     activo: true,
   },
   {
     nombre: 'Franco Sartori',
     email: 'sistemas.ti@bacarsa.com.ar',
-    rol: 'Coordinación de área',
+    rol: 'Desarrollador',
     primeraReunion: true,
+    responsablePrincipal: false,
+    activo: true,
+  },
+  {
+    nombre: 'Surly Meyer',
+    email: 'desarrollo.it@bacarsa.com.ar',
+    rol: 'Desarrolladora',
+    primeraReunion: false,
+    responsablePrincipal: false,
+    activo: true,
+  },
+  {
+    nombre: 'Debora Quinteros',
+    email: 'implementaciones.it@bacarsa.com.ar',
+    rol: 'Implementadora',
+    primeraReunion: false,
+    responsablePrincipal: false,
     activo: true,
   },
 ]
+
+const LEGACY_EXAMPLE_NAMES = new Set([
+  'Marcos Duarte',
+  'Lucía Fernández',
+  'Julián Vega',
+  'Agustina Rey',
+])
 
 function loadBackendEnv() {
   const envPath = resolve(ROOT, 'backend/.env')
@@ -105,6 +130,14 @@ async function main() {
       : '=== APPLY: upsert en helpdeskTeam ===',
   )
 
+  const existingTeam = await db.collection(COLLECTION).get()
+  for (const doc of existingTeam.docs) {
+    const nombre = typeof doc.get('nombre') === 'string' ? doc.get('nombre').trim() : ''
+    if (!LEGACY_EXAMPLE_NAMES.has(nombre)) continue
+    console.log(`ELIMINA ejemplo  ${nombre}  id=${doc.id}`)
+    if (!dryRun) await doc.ref.delete()
+  }
+
   for (const member of MEMBERS) {
     const email = normEmail(member.email)
     const uid = await resolveUidByEmail(db, email)
@@ -112,7 +145,7 @@ async function main() {
     const action = existing.empty ? 'CREA' : 'ACTUALIZA'
 
     console.log(
-      `${action}  ${member.nombre} <${email}>  rol="${member.rol}"  uid=${uid ?? '(sin users/)'}`,
+      `${action}  ${member.nombre} <${email}>  rol="${member.rol}"  primeraReunion=${member.primeraReunion}  responsablePrincipal=${member.responsablePrincipal}  uid=${uid ?? '(sin users/)'}`,
     )
 
     if (dryRun) continue
@@ -124,6 +157,7 @@ async function main() {
       rol: member.rol,
       activo: member.activo,
       primeraReunion: member.primeraReunion,
+      responsablePrincipal: member.responsablePrincipal,
       updatedAt: FieldValue.serverTimestamp(),
     }
 
@@ -134,6 +168,17 @@ async function main() {
       })
     } else {
       await existing.docs[0].ref.set(payload, { merge: true })
+    }
+  }
+
+  if (!dryRun) {
+    const verified = await db.collection(COLLECTION).get()
+    console.log('\n=== VERIFICACIÓN helpdeskTeam ===')
+    for (const doc of verified.docs) {
+      const row = doc.data()
+      console.log(
+        `${doc.id}  ${row.nombre} <${row.email}>  activo=${row.activo}  primeraReunion=${row.primeraReunion}  responsablePrincipal=${row.responsablePrincipal}`,
+      )
     }
   }
 }

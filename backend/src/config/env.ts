@@ -74,6 +74,12 @@ export function getEnv() {
     process.env.HELPDESK_N8N_WEBHOOK_ESTADO_CAMBIADO?.trim() || ''
   const helpdeskN8nWebhookRecordatorio =
     process.env.HELPDESK_N8N_WEBHOOK_RECORDATORIO?.trim() || ''
+  const n8nManagementCredential = process.env.N8N_MGMT_API_KEY?.trim() || ''
+  const n8nMgmtApiBase =
+    process.env.N8N_MGMT_API_BASE?.trim().replace(/\/+$/, '') ||
+    'https://bacarit.app.n8n.cloud/api/v1'
+  const n8nJefesAreasTableId =
+    process.env.N8N_JEFES_AREAS_TABLE_ID?.trim() || 'H89zKU8ofZrpbFP5'
   const publicAppUrl = (process.env.PUBLIC_APP_URL ?? DEFAULT_PUBLIC_APP_URL).trim().replace(/\/+$/, '')
   const pendingUploadsBucket =
     process.env.PENDING_UPLOADS_BUCKET?.trim() || 'bacar-pending-uploads'
@@ -113,6 +119,9 @@ export function getEnv() {
     helpdeskN8nWebhookSolicitudCreada,
     helpdeskN8nWebhookEstadoCambiado,
     helpdeskN8nWebhookRecordatorio,
+    n8nManagementCredential,
+    n8nMgmtApiBase,
+    n8nJefesAreasTableId,
     publicAppUrl,
     pendingUploadsBucket,
     ragStagingBucket,

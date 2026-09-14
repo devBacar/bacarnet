@@ -1,6 +1,7 @@
-import { defineSecret } from 'firebase-functions/params'
+import { defineSecret, defineString } from 'firebase-functions/params'
 import { setGlobalOptions } from 'firebase-functions/v2'
 import { onRequest } from 'firebase-functions/v2/https'
+import { onSchedule } from 'firebase-functions/v2/scheduler'
 import type { Request, Response } from 'express'
 import { initFirebaseAdmin } from './lib/firebase/admin.js'
 import { logCredentialDiagnostics } from './lib/diag.js'
@@ -12,6 +13,11 @@ const helpdeskN8nOutboundApiKey = defineSecret('HELPDESK_N8N_OUTBOUND_API_KEY')
 const helpdeskN8nWebhookSolicitudCreada = defineSecret('HELPDESK_N8N_WEBHOOK_SOLICITUD_CREADA')
 const helpdeskN8nWebhookEstadoCambiado = defineSecret(
   'HELPDESK_N8N_WEBHOOK_' + 'ESTADO_CAMBIADO',
+)
+const n8nMgmtApiKey = defineSecret('N8N_MGMT_API_KEY')
+const helpdeskN8nWebhookRecordatorio = defineString(
+  'HELPDESK_N8N_WEBHOOK_RECORDATORIO',
+  { default: '' },
 )
 
 const adminMode = initFirebaseAdmin()
@@ -56,6 +62,39 @@ export const api = onRequest(
   async (req, res) => {
     const app = await loadApp()
     app(req, res)
+  },
+)
+
+export const sincronizarReunionesHelpdesk = onSchedule(
+  {
+    schedule: 'every 2 hours',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async () => {
+    const { runScheduledReunionSync } = await import(
+      './modules/helpdesk/scheduledReunionSync.js'
+    )
+    await runScheduledReunionSync()
+  },
+)
+
+export const recordarSolicitudesHelpdesk = onSchedule(
+  {
+    schedule: 'every day 09:00',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    timeoutSeconds: 300,
+    memory: '256MiB',
+    secrets: [n8nMgmtApiKey, helpdeskN8nOutboundApiKey],
+  },
+  async () => {
+    process.env.HELPDESK_N8N_WEBHOOK_RECORDATORIO =
+      helpdeskN8nWebhookRecordatorio.value()
+    const { runScheduledReminder } = await import(
+      './modules/helpdesk/scheduledReminder.js'
+    )
+    await runScheduledReminder()
   },
 )
 

@@ -13,6 +13,7 @@ export async function getTeamHandler(_req: Request, res: Response): Promise<void
         email: m.email,
         rol: m.rol,
         primeraReunion: m.primeraReunion,
+        responsablePrincipal: m.responsablePrincipal === true,
       })),
     })
   } catch (err) {

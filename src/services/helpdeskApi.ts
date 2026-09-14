@@ -157,6 +157,7 @@ export interface HelpdeskTeamMemberDto {
   email: string
   rol: string
   primeraReunion: boolean
+  responsablePrincipal: boolean
 }
 
 export interface HelpdeskEmailLogEntry {

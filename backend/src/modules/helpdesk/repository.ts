@@ -70,27 +70,27 @@ export async function listPrimeraReunionTeamMembers(): Promise<
   return members.filter((m) => m.primeraReunion === true)
 }
 
-export function pickDireccionTeamMember(
+export function pickResponsablePrincipalTeamMember(
   members: (HelpdeskTeamMemberRecord & { id: string })[],
 ): (HelpdeskTeamMemberRecord & { id: string }) | null {
   for (const member of members) {
-    if (typeof member.rol === 'string' && member.rol.includes('Dirección')) {
+    if (member.responsablePrincipal === true) {
       return member
     }
   }
   return null
 }
 
-/** Primer miembro activo con primera reunión y rol que contiene "Dirección". */
-export async function findDireccionPrimeraReunionTeamMemberId(): Promise<string | null> {
-  const direccion = pickDireccionTeamMember(await listPrimeraReunionTeamMembers())
-  if (!direccion) {
+/** Miembro activo de primera reunión marcado explícitamente como responsable principal. */
+export async function findResponsablePrincipalPrimeraReunionTeamMemberId(): Promise<string | null> {
+  const responsable = pickResponsablePrincipalTeamMember(await listPrimeraReunionTeamMembers())
+  if (!responsable) {
     logInfo(
-      'helpdesk: no se encontró miembro de Dirección con primeraReunion; asignadoATeamId quedará null',
+      'helpdesk: no se encontró responsablePrincipal con primeraReunion; asignadoATeamId quedará null',
     )
     return null
   }
-  return direccion.id
+  return responsable.id
 }
 
 export async function isHelpdeskTokenJtiUsed(jti: string): Promise<boolean> {
@@ -140,6 +140,7 @@ export async function upsertHelpdeskTeamMemberByEmail(
     rol: member.rol.trim(),
     activo: member.activo,
     primeraReunion: member.primeraReunion,
+    responsablePrincipal: member.responsablePrincipal,
     updatedAt: FieldValue.serverTimestamp(),
   }
 

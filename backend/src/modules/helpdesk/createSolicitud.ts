@@ -12,7 +12,7 @@ import {
   createHelpdeskTicketWithInitialReunion,
   isValidHelpdeskUrgencia,
   listPrimeraReunionTeamMembers,
-  pickDireccionTeamMember,
+  pickResponsablePrincipalTeamMember,
 } from './repository.js'
 import { notificarN8n } from './n8nWebhooks.js'
 import { ticketPayloadForN8n } from './serializeTicket.js'
@@ -71,9 +71,9 @@ export async function createSolicitudHandler(req: Request, res: Response): Promi
   try {
     const primeraReunionTeam = await listPrimeraReunionTeamMembers()
     const teamEmails = primeraReunionTeam.map((m) => m.email)
-    const direccion = pickDireccionTeamMember(primeraReunionTeam)
+    const responsablePrincipal = pickResponsablePrincipalTeamMember(primeraReunionTeam)
 
-    if (teamEmails.length === 0 || !direccion) {
+    if (teamEmails.length === 0 || !responsablePrincipal) {
       res.status(503).json({ error: 'No hay equipo de primera reunión configurado' })
       return
     }
@@ -89,7 +89,7 @@ export async function createSolicitudHandler(req: Request, res: Response): Promi
     }
 
     const participantesTeamIds = primeraReunionTeam
-      .filter((m) => m.id !== direccion.id)
+      .filter((m) => m.id !== responsablePrincipal.id)
       .map((m) => m.id)
 
     const { ticketId, reunionId } = await createHelpdeskTicketWithInitialReunion({
@@ -105,11 +105,11 @@ export async function createSolicitudHandler(req: Request, res: Response): Promi
         problematica,
         urgencia,
         estadoIdx: 1,
-        asignadoATeamId: direccion.id,
+        asignadoATeamId: responsablePrincipal.id,
       },
       reunion: {
         tipo: 'Reunión inicial',
-        conTeamId: direccion.id,
+        conTeamId: responsablePrincipal.id,
         participantesTeamIds,
         fecha: fechaStr,
         hora: horaStr,
@@ -129,7 +129,7 @@ export async function createSolicitudHandler(req: Request, res: Response): Promi
     await attachCalendarEventToReunion({
       ticketId,
       reunionId,
-      organizerEmail: direccion.email,
+      organizerEmail: responsablePrincipal.email,
       attendeeEmails,
       summary: `Sistemas · Primera reunión — ${claims.areaNombre}`,
       description: problematica,
@@ -149,7 +149,7 @@ export async function createSolicitudHandler(req: Request, res: Response): Promi
         problematica,
         urgencia,
         estadoIdx: 1,
-        asignadoATeamId: direccion.id,
+        asignadoATeamId: responsablePrincipal.id,
       }),
       reunionId,
       reunionFecha: fechaStr,

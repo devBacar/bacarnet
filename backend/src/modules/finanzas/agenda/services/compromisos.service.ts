@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { getChequeDocument } from '../../cheques/services/cheques.repository.js'
-import { CHEQUE_ESTADO_LABEL } from '../../cheques/domain/cheque.types.js'
 import { buildMarcarPagadoHistorial } from '../domain/agenda.historial.js'
 import { computeVencimientoAlerta } from '../domain/vencimiento.alert.js'
 import type { CompromisoPagoDocument, MedioPago } from '../domain/agenda.types.js'
@@ -26,17 +24,6 @@ function tsToIso(value: unknown): string | null {
   return d ? d.toISOString() : null
 }
 
-async function enrichCheque(chequeId: string | null) {
-  if (!chequeId) return null
-  const doc = await getChequeDocument(chequeId)
-  if (!doc) return null
-  return {
-    id: chequeId,
-    numero: doc.numero,
-    estadoActual: doc.estadoActual,
-    estadoLabel: CHEQUE_ESTADO_LABEL[doc.estadoActual],
-  }
-}
 
 export async function serializeCompromiso(id: string, data: CompromisoPagoDocument) {
   const fechaVenc = tsToDate(data.fechaVencimiento)
@@ -47,7 +34,7 @@ export async function serializeCompromiso(id: string, data: CompromisoPagoDocume
       })
     : 'neutro'
 
-  const cheque = await enrichCheque(data.chequeId)
+  const cheque = null
 
   return {
     id,

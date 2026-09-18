@@ -2,7 +2,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
-import { Link } from 'react-router-dom'
 import {
   VencimientoAlertTag,
   vencimientoRowClass,
@@ -240,13 +239,13 @@ function CompromisosTable({
                 <td className="px-3 py-3">{MEDIO_LABEL[row.medioPago]}</td>
                 <td className="px-3 py-3">
                   {row.cheque ? (
-                    <Link
-                      to="/finanzas/cheques"
-                      className="text-brand-primary font-medium hover:underline"
-                      title={`Estado: ${row.cheque.estadoLabel}`}
-                    >
+                    <span className="text-body-muted text-sm" title={`Estado: ${row.cheque.estadoLabel}`}>
                       Nº {row.cheque.numero}
-                    </Link>
+                    </span>
+                  ) : row.chequeId ? (
+                    <span className="text-body-muted text-xs" title="Vínculo guardado (detalle cuando Cheques esté disponible)">
+                      Vinculado
+                    </span>
                   ) : (
                     '—'
                   )}
@@ -341,9 +340,11 @@ function CobrosTable({
               <td className="px-3 py-3">{formatFecha(row.fechaEsperada)}</td>
               <td className="px-3 py-3">
                 {row.cheque ? (
-                  <Link to="/finanzas/cheques" className="text-brand-primary font-medium hover:underline">
-                    Nº {row.cheque.numero}
-                  </Link>
+                  <span className="text-body-muted text-sm">Nº {row.cheque.numero}</span>
+                ) : row.chequeId ? (
+                  <span className="text-body-muted text-xs" title="Vínculo guardado (detalle cuando Cheques esté disponible)">
+                    Vinculado
+                  </span>
                 ) : (
                   '—'
                 )}

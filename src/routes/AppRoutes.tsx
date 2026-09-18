@@ -30,7 +30,6 @@ import {
   SistemasMesaAyuda,
   SoporteTi,
   FinanzasCuentasPage,
-  FinanzasChequesPage,
   FinanzasAgendaPage,
   FinanzasLayout,
 } from '../pages'
@@ -78,7 +77,6 @@ export function AppRoutes() {
               <Route path="finanzas" element={<FinanzasLayout />}>
                 <Route index element={<Navigate to="cuentas" replace />} />
                 <Route path="cuentas" element={<FinanzasCuentasPage />} />
-                <Route path="cheques" element={<FinanzasChequesPage />} />
                 <Route path="agenda" element={<FinanzasAgendaPage />} />
               </Route>
             </Route>

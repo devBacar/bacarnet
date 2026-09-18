@@ -12,7 +12,6 @@ export interface FinanzasNavItem {
 
 export const FINANZAS_NAV_ITEMS: FinanzasNavItem[] = [
   { to: '/finanzas/cuentas', label: 'Saldos', enabled: true },
-  { to: '/finanzas/cheques', label: 'Cheques', enabled: true },
   { to: '/finanzas/agenda', label: 'Agenda', enabled: true },
   // Fases futuras — habilitar cuando exista la ruta:
   // { to: '/finanzas/creditos', label: 'Créditos', enabled: false },

@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto'
 import { buildAgendaHistorialEntry } from '../domain/agenda.historial.js'
 import { computeVencimientoAlerta } from '../domain/vencimiento.alert.js'
+import { compareAgendaByUrgenciaThenFecha, parsePrioridadUrgencia } from '../domain/agenda.prioridad.js'
+import type { PrioridadUrgencia } from '../domain/agenda.prioridad.js'
+import { filterCobrosByVista, type CobrosAgendaVista } from '../domain/agenda.listFilters.js'
+import { agendaTimestampToDate, agendaTimestampToIso } from '../domain/agendaTimestamps.js'
 import type { CobroEsperadoDocument } from '../domain/agenda.types.js'
 import {
   appendCobroHistorial,
@@ -10,23 +14,14 @@ import {
   listCobroHistorial,
   parseDateInput,
   timestampFromDate,
-  updateCobroPrioridad,
+  updateCobroUrgencia,
 } from './agenda.repository.js'
 
-function tsToDate(value: unknown): Date | null {
-  if (!value || typeof value !== 'object') return null
-  const maybe = value as { toDate?: () => Date }
-  return typeof maybe.toDate === 'function' ? maybe.toDate() : null
-}
-
-function tsToIso(value: unknown): string | null {
-  const d = tsToDate(value)
-  return d ? d.toISOString() : null
-}
+export type { CobrosAgendaVista } from '../domain/agenda.listFilters.js'
 
 
 export async function serializeCobro(id: string, data: CobroEsperadoDocument) {
-  const fechaEsp = tsToDate(data.fechaEsperada)
+  const fechaEsp = agendaTimestampToDate(data.fechaEsperada)
   const alertaVencimiento = fechaEsp
     ? computeVencimientoAlerta({
         fechaVencimiento: fechaEsp,
@@ -40,34 +35,52 @@ export async function serializeCobro(id: string, data: CobroEsperadoDocument) {
     id,
     clienteONombre: data.clienteONombre,
     montoCentavos: data.montoCentavos,
-    fechaEsperada: tsToIso(data.fechaEsperada),
-    prioridad: data.prioridad ?? 0,
+    fechaEsperada: agendaTimestampToIso(data.fechaEsperada),
+    urgenciaManual: parsePrioridadUrgencia(data.urgenciaManual) ?? null,
     chequeId: data.chequeId,
     cheque,
     estado: data.estado,
     cuentaId: data.cuentaId ?? null,
-    fechaConfirmado: tsToIso(data.fechaConfirmado),
+    fechaConfirmado: agendaTimestampToIso(data.fechaConfirmado),
     confirmadoPor: data.confirmadoPor,
     alertaVencimiento,
-    createdAt: tsToIso(data.createdAt),
-    updatedAt: tsToIso(data.updatedAt),
+    createdAt: agendaTimestampToIso(data.createdAt),
+    updatedAt: agendaTimestampToIso(data.updatedAt),
   }
 }
 
-export async function listCobrosAgenda() {
+export async function listCobrosAgenda(vista: CobrosAgendaVista = 'esperados') {
   const rows = await listAllCobros()
-  const abiertos = rows.filter(({ data }) => data.estado === 'esperado')
 
-  abiertos.sort((a, b) => {
-    const pa = a.data.prioridad ?? 0
-    const pb = b.data.prioridad ?? 0
-    if (pa !== pb) return pa - pb
-    const da = tsToDate(a.data.fechaEsperada)?.getTime() ?? 0
-    const db = tsToDate(b.data.fechaEsperada)?.getTime() ?? 0
-    return da - db
+  const filtered = filterCobrosByVista(rows, vista)
+
+  if (vista === 'cobrados') {
+    filtered.sort((a, b) => {
+      const da =
+        agendaTimestampToDate(a.data.fechaConfirmado)?.getTime() ??
+        agendaTimestampToDate(a.data.updatedAt)?.getTime() ??
+        0
+      const db =
+        agendaTimestampToDate(b.data.fechaConfirmado)?.getTime() ??
+        agendaTimestampToDate(b.data.updatedAt)?.getTime() ??
+        0
+      return db - da
+    })
+    return Promise.all(filtered.map(({ id, data }) => serializeCobro(id, data)))
+  }
+
+  filtered.sort((a, b) => {
+    const da = agendaTimestampToDate(a.data.fechaEsperada)?.getTime() ?? 0
+    const db = agendaTimestampToDate(b.data.fechaEsperada)?.getTime() ?? 0
+    return compareAgendaByUrgenciaThenFecha(
+      parsePrioridadUrgencia(a.data.urgenciaManual),
+      da,
+      parsePrioridadUrgencia(b.data.urgenciaManual),
+      db,
+    )
   })
 
-  return Promise.all(abiertos.map(({ id, data }) => serializeCobro(id, data)))
+  return Promise.all(filtered.map(({ id, data }) => serializeCobro(id, data)))
 }
 
 export async function createCobroAgenda(input: {
@@ -78,7 +91,10 @@ export async function createCobroAgenda(input: {
     typeof input.body.clienteONombre === 'string' ? input.body.clienteONombre.trim() : ''
   const montoCentavos = input.body.montoCentavos
   const fechaEsperada = parseDateInput(input.body.fechaEsperada)
-  const prioridad = typeof input.body.prioridad === 'number' ? input.body.prioridad : 0
+  const urgenciaManual =
+    input.body.urgenciaManual === null || input.body.urgenciaManual === ''
+      ? null
+      : parsePrioridadUrgencia(input.body.urgenciaManual)
   const chequeId =
     typeof input.body.chequeId === 'string' && input.body.chequeId.trim()
       ? input.body.chequeId.trim()
@@ -99,7 +115,8 @@ export async function createCobroAgenda(input: {
       clienteONombre,
       montoCentavos,
       fechaEsperada: timestampFromDate(fechaEsperada),
-      prioridad,
+      prioridad: 0,
+      urgenciaManual,
       chequeId,
       estado: 'esperado',
       createdBy: input.actorUid,
@@ -111,9 +128,8 @@ export async function createCobroAgenda(input: {
   return serializeCobro(id, created)
 }
 
-export async function patchCobroPrioridad(cobroId: string, prioridad: number) {
-  if (!Number.isFinite(prioridad)) throw new Error('prioridad inválida')
-  await updateCobroPrioridad(cobroId, Math.round(prioridad))
+export async function patchCobroUrgencia(cobroId: string, urgenciaManual: PrioridadUrgencia | null) {
+  await updateCobroUrgencia(cobroId, urgenciaManual)
   const doc = await getCobroDocument(cobroId)
   if (!doc) throw new Error('Cobro no encontrado')
   return serializeCobro(cobroId, doc)
@@ -162,7 +178,7 @@ export async function getCobroHistorialApi(cobroId: string) {
     id,
     estadoAnterior: data.estadoAnterior,
     estadoNuevo: data.estadoNuevo,
-    fecha: tsToIso(data.fecha),
+    fecha: agendaTimestampToIso(data.fecha),
     usuario: data.usuario,
     nota: data.nota,
   }))

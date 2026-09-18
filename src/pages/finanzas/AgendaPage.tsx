@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import {
   VencimientoAlertTag,
@@ -8,29 +8,51 @@ import {
 } from '../../components/finanzas/VencimientoAlert'
 import { FinanzasFormField, finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
-import type { FinanzasCuenta } from '../../services/finanzasApi'
 import { useAuth } from '../../context'
-import { fetchFinanzasCuentas } from '../../services/finanzasApi'
+import { fetchFinanzasCuentas, type FinanzasCuenta } from '../../services/finanzasApi'
 import {
   confirmarCobroAgenda,
   createCobroAgenda,
   createCompromisoAgenda,
+  fetchCobroHistorial,
   fetchCobrosAgenda,
   fetchCompromisoHistorial,
   fetchCompromisosAgenda,
   marcarCompromisoPagado,
-  patchCobroPrioridad,
-  patchCompromisoPrioridad,
+  patchCobroUrgencia,
+  patchCompromisoUrgencia,
   type CobroAgendaItem,
+  type CobrosAgendaVista,
   type CompromisoAgendaItem,
+  type CompromisosAgendaVista,
   type MedioPago,
+  type PrioridadUrgencia,
 } from '../../services/finanzasAgendaApi'
 
 type Tab = 'pagos' | 'cobros'
 
-function formatFecha(iso: string | null): string {
+const URGENCIA_LABEL: Record<PrioridadUrgencia, string> = {
+  alta: 'Alta',
+  media: 'Media',
+  baja: 'Baja',
+}
+
+function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('es-AR')
+}
+
+function filterCompromisosForVista(
+  rows: CompromisoAgendaItem[],
+  vista: CompromisosAgendaVista,
+): CompromisoAgendaItem[] {
+  if (vista === 'pagados') return rows.filter((r) => r.estado === 'pagado')
+  return rows.filter((r) => r.estado === 'pendiente' || r.estado === 'vencido')
+}
+
+function filterCobrosForVista(rows: CobroAgendaItem[], vista: CobrosAgendaVista): CobroAgendaItem[] {
+  if (vista === 'cobrados') return rows.filter((r) => r.estado === 'confirmado')
+  return rows.filter((r) => r.estado === 'esperado')
 }
 
 const MEDIO_LABEL: Record<MedioPago, string> = {
@@ -42,26 +64,41 @@ const MEDIO_LABEL: Record<MedioPago, string> = {
 export function FinanzasAgendaPage() {
   const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('pagos')
+  const [vistaPagos, setVistaPagos] = useState<CompromisosAgendaVista>('pendientes')
+  const [vistaCobros, setVistaCobros] = useState<CobrosAgendaVista>('esperados')
   const [showAlta, setShowAlta] = useState(false)
   const queryClient = useQueryClient()
 
-  const { data: compromisos = [], isLoading: loadingPagos } = useQuery({
-    queryKey: ['finanzas', 'agenda', 'compromisos'],
-    queryFn: fetchCompromisosAgenda,
-    enabled: Boolean(user),
+  const { data: compromisosRaw = [], isLoading: loadingPagos } = useQuery({
+    queryKey: ['finanzas', 'agenda', 'compromisos', vistaPagos],
+    queryFn: () => fetchCompromisosAgenda(vistaPagos),
+    enabled: Boolean(user) && tab === 'pagos',
   })
 
-  const { data: cobros = [], isLoading: loadingCobros } = useQuery({
-    queryKey: ['finanzas', 'agenda', 'cobros'],
-    queryFn: fetchCobrosAgenda,
-    enabled: Boolean(user),
+  const { data: cobrosRaw = [], isLoading: loadingCobros } = useQuery({
+    queryKey: ['finanzas', 'agenda', 'cobros', vistaCobros],
+    queryFn: () => fetchCobrosAgenda(vistaCobros),
+    enabled: Boolean(user) && tab === 'cobros',
   })
+
+  const compromisos = useMemo(
+    () => filterCompromisosForVista(compromisosRaw, vistaPagos),
+    [compromisosRaw, vistaPagos],
+  )
+  const cobros = useMemo(
+    () => filterCobrosForVista(cobrosRaw, vistaCobros),
+    [cobrosRaw, vistaCobros],
+  )
 
   const { data: cuentasData } = useQuery({
     queryKey: ['finanzas', 'cuentas'],
     queryFn: fetchFinanzasCuentas,
     enabled: Boolean(user),
   })
+
+  const cuentas = cuentasData?.cuentas ?? []
+  const puedeAlta =
+    (tab === 'pagos' && vistaPagos === 'pendientes') || (tab === 'cobros' && vistaCobros === 'esperados')
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
@@ -72,7 +109,8 @@ export function FinanzasAgendaPage() {
       <header className="mb-6">
         <h1 className="text-heading text-2xl font-bold tracking-tight sm:text-3xl">Agenda</h1>
         <p className="text-body-muted mt-2 max-w-2xl text-sm">
-          Pagos pendientes y cobros esperados, con prioridad manual y trazabilidad al saldar.
+          Compromisos y cobros ordenados por vencimiento; podés marcar urgencia Alta, Media o Baja para
+          priorizar. Los saldos de cuenta solo reflejan sync con Interbanking.
         </p>
       </header>
 
@@ -85,7 +123,7 @@ export function FinanzasAgendaPage() {
               tab === 'pagos' ? 'bg-brand-primary text-white' : 'text-body-muted'
             }`}
           >
-            Pagos pendientes
+            Compromisos de pago
           </button>
           <button
             type="button"
@@ -97,50 +135,76 @@ export function FinanzasAgendaPage() {
             Cobros esperados
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowAlta(true)}
-          className="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
-        >
-          <Plus className="h-4 w-4" />
-          {tab === 'pagos' ? 'Nuevo compromiso' : 'Nuevo cobro'}
-        </button>
+        {puedeAlta ? (
+          <button
+            type="button"
+            onClick={() => setShowAlta(true)}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
+          >
+            <Plus className="h-4 w-4" />
+            {tab === 'pagos' ? 'Nuevo compromiso' : 'Nuevo cobro'}
+          </button>
+        ) : null}
       </div>
 
       {tab === 'pagos' ? (
-        loadingPagos ? (
-          <LoadingBlock />
-        ) : (
-          <CompromisosTable
-            rows={compromisos}
-            cuentas={cuentasData?.cuentas ?? []}
-            onPrioridadChange={async (id, prioridad) => {
-              await patchCompromisoPrioridad(id, prioridad)
-              invalidate()
-            }}
-            onMarcarPagado={async (id, body) => {
-              await marcarCompromisoPagado(id, body)
-              toast.success('Marcado como pagado')
-              invalidate()
-            }}
+        <>
+          <SubVistaTabs
+            options={[
+              { id: 'pendientes', label: 'Pendientes' },
+              { id: 'pagados', label: 'Pagados' },
+            ]}
+            value={vistaPagos}
+            onChange={(id) => setVistaPagos(id as CompromisosAgendaVista)}
           />
-        )
-      ) : loadingCobros ? (
-        <LoadingBlock />
+          {loadingPagos ? (
+            <LoadingBlock />
+          ) : (
+            <CompromisosTable
+              rows={compromisos}
+              vista={vistaPagos}
+              cuentas={cuentas}
+              onUrgenciaChange={async (id, urgenciaManual) => {
+                await patchCompromisoUrgencia(id, urgenciaManual)
+                invalidate()
+              }}
+              onMarcarPagado={async (id, body) => {
+                await marcarCompromisoPagado(id, body)
+                toast.success('Marcado como pagado')
+                invalidate()
+              }}
+            />
+          )}
+        </>
       ) : (
-        <CobrosTable
-          rows={cobros}
-          cuentas={cuentasData?.cuentas ?? []}
-          onPrioridadChange={async (id, prioridad) => {
-            await patchCobroPrioridad(id, prioridad)
-            invalidate()
-          }}
-          onConfirmar={async (id, body) => {
-            await confirmarCobroAgenda(id, body)
-            toast.success('Cobro confirmado')
-            invalidate()
-          }}
-        />
+        <>
+          <SubVistaTabs
+            options={[
+              { id: 'esperados', label: 'Esperados' },
+              { id: 'cobrados', label: 'Cobrados' },
+            ]}
+            value={vistaCobros}
+            onChange={(id) => setVistaCobros(id as CobrosAgendaVista)}
+          />
+          {loadingCobros ? (
+            <LoadingBlock />
+          ) : (
+            <CobrosTable
+              rows={cobros}
+              vista={vistaCobros}
+              cuentas={cuentas}
+              onUrgenciaChange={async (id, urgenciaManual) => {
+                await patchCobroUrgencia(id, urgenciaManual)
+                invalidate()
+              }}
+              onConfirmar={async (id, body) => {
+                await confirmarCobroAgenda(id, body)
+                toast.success('Cobro confirmado')
+                invalidate()
+              }}
+            />
+          )}
+        </>
       )}
 
       {showAlta ? (
@@ -160,6 +224,35 @@ export function FinanzasAgendaPage() {
   )
 }
 
+function SubVistaTabs({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ id: string; label: string }>
+  value: string
+  onChange: (id: string) => void
+}) {
+  return (
+    <div className="mb-3 inline-flex gap-1 rounded-lg bg-neutral-100 p-1 dark:bg-zinc-900">
+      {options.map((opt) => (
+        <button
+          key={opt.id}
+          type="button"
+          onClick={() => onChange(opt.id)}
+          className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+            value === opt.id
+              ? 'bg-white text-heading shadow-sm dark:bg-zinc-800'
+              : 'text-body-muted hover:text-heading'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function LoadingBlock() {
   return (
     <div className="flex min-h-[30vh] items-center justify-center">
@@ -168,46 +261,55 @@ function LoadingBlock() {
   )
 }
 
-function PrioridadInput({
+function UrgenciaSelect({
   value,
-  onCommit,
+  onChange,
+  disabled,
 }: {
-  value: number
-  onCommit: (v: number) => void
+  value: PrioridadUrgencia | null
+  onChange: (v: PrioridadUrgencia | null) => void
+  disabled?: boolean
 }) {
-  const [draft, setDraft] = useState(String(value))
   return (
-    <input
-      type="number"
-      className="input-surface w-16 rounded border px-2 py-1 text-sm tabular-nums"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => {
-        const n = Number(draft)
-        if (Number.isFinite(n) && n !== value) onCommit(Math.round(n))
+    <select
+      disabled={disabled}
+      className="input-surface max-w-[7.5rem] rounded border px-2 py-1 text-sm"
+      value={value ?? ''}
+      onChange={(e) => {
+        const v = e.target.value
+        onChange(v === '' ? null : (v as PrioridadUrgencia))
       }}
-    />
+    >
+      <option value="">Por fecha</option>
+      <option value="alta">Alta</option>
+      <option value="media">Media</option>
+      <option value="baja">Baja</option>
+    </select>
   )
 }
 
 function CompromisosTable({
   rows,
+  vista,
   cuentas,
-  onPrioridadChange,
+  onUrgenciaChange,
   onMarcarPagado,
 }: {
   rows: CompromisoAgendaItem[]
+  vista: CompromisosAgendaVista
   cuentas: FinanzasCuenta[]
-  onPrioridadChange: (id: string, prioridad: number) => Promise<void>
+  onUrgenciaChange: (id: string, urgenciaManual: PrioridadUrgencia | null) => Promise<void>
   onMarcarPagado: (id: string, body: Record<string, unknown>) => Promise<void>
 }) {
   const [historialId, setHistorialId] = useState<string | null>(null)
-  const [marcarPagadoRow, setMarcarPagadoRow] = useState<CompromisoAgendaItem | null>(null)
+  const [marcarRow, setMarcarRow] = useState<CompromisoAgendaItem | null>(null)
   const { data: historial = [] } = useQuery({
-    queryKey: ['finanzas', 'agenda', 'historial', historialId],
+    queryKey: ['finanzas', 'agenda', 'historial', 'compromiso', historialId],
     queryFn: () => fetchCompromisoHistorial(historialId!),
     enabled: Boolean(historialId),
   })
+
+  const emptyMsg = vista === 'pagados' ? 'No hay pagos registrados.' : 'No hay pagos pendientes.'
 
   return (
     <>
@@ -215,31 +317,194 @@ function CompromisosTable({
         <table className="min-w-full text-sm">
           <thead className="bg-neutral-50 dark:bg-zinc-950/80">
             <tr>
-              <th className="px-3 py-3 text-left font-medium">Prioridad</th>
+              {vista === 'pendientes' ? (
+                <th className="px-3 py-3 text-left font-medium">Urgencia</th>
+              ) : null}
               <th className="px-3 py-3 text-left font-medium">Concepto</th>
               <th className="px-3 py-3 text-left font-medium">Monto</th>
-              <th className="px-3 py-3 text-left font-medium">Vencimiento</th>
-              <th className="px-3 py-3 text-left font-medium">Medio previsto</th>
+              <th className="px-3 py-3 text-left font-medium">
+                {vista === 'pagados' ? 'Pagado el' : 'Vencimiento'}
+              </th>
+              {vista === 'pendientes' ? (
+                <>
+                  <th className="px-3 py-3 text-left font-medium">Medio previsto</th>
+                  <th className="px-3 py-3 text-left font-medium">Cheque</th>
+                </>
+              ) : null}
+              <th className="px-3 py-3 text-left font-medium">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-neutral-100 dark:divide-zinc-800">
+            {rows.map((row) => (
+              <tr
+                key={row.id}
+                className={`bg-white dark:bg-zinc-900 ${
+                  vista === 'pendientes' ? vencimientoRowClass(row.alertaVencimiento) : ''
+                }`}
+              >
+                {vista === 'pendientes' ? (
+                  <td className="px-3 py-3">
+                    <UrgenciaSelect
+                      value={row.urgenciaManual}
+                      onChange={(v) => void onUrgenciaChange(row.id, v)}
+                    />
+                  </td>
+                ) : null}
+                <td className="px-3 py-3">
+                  <div className="font-medium">{row.concepto}</div>
+                  <div className="text-body-muted text-xs">{row.proveedorONombre}</div>
+                  {vista === 'pendientes' ? (
+                    <div className="mt-1">
+                      <VencimientoAlertTag alerta={row.alertaVencimiento} />
+                    </div>
+                  ) : row.urgenciaManual ? (
+                    <div className="text-body-muted mt-1 text-xs">Urgencia: {URGENCIA_LABEL[row.urgenciaManual]}</div>
+                  ) : null}
+                </td>
+                <td className="px-3 py-3 tabular-nums">{formatMoneyCentavos(row.montoCentavos, 'ARS')}</td>
+                <td className="px-3 py-3">
+                  {formatFecha(
+                    vista === 'pagados'
+                      ? row.fechaPago ?? row.updatedAt ?? null
+                      : row.fechaVencimiento,
+                  )}
+                </td>
+                {vista === 'pendientes' ? (
+                  <>
+                    <td className="px-3 py-3">{MEDIO_LABEL[row.medioPago]}</td>
+                    <td className="px-3 py-3">
+                      {row.cheque ? (
+                        <span className="text-body-muted text-sm" title={`Estado: ${row.cheque.estadoLabel}`}>
+                          Nº {row.cheque.numero}
+                        </span>
+                      ) : row.chequeId ? (
+                        <span
+                          className="text-body-muted text-xs"
+                          title="Vínculo guardado (detalle cuando Cheques esté disponible)"
+                        >
+                          Vinculado
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </>
+                ) : null}
+                <td className="px-3 py-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="rounded border px-2 py-1 text-xs font-medium"
+                      onClick={() => setHistorialId(row.id)}
+                    >
+                      Historial
+                    </button>
+                    {vista === 'pendientes' ? (
+                      <button
+                        type="button"
+                        className="rounded bg-neutral-900 px-2 py-1 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                        onClick={() => setMarcarRow(row)}
+                      >
+                        Marcar pagado
+                      </button>
+                    ) : null}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {rows.length === 0 ? <p className="text-body-muted px-4 py-8 text-center">{emptyMsg}</p> : null}
+      </div>
+      {historialId ? (
+        <HistorialModal historial={historial} onClose={() => setHistorialId(null)} />
+      ) : null}
+      {marcarRow ? (
+        <MarcarPagadoModal
+          row={marcarRow}
+          cuentas={cuentas}
+          onClose={() => setMarcarRow(null)}
+          onSubmit={async (body) => {
+            await onMarcarPagado(marcarRow.id, body)
+            setMarcarRow(null)
+          }}
+        />
+      ) : null}
+    </>
+  )
+}
+
+function CobrosTable({
+  rows,
+  vista,
+  cuentas,
+  onUrgenciaChange,
+  onConfirmar,
+}: {
+  rows: CobroAgendaItem[]
+  vista: CobrosAgendaVista
+  cuentas: FinanzasCuenta[]
+  onUrgenciaChange: (id: string, urgenciaManual: PrioridadUrgencia | null) => Promise<void>
+  onConfirmar: (id: string, body: Record<string, unknown>) => Promise<void>
+}) {
+  const [historialId, setHistorialId] = useState<string | null>(null)
+  const [confirmarRow, setConfirmarRow] = useState<CobroAgendaItem | null>(null)
+  const { data: historial = [] } = useQuery({
+    queryKey: ['finanzas', 'agenda', 'historial', 'cobro', historialId],
+    queryFn: () => fetchCobroHistorial(historialId!),
+    enabled: Boolean(historialId),
+  })
+
+  const emptyMsg = vista === 'cobrados' ? 'No hay cobros confirmados.' : 'No hay cobros esperados.'
+
+  return (
+    <>
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 dark:border-zinc-800">
+        <table className="min-w-full text-sm">
+          <thead className="bg-neutral-50 dark:bg-zinc-950/80">
+            <tr>
+              {vista === 'esperados' ? <th className="px-3 py-3 text-left font-medium">Urgencia</th> : null}
+              <th className="px-3 py-3 text-left font-medium">Cliente</th>
+              <th className="px-3 py-3 text-left font-medium">Monto</th>
+              <th className="px-3 py-3 text-left font-medium">
+                {vista === 'cobrados' ? 'Cobrado el' : 'Fecha esperada'}
+              </th>
               <th className="px-3 py-3 text-left font-medium">Cheque</th>
               <th className="px-3 py-3 text-left font-medium">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100 dark:divide-zinc-800">
             {rows.map((row) => (
-              <tr key={row.id} className={`bg-white dark:bg-zinc-900 ${vencimientoRowClass(row.alertaVencimiento)}`}>
+              <tr
+                key={row.id}
+                className={`bg-white dark:bg-zinc-900 ${
+                  vista === 'esperados' ? vencimientoRowClass(row.alertaVencimiento) : ''
+                }`}
+              >
+                {vista === 'esperados' ? (
+                  <td className="px-3 py-3">
+                    <UrgenciaSelect
+                      value={row.urgenciaManual}
+                      onChange={(v) => void onUrgenciaChange(row.id, v)}
+                    />
+                  </td>
+                ) : null}
                 <td className="px-3 py-3">
-                  <PrioridadInput value={row.prioridad} onCommit={(v) => onPrioridadChange(row.id, v)} />
-                </td>
-                <td className="px-3 py-3">
-                  <div className="font-medium">{row.concepto}</div>
-                  <div className="text-body-muted text-xs">{row.proveedorONombre}</div>
-                  <div className="mt-1">
+                  <div className="font-medium">{row.clienteONombre}</div>
+                  {vista === 'esperados' ? (
                     <VencimientoAlertTag alerta={row.alertaVencimiento} />
-                  </div>
+                  ) : row.urgenciaManual ? (
+                    <div className="text-body-muted text-xs">Urgencia: {URGENCIA_LABEL[row.urgenciaManual]}</div>
+                  ) : null}
                 </td>
                 <td className="px-3 py-3 tabular-nums">{formatMoneyCentavos(row.montoCentavos, 'ARS')}</td>
-                <td className="px-3 py-3">{formatFecha(row.fechaVencimiento)}</td>
-                <td className="px-3 py-3">{MEDIO_LABEL[row.medioPago]}</td>
+                <td className="px-3 py-3">
+                  {formatFecha(
+                    vista === 'cobrados'
+                      ? row.fechaConfirmado ?? row.updatedAt ?? null
+                      : row.fechaEsperada,
+                  )}
+                </td>
                 <td className="px-3 py-3">
                   {row.cheque ? (
                     <span className="text-body-muted text-sm" title={`Estado: ${row.cheque.estadoLabel}`}>
@@ -262,105 +527,25 @@ function CompromisosTable({
                     >
                       Historial
                     </button>
-                    <button
-                      type="button"
-                      className="rounded bg-neutral-900 px-2 py-1 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                      onClick={() => setMarcarPagadoRow(row)}
-                    >
-                      Marcar pagado
-                    </button>
+                    {vista === 'esperados' ? (
+                      <button
+                        type="button"
+                        className="rounded bg-neutral-900 px-2 py-1 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+                        onClick={() => setConfirmarRow(row)}
+                      >
+                        Confirmar cobro
+                      </button>
+                    ) : null}
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {rows.length === 0 ? (
-          <p className="text-body-muted px-4 py-8 text-center">No hay pagos pendientes.</p>
-        ) : null}
+        {rows.length === 0 ? <p className="text-body-muted px-4 py-8 text-center">{emptyMsg}</p> : null}
       </div>
       {historialId ? (
         <HistorialModal historial={historial} onClose={() => setHistorialId(null)} />
-      ) : null}
-      {marcarPagadoRow ? (
-        <MarcarPagadoModal
-          row={marcarPagadoRow}
-          cuentas={cuentas}
-          onClose={() => setMarcarPagadoRow(null)}
-          onSubmit={async (body) => {
-            await onMarcarPagado(marcarPagadoRow.id, body)
-            setMarcarPagadoRow(null)
-          }}
-        />
-      ) : null}
-    </>
-  )
-}
-
-function CobrosTable({
-  rows,
-  cuentas,
-  onPrioridadChange,
-  onConfirmar,
-}: {
-  rows: CobroAgendaItem[]
-  cuentas: FinanzasCuenta[]
-  onPrioridadChange: (id: string, prioridad: number) => Promise<void>
-  onConfirmar: (id: string, body: Record<string, unknown>) => Promise<void>
-}) {
-  const [confirmarRow, setConfirmarRow] = useState<CobroAgendaItem | null>(null)
-
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-neutral-200 dark:border-zinc-800">
-      <table className="min-w-full text-sm">
-        <thead className="bg-neutral-50 dark:bg-zinc-950/80">
-          <tr>
-            <th className="px-3 py-3 text-left font-medium">Prioridad</th>
-            <th className="px-3 py-3 text-left font-medium">Cliente</th>
-            <th className="px-3 py-3 text-left font-medium">Monto</th>
-            <th className="px-3 py-3 text-left font-medium">Fecha esperada</th>
-            <th className="px-3 py-3 text-left font-medium">Cheque</th>
-            <th className="px-3 py-3 text-left font-medium">Acciones</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-neutral-100 dark:divide-zinc-800">
-          {rows.map((row) => (
-            <tr key={row.id} className={`bg-white dark:bg-zinc-900 ${vencimientoRowClass(row.alertaVencimiento)}`}>
-              <td className="px-3 py-3">
-                <PrioridadInput value={row.prioridad} onCommit={(v) => onPrioridadChange(row.id, v)} />
-              </td>
-              <td className="px-3 py-3">
-                <div className="font-medium">{row.clienteONombre}</div>
-                <VencimientoAlertTag alerta={row.alertaVencimiento} />
-              </td>
-              <td className="px-3 py-3 tabular-nums">{formatMoneyCentavos(row.montoCentavos, 'ARS')}</td>
-              <td className="px-3 py-3">{formatFecha(row.fechaEsperada)}</td>
-              <td className="px-3 py-3">
-                {row.cheque ? (
-                  <span className="text-body-muted text-sm">Nº {row.cheque.numero}</span>
-                ) : row.chequeId ? (
-                  <span className="text-body-muted text-xs" title="Vínculo guardado (detalle cuando Cheques esté disponible)">
-                    Vinculado
-                  </span>
-                ) : (
-                  '—'
-                )}
-              </td>
-              <td className="px-3 py-3">
-                <button
-                  type="button"
-                  className="rounded bg-neutral-900 px-2 py-1 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  onClick={() => setConfirmarRow(row)}
-                >
-                  Confirmar cobro
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {rows.length === 0 ? (
-        <p className="text-body-muted px-4 py-8 text-center">No hay cobros esperados.</p>
       ) : null}
       {confirmarRow ? (
         <ConfirmarCobroModal
@@ -373,7 +558,7 @@ function CobrosTable({
           }}
         />
       ) : null}
-    </div>
+    </>
   )
 }
 
@@ -421,7 +606,7 @@ function AltaAgendaModal({
     clienteONombre: '',
     montoPesos: '',
     fecha: '',
-    prioridad: '10',
+    urgenciaManual: '' as '' | PrioridadUrgencia,
     medioPago: 'transferencia' as MedioPago,
   })
 
@@ -435,14 +620,14 @@ function AltaAgendaModal({
     setSaving(true)
     try {
       const montoCentavos = Math.round(monto * 100)
-      const prioridad = Number(form.prioridad)
+      const urgenciaManual = form.urgenciaManual === '' ? null : form.urgenciaManual
       if (tab === 'pagos') {
         await onSave({
           concepto: form.concepto,
           proveedorONombre: form.proveedorONombre,
           montoCentavos,
           fechaVencimiento: form.fecha,
-          prioridad: Number.isFinite(prioridad) ? prioridad : 10,
+          urgenciaManual,
           medioPago: form.medioPago,
         })
       } else {
@@ -450,7 +635,7 @@ function AltaAgendaModal({
           clienteONombre: form.clienteONombre,
           montoCentavos,
           fechaEsperada: form.fecha,
-          prioridad: Number.isFinite(prioridad) ? prioridad : 10,
+          urgenciaManual,
         })
       }
     } catch (err) {
@@ -536,15 +721,23 @@ function AltaAgendaModal({
               onChange={(e) => setForm({ ...form, fecha: e.target.value })}
             />
           </FinanzasFormField>
-          <FinanzasFormField label="Prioridad" htmlFor="agenda-alta-prioridad" optional>
-            <input
-              id="agenda-alta-prioridad"
-              type="number"
+          <FinanzasFormField label="Urgencia" htmlFor="agenda-alta-urgencia" optional>
+            <select
+              id="agenda-alta-urgencia"
               className={finanzasInputClass}
-              value={form.prioridad}
-              onChange={(e) => setForm({ ...form, prioridad: e.target.value })}
-            />
-            <p className="text-body-muted mt-1 text-xs">Menor número = más urgente (predeterminado 10).</p>
+              value={form.urgenciaManual}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  urgenciaManual: e.target.value as '' | PrioridadUrgencia,
+                })
+              }
+            >
+              <option value="">Por fecha de vencimiento</option>
+              <option value="alta">Alta</option>
+              <option value="media">Media</option>
+              <option value="baja">Baja</option>
+            </select>
           </FinanzasFormField>
         </div>
         <div className="mt-4 flex justify-end gap-2">
@@ -577,6 +770,11 @@ function MarcarPagadoModal({
   const [fechaPago, setFechaPago] = useState(() => new Date().toISOString().slice(0, 10))
 
   const needsCuenta = medioPago === 'transferencia' || medioPago === 'efectivo'
+  const cuenta = needsCuenta && cuentaId ? cuentas.find((c) => c.id === cuentaId) : undefined
+  const saldoInsuficiente =
+    Boolean(cuenta) &&
+    typeof cuenta!.saldoActualCentavos === 'number' &&
+    cuenta!.saldoActualCentavos < row.montoCentavos
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -604,8 +802,13 @@ function MarcarPagadoModal({
       <form onSubmit={(e) => void submit(e)} className="relative w-full max-w-md rounded-2xl bg-white p-6 dark:bg-zinc-900">
         <h2 className="text-heading text-lg font-semibold">Marcar pagado</h2>
         <p className="text-body-muted mt-1 text-sm">
-          {row.concepto} — {row.proveedorONombre}
+          {row.concepto} — {row.proveedorONombre} · {formatMoneyCentavos(row.montoCentavos, 'ARS')}
         </p>
+        {saldoInsuficiente ? (
+          <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+            El saldo de esta cuenta es menor al monto. Podés confirmar igual si el pago ya ocurrió fuera del sistema.
+          </p>
+        ) : null}
         <div className="mt-4 grid gap-3">
           <FinanzasFormField label="Medio de pago real" htmlFor="agenda-pagado-medio">
             <select
@@ -634,7 +837,7 @@ function MarcarPagadoModal({
                 </option>
                 {cuentas.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.bancoNombre} — {c.tipoLabel} ({c.moneda})
+                    {c.bancoNombre} — {c.tipoLabel} ({formatMoneyCentavos(c.saldoActualCentavos, c.moneda)})
                   </option>
                 ))}
               </select>

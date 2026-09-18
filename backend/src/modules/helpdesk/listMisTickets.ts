@@ -5,7 +5,11 @@ import {
   listHelpdeskReunionesForTicket,
   listHelpdeskTicketsForRequester,
 } from './repository.js'
+import {
+  serializeColaboradorSolicitante,
+} from './serializeColaboradores.js'
 import { serializeHelpdeskTicket } from './serializeTicket.js'
+import { misProyectoAccesoRol } from './ticketCollaboratorAccess.js'
 
 export async function listMisTicketsHandler(req: Request, res: Response): Promise<void> {
   const user = req.authedUser
@@ -27,9 +31,14 @@ export async function listMisTicketsHandler(req: Request, res: Response): Promis
           const member = await getHelpdeskTeamMemberById(ticket.asignadoATeamId)
           asignadoNombre = member?.nombre?.trim() || null
         }
+        const miRolAcceso = misProyectoAccesoRol(user, ticket)
         return {
           ...serializeHelpdeskTicket(ticket, reuniones),
           asignadoNombre,
+          miRolAcceso,
+          colaboradoresSolicitante: (ticket.colaboradoresSolicitante ?? []).map(
+            serializeColaboradorSolicitante,
+          ),
         }
       }),
     )

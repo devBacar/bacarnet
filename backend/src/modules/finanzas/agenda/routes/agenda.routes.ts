@@ -1,0 +1,152 @@
+import { Router } from 'express'
+import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import {
+  confirmarCobro,
+  createCobroAgenda,
+  getCobroHistorialApi,
+  listCobrosAgenda,
+  patchCobroPrioridad,
+} from '../services/cobros.service.js'
+import {
+  createCompromisoAgenda,
+  getCompromisoHistorialApi,
+  listCompromisosAgenda,
+  marcarCompromisoPagado,
+  patchCompromisoPrioridad,
+} from '../services/compromisos.service.js'
+
+export const finanzasAgendaRouter = Router()
+
+finanzasAgendaRouter.use(requireWorkspaceUser, requireViewFinanzas)
+
+finanzasAgendaRouter.get('/compromisos', async (_req, res) => {
+  try {
+    const compromisos = await listCompromisosAgenda()
+    res.json({ compromisos })
+  } catch (err) {
+    console.error('[finanzas/agenda] list compromisos', err)
+    res.status(500).json({ error: 'No se pudieron listar los compromisos' })
+  }
+})
+
+finanzasAgendaRouter.post('/compromisos', async (req, res) => {
+  try {
+    const compromiso = await createCompromisoAgenda({
+      actorUid: req.authedUser!.uid,
+      body: req.body as Record<string, unknown>,
+    })
+    res.status(201).json({ compromiso })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error al crear compromiso'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasAgendaRouter.get('/compromisos/:id/historial', async (req, res) => {
+  try {
+    const historial = await getCompromisoHistorialApi(req.params.id)
+    if (!historial) {
+      res.status(404).json({ error: 'Compromiso no encontrado' })
+      return
+    }
+    res.json({ historial })
+  } catch (err) {
+    console.error('[finanzas/agenda] historial compromiso', err)
+    res.status(500).json({ error: 'No se pudo cargar el historial' })
+  }
+})
+
+finanzasAgendaRouter.patch('/compromisos/:id/prioridad', async (req, res) => {
+  try {
+    const prioridad = (req.body as Record<string, unknown>).prioridad
+    if (typeof prioridad !== 'number') {
+      res.status(400).json({ error: 'prioridad inválida' })
+      return
+    }
+    const compromiso = await patchCompromisoPrioridad(req.params.id, prioridad)
+    res.json({ compromiso })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo actualizar prioridad'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasAgendaRouter.post('/compromisos/:id/marcar-pagado', async (req, res) => {
+  try {
+    const compromiso = await marcarCompromisoPagado(
+      req.params.id,
+      req.authedUser!.uid,
+      req.body as Record<string, unknown>,
+    )
+    res.json({ compromiso })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo marcar como pagado'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasAgendaRouter.get('/cobros', async (_req, res) => {
+  try {
+    const cobros = await listCobrosAgenda()
+    res.json({ cobros })
+  } catch (err) {
+    console.error('[finanzas/agenda] list cobros', err)
+    res.status(500).json({ error: 'No se pudieron listar los cobros' })
+  }
+})
+
+finanzasAgendaRouter.post('/cobros', async (req, res) => {
+  try {
+    const cobro = await createCobroAgenda({
+      actorUid: req.authedUser!.uid,
+      body: req.body as Record<string, unknown>,
+    })
+    res.status(201).json({ cobro })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error al crear cobro'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasAgendaRouter.get('/cobros/:id/historial', async (req, res) => {
+  try {
+    const historial = await getCobroHistorialApi(req.params.id)
+    if (!historial) {
+      res.status(404).json({ error: 'Cobro no encontrado' })
+      return
+    }
+    res.json({ historial })
+  } catch (err) {
+    console.error('[finanzas/agenda] historial cobro', err)
+    res.status(500).json({ error: 'No se pudo cargar el historial' })
+  }
+})
+
+finanzasAgendaRouter.patch('/cobros/:id/prioridad', async (req, res) => {
+  try {
+    const prioridad = (req.body as Record<string, unknown>).prioridad
+    if (typeof prioridad !== 'number') {
+      res.status(400).json({ error: 'prioridad inválida' })
+      return
+    }
+    const cobro = await patchCobroPrioridad(req.params.id, prioridad)
+    res.json({ cobro })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo actualizar prioridad'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasAgendaRouter.post('/cobros/:id/confirmar', async (req, res) => {
+  try {
+    const cobro = await confirmarCobro(
+      req.params.id,
+      req.authedUser!.uid,
+      req.body as Record<string, unknown>,
+    )
+    res.json({ cobro })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo confirmar el cobro'
+    res.status(400).json({ error: message })
+  }
+})

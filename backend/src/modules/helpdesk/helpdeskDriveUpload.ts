@@ -6,7 +6,6 @@ import { sanitizeDriveId } from '../../lib/google/driveIds.js'
 import { logError } from '../../lib/log.js'
 import { getFileInSharedDrive } from '../drive/assertInSharedDrive.js'
 import { grantUserDrivePermission } from '../drive/driveUserPermission.js'
-import { resolveDriveSubject } from '../drive/driveSubject.js'
 import {
   HELPDESK_ANALISIS_DRIVE_FOLDER_ID_DEFAULT,
   type HelpdeskAnalisis,
@@ -45,12 +44,12 @@ export async function uploadHelpdeskDocumentToDrive(
     return {
       ok: false,
       status: 400,
-      error: 'Solo se permiten documentos Office o PDF',
+      error: 'Solo se permiten documentos Office, PDF o imágenes (PNG, JPEG, GIF, WebP)',
     }
   }
 
   const parentFolderId = resolveHelpdeskAnalisisFolderId()
-  const driveSubject = resolveDriveSubject(input.user)
+  const driveSubject = getEnv().driveImpersonateEmail
   const parent = await getFileInSharedDrive(parentFolderId, driveSubject)
   if (!parent.ok) {
     return { ok: false, status: parent.status, error: parent.error }
@@ -84,6 +83,8 @@ export async function uploadHelpdeskDocumentToDrive(
     if (!fileId || !webViewLink) {
       return { ok: false, status: 500, error: 'No se pudo crear el archivo en Drive' }
     }
+
+    await shareHelpdeskDriveFileWithReaders(fileId, [input.user.email])
 
     return { ok: true, fileId, webViewLink }
   } catch (err) {

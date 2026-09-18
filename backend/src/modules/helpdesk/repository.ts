@@ -219,7 +219,7 @@ export async function getHelpdeskReunionById(
 export async function updateHelpdeskReunion(
   ticketId: string,
   reunionId: string,
-  patch: Partial<HelpdeskReunion>,
+  patch: Partial<HelpdeskReunion> | Record<string, unknown>,
 ): Promise<void> {
   await adminDb()
     .collection(HELPDESK_TICKETS_COLLECTION)
@@ -289,6 +289,19 @@ export async function updateHelpdeskTicket(
   ticketId: string,
   patch: Partial<Pick<HelpdeskTicket, 'estadoIdx' | 'asignadoATeamId'>>,
 ): Promise<void> {
+  await adminDb()
+    .collection(HELPDESK_TICKETS_COLLECTION)
+    .doc(ticketId)
+    .update({
+      ...patch,
+      seguimientoUpdatedAt: FieldValue.serverTimestamp(),
+    })
+}
+
+export async function updateHelpdeskTicketFields(
+  ticketId: string,
+  patch: Partial<HelpdeskTicket>,
+): Promise<void> {
   await adminDb().collection(HELPDESK_TICKETS_COLLECTION).doc(ticketId).update(patch)
 }
 
@@ -296,7 +309,13 @@ export async function updateHelpdeskTicketCancelacion(
   ticketId: string,
   patch: Record<string, unknown>,
 ): Promise<void> {
-  await adminDb().collection(HELPDESK_TICKETS_COLLECTION).doc(ticketId).update(patch)
+  await adminDb()
+    .collection(HELPDESK_TICKETS_COLLECTION)
+    .doc(ticketId)
+    .update({
+      ...patch,
+      seguimientoUpdatedAt: FieldValue.serverTimestamp(),
+    })
 }
 
 export async function listHelpdeskReunionesForTicket(
@@ -344,6 +363,16 @@ export async function listHelpdeskTicketsForRequester(input: {
     .collection(HELPDESK_TICKETS_COLLECTION)
     .where('requesterEmail', '==', normalizedEmail)
     .get()
+  const byColabUidSnap = input.uid
+    ? await adminDb()
+        .collection(HELPDESK_TICKETS_COLLECTION)
+        .where('colaboradorUids', 'array-contains', input.uid)
+        .get()
+    : null
+  const byColabEmailSnap = await adminDb()
+    .collection(HELPDESK_TICKETS_COLLECTION)
+    .where('colaboradorEmails', 'array-contains', normalizedEmail)
+    .get()
 
   const merged = new Map<string, HelpdeskTicket & { id: string }>()
   for (const doc of byUidSnap.docs) {
@@ -354,6 +383,14 @@ export async function listHelpdeskTicketsForRequester(input: {
     if (ticket.requesterUid == null || ticket.requesterUid === input.uid) {
       merged.set(doc.id, { id: doc.id, ...ticket })
     }
+  }
+  if (byColabUidSnap) {
+    for (const doc of byColabUidSnap.docs) {
+      merged.set(doc.id, { id: doc.id, ...(doc.data() as HelpdeskTicket) })
+    }
+  }
+  for (const doc of byColabEmailSnap.docs) {
+    merged.set(doc.id, { id: doc.id, ...(doc.data() as HelpdeskTicket) })
   }
 
   const tickets = [...merged.values()]
@@ -404,6 +441,7 @@ export async function appendHelpdeskEmailLog(input: {
   respondido?: boolean | null
   fechaRespuesta?: Timestamp | null
   fecha?: Timestamp
+  source?: HelpdeskEmailLog['source']
 }): Promise<string> {
   const ref = adminDb().collection(HELPDESK_EMAIL_LOG_COLLECTION).doc()
   const doc: HelpdeskEmailLog = {
@@ -415,6 +453,7 @@ export async function appendHelpdeskEmailLog(input: {
     ticketId: input.ticketId ?? null,
     respondido: input.respondido ?? null,
     fechaRespuesta: input.fechaRespuesta ?? null,
+    source: input.source ?? null,
   }
   await ref.set(doc)
   return ref.id

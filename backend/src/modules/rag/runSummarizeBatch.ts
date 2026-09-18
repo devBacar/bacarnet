@@ -2,6 +2,7 @@ import type { AccessibleDriveFile } from './accessibleDriveInventory.js'
 import { loadAccessibleInventory } from './accessibleDriveInventory.js'
 import { isSummarizeableKind, type SummarizeIntent } from './assistantIntent.js'
 import type { RagToolContext } from './executeRagTool.js'
+import { pushRagCitation } from './ragCitationUtils.js'
 import { summarizeDocument } from './summarizeDocument.js'
 
 export const MAX_SUMMARIZE_BATCH = 3
@@ -91,7 +92,7 @@ export async function runSummarizeBatch(
         fileKind: item.file.fileKind,
         summary: item.summary,
       })
-      ctx.citations.push({
+      pushRagCitation(ctx, {
         fileId: item.file.id,
         fileName: item.file.name,
         webViewLink: item.file.webViewLink,

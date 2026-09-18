@@ -28,12 +28,14 @@ export function HelpdeskPanelAnalisisSection({
   cancelado,
   analisis,
   onUpdated,
+  embedded = false,
 }: {
   ticketId: string
   estadoIdx: number
   cancelado: boolean
   analisis: HelpdeskAnalisisDto[]
   onUpdated: () => void
+  embedded?: boolean
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [aprobadores, setAprobadores] = useState(HELPDESK_ANALISIS_DEFAULT_APROBADOR)
@@ -65,12 +67,9 @@ export function HelpdeskPanelAnalisisSection({
     return null
   }
 
-  return (
-    <section
-      className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5"
-      data-testid="helpdesk-analisis-section"
-    >
-      <h3 className="text-sm font-semibold text-heading">Análisis del proyecto</h3>
+  const inner = (
+    <>
+      {!embedded ? <h3 className="text-sm font-semibold text-heading">Análisis del proyecto</h3> : null}
 
       {analisis.length > 0 ? (
         <ul className="mt-3 space-y-2">
@@ -153,6 +152,19 @@ export function HelpdeskPanelAnalisisSection({
           El proyecto está cancelado. Reactivalo para subir un nuevo análisis.
         </p>
       ) : null}
+    </>
+  )
+
+  if (embedded) {
+    return <div data-testid="helpdesk-analisis-section">{inner}</div>
+  }
+
+  return (
+    <section
+      className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5"
+      data-testid="helpdesk-analisis-section"
+    >
+      {inner}
     </section>
   )
 }

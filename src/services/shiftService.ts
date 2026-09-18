@@ -31,12 +31,6 @@ export interface SystemsShiftOverride {
 export interface WeekShiftSnapshot {
   weekKey: string
   weekLabel: string
-  jefe: {
-    fullName: string
-    firstName: string
-    lastName: string
-    internalPhone: string
-  } | null
   systems: {
     name: string
     isOverride: boolean
@@ -81,17 +75,31 @@ export function resolveSystemsAssignee(
   return { name: members[index], isOverride: false }
 }
 
+function normalizeMembersField(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+      .map((m) => m.trim())
+  }
+  if (raw && typeof raw === 'object') {
+    return Object.entries(raw as Record<string, unknown>)
+      .filter(([key]) => /^\d+$/.test(key))
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([, value]) => (typeof value === 'string' ? value.trim() : ''))
+      .filter(Boolean)
+  }
+  return [...DEFAULT_SYSTEMS_MEMBERS]
+}
+
 export async function getSystemsRotationConfig(): Promise<SystemsRotationConfig> {
   const snapshot = await getDoc(doc(db, SYSTEMS_SETTINGS_COLLECTION, SYSTEMS_SETTINGS_ID))
 
   if (!snapshot.exists()) {
-    return { ...DEFAULT_SYSTEMS_ROTATION }
+    return { ...DEFAULT_SYSTEMS_ROTATION, members: [...DEFAULT_SYSTEMS_MEMBERS] }
   }
 
   const data = snapshot.data()
-  const members = Array.isArray(data.members)
-    ? (data.members as string[]).filter((m) => typeof m === 'string' && m.trim())
-    : [...DEFAULT_SYSTEMS_MEMBERS]
+  const members = normalizeMembersField(data.members)
 
   return {
     members: members.length > 0 ? members : [...DEFAULT_SYSTEMS_MEMBERS],
@@ -202,8 +210,7 @@ export async function clearSystemsOverride(weekKey: string): Promise<void> {
 export async function getWeekShiftSnapshot(
   weekKey: string = getWeekKey(),
 ): Promise<WeekShiftSnapshot> {
-  const [jefe, config, override] = await Promise.all([
-    getJefeAssignment(weekKey),
+  const [config, override] = await Promise.all([
     getSystemsRotationConfig(),
     getSystemsOverride(weekKey),
   ])
@@ -213,14 +220,6 @@ export async function getWeekShiftSnapshot(
   return {
     weekKey,
     weekLabel: getWeekRangeLabel(weekKey),
-    jefe: jefe
-      ? {
-          fullName: formatFullName(jefe.firstName, jefe.lastName),
-          firstName: jefe.firstName,
-          lastName: jefe.lastName,
-          internalPhone: jefe.internalPhone,
-        }
-      : null,
     systems: systems.name
       ? { name: systems.name, isOverride: systems.isOverride }
       : null,

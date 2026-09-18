@@ -1,5 +1,5 @@
 import { ExternalLink, Loader2, MessageSquarePlus } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import {
   fetchHelpdeskTicketBitacora,
@@ -8,6 +8,7 @@ import {
   HELPDESK_GENERIC_ERROR_MESSAGE,
   type HelpdeskBitacoraEntradaDto,
 } from '../../services/helpdeskApi'
+import { HelpdeskBitacoraFileAttach } from './HelpdeskBitacoraFileAttach'
 
 function formatWhen(iso: string | null): string {
   if (!iso) return '—'
@@ -20,16 +21,21 @@ export function HelpdeskBitacoraSection({
   ticketId,
   estadoIdx,
   mode,
+  embedded = false,
+  canComment = true,
 }: {
   ticketId: string
   estadoIdx: number
   mode: 'panel' | 'mis-proyectos'
+  embedded?: boolean
+  /** En Mis proyectos, los colaboradores Lector solo leen la bitácora. */
+  canComment?: boolean
 }) {
   const [entradas, setEntradas] = useState<HelpdeskBitacoraEntradaDto[]>([])
   const [loading, setLoading] = useState(true)
   const [texto, setTexto] = useState('')
   const [busy, setBusy] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [adjunto, setAdjunto] = useState<File | null>(null)
 
   const visible = estadoIdx >= 3 && estadoIdx <= 5
 
@@ -61,10 +67,12 @@ export function HelpdeskBitacoraSection({
     }
     setBusy(true)
     try {
-      const file = mode === 'panel' ? fileRef.current?.files?.[0] : undefined
-      await postHelpdeskTicketBitacora(ticketId, { texto: texto.trim(), file })
+      await postHelpdeskTicketBitacora(ticketId, {
+        texto: texto.trim(),
+        file: adjunto ?? undefined,
+      })
       setTexto('')
-      if (fileRef.current) fileRef.current.value = ''
+      setAdjunto(null)
       toast.success(mode === 'panel' ? 'Avance publicado' : 'Comentario publicado')
       await load()
     } catch (err) {
@@ -76,13 +84,16 @@ export function HelpdeskBitacoraSection({
 
   if (!visible) return null
 
-  return (
-    <section
-      className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5"
-      data-testid="helpdesk-bitacora-section"
-    >
-      <h3 className="text-sm font-semibold text-heading">Bitácora del proyecto</h3>
-      <p className="mt-1 text-xs text-body-muted">Avances del equipo y comentarios del área solicitante.</p>
+  const inner = (
+    <>
+      {!embedded ? (
+        <>
+          <h3 className="text-sm font-semibold text-heading">Bitácora del proyecto</h3>
+          <p className="mt-1 text-xs text-body-muted">
+            Avances del equipo y comentarios del área solicitante.
+          </p>
+        </>
+      ) : null}
 
       {loading ? (
         <div className="mt-4 flex justify-center text-body-muted">
@@ -122,30 +133,33 @@ export function HelpdeskBitacoraSection({
         </ul>
       )}
 
+      {!canComment ? (
+        <p className="mt-4 text-sm text-body-muted" data-testid="helpdesk-bitacora-solo-lectura">
+          Como lector podés ver la bitácora pero no publicar comentarios.
+        </p>
+      ) : null}
+
+      {canComment ? (
       <div className="mt-4 space-y-2 rounded-lg border border-dashed border-neutral-200 p-3 dark:border-zinc-700">
         <label className="block text-xs font-semibold uppercase tracking-wide text-body-muted">
           {mode === 'panel' ? 'Publicar avance' : 'Comentar'}
-          <textarea
-            rows={3}
-            value={texto}
-            maxLength={5000}
-            onChange={(ev) => setTexto(ev.target.value)}
-            className="input-brand-focus mt-1 w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-            data-testid="helpdesk-bitacora-texto"
-          />
-        </label>
-        {mode === 'panel' ? (
-          <label className="block text-xs font-semibold uppercase tracking-wide text-body-muted">
-            Adjunto opcional (Office o PDF)
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
-              className="mt-1 block w-full text-sm"
-              data-testid="helpdesk-bitacora-file"
+          <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-end">
+            <textarea
+              rows={3}
+              value={texto}
+              maxLength={5000}
+              onChange={(ev) => setTexto(ev.target.value)}
+              className="input-brand-focus min-h-[4.5rem] w-full flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+              data-testid="helpdesk-bitacora-texto"
             />
-          </label>
-        ) : null}
+            <div className="shrink-0 sm:self-end">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-body-muted">
+                Adjunto opcional
+              </p>
+              <HelpdeskBitacoraFileAttach file={adjunto} onFileChange={setAdjunto} />
+            </div>
+          </div>
+        </label>
         <button
           type="button"
           disabled={busy}
@@ -161,6 +175,20 @@ export function HelpdeskBitacoraSection({
           Publicar
         </button>
       </div>
+      ) : null}
+    </>
+  )
+
+  if (embedded) {
+    return <div data-testid="helpdesk-bitacora-section">{inner}</div>
+  }
+
+  return (
+    <section
+      className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5"
+      data-testid="helpdesk-bitacora-section"
+    >
+      {inner}
     </section>
   )
 }

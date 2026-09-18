@@ -105,6 +105,33 @@ async function main() {
   })
   allOk = result('Seed helpdeskTickets con reglas deshabilitadas', true) && allOk
 
+  const userA = env.authenticatedContext('uid-a', {
+    email: 'a@bacarsa.com.ar',
+    email_verified: true,
+  })
+  const userB = env.authenticatedContext('uid-b', {
+    email: 'b@bacarsa.com.ar',
+    email_verified: true,
+  })
+  try {
+    await assertSucceeds(
+      setDoc(doc(userA.firestore(), 'helpdeskTickets', 'ticket-seed', 'vistoPor', 'uid-a'), {
+        bitacora: new Date(),
+      }),
+    )
+    allOk = result('vistoPor: usuario escribe su propio doc', true) && allOk
+  } catch (err) {
+    allOk = result('vistoPor: usuario escribe su propio doc', false, String(err)) && allOk
+  }
+  try {
+    await assertFails(
+      getDoc(doc(userB.firestore(), 'helpdeskTickets', 'ticket-seed', 'vistoPor', 'uid-a')),
+    )
+    allOk = result('vistoPor: no leer doc ajeno', true, 'denegado') && allOk
+  } catch (err) {
+    allOk = result('vistoPor: no leer doc ajeno', false, String(err)) && allOk
+  }
+
   await env.cleanup()
   if (!allOk) {
     process.exitCode = 1

@@ -26,12 +26,9 @@ import {
 } from '../services/userService'
 import { applyPendingUserSetupAfterRegister } from '../services/usersApi'
 
-const GOOGLE_TOKEN_STORAGE_KEY = 'googleToken'
-
 interface AuthContextValue {
   user: User | null
   userProfile: UserProfile | null
-  googleAccessToken: string | null
   loading: boolean
   profileLoading: boolean
   login: (email: string, password: string, rememberMe?: boolean) => Promise<void>
@@ -49,9 +46,6 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
-  const [googleAccessToken, setGoogleAccessToken] = useState<string | null>(() =>
-    sessionStorage.getItem(GOOGLE_TOKEN_STORAGE_KEY),
-  )
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
 
@@ -83,8 +77,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       } else {
         setUserProfile(null)
         setProfileLoading(false)
-        sessionStorage.removeItem(GOOGLE_TOKEN_STORAGE_KEY)
-        setGoogleAccessToken(null)
       }
 
       setLoading(false)
@@ -101,27 +93,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await signInWithEmailAndPassword(auth, email, password)
   }
 
+  /** Login Firebase con Google (cuenta Bacarnet). Gmail/Calendar del Home usan OAuth backend aparte. */
   const loginWithGoogle = async (rememberMe = true) => {
     await setPersistence(
       auth,
       rememberMe ? browserLocalPersistence : browserSessionPersistence,
     )
     const provider = new GoogleAuthProvider()
-    provider.addScope('https://www.googleapis.com/auth/calendar.readonly')
-    provider.addScope('https://www.googleapis.com/auth/gmail.readonly')
-    provider.setCustomParameters({ prompt: 'consent' })
-
     const result = await signInWithPopup(auth, provider)
-    const credential = GoogleAuthProvider.credentialFromResult(result)
-    const token = credential?.accessToken
-
-    if (token) {
-      sessionStorage.setItem(GOOGLE_TOKEN_STORAGE_KEY, token)
-      setGoogleAccessToken(token)
-    } else {
-      sessionStorage.removeItem(GOOGLE_TOKEN_STORAGE_KEY)
-      setGoogleAccessToken(null)
-    }
 
     const created = await ensureGoogleUserProfile(result.user)
     if (created) {
@@ -135,8 +114,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   const logout = async () => {
-    sessionStorage.removeItem(GOOGLE_TOKEN_STORAGE_KEY)
-    setGoogleAccessToken(null)
     await signOut(auth)
   }
 
@@ -145,7 +122,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
       value={{
         user,
         userProfile,
-        googleAccessToken,
         loading,
         profileLoading,
         login,

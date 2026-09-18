@@ -1,11 +1,11 @@
 import { ShieldAlert } from 'lucide-react'
 import { ShiftManager } from '../components/ShiftManager'
 import { useAuth } from '../context'
-import { canManageShifts } from '../services/userService'
+import { canManageShifts, isSuperAdmin } from '../services/userService'
 
 export function AdminShifts() {
-  const { user } = useAuth()
-  const canManage = canManageShifts(user?.email)
+  const { user, userProfile } = useAuth()
+  const canManage = canManageShifts(user?.email) || isSuperAdmin(userProfile)
 
   return (
     <div className="w-full space-y-6">
@@ -15,7 +15,7 @@ export function AdminShifts() {
         </p>
         <h1 className="text-2xl font-bold text-neutral-900 dark:text-gray-100">Turnos</h1>
         <p className="mt-1 text-sm text-neutral-500 dark:text-gray-400">
-          Planificá el jefe de turno semana a semana y administrá la rotación de Sistemas.
+          Administrá la rotación semanal del turno de Sistemas y las excepciones por semana.
         </p>
       </header>
 

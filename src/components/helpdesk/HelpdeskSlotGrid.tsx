@@ -1,9 +1,11 @@
 import { Loader2 } from 'lucide-react'
 import { useMemo } from 'react'
 import type { HelpdeskSlotDisponibilidad } from '../../services/helpdeskApi'
+import {
+  HELPDESK_BUSINESS_HOURS,
+  HELPDESK_OFFICE_HOURS_SHORT_LABEL,
+} from '@intranet/helpdesk-scheduling'
 import { collectHelpdeskBusinessDayLabels, formatHelpdeskDayHeader } from '../../utils/helpdeskBusinessDays'
-
-const BUSINESS_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17] as const
 
 function slotKey(fecha: string, hora: string): string {
   return `${fecha}|${hora}`
@@ -54,7 +56,9 @@ export function HelpdeskSlotGrid({
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <p className="text-sm text-body-muted">Elegí un turno libre (45 min aprox., 9 a 17 hs).</p>
+        <p className="text-sm text-body-muted">
+          Elegí un turno libre (45 min aprox., {HELPDESK_OFFICE_HOURS_SHORT_LABEL}).
+        </p>
         <button
           type="button"
           disabled={loading}
@@ -94,7 +98,7 @@ export function HelpdeskSlotGrid({
             </tr>
           </thead>
           <tbody>
-            {BUSINESS_HOURS.map((hour) => {
+            {HELPDESK_BUSINESS_HOURS.map((hour) => {
               const hora = formatHourLabel(hour)
               return (
                 <tr key={hora} className="border-t border-neutral-100 dark:border-zinc-800">

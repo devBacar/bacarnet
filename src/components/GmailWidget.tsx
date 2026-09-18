@@ -1,256 +1,247 @@
 import { ExternalLink, Mail } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { useAuth } from '../context'
+import { useCallback, useEffect, useState } from 'react'
+import { useGoogleWidgetsConnection } from '../hooks/useGoogleWidgetsConnection'
+import {
+  fetchWidgetGmailMessageDetail,
+  fetchWidgetGmailMessages,
+  type WidgetGmailMessage,
+  type WidgetGmailMessageDetail,
+} from '../services/googleWidgetsApi'
+import {
+  WidgetDetailLoading,
+  WidgetDetailModal,
+  WidgetExternalLinkButton,
+} from './home/WidgetDetailModal'
 
-const GOOGLE_TOKEN_STORAGE_KEY = 'googleToken'
-const GMAIL_MESSAGES_BASE_URL =
-  'https://gmail.googleapis.com/gmail/v1/users/me/messages'
-
-/** Bandeja principal e importantes; excluye spam, promociones y redes sociales. */
-const GMAIL_INBOX_QUERY =
-  'is:unread in:inbox -in:spam -category:promotions -category:social (category:primary OR is:important)'
-
-function buildGmailInboxUrl(): string {
-  const params = new URLSearchParams({
-    q: GMAIL_INBOX_QUERY,
-    maxResults: '10',
+function formatMessageDate(iso: string | null): string {
+  if (!iso) return 'Fecha no disponible'
+  return new Date(iso).toLocaleString('es-AR', {
+    dateStyle: 'full',
+    timeStyle: 'short',
+    timeZone: 'America/Argentina/Buenos_Aires',
   })
-  return `${GMAIL_MESSAGES_BASE_URL}?${params.toString()}`
-}
-
-interface GmailMessageRef {
-  id: string
-  threadId: string
-}
-
-interface GmailMessagesResponse {
-  messages?: GmailMessageRef[]
-}
-
-interface GmailMessageHeader {
-  name: string
-  value: string
-}
-
-interface GmailMessageDetailResponse {
-  id: string
-  payload?: {
-    headers?: GmailMessageHeader[]
-  }
-}
-
-export interface GmailEmail {
-  id: string
-  from: string
-  subject: string
-}
-
-function getHeaderValue(
-  headers: GmailMessageHeader[] | undefined,
-  name: string,
-): string {
-  const header = headers?.find(
-    (item) => item.name.toLowerCase() === name.toLowerCase(),
-  )
-  return header?.value?.trim() ?? ''
-}
-
-function parseSender(from: string): string {
-  const trimmed = from.trim()
-  if (!trimmed) return 'Remitente desconocido'
-
-  const nameWithEmail = trimmed.match(/^("?)(.+?)\1\s*<[^>]+>$/)
-  if (nameWithEmail) {
-    return nameWithEmail[2].replace(/^"|"$/g, '').trim() || trimmed
-  }
-
-  if (trimmed.includes('@')) {
-    return trimmed.split('@')[0]
-  }
-
-  return trimmed
-}
-
-function buildMessageMetadataUrl(messageId: string): string {
-  const params = new URLSearchParams({
-    format: 'metadata',
-  })
-  params.append('metadataHeaders', 'From')
-  params.append('metadataHeaders', 'Subject')
-
-  return `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?${params.toString()}`
-}
-
-async function fetchMessageDetails(
-  messages: GmailMessageRef[],
-  token: string,
-  signal: AbortSignal,
-): Promise<GmailEmail[]> {
-  const details = await Promise.all(
-    messages.map(async (message) => {
-      const response = await fetch(buildMessageMetadataUrl(message.id), {
-        headers: { Authorization: `Bearer ${token}` },
-        signal,
-      })
-
-      if (!response.ok) {
-        throw new Error(`Gmail message error: ${response.status}`)
-      }
-
-      const data = (await response.json()) as GmailMessageDetailResponse
-      const fromRaw = getHeaderValue(data.payload?.headers, 'From')
-      const subjectRaw = getHeaderValue(data.payload?.headers, 'Subject')
-
-      return {
-        id: message.id,
-        from: parseSender(fromRaw),
-        subject: subjectRaw || '(Sin asunto)',
-      }
-    }),
-  )
-
-  return details
 }
 
 export function GmailWidget() {
-  const { googleAccessToken, loginWithGoogle } = useAuth()
-  const token =
-    sessionStorage.getItem(GOOGLE_TOKEN_STORAGE_KEY) ?? googleAccessToken
-  const [emails, setEmails] = useState<GmailEmail[]>([])
-  const [loading, setLoading] = useState(Boolean(token))
-  const [error, setError] = useState(false)
-  const [connecting, setConnecting] = useState(false)
+  const {
+    connected,
+    connecting,
+    disconnecting,
+    connect,
+    disconnect,
+    isGoogleReconnectError,
+  } = useGoogleWidgetsConnection()
+  const [emails, setEmails] = useState<WidgetGmailMessage[]>([])
+  const [loading, setLoading] = useState(false)
+  const [needsReconnect, setNeedsReconnect] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [detail, setDetail] = useState<WidgetGmailMessageDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailError, setDetailError] = useState<string | null>(null)
+
+  const loadEmails = useCallback(async () => {
+    setLoading(true)
+    try {
+      const messages = await fetchWidgetGmailMessages()
+      setEmails(messages)
+      setNeedsReconnect(false)
+    } catch (err) {
+      if (isGoogleReconnectError(err)) {
+        setNeedsReconnect(true)
+        setEmails([])
+      } else {
+        console.error('Error al cargar correos de Gmail:', err)
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [isGoogleReconnectError])
 
   useEffect(() => {
-    if (!token) {
-      setLoading(false)
-      setEmails([])
-      setError(false)
+    if (connected !== true) return
+    void loadEmails()
+  }, [connected, loadEmails])
+
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null)
+      setDetailError(null)
       return
     }
-
-    setLoading(true)
-    const accessToken = token
-    const controller = new AbortController()
-
-    async function loadUnreadEmails() {
-      try {
-        const response = await fetch(buildGmailInboxUrl(), {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          signal: controller.signal,
-        })
-
-        if (!response.ok) {
-          throw new Error(`Gmail API error: ${response.status}`)
+    let cancelled = false
+    setDetailLoading(true)
+    setDetailError(null)
+    setDetail(null)
+    void fetchWidgetGmailMessageDetail(selectedId)
+      .then((message) => {
+        if (!cancelled) setDetail(message)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setDetailError(err instanceof Error ? err.message : 'No se pudo cargar el correo')
         }
-
-        const data = (await response.json()) as GmailMessagesResponse
-        const messages = data.messages ?? []
-
-        if (messages.length === 0) {
-          setEmails([])
-          setError(false)
-          return
-        }
-
-        const messageDetails = await fetchMessageDetails(
-          messages,
-          accessToken,
-          controller.signal,
-        )
-
-        setEmails(messageDetails)
-        setError(false)
-      } catch (err) {
-        if (!controller.signal.aborted) {
-          console.error('Error al cargar correos de Gmail:', err)
-          setError(true)
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false)
-        }
-      }
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
+  }, [selectedId])
 
-    loadUnreadEmails()
+  const closeModal = () => setSelectedId(null)
 
-    return () => controller.abort()
-  }, [token, googleAccessToken])
-
-  const handleConnectGoogle = async () => {
-    setConnecting(true)
-    try {
-      await loginWithGoogle(true)
-    } catch (err) {
-      console.error('Error al conectar Google:', err)
-    } finally {
-      setConnecting(false)
-    }
-  }
+  const showConnect = connected === false || needsReconnect
+  const statusLoading = connected === null
+  const selectedPreview = emails.find((item) => item.id === selectedId)
 
   return (
-    <section className="card-minimal overflow-hidden dark:bg-zinc-900">
-      <div className="p-4 lg:p-5">
-        <div className="mb-4 flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-tint text-brand-primary">
-            <Mail className="h-5 w-5" />
-          </span>
-          <p className="text-sm font-semibold text-neutral-900 dark:text-gray-100">Gmail</p>
-        </div>
+    <>
+      <section className="card-minimal overflow-hidden dark:bg-zinc-900">
+        <div className="p-4 lg:p-5">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-tint text-brand-primary">
+              <Mail className="h-5 w-5" />
+            </span>
+            <p className="text-sm font-semibold text-neutral-900 dark:text-gray-100">Gmail</p>
+          </div>
 
-        {!token ? (
-          <div className="mb-4">
-            <p className="mb-3 text-sm text-neutral-500 dark:text-zinc-400">
-              Conectá tu cuenta de Google para ver tus correos sin leer.
+          {statusLoading ? (
+            <p className="mb-4 text-sm text-neutral-500 dark:text-zinc-400">
+              Comprobando conexión...
             </p>
+          ) : showConnect ? (
+            <div className="mb-4">
+              <p className="mb-3 text-sm text-neutral-500 dark:text-zinc-400">
+                {needsReconnect
+                  ? 'Tu conexión con Google venció o fue revocada. Volvé a conectar para ver tus correos.'
+                  : 'Conectá tu cuenta de Google para ver tus correos sin leer.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => void connect()}
+                disabled={connecting}
+                className="inline-flex w-full items-center justify-center rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 transition-colors hover:border-brand-primary/30 hover:bg-neutral-50 hover:text-brand-primary disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100 dark:hover:border-brand-primary/40 dark:hover:bg-zinc-700 dark:hover:text-brand-primary"
+              >
+                {connecting ? 'Conectando...' : 'Conectar Google'}
+              </button>
+            </div>
+          ) : loading ? (
+            <p className="mb-4 text-sm text-neutral-500 dark:text-zinc-400">
+              Cargando bandeja...
+            </p>
+          ) : emails.length === 0 ? (
+            <p className="mb-4 text-sm text-neutral-500 dark:text-zinc-400">
+              No tenés correos sin leer en Principal o Importantes.
+            </p>
+          ) : (
+            <ul className="mb-4 space-y-3">
+              {emails.map((email) => (
+                <li
+                  key={email.id}
+                  className="min-w-0 border-b border-neutral-100 pb-3 last:border-b-0 last:pb-0 dark:border-zinc-800"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(email.id)}
+                    className="w-full rounded-lg text-left transition-colors hover:bg-neutral-50/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary/40 dark:hover:bg-zinc-800/50 px-1 py-0.5 -mx-1"
+                    data-testid="gmail-widget-item"
+                  >
+                    <p className="truncate font-semibold text-neutral-900 dark:text-gray-100">
+                      {email.from}
+                    </p>
+                    <p
+                      className="line-clamp-2 text-sm leading-snug text-zinc-400 dark:text-zinc-500"
+                      title={email.subject}
+                      data-testid="gmail-message-subject"
+                    >
+                      {email.subject}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {connected === true && !showConnect ? (
             <button
               type="button"
-              onClick={handleConnectGoogle}
-              disabled={connecting}
-              className="inline-flex w-full items-center justify-center rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 transition-colors hover:border-brand-primary/30 hover:bg-neutral-50 hover:text-brand-primary disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100 dark:hover:border-brand-primary/40 dark:hover:bg-zinc-700 dark:hover:text-brand-primary"
+              onClick={() => void disconnect()}
+              disabled={disconnecting}
+              className="mb-4 inline-flex w-full items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-2 text-sm font-medium text-neutral-600 transition-colors hover:border-neutral-300 hover:bg-neutral-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300 dark:hover:bg-zinc-800"
             >
-              {connecting ? 'Conectando...' : 'Conectar Google'}
+              {disconnecting ? 'Desconectando...' : 'Desconectar Google'}
             </button>
-          </div>
-        ) : loading ? (
-          <p className="mb-4 text-sm text-neutral-500 dark:text-zinc-400">
-            Cargando bandeja...
-          </p>
-        ) : error ? (
-          <p className="mb-4 text-sm text-neutral-500 dark:text-zinc-400">
-            No se pudo cargar tu bandeja de entrada.
-          </p>
-        ) : emails.length === 0 ? (
-          <p className="mb-4 text-sm text-neutral-500 dark:text-zinc-400">
-            No tenés correos sin leer en Principal o Importantes.
-          </p>
-        ) : (
-          <ul className="mb-4 space-y-3">
-            {emails.map((email) => (
-              <li
-                key={email.id}
-                className="min-w-0 border-b border-neutral-100 pb-3 last:border-b-0 last:pb-0 dark:border-zinc-800"
-              >
-                <p className="truncate font-semibold text-neutral-900 dark:text-gray-100">
-                  {email.from}
-                </p>
-                <p className="truncate text-sm text-zinc-400">{email.subject}</p>
-              </li>
-            ))}
-          </ul>
-        )}
+          ) : null}
 
-        <a
-          href="https://mail.google.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 transition-colors hover:border-brand-primary/30 hover:bg-neutral-50 hover:text-brand-primary dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100 dark:hover:border-brand-primary/40 dark:hover:bg-zinc-700 dark:hover:text-brand-primary"
-        >
-          Abrir Gmail
-          <ExternalLink className="h-4 w-4" />
-        </a>
-      </div>
-    </section>
+          <a
+            href="https://mail.google.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 transition-colors hover:border-brand-primary/30 hover:bg-neutral-50 hover:text-brand-primary dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100 dark:hover:border-brand-primary/40 dark:hover:bg-zinc-700 dark:hover:text-brand-primary"
+          >
+            Abrir Gmail
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </div>
+      </section>
+
+      <WidgetDetailModal
+        open={selectedId !== null}
+        title="Correo"
+        titleId="gmail-widget-modal-title"
+        testId="gmail-widget-modal"
+        onClose={closeModal}
+        footer={
+          detail?.gmailWebUrl ? (
+            <WidgetExternalLinkButton href={detail.gmailWebUrl} label="Abrir en Gmail" />
+          ) : null
+        }
+      >
+        {detailLoading ? (
+          <WidgetDetailLoading />
+        ) : detailError ? (
+          <p className="text-sm text-red-600 dark:text-red-400">{detailError}</p>
+        ) : detail ? (
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">De</p>
+              <p className="mt-1 text-sm text-heading" data-testid="gmail-modal-from">
+                {detail.from}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Asunto</p>
+              <p className="mt-1 text-sm font-medium text-heading" data-testid="gmail-modal-subject">
+                {detail.subject}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Fecha</p>
+              <p className="mt-1 text-sm text-body-muted">{formatMessageDate(detail.date)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Mensaje</p>
+              {detail.bodyHtml ? (
+                <div
+                  className="prose prose-sm mt-2 max-w-none text-heading dark:prose-invert"
+                  data-testid="gmail-modal-body"
+                  dangerouslySetInnerHTML={{ __html: detail.bodyHtml }}
+                />
+              ) : (
+                <pre
+                  className="mt-2 whitespace-pre-wrap font-sans text-sm text-heading"
+                  data-testid="gmail-modal-body"
+                >
+                  {detail.bodyText}
+                </pre>
+              )}
+            </div>
+          </div>
+        ) : selectedPreview ? (
+          <WidgetDetailLoading />
+        ) : null}
+      </WidgetDetailModal>
+    </>
   )
 }

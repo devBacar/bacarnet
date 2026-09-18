@@ -5,6 +5,7 @@ import {
   getHelpdeskTicketById,
   updateHelpdeskTicket,
 } from './repository.js'
+import { markHelpdeskVistoSeccionNowForUser } from './vistoPorRepository.js'
 
 export async function patchTicketAsignadoHandler(req: Request, res: Response): Promise<void> {
   const ticketId = String(req.params.ticketId ?? '').trim()
@@ -39,6 +40,7 @@ export async function patchTicketAsignadoHandler(req: Request, res: Response): P
     }
 
     await updateHelpdeskTicket(ticketId, { asignadoATeamId: teamMemberId })
+    await markHelpdeskVistoSeccionNowForUser(ticketId, req.authedUser?.uid, 'seguimiento')
     res.json({ ticketId, asignadoATeamId: teamMemberId })
   } catch (err) {
     logError('patchTicketAsignado falló', err)

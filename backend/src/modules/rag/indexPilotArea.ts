@@ -144,6 +144,7 @@ async function processFile(
     classification,
     governingAreaId: resolvedAreaId,
     allowedReaders: acl.allowedReaders,
+    fileDirectReaders: acl.fileDirectReaders,
     domainAccess: acl.domainAccess,
     chunkIndex: part.chunkIndex,
     charStart: part.charStart,

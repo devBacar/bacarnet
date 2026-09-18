@@ -97,6 +97,16 @@ export function getEnv() {
     process.env.GOOGLE_CLOUD_PROJECT?.trim() ||
     process.env.GCLOUD_PROJECT?.trim() ||
     ''
+  const widgetsOAuthClientId = process.env.WIDGETS_OAUTH_CLIENT_ID?.trim() || ''
+  const widgetsOAuthClientSecret = process.env.WIDGETS_OAUTH_CLIENT_SECRET?.trim() || ''
+  const widgetsOAuthTokenEncryptionKey =
+    process.env.WIDGETS_OAUTH_TOKEN_ENCRYPTION_KEY?.trim() || ''
+  const widgetsOAuthStateSecret = process.env.WIDGETS_OAUTH_STATE_SECRET?.trim() || ''
+  const widgetsOAuthRedirectUri = process.env.WIDGETS_OAUTH_REDIRECT_URI?.trim() || ''
+  const stTicketsBaseUrl = (process.env.ST_BASE_URL ?? 'https://bacarsa.dyndns.org')
+    .trim()
+    .replace(/\/+$/, '')
+  const stTicketsApiKey = process.env.ST_INTEGRATION_API_KEY?.trim() || ''
 
   if (!allowedEmailDomain) {
     throw new Error('ALLOWED_EMAIL_DOMAIN está vacío')
@@ -134,6 +144,13 @@ export function getEnv() {
     ragStagingLocation,
     ragEmbeddingLocation,
     gcpProjectId,
+    widgetsOAuthClientId,
+    widgetsOAuthClientSecret,
+    widgetsOAuthTokenEncryptionKey,
+    widgetsOAuthStateSecret,
+    widgetsOAuthRedirectUri,
+    stTicketsBaseUrl,
+    stTicketsApiKey,
   }
 }
 

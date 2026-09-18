@@ -1,5 +1,9 @@
 import type { AuthedUser } from '../auth/middleware.js'
 import { isActiveHelpdeskTeamMemberByEmail } from './repository.js'
+import {
+  canPostMisProyectoBitacoraComment,
+  canViewMisProyectoTicket,
+} from './ticketCollaboratorAccess.js'
 import type { HelpdeskTicket } from './types.js'
 
 export async function canAccessHelpdeskBitacora(
@@ -9,14 +13,17 @@ export async function canAccessHelpdeskBitacora(
   if (await isActiveHelpdeskTeamMemberByEmail(user.email)) {
     return 'team'
   }
-  const email = user.email.trim().toLowerCase()
-  if (ticket.requesterUid === user.uid) {
-    return 'requester'
-  }
-  if (ticket.requesterEmail.trim().toLowerCase() === email) {
+  if (canViewMisProyectoTicket(user, ticket)) {
     return 'requester'
   }
   return null
+}
+
+export function canPostHelpdeskBitacoraAsRequesterSide(
+  user: AuthedUser,
+  ticket: HelpdeskTicket,
+): boolean {
+  return canPostMisProyectoBitacoraComment(user, ticket)
 }
 
 export function bitacoraVisibleForTicket(ticket: HelpdeskTicket): boolean {

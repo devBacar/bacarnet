@@ -4,8 +4,10 @@ import {
   getHelpdeskAnalisisById,
   updateHelpdeskAnalisisDecision,
 } from './analisisRepository.js'
+import { logHelpdeskEmailAvisoBestEffort } from './logHelpdeskEmailAviso.js'
 import { notificarN8n } from './n8nWebhooks.js'
 import { getHelpdeskTicketById, updateHelpdeskTicket } from './repository.js'
+import { markHelpdeskVistoSeccionNowForUser } from './vistoPorRepository.js'
 import { helpdeskEstadoLabelFromIdx } from './types.js'
 
 const SISTEMAS_AVISO_EMAIL = 'admin@bacarsa.com.ar'
@@ -85,6 +87,13 @@ export async function patchAnalisisDecisionHandler(req: Request, res: Response):
         nombre: ticket.requesterNombre,
         estadoNuevo,
       })
+      await logHelpdeskEmailAvisoBestEffort({
+        tipo: 'actualizacion_estado',
+        destinatarios: [ticket.requesterEmail],
+        area: ticket.areaNombre,
+        areaId: ticket.areaId ?? null,
+        ticketId,
+      })
       await notificarN8n('aviso_interno', {
         tipoAviso: 'analisis_aprobado',
         destinatarioEmail: SISTEMAS_AVISO_EMAIL,
@@ -94,6 +103,13 @@ export async function patchAnalisisDecisionHandler(req: Request, res: Response):
         decididoPorEmail: userEmail,
         comentario: comentario || null,
         archivoDriveLink: analisis.archivoDriveLink,
+      })
+      await logHelpdeskEmailAvisoBestEffort({
+        tipo: 'analisis_aprobado',
+        destinatarios: [SISTEMAS_AVISO_EMAIL],
+        area: ticket.areaNombre,
+        areaId: ticket.areaId ?? null,
+        ticketId,
       })
     } else {
       await notificarN8n('aviso_interno', {
@@ -106,7 +122,16 @@ export async function patchAnalisisDecisionHandler(req: Request, res: Response):
         comentario: comentarioDecision,
         archivoDriveLink: analisis.archivoDriveLink,
       })
+      await logHelpdeskEmailAvisoBestEffort({
+        tipo: 'analisis_rechazado',
+        destinatarios: [SISTEMAS_AVISO_EMAIL],
+        area: ticket.areaNombre,
+        areaId: ticket.areaId ?? null,
+        ticketId,
+      })
     }
+
+    await markHelpdeskVistoSeccionNowForUser(ticketId, user.uid, 'analisis')
 
     res.json({ ticketId, analisisId, decision })
   } catch (err) {

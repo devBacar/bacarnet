@@ -129,6 +129,7 @@ export async function approveExternalAccount(req: Request, res: Response): Promi
       permissions: EXTERNAL_APPROVED_PERMISSIONS,
       widgetPreferences: { weather: true, dollar: true },
       favoriteApps: [],
+      personalLinks: [],
       memberAreaIds: [],
       managedAreaIds: [],
       accountReviewedAt: FieldValue.serverTimestamp(),

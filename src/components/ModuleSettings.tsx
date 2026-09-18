@@ -78,6 +78,11 @@ const MODULE_TOGGLES: {
     label: 'Mostrar Encuestas',
     description: 'Widget de encuesta activa en la columna lateral del inicio.',
   },
+  {
+    key: 'finanzasEnabled',
+    label: 'Mostrar Finanzas',
+    description: 'Habilita el módulo Finanzas y la ruta /finanzas/cuentas para usuarios con permiso.',
+  },
 ]
 
 export function ModuleSettings() {

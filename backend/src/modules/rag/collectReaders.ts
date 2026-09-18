@@ -5,7 +5,10 @@ import type { RagDomainAccess } from './types.js'
 import { driveRoleToApiRole } from '../drive/permissionRoleUtils.js'
 
 export type RagFileAcl = {
+  /** Lectores efectivos (archivo + Unidad compartida). */
   allowedReaders: string[]
+  /** Solo permisos directos sobre el archivo (sin herencia de la Unidad compartida). */
+  fileDirectReaders: string[]
   domainAccess: RagDomainAccess | null
 }
 
@@ -71,16 +74,14 @@ function collectFromPermissions(
 
   return {
     allowedReaders: [...allowedReaders].sort((a, b) => a.localeCompare(b, 'es')),
+    fileDirectReaders: [...allowedReaders].sort((a, b) => a.localeCompare(b, 'es')),
     domainAccess: domainAccess.current,
   }
 }
 
-function mergeAcls(base: RagFileAcl, extra: RagFileAcl): RagFileAcl {
+function mergeAllowedReaders(base: RagFileAcl, extra: RagFileAcl): string[] {
   const allowedReaders = new Set([...base.allowedReaders, ...extra.allowedReaders])
-  return {
-    allowedReaders: [...allowedReaders].sort((a, b) => a.localeCompare(b, 'es')),
-    domainAccess: base.domainAccess ?? extra.domainAccess,
-  }
+  return [...allowedReaders].sort((a, b) => a.localeCompare(b, 'es'))
 }
 
 /**
@@ -98,5 +99,9 @@ export async function collectDriveFileAcl(
 
   const fileAcl = collectFromPermissions(filePermissions)
   const driveAcl = collectFromPermissions(drivePermissions)
-  return mergeAcls(fileAcl, driveAcl)
+  return {
+    allowedReaders: mergeAllowedReaders(fileAcl, driveAcl),
+    fileDirectReaders: fileAcl.fileDirectReaders,
+    domainAccess: fileAcl.domainAccess ?? driveAcl.domainAccess,
+  }
 }

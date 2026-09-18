@@ -20,6 +20,15 @@ export async function listHelpdeskBitacoraForTicket(
   return snap.docs.map((doc) => ({ id: doc.id, ...(doc.data() as HelpdeskBitacoraEntrada) }))
 }
 
+export async function getHelpdeskBitacoraEntradaById(
+  ticketId: string,
+  entradaId: string,
+): Promise<(HelpdeskBitacoraEntrada & { id: string }) | null> {
+  const snap = await bitacoraCol(ticketId).doc(entradaId).get()
+  if (!snap.exists) return null
+  return { id: snap.id, ...(snap.data() as HelpdeskBitacoraEntrada) }
+}
+
 export async function createHelpdeskBitacoraEntrada(input: {
   ticketId: string
   entrada: Omit<HelpdeskBitacoraEntrada, 'createdAt'>

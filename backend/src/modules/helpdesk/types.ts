@@ -59,6 +59,24 @@ export interface HelpdeskTeamMemberRecord extends HelpdeskTeamMember {
   updatedAt?: Timestamp
 }
 
+export interface HelpdeskColaboradorSistemas {
+  teamMemberId: string
+  nombre: string
+  email: string
+  addedByEmail: string
+  addedAt?: Timestamp
+}
+
+export type HelpdeskColaboradorSolicitanteRol = 'lector' | 'editor'
+
+export interface HelpdeskColaboradorSolicitante {
+  email: string
+  uid: string | null
+  nombre: string
+  rol: HelpdeskColaboradorSolicitanteRol
+  addedAt?: Timestamp
+}
+
 export interface HelpdeskTicket {
   token: string
   requesterUid: string | null
@@ -75,6 +93,12 @@ export interface HelpdeskTicket {
   canceladoPor?: string | null
   canceladoFecha?: Timestamp | null
   createdAt?: Timestamp
+  /** Último cambio de estadoIdx o asignadoATeamId (seguimiento). */
+  seguimientoUpdatedAt?: Timestamp
+  colaboradoresSistemas?: HelpdeskColaboradorSistemas[]
+  colaboradoresSolicitante?: HelpdeskColaboradorSolicitante[]
+  colaboradorUids?: string[]
+  colaboradorEmails?: string[]
 }
 
 export type HelpdeskAnalisisEstado = 'pendiente' | 'aprobado' | 'rechazado'
@@ -167,6 +191,8 @@ export interface HelpdeskReunion {
   minuta?: HelpdeskReunionMinuta | null
   minutaDiagnostico?: HelpdeskMinutaDiagnostico | null
   createdAt?: Timestamp
+  /** Última vez que cambió el estado de la reunión (confirmada/rechazada). */
+  estadoUpdatedAt?: Timestamp
 }
 
 export interface HelpdeskNota {
@@ -180,6 +206,15 @@ export type HelpdeskEmailLogTipo =
   | 'invitacion_reunion'
   | 'actualizacion_estado'
   | 'recordatorio'
+  | 'analisis_pendiente_aprobacion'
+  | 'analisis_aprobado'
+  | 'analisis_rechazado'
+  | 'aviso_interno_ticket'
+  | 'aviso_interno_reunion'
+  | 'colaborador_sistemas_agregado'
+  | 'colaborador_solicitante_agregado'
+
+export type HelpdeskEmailLogSource = 'bacarnet' | 'n8n_callback'
 
 export interface HelpdeskEmailLog {
   fecha: Timestamp
@@ -190,14 +225,28 @@ export interface HelpdeskEmailLog {
   ticketId?: string | null
   respondido: boolean | null
   fechaRespuesta: Timestamp | null
+  /** bacarnet = registro al disparar aviso; n8n_callback = webhook externo (legacy/complementario). */
+  source?: HelpdeskEmailLogSource | null
 }
+
+const HELPDESK_EMAIL_LOG_TIPOS: HelpdeskEmailLogTipo[] = [
+  'difusion_inicial',
+  'invitacion_reunion',
+  'actualizacion_estado',
+  'recordatorio',
+  'analisis_pendiente_aprobacion',
+  'analisis_aprobado',
+  'analisis_rechazado',
+  'aviso_interno_ticket',
+  'aviso_interno_reunion',
+  'colaborador_sistemas_agregado',
+  'colaborador_solicitante_agregado',
+]
 
 export function isValidHelpdeskEmailLogTipo(value: unknown): value is HelpdeskEmailLogTipo {
   return (
-    value === 'difusion_inicial' ||
-    value === 'invitacion_reunion' ||
-    value === 'actualizacion_estado' ||
-    value === 'recordatorio'
+    typeof value === 'string' &&
+    (HELPDESK_EMAIL_LOG_TIPOS as string[]).includes(value)
   )
 }
 

@@ -7,6 +7,7 @@ import { normalizeActionGrants, type ActionGrants } from '../drive/governanceAct
 export interface AuthedUserPermissions {
   super_admin?: boolean
   view_drive?: boolean
+  view_finanzas?: boolean
   rag_assistant?: boolean
 }
 
@@ -124,6 +125,7 @@ export async function requireWorkspaceUser(
             super_admin:
               (permissionsRaw as Record<string, unknown>).super_admin === true,
             view_drive: (permissionsRaw as Record<string, unknown>).view_drive === true,
+            view_finanzas: (permissionsRaw as Record<string, unknown>).view_finanzas === true,
             rag_assistant: (permissionsRaw as Record<string, unknown>).rag_assistant === true,
           }
         : {}
@@ -226,6 +228,42 @@ async function isResourcesModuleEnabled(): Promise<boolean> {
   const snap = await adminDb().collection('global_settings').doc('main').get()
   if (!snap.exists) return true
   return snap.get('resourcesEnabled') !== false
+}
+
+async function isFinanzasModuleEnabled(): Promise<boolean> {
+  const snap = await adminDb().collection('global_settings').doc('main').get()
+  if (!snap.exists) return false
+  return snap.get('finanzasEnabled') === true
+}
+
+/** Mismo criterio que ModulePermissionRoute(view_finanzas, finanzasEnabled) en el frontend. */
+export async function requireViewFinanzas(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const user = req.authedUser
+  if (!user) {
+    res.status(401).json({ error: 'No autenticado' })
+    return
+  }
+
+  if (isSuperAdminUser(user)) {
+    next()
+    return
+  }
+
+  try {
+    const moduleEnabled = await isFinanzasModuleEnabled()
+    if (!moduleEnabled || user.permissions.view_finanzas !== true) {
+      res.status(403).json({ error: 'No tenés permiso para acceder a Finanzas' })
+      return
+    }
+    next()
+  } catch (err) {
+    logError('Fallo al verificar permiso view_finanzas', err)
+    res.status(500).json({ error: 'No se pudo verificar el acceso a Finanzas' })
+  }
 }
 
 /** Mismo criterio que ModulePermissionRoute(view_drive, resourcesEnabled) en el frontend. */

@@ -47,6 +47,7 @@ export type RagCitation = {
   webViewLink: string | null
   chunkIndex: number
   excerpt: string
+  accessFootnote?: string
 }
 
 export async function generateRagAnswer(input: {

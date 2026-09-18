@@ -1,5 +1,8 @@
 import type { Timestamp } from 'firebase-admin/firestore'
 import {
+  serializeColaboradorSistemas,
+} from './serializeColaboradores.js'
+import {
   helpdeskEstadoLabelFromIdx,
   type HelpdeskEmailLog,
   type HelpdeskNota,
@@ -54,6 +57,7 @@ export function serializeHelpdeskEmailLog(entry: HelpdeskEmailLog & { id: string
     ticketId: entry.ticketId ?? null,
     respondido: entry.respondido ?? null,
     fechaRespuesta: timestampToIso(entry.fechaRespuesta ?? undefined),
+    source: entry.source ?? null,
   }
 }
 
@@ -81,6 +85,7 @@ export function serializeHelpdeskTicket(
     createdAt: timestampToIso(ticket.createdAt),
     reuniones: reuniones.map(serializeHelpdeskReunion),
     emailLog: emailLog.map(serializeHelpdeskEmailLog),
+    colaboradoresSistemas: (ticket.colaboradoresSistemas ?? []).map(serializeColaboradorSistemas),
   }
 }
 

@@ -139,19 +139,39 @@ async function runTeamMemberFlow(assigneeId) {
     await page.getByTestId('helpdesk-mesa-ticket-row').filter({ hasText: E2E_AREA }).first().click()
     await page.getByTestId('helpdesk-mesa-detail').waitFor({ timeout: 30_000 })
 
-    const estadoSelect = page.locator('select').filter({ hasText: 'Reunión inicial agendada' }).first()
-    await estadoSelect.selectOption({ label: 'Realizando análisis' })
-    await page.waitForTimeout(800)
-    const detailText = await page.getByTestId('helpdesk-mesa-detail').innerText()
+    await page.getByTestId('helpdesk-mesa-seguimiento-toggle').click()
+    await page.getByTestId('helpdesk-ticket-estado-manual-open').click()
+    const estadoSelect = page.getByTestId('helpdesk-ticket-estado-select')
+    await estadoSelect.selectOption('2')
+    await page.waitForFunction(
+      () => {
+        const sel = document.querySelector('[data-testid="helpdesk-ticket-estado-select"]')
+        return sel instanceof HTMLSelectElement && sel.value === '2'
+      },
+      null,
+      { timeout: 30_000 },
+    )
+    const detailText = await page.getByTestId('helpdesk-mesa-seguimiento').innerText()
     record(
       'Cambio de estado reflejado en detalle',
       detailText.includes('Realizando análisis'),
     )
 
-    await page.getByTestId('helpdesk-mesa-nota-input').fill(E2E_NOTA)
-    await page.getByRole('button', { name: 'Guardar nota' }).click()
+    await estadoSelect.selectOption('3')
+    await page.waitForFunction(
+      () => {
+        const sel = document.querySelector('[data-testid="helpdesk-ticket-estado-select"]')
+        return sel instanceof HTMLSelectElement && sel.value === '3'
+      },
+      null,
+      { timeout: 30_000 },
+    )
+    await page.getByTestId('helpdesk-mesa-bitacora-toggle').waitFor({ timeout: 30_000 })
+    await page.getByTestId('helpdesk-mesa-bitacora-toggle').click()
+    await page.getByTestId('helpdesk-bitacora-texto').fill(E2E_NOTA)
+    await page.getByTestId('helpdesk-bitacora-publicar').click()
     await page.getByText(E2E_NOTA).waitFor({ timeout: 30_000 })
-    record('Nota agregada visible en detalle', true)
+    record('Avance en bitácora visible en detalle', true)
 
     const layoutCheck = await page.evaluate(() => {
       function overlaps(a, b) {
@@ -187,6 +207,15 @@ async function runTeamMemberFlow(assigneeId) {
         detailPane.scrollTop = before > 0 ? Math.max(0, before - 240) : 240
         detailScrollDelta = Math.abs(detailPane.scrollTop - before)
       }
+      const listPane = document.querySelector('[data-testid="helpdesk-mesa-ticket-row"]')?.parentElement
+      let listScrollable = false
+      let listScrollDelta = 0
+      if (listPane instanceof HTMLElement) {
+        listScrollable = listPane.scrollHeight > listPane.clientHeight + 8
+        const beforeList = listPane.scrollTop
+        listPane.scrollTop = beforeList > 0 ? Math.max(0, beforeList - 120) : 120
+        listScrollDelta = Math.abs(listPane.scrollTop - beforeList)
+      }
       return {
         ok: !checks.some((c) => c.overlap),
         checks,
@@ -196,6 +225,9 @@ async function runTeamMemberFlow(assigneeId) {
         detailScrollDelta,
         detailOverflowY,
         detailDimensions,
+        listScrollable,
+        listScrollDelta,
+        detailPaneShouldNotScroll: detailOverflowY !== 'auto' && detailOverflowY !== 'scroll',
       }
     })
     record(
@@ -203,14 +235,19 @@ async function runTeamMemberFlow(assigneeId) {
       layoutCheck.ok,
       layoutCheck.ok ? undefined : JSON.stringify(layoutCheck.checks?.filter((c) => c.overlap)),
     )
-    const scrollOk =
-      (layoutCheck.pageScrollable && layoutCheck.pageScrollDelta > 20) ||
-      (layoutCheck.detailScrollable && layoutCheck.detailScrollDelta > 20) ||
-      (!layoutCheck.pageScrollable && !layoutCheck.detailScrollable)
     record(
-      'Scroll (página o panel detalle) responde',
-      scrollOk,
-      `pageΔ=${layoutCheck.pageScrollDelta} detailΔ=${layoutCheck.detailScrollDelta} overflow=${layoutCheck.detailOverflowY} dims=${JSON.stringify(layoutCheck.detailDimensions)}`,
+      'Panel detalle sin scroll interno forzado',
+      layoutCheck.detailOverflowY !== 'auto' && layoutCheck.detailOverflowY !== 'scroll',
+      `detailOverflow=${layoutCheck.detailOverflowY} dims=${JSON.stringify(layoutCheck.detailDimensions)}`,
+    )
+    const scrollOk =
+      (layoutCheck.pageScrollable && layoutCheck.pageScrollDelta > 8) ||
+      (layoutCheck.listScrollable && layoutCheck.listScrollDelta > 8) ||
+      (!layoutCheck.pageScrollable && !layoutCheck.listScrollable)
+    record(
+      'Sin scroll interno en ticket (scroll global o lista si hace falta)',
+      scrollOk || layoutCheck.detailOverflowY === 'visible',
+      `pageΔ=${layoutCheck.pageScrollDelta} listΔ=${layoutCheck.listScrollDelta}`,
     )
 
     await page.evaluate(() => window.scrollTo(0, 320))

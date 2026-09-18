@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HomeBoardsSection } from '../components/home/HomeBoardsSection'
 import { HomeCollapsibleSection } from '../components/home/HomeCollapsibleSection'
+import { HomePersonalLinksSection } from '../components/home/HomePersonalLinksSection'
 import { HomeRecentFilesSection } from '../components/home/HomeRecentFilesSection'
 import { BirthdayConfetti } from '../components/home/BirthdayConfetti'
 import { WelcomeHeader } from '../components/home/WelcomeHeader'
@@ -19,6 +20,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage'
 import { isExternalAccount } from '../services/userService'
 import { isBirthdayToday } from '../utils/birthday'
 import { getActiveBanner, type Banner } from '../services/bannerService'
+import { resolveHomeWidgetPreferences } from '../constants/homeWidgets'
 import { getCoreApps, type CoreApp } from '../services/coreAppService'
 
 const DEFAULT_PINNED_COUNT = 4
@@ -91,6 +93,8 @@ export function IntranetHub() {
     'Usuario'
 
   const favoriteApps = userProfile?.favoriteApps ?? []
+  const homeWidgets = resolveHomeWidgetPreferences(userProfile?.widgetPreferences)
+  const showSystemsShift = homeWidgets.systemsShift
 
   const pinnedCoreApps = useMemo(
     () => getPinnedCoreApps(coreApps, favoriteApps),
@@ -197,26 +201,6 @@ export function IntranetHub() {
             />
           )}
 
-          <section className="overflow-hidden rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-bold text-neutral-900 dark:text-gray-100">
-                  Aprobaciones de proyectos (Sistemas)
-                </h2>
-                <p className="mt-1 text-sm text-neutral-500 dark:text-gray-400">
-                  Revisá documentos de análisis que te hayan enviado para aprobar o rechazar.
-                </p>
-              </div>
-              <Link
-                to="/aprobaciones-pendientes"
-                className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-primary transition-colors hover:opacity-90"
-              >
-                Ver pendientes
-                <ArrowRight className="h-4 w-4 shrink-0" />
-              </Link>
-            </div>
-          </section>
-
           {(coreAppsLoading || pinnedCoreApps.length > 0 || coreAppsError) && (
             <HomeCollapsibleSection
               title="Mis Herramientas"
@@ -259,13 +243,15 @@ export function IntranetHub() {
             </HomeCollapsibleSection>
           )}
 
+          <HomePersonalLinksSection />
+
           {settings.boardsEnabled && <HomeBoardsSection />}
 
           <HomeRecentFilesSection />
         </div>
 
         <aside className="min-w-0 space-y-6 lg:col-span-4 xl:col-span-3">
-          <ShiftWidget />
+          {showSystemsShift ? <ShiftWidget /> : null}
 
           <DailyQuestionWidget />
 

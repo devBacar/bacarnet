@@ -66,6 +66,7 @@ export async function postWebhookCorreoEnviadoHandler(
       area,
       ticketId,
       fecha,
+      source: 'n8n_callback',
     })
     res.status(201).json({ logId })
   } catch (err) {

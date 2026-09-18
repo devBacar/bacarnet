@@ -14,6 +14,7 @@ import {
   listPrimeraReunionTeamMembers,
   pickResponsablePrincipalTeamMember,
 } from './repository.js'
+import { logHelpdeskEmailAvisoBestEffort } from './logHelpdeskEmailAviso.js'
 import { notificarN8n } from './n8nWebhooks.js'
 import { ticketPayloadForN8n } from './serializeTicket.js'
 import { attachMinutaDiagnosticoDraftOnTicketCreate } from './generateMinutaDiagnosticoDraft.js'
@@ -164,6 +165,20 @@ export async function createSolicitudHandler(req: Request, res: Response): Promi
       reunionFecha: fechaStr,
       reunionHora: horaStr,
     })
+    await logHelpdeskEmailAvisoBestEffort({
+      tipo: 'difusion_inicial',
+      destinatarios: [claims.email],
+      area: claims.areaNombre,
+      areaId: claims.areaId,
+      ticketId,
+    })
+    await logHelpdeskEmailAvisoBestEffort({
+      tipo: 'invitacion_reunion',
+      destinatarios: attendeeEmails,
+      area: claims.areaNombre,
+      areaId: claims.areaId,
+      ticketId,
+    })
 
     await notificarN8n('aviso_interno', {
       tipoAviso: 'ticket_creado',
@@ -174,6 +189,13 @@ export async function createSolicitudHandler(req: Request, res: Response): Promi
       urgencia,
       reunionFecha: fechaStr,
       reunionHora: horaStr,
+    })
+    await logHelpdeskEmailAvisoBestEffort({
+      tipo: 'aviso_interno_ticket',
+      destinatarios: ['admin@bacarsa.com.ar'],
+      area: claims.areaNombre,
+      areaId: claims.areaId,
+      ticketId,
     })
 
     res.status(201).json({

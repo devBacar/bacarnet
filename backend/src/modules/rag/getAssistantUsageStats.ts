@@ -11,6 +11,10 @@ import {
   type AssistantToolCategory,
 } from './assistantUsageMeter.js'
 import { ASSISTANT_INTERACTIONS_COLLECTION } from './constants.js'
+import {
+  computePreviousWeekAssistantUsage,
+  previousCompletedWeekBounds,
+} from './assistantUsageAggregates.js'
 
 const MAX_INTERACTIONS = 4000
 const HISTORY_MONTHS = 6
@@ -140,10 +144,20 @@ export async function getAssistantUsageStats(req: Request, res: Response): Promi
         estimatedCostUsd: stats.estimatedCostUsd,
       }))
 
+    const { from: weekFrom, to: weekTo } = previousCompletedWeekBounds(now)
+    const previousWeekUsage = await computePreviousWeekAssistantUsage(now)
+
     res.json({
       disclaimer:
         'Estimación interna basada en interacciones registradas. No es la factura real de Google Cloud Billing.',
       pricing: ASSISTANT_USAGE_PRICING,
+      previousWeekUsage: {
+        weekFrom: weekFrom.toISOString(),
+        weekTo: weekTo.toISOString(),
+        questions: previousWeekUsage.questions,
+        estimatedCostUsd: previousWeekUsage.estimatedCostUsd,
+        averageCostUsdPerQuestion: previousWeekUsage.averageCostUsdPerQuestion,
+      },
       totals: {
         questions: totalQuestions,
         measuredInteractions: measuredCount,

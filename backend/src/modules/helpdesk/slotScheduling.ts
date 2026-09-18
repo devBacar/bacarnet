@@ -1,10 +1,21 @@
 import { DEFAULT_CALENDAR_TIMEZONE } from '../assistant-actions/calendarDateTime.js'
 
+import {
+  HELPDESK_BUSINESS_DAYS_COUNT,
+  HELPDESK_BUSINESS_HOUR_END_EXCLUSIVE,
+  HELPDESK_BUSINESS_HOUR_START,
+} from './schedulingConstants.js'
+
+export {
+  HELPDESK_BUSINESS_DAYS_COUNT,
+  HELPDESK_BUSINESS_HOUR_START,
+} from './schedulingConstants.js'
+
 export const HELPDESK_SLOT_TIMEZONE = DEFAULT_CALENDAR_TIMEZONE
 export const HELPDESK_MEETING_DURATION_MINUTES = 45
-export const HELPDESK_BUSINESS_HOUR_START = 9
-export const HELPDESK_BUSINESS_HOUR_END = 18
-export const HELPDESK_BUSINESS_DAYS_COUNT = 5
+
+/** @deprecated Preferí HELPDESK_BUSINESS_HOUR_END_EXCLUSIVE; se mantiene el nombre por compatibilidad interna. */
+export const HELPDESK_BUSINESS_HOUR_END = HELPDESK_BUSINESS_HOUR_END_EXCLUSIVE
 
 const FECHA_RE = /^(\d{2})\/(\d{2})\/(\d{4})$/
 const HORA_RE = /^(\d{2}):00$/
@@ -108,7 +119,7 @@ export function buildInitialAvailabilitySlots(semanaOffset: number): HelpdeskSlo
   const slots: HelpdeskSlotLabel[] = []
   for (const day of days) {
     const fecha = formatFechaLabel(day, HELPDESK_SLOT_TIMEZONE)
-    for (let hour = HELPDESK_BUSINESS_HOUR_START; hour < HELPDESK_BUSINESS_HOUR_END; hour++) {
+    for (let hour = HELPDESK_BUSINESS_HOUR_START; hour < HELPDESK_BUSINESS_HOUR_END_EXCLUSIVE; hour++) {
       const hh = String(hour).padStart(2, '0')
       slots.push({ fecha, hora: `${hh}:00` })
     }

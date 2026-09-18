@@ -7,6 +7,7 @@ import {
 import { rankByCosineSimilarity } from './cosineSimilarity.js'
 import { embedTexts } from './embeddings.js'
 import type { RagCitation } from './generateRagAnswer.js'
+import { pushRagCitation } from './ragCitationUtils.js'
 import type { LoadedRagCorpus } from './loadRagCorpus.js'
 import {
   areaLabelReferencesExcludedArea,
@@ -191,13 +192,13 @@ async function runSemanticSearch(
       excerpt,
     })
 
-    ctx.citations.push({
+    pushRagCitation(ctx, {
       fileId: chunk.fileId,
       fileName: chunk.fileName,
       webViewLink: chunk.webViewLink,
       chunkIndex: chunk.chunkIndex,
       excerpt,
-    })
+    }, chunk)
   }
 
   return {
@@ -636,8 +637,15 @@ export function buildAssistantSystemInstruction(input: {
     'Explicá limitaciones técnicas reales solo cuando no haya forma de resolverlo con lo disponible.\n' +
     'Nunca muestres IDs técnicos (uid, fileId, governingAreaId, permissionId, etc.). Usá nombres de personas, emails, nombres de archivos y nombres de área.\n' +
     `Nunca inventes números ni metadata. Si una herramienta devuelve error ${RAG_REGULATORY_ERROR_CODE}, repetí el mensaje de bloqueo regulatorio sin dar cifras.\n` +
-    `Documentos RESTRICTED y del área ${excludedLabels} están totalmente excluidos: no existen para vos.\n` +
-    'Si el usuario pregunta por un área fuera de su alcance o por auditoría sin permiso, explicá el límite claramente.\n' +
+    'CONTENIDO RESTRINGIDO Y ÁREAS EXCLUIDAS (Cumplimiento, RESTRINGIDO, UIF):\n' +
+    '- Esos documentos están totalmente fuera de tu alcance: no los indexamos, no los buscás, no los citás y no podés inferir su contenido.\n' +
+    '- Si preguntan si pueden leer Cumplimiento, RESTRINGIDO, UIF o áreas regulatorias excluidas, respondé SIEMPRE de forma directa e inequívoca: no tenés acceso a ese contenido; está fuera de tu alcance y del alcance de esta cuenta en el asistente.\n' +
+    '- NO digas que tenés acceso parcial, que podés leer "exclusiones regulatorias" de Cumplimiento, ni que podés responder sobre un subconjunto de documentos de Cumplimiento. Eso es incorrecto: Cumplimiento/RESTRINGIDO no existen para vos.\n' +
+    '- NO mezcles permisos de Drive del usuario con acceso del asistente: aunque alguien tenga permiso en Drive, el asistente no puede leer ni resumir ese contenido excluido.\n' +
+    '- NO sugieras formas de sortear la restricción (otras búsquedas, rol super_admin, pedir al asistente que "igual intente", etc.).\n' +
+    `Áreas excluidas por política (incl. ${excludedLabels}): fuera de alcance del asistente.\n` +
+    'Si preguntan por otras áreas no habilitadas para la cuenta (distintas de Cumplimiento/RESTRINGIDO), explicá el límite de permisos sin mezclar con contenido regulatorio excluido.\n' +
+    'Si preguntan por auditoría interna sin permiso de super_admin, decí que no podés acceder a esa auditoría.\n' +
     'Cuando cites contenido documental, referenciá las fuentes como [1], [2], etc.' +
     (correctionsBlock?.trim() ? `\n\n${correctionsBlock.trim()}` : '')
   )

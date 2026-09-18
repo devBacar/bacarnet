@@ -1,10 +1,11 @@
 import { Headphones, Loader2, ShieldX } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { HelpdeskCampanaAuditoria } from '../components/helpdesk/HelpdeskCampanaAuditoria'
 import { HelpdeskPanelTicketDetail } from '../components/helpdesk/HelpdeskPanelTicketDetail'
+import { HelpdeskTicketTimelineMini } from '../components/helpdesk/HelpdeskTicketTimelineMini'
 import {
-  formatHelpdeskDateTime,
   helpdeskUrgenciaBadgeClass,
   helpdeskUrgenciaLabel,
 } from '../components/helpdesk/helpdeskUi'
@@ -46,6 +47,7 @@ function computeKpis(tickets: HelpdeskPanelTicket[]) {
 }
 
 export function SistemasMesaAyuda() {
+  const [searchParams] = useSearchParams()
   const [access, setAccess] = useState<AccessState>('loading')
   const [teamMembers, setTeamMembers] = useState<HelpdeskTeamMemberDto[]>([])
   const [tickets, setTickets] = useState<HelpdeskPanelTicket[]>([])
@@ -91,6 +93,15 @@ export function SistemasMesaAyuda() {
     }
   }, [loadTickets])
 
+  useEffect(() => {
+    const fromQuery = searchParams.get('ticket')?.trim()
+    if (!fromQuery || tickets.length === 0) return
+    if (tickets.some((t) => t.id === fromQuery)) {
+      setSelectedTicketId(fromQuery)
+      setPanelTab('proyectos')
+    }
+  }, [searchParams, tickets])
+
   const filteredTickets = useMemo(() => {
     return tickets.filter((t) => {
       if (filterEstado !== '' && t.estadoIdx !== Number.parseInt(filterEstado, 10)) {
@@ -130,7 +141,7 @@ export function SistemasMesaAyuda() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-8 pb-8" data-testid="helpdesk-mesa-panel">
+    <div className="mx-auto w-full max-w-7xl space-y-5 pb-8" data-testid="helpdesk-mesa-panel">
       <header className="scroll-mt-24 space-y-3">
         <div className="flex items-center gap-2 text-brand-primary">
           <Headphones className="h-6 w-6" aria-hidden />
@@ -178,22 +189,24 @@ export function SistemasMesaAyuda() {
         <HelpdeskCampanaAuditoria />
       ) : (
         <>
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Activos</p>
-          <p className="mt-1 text-2xl font-semibold text-heading">{kpis.totalActivos}</p>
+          <p className="mt-0.5 text-2xl font-semibold tabular-nums text-heading">{kpis.totalActivos}</p>
         </div>
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Nuevos (7 días)</p>
-          <p className="mt-1 text-2xl font-semibold text-heading">{kpis.nuevos7d}</p>
+          <p className="mt-0.5 text-2xl font-semibold tabular-nums text-heading">{kpis.nuevos7d}</p>
         </div>
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
           <p className="text-xs font-semibold uppercase tracking-wide text-body-muted">Urgentes activos</p>
-          <p className="mt-1 text-2xl font-semibold text-heading">{kpis.urgentesActivos}</p>
+          <p className="mt-0.5 text-2xl font-semibold tabular-nums text-heading">{kpis.urgentesActivos}</p>
         </div>
-        <div className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:col-span-2 xl:col-span-1">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-body-muted">Por estado</p>
-          <ul className="space-y-1 text-xs text-body-muted">
+        <details className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+          <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-wide text-body-muted marker:content-none">
+            Por estado (desglose)
+          </summary>
+          <ul className="mt-2 space-y-0.5 text-xs text-body-muted">
             {kpis.porEstado.map((row) => (
               <li key={row.idx} className="flex justify-between gap-2">
                 <span className="truncate">{row.label}</span>
@@ -201,11 +214,11 @@ export function SistemasMesaAyuda() {
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-        <section className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(260px,20rem)_minmax(0,1fr)] xl:items-start">
+        <section className="space-y-3 xl:max-h-[calc(100dvh-11rem)] xl:overflow-y-auto xl:overscroll-contain xl:pr-1">
           <div className="flex flex-wrap gap-3">
             <label className="text-sm">
               <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-body-muted">
@@ -267,15 +280,20 @@ export function SistemasMesaAyuda() {
                       }`}
                     >
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          <p className="font-semibold text-heading">{ticket.areaNombre}</p>
-                          <p className="text-sm text-body-muted">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold text-heading">{ticket.areaNombre}</p>
+                          <p className="text-xs text-body-muted sm:text-sm">
                             {HELPDESK_TICKET_ESTADOS[ticket.estadoIdx] ?? ticket.estado}
                           </p>
-                          <p className="mt-1 text-xs text-body-muted">
-                            {ticket.asignadoNombre ?? 'Sin asignar'} ·{' '}
-                            {formatHelpdeskDateTime(ticket.createdAt)}
-                          </p>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            <HelpdeskTicketTimelineMini
+                              estadoIdx={ticket.estadoIdx}
+                              cancelado={ticket.cancelado === true}
+                            />
+                            <span className="text-[11px] text-body-muted">
+                              {ticket.asignadoNombre ?? 'Sin asignar'}
+                            </span>
+                          </div>
                         </div>
                         <span
                           className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase ${helpdeskUrgenciaBadgeClass(ticket.urgencia)}`}
@@ -292,7 +310,7 @@ export function SistemasMesaAyuda() {
         </section>
 
         <section
-          className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5 xl:sticky xl:top-20 xl:z-[1] xl:max-h-[calc(100dvh-5.5rem)] xl:min-h-[24rem] xl:overflow-y-auto xl:overscroll-contain"
+          className="min-w-0 rounded-xl border border-neutral-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900 sm:p-4 xl:sticky xl:top-20 xl:z-[1] xl:self-start"
           data-testid="helpdesk-mesa-detail-scroll"
         >
           {selectedTicketId ? (

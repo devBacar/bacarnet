@@ -1,11 +1,15 @@
 import { RAG_GENERATION_MODEL } from './constants.js'
 import { RAG_EMBEDDING_MODEL } from './embeddings.js'
 
-/** Tarifas orientativas Vertex AI (USD). No son la factura real de Billing. */
+/**
+ * Tarifas orientativas Vertex AI Gemini 2.5 Pro (USD, prompts ≤200K tokens).
+ * Fuente: https://cloud.google.com/vertex-ai/generative-ai/pricing
+ * Por encima de 200K tokens de entrada: $2.50 / $15.00 por millón (no modelado aquí).
+ */
 export const ASSISTANT_USAGE_PRICING = {
   geminiModel: RAG_GENERATION_MODEL,
-  geminiInputUsdPer1M: 0.15,
-  geminiOutputUsdPer1M: 0.6,
+  geminiInputUsdPer1M: 1.25,
+  geminiOutputUsdPer1M: 10,
   embeddingModel: RAG_EMBEDDING_MODEL,
   /** text-embedding-005 — aprox. USD por millón de caracteres facturables. */
   embeddingUsdPer1MChars: 0.025,

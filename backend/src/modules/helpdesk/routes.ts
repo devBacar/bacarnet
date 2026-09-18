@@ -3,18 +3,27 @@ import rateLimit from 'express-rate-limit'
 import { requireWorkspaceUser } from '../auth/middleware.js'
 import { createSolicitudHandler } from './createSolicitud.js'
 import { createTicketReunionHandler } from './createTicketReunion.js'
+import { getCampanaArchivoByIdHandler, getCampanaArchivosHandler } from './getCampanaArchivos.js'
 import { getCampanaAuditoriaHandler } from './getCampanaAuditoria.js'
+import { getCampanaAuditoriaPdfHandler } from './getCampanaAuditoriaPdf.js'
+import { postCampanaArchivarHandler } from './postCampanaArchivar.js'
 import { getCampanaEnlacesHandler } from './getCampanaEnlaces.js'
 import { postCampanaGenerarEnlaceHandler } from './postCampanaGenerarEnlace.js'
 import { getDisponibilidadInicialHandler } from './getDisponibilidadInicial.js'
 import { getDisponibilidadTeamMemberHandler } from './getDisponibilidadTeamMember.js'
 import { getTeamHandler } from './getTeam.js'
+import { deleteColaboradoresSistemasHandler } from './deleteColaboradoresSistemas.js'
+import { deleteColaboradoresSolicitanteHandler } from './deleteColaboradoresSolicitante.js'
+import { getMisTicketDetailHandler } from './getMisTicketDetail.js'
 import { getTicketDetailHandler } from './getTicketDetail.js'
+import { postColaboradoresSistemasHandler } from './postColaboradoresSistemas.js'
+import { postColaboradoresSolicitanteHandler } from './postColaboradoresSolicitante.js'
 import { listMisTicketsHandler } from './listMisTickets.js'
 import { listTicketsHandler } from './listTickets.js'
 import { requireHelpdeskTeamMember } from './middleware.js'
 import { requireHelpdeskN8nApiKey } from './n8nAuthMiddleware.js'
 import { patchTicketAsignadoHandler } from './patchTicketAsignado.js'
+import { patchTicketVistoPorHandler } from './patchTicketVistoPor.js'
 import { patchTicketEstadoHandler } from './patchTicketEstado.js'
 import { patchReunionMinutaHandler } from './patchReunionMinuta.js'
 import { postTicketNotaHandler } from './postTicketNota.js'
@@ -27,6 +36,8 @@ import { patchAnalisisDecisionHandler } from './patchAnalisisDecision.js'
 import { getTicketBitacoraHandler } from './getTicketBitacora.js'
 import { postTicketBitacoraHandler } from './postTicketBitacora.js'
 import { deleteTicketHandler } from './deleteTicket.js'
+import { getTableroProyectosHandler } from './getTableroProyectos.js'
+import { requireTableroProyectosAccess } from './requireTableroProyectosAccess.js'
 
 export const helpdeskRouter = Router()
 
@@ -81,9 +92,27 @@ helpdeskRouter.post(
   postWebhookCorreoEnviadoHandler,
 )
 
+helpdeskRouter.get(
+  '/tablero-proyectos',
+  requireWorkspaceUser,
+  requireTableroProyectosAccess,
+  getTableroProyectosHandler,
+)
+
 const helpdeskTeamPanel = [requireWorkspaceUser, requireHelpdeskTeamMember]
 
 helpdeskRouter.get('/tickets/mias', requireWorkspaceUser, listMisTicketsHandler)
+helpdeskRouter.get('/tickets/:ticketId/mio', requireWorkspaceUser, getMisTicketDetailHandler)
+helpdeskRouter.post(
+  '/tickets/:ticketId/colaboradores',
+  requireWorkspaceUser,
+  postColaboradoresSolicitanteHandler,
+)
+helpdeskRouter.delete(
+  '/tickets/:ticketId/colaboradores/:email',
+  requireWorkspaceUser,
+  deleteColaboradoresSolicitanteHandler,
+)
 helpdeskRouter.get('/tickets/:ticketId/bitacora', requireWorkspaceUser, getTicketBitacoraHandler)
 helpdeskRouter.post('/tickets/:ticketId/bitacora', requireWorkspaceUser, postTicketBitacoraHandler)
 helpdeskRouter.get('/analisis-pendientes', requireWorkspaceUser, getAnalisisPendientesHandler)
@@ -93,6 +122,10 @@ helpdeskRouter.patch(
   patchAnalisisDecisionHandler,
 )
 helpdeskRouter.get('/campana/auditoria', ...helpdeskTeamPanel, getCampanaAuditoriaHandler)
+helpdeskRouter.get('/campana/auditoria/pdf', ...helpdeskTeamPanel, getCampanaAuditoriaPdfHandler)
+helpdeskRouter.post('/campana/archivar', ...helpdeskTeamPanel, postCampanaArchivarHandler)
+helpdeskRouter.get('/campana/archivos', ...helpdeskTeamPanel, getCampanaArchivosHandler)
+helpdeskRouter.get('/campana/archivos/:archivoId', ...helpdeskTeamPanel, getCampanaArchivoByIdHandler)
 helpdeskRouter.get('/team', ...helpdeskTeamPanel, getTeamHandler)
 helpdeskRouter.get(
   '/disponibilidad/:teamMemberId',
@@ -101,6 +134,7 @@ helpdeskRouter.get(
 )
 helpdeskRouter.get('/tickets', ...helpdeskTeamPanel, listTicketsHandler)
 helpdeskRouter.get('/tickets/:ticketId', ...helpdeskTeamPanel, getTicketDetailHandler)
+helpdeskRouter.patch('/tickets/:ticketId/visto-por', ...helpdeskTeamPanel, patchTicketVistoPorHandler)
 helpdeskRouter.delete('/tickets/:ticketId', ...helpdeskTeamPanel, deleteTicketHandler)
 
 helpdeskRouter.patch('/tickets/:ticketId/estado', ...helpdeskTeamPanel, patchTicketEstadoHandler)
@@ -118,6 +152,16 @@ helpdeskRouter.patch(
   '/tickets/:ticketId/asignado',
   ...helpdeskTeamPanel,
   patchTicketAsignadoHandler,
+)
+helpdeskRouter.post(
+  '/tickets/:ticketId/colaboradores-sistemas',
+  ...helpdeskTeamPanel,
+  postColaboradoresSistemasHandler,
+)
+helpdeskRouter.delete(
+  '/tickets/:ticketId/colaboradores-sistemas/:teamMemberId',
+  ...helpdeskTeamPanel,
+  deleteColaboradoresSistemasHandler,
 )
 helpdeskRouter.post('/tickets/:ticketId/notas', ...helpdeskTeamPanel, postTicketNotaHandler)
 

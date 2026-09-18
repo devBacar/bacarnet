@@ -1,7 +1,9 @@
 import type { Request, Response } from 'express'
 import { logError } from '../../lib/log.js'
+import { logHelpdeskEmailAvisoBestEffort } from './logHelpdeskEmailAviso.js'
 import { notificarN8n } from './n8nWebhooks.js'
 import { getHelpdeskTicketById, updateHelpdeskTicket } from './repository.js'
+import { markHelpdeskVistoSeccionNowForUser } from './vistoPorRepository.js'
 import { helpdeskEstadoLabelFromIdx, isValidHelpdeskEstadoIdx } from './types.js'
 
 export async function patchTicketEstadoHandler(req: Request, res: Response): Promise<void> {
@@ -37,6 +39,7 @@ export async function patchTicketEstadoHandler(req: Request, res: Response): Pro
     }
 
     await updateHelpdeskTicket(ticketId, { estadoIdx })
+    await markHelpdeskVistoSeccionNowForUser(ticketId, req.authedUser?.uid, 'seguimiento')
     const estadoNuevo = helpdeskEstadoLabelFromIdx(estadoIdx)
     await notificarN8n('estado_cambiado', {
       ticketId,
@@ -44,6 +47,13 @@ export async function patchTicketEstadoHandler(req: Request, res: Response): Pro
       email: ticket.requesterEmail,
       nombre: ticket.requesterNombre,
       estadoNuevo: estadoNuevo ?? '',
+    })
+    await logHelpdeskEmailAvisoBestEffort({
+      tipo: 'actualizacion_estado',
+      destinatarios: [ticket.requesterEmail],
+      area: ticket.areaNombre,
+      areaId: ticket.areaId ?? null,
+      ticketId,
     })
 
     res.json({ ticketId, estadoIdx })

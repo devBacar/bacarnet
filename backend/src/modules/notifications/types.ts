@@ -11,6 +11,9 @@ export const PASSIVE_NOTIFICATION_TYPES = {
   ACCESS_REQUEST_REJECTED: 'access_request_rejected',
   OFFICE_UPLOAD_APPROVED: 'office_upload_approved',
   OFFICE_UPLOAD_REJECTED: 'office_upload_rejected',
+  ST_TICKET_STATUS_CHANGED: 'st_ticket_status_changed',
+  HELPDESK_COLABORADOR_SISTEMAS: 'helpdesk_colaborador_sistemas',
+  HELPDESK_COLABORADOR_SOLICITANTE: 'helpdesk_colaborador_solicitante',
 } as const
 
 export type PassiveNotificationType =

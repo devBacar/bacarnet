@@ -8,6 +8,8 @@ import { notificationsRouter } from './modules/notifications/routes.js'
 import { approvalRequestsRouter } from './modules/approvalRequests/routes.js'
 import { catalogRouter } from './modules/areas/routes.js'
 import { helpdeskRouter } from './modules/helpdesk/routes.js'
+import { stTicketsRouter } from './modules/stTickets/routes.js'
+import { finanzasRouter } from './modules/finanzas/routes/index.js'
 import {
   handleOfficeUploadStagingContentPreflight,
   serveOfficeUploadStagingContent,
@@ -37,6 +39,16 @@ app.use(
       'http://127.0.0.1:5180',
       'http://localhost:5181',
       'http://127.0.0.1:5181',
+      'http://localhost:5190',
+      'http://127.0.0.1:5190',
+      'http://localhost:5195',
+      'http://127.0.0.1:5195',
+      'http://localhost:5205',
+      'http://127.0.0.1:5205',
+      'http://localhost:5189',
+      'http://127.0.0.1:5189',
+      'http://localhost:5192',
+      'http://127.0.0.1:5192',
       'https://bacarnet.web.app',
       'https://bacarnet.firebaseapp.com',
       'https://intranet-bacar.web.app',
@@ -52,6 +64,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/catalog', catalogRouter)
 app.use('/api/helpdesk', helpdeskRouter)
+app.use('/api/st-tickets', stTicketsRouter)
 
 app.use('/api/drive', driveRouter)
 app.use('/api/boards', boardsRouter)
@@ -59,6 +72,7 @@ app.use('/api/audit', auditRouter)
 app.use('/api/users', usersRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/approval-requests', approvalRequestsRouter)
+app.use('/api/finanzas', finanzasRouter)
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'No encontrado' })

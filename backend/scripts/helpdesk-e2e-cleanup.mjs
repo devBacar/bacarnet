@@ -73,7 +73,7 @@ export async function deleteHelpdeskTicketFull(ticketId) {
     }
   }
 
-  for (const sub of ['reuniones', 'notas', 'analisis', 'bitacora']) {
+  for (const sub of ['reuniones', 'notas', 'analisis', 'bitacora', 'vistoPor']) {
     const snap = await db.collection('helpdeskTickets').doc(ticketId).collection(sub).get()
     for (const doc of snap.docs) {
       await doc.ref.delete()

@@ -7,7 +7,9 @@ import {
   getHelpdeskTeamMemberById,
   getHelpdeskTicketById,
 } from './repository.js'
+import { logHelpdeskEmailAvisoBestEffort } from './logHelpdeskEmailAviso.js'
 import { notificarN8n } from './n8nWebhooks.js'
+import { markHelpdeskVistoSeccionNowForUser } from './vistoPorRepository.js'
 import { isJointSlotFree, isValidSlotLabel, parseSlotLabels } from './slotScheduling.js'
 
 export async function createTicketReunionHandler(req: Request, res: Response): Promise<void> {
@@ -98,6 +100,15 @@ export async function createTicketReunionHandler(req: Request, res: Response): P
       reunionFecha: fechaStr,
       reunionHora: horaStr,
     })
+    await logHelpdeskEmailAvisoBestEffort({
+      tipo: 'aviso_interno_reunion',
+      destinatarios: [member.email],
+      area: ticket.areaNombre,
+      areaId: ticket.areaId ?? null,
+      ticketId,
+    })
+
+    await markHelpdeskVistoSeccionNowForUser(ticketId, req.authedUser?.uid, 'reuniones')
 
     res.status(201).json({ reunionId, ticketId })
   } catch (err) {

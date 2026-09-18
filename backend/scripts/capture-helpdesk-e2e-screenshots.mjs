@@ -68,7 +68,7 @@ try {
     fullPage: true,
   })
   await page.goto(`${VITE}/aprobaciones-pendientes`, { waitUntil: 'domcontentloaded' })
-  await page.getByTestId('aprobaciones-pendientes-page').waitFor({ timeout: 30_000 })
+  await page.getByTestId('aprobaciones-pendientes-modal').waitFor({ timeout: 30_000 })
   await page.screenshot({
     path: resolve(OUT, 'e2e-aprobaciones-pendientes.png'),
     fullPage: true,

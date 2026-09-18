@@ -1,4 +1,5 @@
-import { Plus, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 import type {
   HelpdeskMinutaDiagnostico,
   HelpdeskMinutaFactibilidad,
@@ -25,27 +26,96 @@ function SectionHeader({ title }: { title: string }) {
   )
 }
 
+const WIZARD_STEPS = [
+  'Identificación',
+  'Contexto',
+  'Procesos',
+  'Iniciativas',
+  'Acuerdos',
+] as const
+
 export function HelpdeskMinutaDiagnosticoForm({
   value,
   onChange,
   areaNombre,
   reunionFecha,
   disabled,
+  wizard = false,
 }: {
   value: HelpdeskMinutaDiagnostico
   onChange: (next: HelpdeskMinutaDiagnostico) => void
   areaNombre: string
   reunionFecha: string
   disabled?: boolean
+  /** Muestra un paso a la vez con navegación (panel mesa de ayuda). */
+  wizard?: boolean
 }) {
   const defaultDateInput = reunionFechaToInputDate(reunionFecha)
+  const [wizardStep, setWizardStep] = useState(0)
 
   const patch = (partial: Partial<HelpdeskMinutaDiagnostico>) => {
     onChange({ ...value, ...partial })
   }
 
+  const showStep = (step: number) => !wizard || wizardStep === step
+
+  const wizardNav = wizard ? (
+    <div className="mb-4 space-y-3">
+      <div className="flex flex-wrap gap-1.5">
+        {WIZARD_STEPS.map((label, index) => {
+          const active = index === wizardStep
+          const done = index < wizardStep
+          return (
+            <button
+              key={label}
+              type="button"
+              disabled={disabled}
+              onClick={() => setWizardStep(index)}
+              className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                active
+                  ? 'bg-brand-primary text-white'
+                  : done
+                    ? 'bg-brand-tint/50 text-brand-primary dark:bg-brand-primary/20'
+                    : 'bg-neutral-100 text-body-muted dark:bg-zinc-800'
+              }`}
+              data-testid={`helpdesk-minuta-wizard-step-${index}`}
+            >
+              {index + 1}. {label}
+            </button>
+          )
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          disabled={disabled || wizardStep === 0}
+          onClick={() => setWizardStep((s) => Math.max(0, s - 1))}
+          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-brand-primary disabled:opacity-40"
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden />
+          Anterior
+        </button>
+        <p className="text-xs text-body-muted">
+          Paso {wizardStep + 1} de {WIZARD_STEPS.length}
+        </p>
+        <button
+          type="button"
+          disabled={disabled || wizardStep >= WIZARD_STEPS.length - 1}
+          onClick={() => setWizardStep((s) => Math.min(WIZARD_STEPS.length - 1, s + 1))}
+          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-brand-primary disabled:opacity-40"
+        >
+          Siguiente
+          <ChevronRight className="h-4 w-4" aria-hidden />
+        </button>
+      </div>
+    </div>
+  ) : null
+
   return (
     <div className="space-y-6" data-testid="helpdesk-minuta-diagnostico-form">
+      {wizardNav}
+      {showStep(0) ? (
+        <>
       <SectionHeader title="1. Datos de identificación" />
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -86,7 +156,11 @@ export function HelpdeskMinutaDiagnosticoForm({
           />
         </label>
       </div>
+        </>
+      ) : null}
 
+      {showStep(1) ? (
+        <>
       <SectionHeader title="2. Contexto y objetivos" />
       <label className="block text-sm">
         Objetivo de la sesión
@@ -106,7 +180,11 @@ export function HelpdeskMinutaDiagnosticoForm({
           className={textareaClass}
         />
       </label>
+        </>
+      ) : null}
 
+      {showStep(2) ? (
+        <>
       <SectionHeader title="3. Mapeo de procesos actuales" />
       <div className="space-y-4">
         {value.procesosEvaluados.map((proceso, index) => (
@@ -182,7 +260,11 @@ export function HelpdeskMinutaDiagnosticoForm({
           Agregar proceso evaluado
         </button>
       </div>
+        </>
+      ) : null}
 
+      {showStep(3) ? (
+        <>
       <SectionHeader title="4. Oportunidades y proyectos potenciales" />
       <div className="space-y-4">
         {value.iniciativasPropuestas.map((ini, index) => (
@@ -320,7 +402,11 @@ export function HelpdeskMinutaDiagnosticoForm({
           Agregar iniciativa
         </button>
       </div>
+        </>
+      ) : null}
 
+      {showStep(4) ? (
+        <>
       <SectionHeader title="6. Acuerdos y próximos pasos" />
       <label className="block text-sm">
         Proyectos aprobados
@@ -361,6 +447,8 @@ export function HelpdeskMinutaDiagnosticoForm({
           className={inputClass}
         />
       </label>
+        </>
+      ) : null}
     </div>
   )
 }

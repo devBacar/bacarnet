@@ -19,6 +19,7 @@ export const EXTERNAL_PENDING_PERMISSIONS = {
   manage_users: false,
   super_admin: false,
   rag_assistant: false,
+  view_finanzas: false,
 } as const
 
 export const DEFAULT_PERMISSIONS = {
@@ -30,6 +31,7 @@ export const DEFAULT_PERMISSIONS = {
   manage_users: false,
   super_admin: false,
   rag_assistant: false,
+  view_finanzas: false,
 } as const
 
 export const SUPER_ADMIN_PERMISSIONS = {
@@ -41,6 +43,7 @@ export const SUPER_ADMIN_PERMISSIONS = {
   manage_users: true,
   super_admin: true,
   rag_assistant: true,
+  view_finanzas: true,
 } as const
 
 export type BootstrapSource = 'register' | 'google'
@@ -85,6 +88,7 @@ export function buildNewUserProfile(input: {
     accountStatus,
     permissions: corporate ? getPermissionsForEmail(normalizedEmail) : { ...EXTERNAL_PENDING_PERMISSIONS },
     favoriteApps: [],
+    personalLinks: [],
     widgetPreferences: corporate
       ? { ...DEFAULT_HOME_WIDGET_PREFERENCES }
       : { weather: true, dollar: true },

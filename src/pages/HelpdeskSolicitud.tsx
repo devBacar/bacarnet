@@ -11,11 +11,13 @@ import {
   type HelpdeskUrgencia,
 } from '../services/helpdeskApi'
 import {
+  HELPDESK_BUSINESS_HOURS,
+  HELPDESK_OFFICE_HOURS_SHORT_LABEL,
+} from '@intranet/helpdesk-scheduling'
+import {
   collectHelpdeskBusinessDayLabels,
   formatHelpdeskDayHeader,
 } from '../utils/helpdeskBusinessDays'
-
-const BUSINESS_HOURS = [9, 10, 11, 12, 13, 14, 15, 16, 17] as const
 
 const URGENCIA_OPTIONS: { value: HelpdeskUrgencia; label: string; hint: string }[] = [
   { value: 'baja', label: 'Baja', hint: 'Puede esperar unos días' },
@@ -290,7 +292,8 @@ export function HelpdeskSolicitud() {
             <div>
               <p className="text-sm font-semibold text-heading">Horario de reunión</p>
               <p className="mt-1 text-sm text-body-muted">
-                Elegí un turno libre (duración aproximada 45 min). Horario de oficina 9 a 17 hs.
+                Elegí un turno libre (duración aproximada 45 min). Horario de oficina{' '}
+                {HELPDESK_OFFICE_HOURS_SHORT_LABEL}.
               </p>
             </div>
             <button
@@ -333,7 +336,7 @@ export function HelpdeskSolicitud() {
                 </tr>
               </thead>
               <tbody>
-                {BUSINESS_HOURS.map((hour) => {
+                {HELPDESK_BUSINESS_HOURS.map((hour) => {
                   const hora = formatHourLabel(hour)
                   return (
                     <tr key={hora} className="border-t border-neutral-100 dark:border-zinc-800">

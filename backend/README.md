@@ -2,6 +2,8 @@
 
 HTTP API de la intranet. Fuente: `backend/`. Runtime: **Firebase Cloud Functions (2nd gen)**, región `southamerica-east1`. Firebase Admin y Google Drive usan **ADC** en producción (sin JSON de clave).
 
+**Deploy del frontend (hosting BacarNet):** ver la sección *Deploy — Hosting* en el [README de la raíz](../README.md) (`npm run verify:hosting-bundle` obligatorio antes de subir `dist/`).
+
 Función exportada: `api` → Express. Rutas con prefijo `/api`.
 
 ***REMOVED******REMOVED*** Endpoints (pasos 2–5)

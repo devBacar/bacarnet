@@ -33,7 +33,7 @@ function arraysEqual(a: string[], b: string[]): boolean {
 }
 
 const PERMISSION_FIELDS: {
-  key: 'view_directory' | 'view_drive' | 'rag_assistant'
+  key: 'view_directory' | 'view_drive' | 'view_finanzas' | 'rag_assistant'
   label: string
   description: string
 }[] = [
@@ -46,6 +46,11 @@ const PERMISSION_FIELDS: {
     key: 'view_drive',
     label: 'Ver archivos',
     description: 'Muestra Archivos en la barra y permite /recursos',
+  },
+  {
+    key: 'view_finanzas',
+    label: 'Ver finanzas',
+    description: 'Permite acceder a /finanzas/cuentas cuando el módulo Finanzas está habilitado',
   },
   {
     key: 'rag_assistant',
@@ -128,7 +133,7 @@ function UserPermissionsDrawer({ user, onClose, onSaved }: UserPermissionsDrawer
   }
 
   const togglePermission = (
-    key: 'view_directory' | 'view_drive' | 'rag_assistant',
+    key: 'view_directory' | 'view_drive' | 'view_finanzas' | 'rag_assistant',
     value: boolean,
   ) => {
     setPermissions((prev) => ({ ...prev, [key]: value }))

@@ -9,6 +9,7 @@ import {
   loadAccessibleInventory,
 } from './accessibleDriveInventory.js'
 import type { RagToolContext } from './executeRagTool.js'
+import { pushRagCitation } from './ragCitationUtils.js'
 
 const MAX_SOURCE_CHARS = 60_000
 
@@ -134,13 +135,17 @@ export async function summarizeDocument(
   })
 
   const firstExcerpt = resolveChunkContent(fileChunks[0], ctx.corpus.contents).slice(0, 400)
-  ctx.citations.push({
-    fileId: file.id,
-    fileName: file.name,
-    webViewLink: file.webViewLink,
-    chunkIndex: fileChunks[0].chunkIndex,
-    excerpt: firstExcerpt,
-  })
+  pushRagCitation(
+    ctx,
+    {
+      fileId: file.id,
+      fileName: file.name,
+      webViewLink: file.webViewLink,
+      chunkIndex: fileChunks[0].chunkIndex,
+      excerpt: firstExcerpt,
+    },
+    fileChunks[0],
+  )
 
   return {
     fileName: file.name,

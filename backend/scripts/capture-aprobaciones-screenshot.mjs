@@ -64,8 +64,8 @@ try {
   }, customToken)
   await page.getByText('Sesión activa').waitFor()
   await page.goto(`${VITE}/aprobaciones-pendientes`, { waitUntil: 'domcontentloaded' })
-  await page.getByTestId('aprobaciones-pendientes-page').waitFor()
-  await page.getByText('No tenés análisis pendientes').waitFor({ timeout: 60_000 })
+  await page.getByTestId('aprobaciones-pendientes-modal').waitFor()
+  await page.getByTestId('aprobaciones-pendientes-empty').waitFor({ timeout: 60_000 })
   await page.screenshot({
     path: resolve(OUT, 'e2e-aprobaciones-pendientes.png'),
     fullPage: true,

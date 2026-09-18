@@ -172,22 +172,20 @@ try {
   await page.getByText(areaNombre, { exact: true }).click()
   await page.getByTestId('helpdesk-mesa-detail').waitFor({ timeout: 30_000 })
 
-  const form = page.getByTestId('helpdesk-minuta-diagnostico-form')
+  await page.getByTestId('helpdesk-mesa-reuniones-toggle').click()
+  await page.getByTestId('helpdesk-reunion-minuta-open').first().click()
+  const form = page.getByTestId('helpdesk-minuta-simple-form')
   await form.waitFor({ timeout: 30_000 })
 
-  await page.getByLabel('Facilitador').fill('Facilitador E2E')
-  await page.getByLabel('Objetivo de la sesión').fill('Objetivo de prueba automatizada')
-  await page.getByLabel('Proceso evaluado').first().fill(proceso1)
-  await page.getByRole('button', { name: 'Agregar proceso evaluado' }).click()
-  await page.getByLabel('Proceso evaluado').nth(1).fill(proceso2)
-
-  await form.getByLabel('Nombre').first().fill(ini1)
-  await page.getByRole('button', { name: 'Agregar iniciativa' }).click()
-  await form.getByLabel('Nombre').nth(1).fill(ini2)
+  await page.getByTestId('helpdesk-minuta-simple-analisis').fill('Objetivo de prueba automatizada')
+  await page.getByTestId('helpdesk-minuta-simple-procesos').fill(proceso1)
+  await page.getByTestId('helpdesk-minuta-simple-problemas').fill('Problemas E2E detectados en el proceso')
+  await page.getByTestId('helpdesk-minuta-simple-propuesta').fill(ini1)
+  await page.getByTestId('helpdesk-minuta-simple-pasos').fill('Acciones E2E de seguimiento')
 
   await page.getByTestId('helpdesk-reunion-minuta-save').click()
-  await page.getByText('Minuta de diagnóstico guardada', { exact: true }).waitFor({ timeout: 30_000 })
-  await page.locator('[data-testid="helpdesk-minuta-diagnostico-form"]').screenshot({ path: SHOT_PANEL })
+  await page.getByText('Minuta guardada', { exact: true }).waitFor({ timeout: 30_000 })
+  await page.locator('[data-testid="helpdesk-minuta-simple-form"]').screenshot({ path: SHOT_PANEL })
 
   const requesterToken = await auth.createCustomToken(requester.uid)
   await page.evaluate((token) => window.__e2eSignInWithCustomToken(token), requesterToken)
@@ -196,10 +194,10 @@ try {
   await page.goto(`${VITE}/mis-solicitudes-sistemas`, { waitUntil: 'domcontentloaded' })
   const card = page.locator(`[data-ticket-id="${ticketRef.id}"]`)
   await card.waitFor({ timeout: 60_000 })
-  const view = card.getByTestId('helpdesk-minuta-diagnostico-view')
+  await card.getByTestId('helpdesk-mis-proyectos-minuta-toggle').click()
+  const view = card.getByTestId('helpdesk-minuta-simple-view')
   await view.getByText(proceso1).waitFor()
   await view.getByText(ini1).waitFor()
-  await view.getByText('Viable', { exact: true }).first().waitFor()
   await card.screenshot({ path: SHOT_MIS })
 
   console.log(

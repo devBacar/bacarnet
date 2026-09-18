@@ -42,6 +42,8 @@ export type RagIndexedChunk = {
   classification: string
   governingAreaId: string | null
   allowedReaders: string[]
+  /** Permisos user directos en el archivo (sin miembros UC). Ausente en índices viejos. */
+  fileDirectReaders?: string[]
   domainAccess: RagDomainAccess | null
   chunkIndex: number
   charStart: number

@@ -15,8 +15,10 @@ import {
   uploadHelpdeskDocumentToDrive,
 } from './helpdeskDriveUpload.js'
 import { emitHelpdeskAnalisisPendienteNotifications } from '../notifications/emitHelpdeskAnalisisPendiente.js'
+import { logHelpdeskEmailAvisoBestEffort } from './logHelpdeskEmailAviso.js'
 import { notificarN8n } from './n8nWebhooks.js'
 import { getHelpdeskTicketById } from './repository.js'
+import { markHelpdeskVistoSeccionNowForUser } from './vistoPorRepository.js'
 
 function parseAprobadoresEmails(raw: string | undefined): string[] {
   const parts = (raw ?? '')
@@ -132,6 +134,13 @@ export async function postTicketAnalisisHandler(req: Request, res: Response): Pr
         subidoPorEmail: user.email.trim().toLowerCase(),
         appUrl,
       })
+      await logHelpdeskEmailAvisoBestEffort({
+        tipo: 'analisis_pendiente_aprobacion',
+        destinatarios: [destinatarioEmail],
+        area: ticket.areaNombre,
+        areaId: ticket.areaId ?? null,
+        ticketId,
+      })
     }
 
     void emitHelpdeskAnalisisPendienteNotifications({
@@ -141,6 +150,8 @@ export async function postTicketAnalisisHandler(req: Request, res: Response): Pr
       aprobadoresEmails,
       actor: user,
     })
+
+    await markHelpdeskVistoSeccionNowForUser(ticketId, user.uid, 'analisis')
 
     const all = await listHelpdeskAnalisisForTicket(ticketId)
     const created = all.find((a) => a.id === analisisId)

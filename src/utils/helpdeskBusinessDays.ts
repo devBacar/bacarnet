@@ -1,9 +1,10 @@
-/** Alineado con backend helpdesk/slotScheduling (America/Argentina/Buenos_Aires). */
+/** Alineado con backend helpdesk/schedulingConstants (America/Argentina/Buenos_Aires). */
+
+import { HELPDESK_BUSINESS_DAYS_COUNT } from '@intranet/helpdesk-scheduling'
+
+export { HELPDESK_BUSINESS_DAYS_COUNT }
 
 export const HELPDESK_SLOT_TIMEZONE = 'America/Argentina/Buenos_Aires'
-export const HELPDESK_BUSINESS_DAYS_COUNT = 5
-export const HELPDESK_BUSINESS_HOUR_START = 9
-export const HELPDESK_BUSINESS_HOUR_END = 18
 
 function startOfLocalDayInZone(date: Date, timeZone: string): Date {
   const parts = new Intl.DateTimeFormat('en-CA', {

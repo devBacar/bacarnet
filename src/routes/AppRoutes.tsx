@@ -12,6 +12,7 @@ import {
   AppsHub,
   BoardList,
   BoardViewerPage,
+  DesarrolloProyectosBoard,
   Directory,
   DriveDocumentViewerPage,
   HelpCenter,
@@ -27,6 +28,11 @@ import {
   RagPilotSistemas,
   Resources,
   SistemasMesaAyuda,
+  SoporteTi,
+  FinanzasCuentasPage,
+  FinanzasChequesPage,
+  FinanzasAgendaPage,
+  FinanzasLayout,
 } from '../pages'
 import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
 import { ProtectedRoute } from './ProtectedRoute'
@@ -68,6 +74,14 @@ export function AppRoutes() {
             <Route element={<ModulePermissionRoute permission="view_directory" module="directoryEnabled" />}>
               <Route path="directorio" element={<Directory />} />
             </Route>
+            <Route element={<ModulePermissionRoute permission="view_finanzas" module="finanzasEnabled" />}>
+              <Route path="finanzas" element={<FinanzasLayout />}>
+                <Route index element={<Navigate to="cuentas" replace />} />
+                <Route path="cuentas" element={<FinanzasCuentasPage />} />
+                <Route path="cheques" element={<FinanzasChequesPage />} />
+                <Route path="agenda" element={<FinanzasAgendaPage />} />
+              </Route>
+            </Route>
             <Route element={<ModulePermissionRoute permission="view_drive" module="resourcesEnabled" />}>
               <Route path="recursos" element={<Resources />} />
               <Route path="recursos/office-preview/:requestId" element={<OfficeUploadPreviewPage />} />
@@ -81,8 +95,11 @@ export function AppRoutes() {
               <Route path="tableros" element={<BoardList />} />
             </Route>
 
+            <Route path="tableros/desarrollo-proyectos" element={<DesarrolloProyectosBoard />} />
+
             <Route element={<CorporateAccountRoute />}>
               <Route path="mis-solicitudes-sistemas" element={<MisSolicitudesSistemas />} />
+              <Route path="soporte-ti" element={<SoporteTi />} />
               <Route path="aprobaciones-pendientes" element={<AprobacionesPendientes />} />
               <Route path="sistemas/mesa-ayuda" element={<SistemasMesaAyuda />} />
               <Route path="ayuda" element={<HelpCenter />} />

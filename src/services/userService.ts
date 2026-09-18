@@ -63,6 +63,67 @@ export interface UserPermissions {
   super_admin: boolean
   /** Acceso al asistente RAG (chat flotante). super_admin siempre. */
   rag_assistant: boolean
+  /** Módulo Finanzas (saldos bancarios). */
+  view_finanzas: boolean
+}
+
+export interface PersonalLink {
+  id: string
+  title: string
+  url: string
+  order: number
+}
+
+export const MAX_PERSONAL_LINKS = 20
+
+const PERSONAL_LINK_URL_PATTERN = /^https?:\/\/.+/i
+
+export function isValidPersonalLinkUrl(url: string): boolean {
+  const trimmed = url.trim()
+  if (!PERSONAL_LINK_URL_PATTERN.test(trimmed)) return false
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function parsePersonalLinks(raw: unknown): PersonalLink[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .flatMap((item) => {
+      if (!item || typeof item !== 'object') return []
+      const row = item as Record<string, unknown>
+      if (
+        typeof row.id !== 'string' ||
+        typeof row.title !== 'string' ||
+        typeof row.url !== 'string'
+      ) {
+        return []
+      }
+      const title = row.title.trim()
+      const url = row.url.trim()
+      if (!title || !isValidPersonalLinkUrl(url)) return []
+      const order = typeof row.order === 'number' && Number.isFinite(row.order) ? row.order : 0
+      return [{ id: row.id, title, url, order }]
+    })
+    .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, 'es'))
+}
+
+function assertPersonalLinks(links: PersonalLink[]): void {
+  if (links.length > MAX_PERSONAL_LINKS) {
+    throw new Error(`Podés guardar hasta ${MAX_PERSONAL_LINKS} enlaces personales`)
+  }
+  const ids = new Set<string>()
+  for (const link of links) {
+    if (!link.title.trim()) throw new Error('Cada enlace necesita un título')
+    if (!isValidPersonalLinkUrl(link.url)) {
+      throw new Error('Cada enlace necesita una URL válida (http:// o https://)')
+    }
+    if (ids.has(link.id)) throw new Error('Hay enlaces duplicados')
+    ids.add(link.id)
+  }
 }
 
 export interface UserProfile {
@@ -82,6 +143,8 @@ export interface UserProfile {
    */
   permissions: UserPermissions
   favoriteApps: string[]
+  /** Enlaces personales del usuario (Home), independientes del catálogo coreApps. */
+  personalLinks: PersonalLink[]
   /** Widgets visibles en la tarjeta de bienvenida de la home. */
   widgetPreferences: HomeWidgetPreferences
   birthDate?: string
@@ -102,6 +165,7 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
   manage_users: false,
   super_admin: false,
   rag_assistant: false,
+  view_finanzas: false,
 }
 
 export const SUPER_ADMIN_EMAILS = [
@@ -119,6 +183,7 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   manage_users: true,
   super_admin: true,
   rag_assistant: true,
+  view_finanzas: true,
 }
 
 export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
@@ -130,6 +195,7 @@ export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
   manage_users: false,
   super_admin: false,
   rag_assistant: false,
+  view_finanzas: false,
 }
 
 export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
@@ -141,6 +207,7 @@ export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
   manage_users: false,
   super_admin: false,
   rag_assistant: false,
+  view_finanzas: false,
 }
 
 export {
@@ -230,6 +297,13 @@ export function hasRagAssistantAccess(profile: UserProfile | null | undefined): 
   return profile.permissions.rag_assistant === true
 }
 
+/** Módulo Finanzas: super_admin siempre; resto con permiso explícito (alineado con requireViewFinanzas en API). */
+export function hasFinanzasAccess(profile: UserProfile | null | undefined): boolean {
+  if (!profile) return false
+  if (isSuperAdmin(profile) || profile.permissions.super_admin === true) return true
+  return profile.permissions.view_finanzas === true
+}
+
 export function isAdminOfArea(
   profile: UserProfile | null | undefined,
   areaId: string,
@@ -280,10 +354,12 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
       manage_users: permissions.manage_users ?? false,
       super_admin: permissions.super_admin ?? false,
       rag_assistant: permissions.rag_assistant ?? false,
+      view_finanzas: permissions.view_finanzas ?? false,
     },
     favoriteApps: Array.isArray(data.favoriteApps)
       ? (data.favoriteApps as string[])
       : [],
+    personalLinks: parsePersonalLinks(data.personalLinks),
     widgetPreferences: resolveHomeWidgetPreferences(
       data.widgetPreferences as Partial<HomeWidgetPreferences> | undefined,
     ),
@@ -478,6 +554,87 @@ export async function toggleFavoriteApp(userId: string, appId: string): Promise<
   })
 
   return next
+}
+
+async function writePersonalLinks(userId: string, links: PersonalLink[]): Promise<PersonalLink[]> {
+  const normalized = [...links]
+    .map((link, index) => ({
+      id: link.id,
+      title: link.title.trim(),
+      url: link.url.trim(),
+      order: typeof link.order === 'number' ? link.order : index,
+    }))
+    .sort((a, b) => a.order - b.order)
+    .map((link, index) => ({ ...link, order: index }))
+
+  assertPersonalLinks(normalized)
+  await updateDoc(doc(db, USERS_COLLECTION, userId), {
+    personalLinks: normalized,
+  })
+  return normalized
+}
+
+export async function addPersonalLink(
+  userId: string,
+  input: { title: string; url: string },
+): Promise<PersonalLink[]> {
+  const profile = await getUserProfile(userId)
+  const current = profile?.personalLinks ?? []
+  if (current.length >= MAX_PERSONAL_LINKS) {
+    throw new Error(`Podés guardar hasta ${MAX_PERSONAL_LINKS} enlaces personales`)
+  }
+
+  const title = input.title.trim()
+  const url = input.url.trim()
+  if (!title) throw new Error('El título es obligatorio')
+  if (!isValidPersonalLinkUrl(url)) {
+    throw new Error('La URL debe empezar con http:// o https://')
+  }
+
+  const nextOrder =
+    current.length === 0 ? 0 : Math.max(...current.map((link) => link.order), -1) + 1
+
+  const next: PersonalLink[] = [
+    ...current,
+    {
+      id: crypto.randomUUID(),
+      title,
+      url,
+      order: nextOrder,
+    },
+  ]
+
+  return writePersonalLinks(userId, next)
+}
+
+export async function removePersonalLink(userId: string, linkId: string): Promise<PersonalLink[]> {
+  const profile = await getUserProfile(userId)
+  const current = profile?.personalLinks ?? []
+  const next = current.filter((link) => link.id !== linkId)
+  if (next.length === current.length) {
+    throw new Error('Enlace no encontrado')
+  }
+  return writePersonalLinks(userId, next)
+}
+
+export async function reorderPersonalLinks(
+  userId: string,
+  orderedIds: string[],
+): Promise<PersonalLink[]> {
+  const profile = await getUserProfile(userId)
+  const current = profile?.personalLinks ?? []
+  if (orderedIds.length !== current.length) {
+    throw new Error('La lista de orden no coincide con tus enlaces')
+  }
+
+  const byId = new Map(current.map((link) => [link.id, link]))
+  const next = orderedIds.map((id, index) => {
+    const link = byId.get(id)
+    if (!link) throw new Error('Enlace no encontrado')
+    return { ...link, order: index }
+  })
+
+  return writePersonalLinks(userId, next)
 }
 
 export async function updateHomeWidgetPreferences(

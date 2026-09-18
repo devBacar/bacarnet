@@ -1,7 +1,12 @@
 import type { Request, Response } from 'express'
 import { logError } from '../../lib/log.js'
 import { listHelpdeskAnalisisForTicket } from './analisisRepository.js'
+import { listHelpdeskBitacoraForTicket } from './bitacoraRepository.js'
 import { serializeHelpdeskAnalisis } from './helpdeskDriveUpload.js'
+import {
+  computeAllSectionActivityMs,
+  computeNovedadesPorSeccion,
+} from './ticketSectionActivity.js'
 import {
   getHelpdeskTeamMemberById,
   getHelpdeskTicketById,
@@ -10,6 +15,7 @@ import {
   listHelpdeskReunionesForTicket,
 } from './repository.js'
 import { serializeHelpdeskNota, serializeHelpdeskTicket } from './serializeTicket.js'
+import { getHelpdeskVistoPor } from './vistoPorRepository.js'
 
 export async function getTicketDetailHandler(req: Request, res: Response): Promise<void> {
   const ticketId = String(req.params.ticketId ?? '').trim()
@@ -25,12 +31,25 @@ export async function getTicketDetailHandler(req: Request, res: Response): Promi
       return
     }
 
-    const [reuniones, notas, emailLog, analisis] = await Promise.all([
+    const uid = req.authedUser?.uid?.trim() ?? ''
+
+    const [reuniones, notas, emailLog, analisis, bitacora, vistoPor] = await Promise.all([
       listHelpdeskReunionesForTicket(ticketId),
       listHelpdeskNotasForTicket(ticketId),
       listHelpdeskEmailLogForTicket(ticketId),
       listHelpdeskAnalisisForTicket(ticketId),
+      listHelpdeskBitacoraForTicket(ticketId),
+      uid ? getHelpdeskVistoPor(ticketId, uid) : Promise.resolve(null),
     ])
+
+    const activity = computeAllSectionActivityMs({
+      ticket,
+      analisis,
+      reuniones,
+      bitacora,
+      emailLog,
+    })
+    const novedades = uid ? computeNovedadesPorSeccion(activity, vistoPor) : null
 
     let asignadoNombre: string | null = null
     if (ticket.asignadoATeamId) {
@@ -45,6 +64,7 @@ export async function getTicketDetailHandler(req: Request, res: Response): Promi
         notas: notas.map(serializeHelpdeskNota),
         analisis: analisis.map(serializeHelpdeskAnalisis),
       },
+      novedades,
     })
   } catch (err) {
     logError('getTicketDetail falló', err)

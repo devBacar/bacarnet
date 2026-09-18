@@ -48,6 +48,24 @@ export interface HelpdeskReunionResumen {
 
 export const HELPDESK_ANALISIS_DEFAULT_APROBADOR = 'pablo.magnin@bacarsa.com.ar'
 
+export type HelpdeskMisProyectoRolAcceso = 'propio' | 'lector' | 'editor'
+
+export interface HelpdeskColaboradorSolicitanteDto {
+  email: string
+  uid: string | null
+  nombre: string
+  rol: 'lector' | 'editor'
+  addedAt: string | null
+}
+
+export interface HelpdeskColaboradorSistemasDto {
+  teamMemberId: string
+  nombre: string
+  email: string
+  addedByEmail: string
+  addedAt: string | null
+}
+
 export interface HelpdeskMisSolicitudTicket {
   id: string
   areaNombre: string
@@ -62,6 +80,8 @@ export interface HelpdeskMisSolicitudTicket {
   canceladoMotivo?: string | null
   canceladoPor?: string | null
   reuniones: HelpdeskReunionResumen[]
+  miRolAcceso?: HelpdeskMisProyectoRolAcceso
+  colaboradoresSolicitante?: HelpdeskColaboradorSolicitanteDto[]
 }
 
 export interface HelpdeskMisSolicitudesResponse {
@@ -173,11 +193,14 @@ export interface HelpdeskTeamMemberDto {
   responsablePrincipal: boolean
 }
 
+export type HelpdeskEmailLogSourceDto = 'bacarnet' | 'n8n_callback' | null
+
 export interface HelpdeskEmailLogEntry {
   id: string
   fecha: string | null
   tipo: string
   destinatarios: string[]
+  source?: HelpdeskEmailLogSourceDto
 }
 
 export interface HelpdeskPanelTicket {
@@ -198,6 +221,7 @@ export interface HelpdeskPanelTicket {
   canceladoMotivo?: string | null
   canceladoPor?: string | null
   canceladoFecha?: string | null
+  colaboradoresSistemas?: HelpdeskColaboradorSistemasDto[]
 }
 
 export interface HelpdeskAnalisisDto {
@@ -225,6 +249,15 @@ export interface HelpdeskTicketDetail extends HelpdeskPanelTicket {
   notas: HelpdeskNotaDto[]
   analisis: HelpdeskAnalisisDto[]
 }
+
+export type HelpdeskVistoSeccion =
+  | 'seguimiento'
+  | 'analisis'
+  | 'reuniones'
+  | 'bitacora'
+  | 'correos'
+
+export type HelpdeskTicketNovedades = Record<HelpdeskVistoSeccion, boolean>
 
 export interface HelpdeskAnalisisPendienteItem {
   ticketId: string
@@ -272,8 +305,18 @@ export async function fetchHelpdeskTickets(input?: {
 
 export async function fetchHelpdeskTicketDetail(
   ticketId: string,
-): Promise<{ ticket: HelpdeskTicketDetail }> {
+): Promise<{ ticket: HelpdeskTicketDetail; novedades: HelpdeskTicketNovedades | null }> {
   return authFetch(`/api/helpdesk/tickets/${encodeURIComponent(ticketId)}`)
+}
+
+export async function patchHelpdeskTicketVistoPor(
+  ticketId: string,
+  seccion: HelpdeskVistoSeccion,
+): Promise<{ ok: boolean }> {
+  return authFetch(`/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/visto-por`, {
+    method: 'PATCH',
+    body: JSON.stringify({ seccion }),
+  })
 }
 
 export async function fetchDisponibilidadTeamMember(
@@ -310,6 +353,49 @@ export async function patchHelpdeskTicketAsignado(
     method: 'PATCH',
     body: JSON.stringify({ teamMemberId }),
   })
+}
+
+export async function postHelpdeskColaboradorSistemas(
+  ticketId: string,
+  teamMemberId: string,
+): Promise<{ ticketId: string; teamMemberId: string }> {
+  return authFetch(
+    `/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/colaboradores-sistemas`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ teamMemberId }),
+    },
+  )
+}
+
+export async function deleteHelpdeskColaboradorSistemas(
+  ticketId: string,
+  teamMemberId: string,
+): Promise<{ ticketId: string; teamMemberId: string; removed: boolean }> {
+  return authFetch(
+    `/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/colaboradores-sistemas/${encodeURIComponent(teamMemberId)}`,
+    { method: 'DELETE' },
+  )
+}
+
+export async function postHelpdeskColaboradorSolicitante(
+  ticketId: string,
+  payload: { email: string; rol: 'lector' | 'editor' },
+): Promise<{ ticketId: string; email: string; rol: string }> {
+  return authFetch(`/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/colaboradores`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteHelpdeskColaboradorSolicitante(
+  ticketId: string,
+  email: string,
+): Promise<{ ticketId: string; email: string; removed: boolean }> {
+  return authFetch(
+    `/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/colaboradores/${encodeURIComponent(email)}`,
+    { method: 'DELETE' },
+  )
 }
 
 export async function postHelpdeskTicketNota(
@@ -374,10 +460,86 @@ export interface HelpdeskCampanaAuditoriaRow {
   respondido: boolean | null
   fecha_respuesta: string | null
   link: string | null
+  respondio_correo: boolean | null
+  respondio_formulario: boolean | null
+  fecha_formulario: string | null
+  ticket_id: string | null
+  campana_cumplida: boolean | null
+  respondido_tabla_n8n: boolean | null
 }
 
 export async function fetchCampanaAuditoria(): Promise<{ rows: HelpdeskCampanaAuditoriaRow[] }> {
   return authFetch('/api/helpdesk/campana/auditoria')
+}
+
+export interface HelpdeskCampanaArchivoFila {
+  area: string | null
+  jefe: string | null
+  email: string | null
+  enviado: boolean | null
+  fechaEnvio: string | null
+  respondido: boolean | null
+  fechaRespuesta: string | null
+}
+
+export interface HelpdeskCampanaArchivoResumen {
+  totalAreas: number
+  respondieron: number
+  sinResponder: number
+}
+
+export interface HelpdeskCampanaArchivoListItem {
+  id: string
+  archivadoEn: string
+  archivadoPorEmail: string
+  anio: number
+  mes: number
+  semanaIso: number
+  resumen: HelpdeskCampanaArchivoResumen
+}
+
+export interface HelpdeskCampanaArchivoDetail extends HelpdeskCampanaArchivoListItem {
+  filas: HelpdeskCampanaArchivoFila[]
+  proyectosSnapshot: unknown | null
+}
+
+export async function fetchCampanaArchivos(): Promise<{ archivos: HelpdeskCampanaArchivoListItem[] }> {
+  return authFetch('/api/helpdesk/campana/archivos')
+}
+
+export async function fetchCampanaArchivoById(archivoId: string): Promise<HelpdeskCampanaArchivoDetail> {
+  return authFetch(`/api/helpdesk/campana/archivos/${encodeURIComponent(archivoId)}`)
+}
+
+export async function postCampanaArchivar(): Promise<{
+  id: string
+  anio: number
+  mes: number
+  semanaIso: number
+  resumen: HelpdeskCampanaArchivoResumen
+}> {
+  return authFetch('/api/helpdesk/campana/archivar', { method: 'POST', body: '{}' })
+}
+
+export async function downloadCampanaAuditoriaPdf(archivoId?: string): Promise<Blob> {
+  const query = archivoId ? `?archivoId=${encodeURIComponent(archivoId)}` : ''
+  const res = await fetch(helpdeskUrl(`/api/helpdesk/campana/auditoria/pdf${query}`), {
+    headers: {
+      Accept: 'application/pdf',
+      ...(await authHeaders()),
+    },
+  })
+  if (!res.ok) {
+    let message = 'No se pudo generar el PDF'
+    try {
+      const body = (await res.json()) as { error?: string }
+      if (body.error) message = body.error
+    } catch {
+      /* ignore */
+    }
+    throw new HelpdeskApiError(message, res.status)
+  }
+  return res.blob()
 }
 
 export async function patchHelpdeskTicketCancelacion(

@@ -37,12 +37,21 @@
     {
       "target": "bacarnet",
       "public": "dist",
+      "predeploy": [
+        "npm run build",
+        "npm run verify:hosting-bundle"
+      ],
       "ignore": [
         "firebase.json",
         "**/.*",
         "**/node_modules/**"
       ],
       "rewrites": [
+        {
+          "source": "/api/me/**",
+          "function": "widgetsApi",
+          "region": "southamerica-east1"
+        },
         {
           "source": "/api/**",
           "function": "api",

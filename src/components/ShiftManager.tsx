@@ -1,22 +1,18 @@
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Plus, Trash2 } from 'lucide-react'
-import { type FormEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { useUrlEnumParam, useUrlWeekParam } from '../hooks/useUrlSearchState'
-import { AdminTabs } from './AdminTabs'
-import { JefeAnnualGrid } from './JefeAnnualGrid'
+import { useUrlWeekParam } from '../hooks/useUrlSearchState'
 import {
   clearSystemsOverride,
   DEFAULT_SYSTEMS_MEMBERS,
-  getJefeAssignment,
   getSystemsOverride,
   getSystemsRotationConfig,
-  previewSystemsRotation,
-  saveJefeAssignment,
+  resolveSystemsAssignee,
   saveSystemsOverride,
   saveSystemsRotationConfig,
   type SystemsRotationConfig,
 } from '../services/shiftService'
-import { addWeeks, formatDateKey, getMonday, getWeekKey, getWeekRangeLabel, parseDateKey } from '../utils/weekUtils'
+import { addWeeks, formatDateKey, getMonday, getWeekRangeLabel, parseDateKey } from '../utils/weekUtils'
 
 const inputClassName =
   'input-brand-focus w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-900 outline-none transition-colors placeholder:text-neutral-400 focus:bg-white dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100 dark:placeholder:text-zinc-500 dark:focus:bg-zinc-800'
@@ -24,32 +20,8 @@ const inputClassName =
 const selectClassName =
   'input-brand-focus w-full rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-900 outline-none transition-colors focus:bg-white dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100 dark:focus:bg-zinc-800'
 
-const SHIFT_TABS = [
-  { id: 'jefes', label: 'Jefes de turno' },
-  { id: 'sistemas', label: 'Sistemas' },
-] as const
-
-type ShiftTab = (typeof SHIFT_TABS)[number]['id']
-
 export function ShiftManager() {
-  const [activeTab, setActiveTab] = useUrlEnumParam(
-    'tab',
-    SHIFT_TABS.map((tab) => tab.id),
-    'jefes',
-  )
-  const [weekKey, setWeekKeyParam] = useUrlWeekParam('semana')
-  const setWeekKey = useCallback(
-    (next: string | ((prev: string) => string)) => {
-      setWeekKeyParam(typeof next === 'function' ? next(weekKey) : next)
-    },
-    [setWeekKeyParam, weekKey],
-  )
-  const [gridRefresh, setGridRefresh] = useState(0)
-  const weeklyFormRef = useRef<HTMLElement>(null)
-  const [jefeForm, setJefeForm] = useState({ firstName: '', lastName: '', internalPhone: '' })
-  const [jefeSaving, setJefeSaving] = useState(false)
-  const [jefeLoading, setJefeLoading] = useState(true)
-
+  const [weekKey] = useUrlWeekParam('semana')
   const [rotation, setRotation] = useState<SystemsRotationConfig | null>(null)
   const [rotationSaving, setRotationSaving] = useState(false)
   const [preview, setPreview] = useState<
@@ -60,35 +32,47 @@ export function ShiftManager() {
   const [overrideReason, setOverrideReason] = useState('')
   const [overrideSaving, setOverrideSaving] = useState(false)
   const [newMemberName, setNewMemberName] = useState('')
+  const rotationDirtyRef = useRef(false)
+  const loadRequestIdRef = useRef(0)
 
-  const loadJefe = useCallback(async (key: string) => {
-    setJefeLoading(true)
-    try {
-      const assignment = await getJefeAssignment(key)
-      setJefeForm({
-        firstName: assignment?.firstName ?? '',
-        lastName: assignment?.lastName ?? '',
-        internalPhone: assignment?.internalPhone ?? '',
-      })
-    } catch (err) {
-      console.error('Error al cargar jefe de turno:', err)
-      toast.error('No se pudo cargar el jefe de turno')
-    } finally {
-      setJefeLoading(false)
-    }
-  }, [])
+  const buildPreviewFromConfig = useCallback(
+    async (config: SystemsRotationConfig, fromWeekKey: string, count = 12) => {
+      const rows: Array<{ weekKey: string; name: string; isOverride: boolean }> = []
+      for (let i = 0; i < count; i += 1) {
+        const key = addWeeks(fromWeekKey, i)
+        const override = await getSystemsOverride(key)
+        const resolved = resolveSystemsAssignee(config, key, override)
+        rows.push({ weekKey: key, name: resolved.name, isOverride: resolved.isOverride })
+      }
+      return rows
+    },
+    [],
+  )
 
-  const loadRotation = useCallback(async (fromWeekKey: string) => {
+  const loadRotation = useCallback(async (opts?: { force?: boolean }) => {
+    const requestId = ++loadRequestIdRef.current
     try {
       const config = await getSystemsRotationConfig()
-      setRotation(config)
-      const rows = await previewSystemsRotation(fromWeekKey, 12)
-      setPreview(rows)
+      if (requestId !== loadRequestIdRef.current) return
+      if (opts?.force || !rotationDirtyRef.current) {
+        setRotation(config)
+      }
     } catch (err) {
       console.error('Error al cargar rotación de sistemas:', err)
       toast.error('No se pudo cargar la rotación de sistemas')
     }
   }, [])
+
+  const refreshPreview = useCallback(
+    async (config: SystemsRotationConfig, fromWeekKey: string) => {
+      try {
+        setPreview(await buildPreviewFromConfig(config, fromWeekKey))
+      } catch (err) {
+        console.error('Error al armar vista previa de rotación:', err)
+      }
+    },
+    [buildPreviewFromConfig],
+  )
 
   const loadOverride = useCallback(async (key: string) => {
     try {
@@ -101,33 +85,17 @@ export function ShiftManager() {
   }, [])
 
   useEffect(() => {
-    loadJefe(weekKey)
     loadOverride(weekKey)
-  }, [weekKey, loadJefe, loadOverride])
+  }, [weekKey, loadOverride])
 
   useEffect(() => {
-    loadRotation(weekKey)
+    void loadRotation()
   }, [weekKey, loadRotation])
 
-  const handleJefeSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!jefeForm.firstName.trim() || !jefeForm.lastName.trim()) {
-      toast.error('Completá nombre y apellido del jefe de turno')
-      return
-    }
-
-    setJefeSaving(true)
-    try {
-      await saveJefeAssignment({ weekKey, ...jefeForm })
-      setGridRefresh((n) => n + 1)
-      toast.success('Jefe de turno guardado')
-    } catch (err) {
-      console.error('Error al guardar jefe:', err)
-      toast.error('No se pudo guardar el jefe de turno')
-    } finally {
-      setJefeSaving(false)
-    }
-  }
+  useEffect(() => {
+    if (!rotation) return
+    void refreshPreview(rotation, weekKey)
+  }, [rotation, weekKey, refreshPreview])
 
   const handleRotationSave = async () => {
     if (!rotation) return
@@ -138,7 +106,8 @@ export function ShiftManager() {
       const normalized = { ...rotation, anchorWeekKey: anchorMonday }
       await saveSystemsRotationConfig(normalized)
       setRotation(normalized)
-      await loadRotation(weekKey)
+      rotationDirtyRef.current = false
+      await loadRotation({ force: true })
       toast.success('Rotación de sistemas actualizada')
     } catch (err) {
       console.error('Error al guardar rotación:', err)
@@ -161,7 +130,7 @@ export function ShiftManager() {
         assigneeName: overrideName,
         reason: overrideReason || undefined,
       })
-      await loadRotation(weekKey)
+      if (rotation) await refreshPreview(rotation, weekKey)
       toast.success('Excepción guardada')
     } catch (err) {
       console.error('Error al guardar excepción:', err)
@@ -177,7 +146,7 @@ export function ShiftManager() {
       await clearSystemsOverride(weekKey)
       setOverrideName('')
       setOverrideReason('')
-      await loadRotation(weekKey)
+      if (rotation) await refreshPreview(rotation, weekKey)
       toast.success('Excepción eliminada — vuelve la rotación automática')
     } catch (err) {
       console.error('Error al quitar excepción:', err)
@@ -190,6 +159,7 @@ export function ShiftManager() {
   const members = rotation?.members ?? [...DEFAULT_SYSTEMS_MEMBERS]
 
   const moveMember = (index: number, direction: -1 | 1) => {
+    rotationDirtyRef.current = true
     setRotation((current) => {
       if (!current) return current
       const nextIndex = index + direction
@@ -210,6 +180,7 @@ export function ShiftManager() {
   }
 
   const removeMember = (index: number) => {
+    rotationDirtyRef.current = true
     setRotation((current) => {
       if (!current || current.members.length <= 1) return current
 
@@ -232,6 +203,7 @@ export function ShiftManager() {
       return
     }
 
+    rotationDirtyRef.current = true
     setRotation((current) => {
       if (!current) return current
       if (current.members.some((name) => name.toLowerCase() === trimmed.toLowerCase())) {
@@ -243,133 +215,8 @@ export function ShiftManager() {
     setNewMemberName('')
   }
 
-  const handleGridSelectWeek = (key: string) => {
-    setWeekKey(key)
-    setActiveTab('jefes')
-    requestAnimationFrame(() => {
-      weeklyFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-  }
-
   return (
     <div className="space-y-6">
-      <AdminTabs
-        tabs={[...SHIFT_TABS]}
-        activeTab={activeTab}
-        onChange={(id) => setActiveTab(id as ShiftTab)}
-      />
-
-      {activeTab === 'jefes' && (
-        <>
-          <JefeAnnualGrid
-            selectedWeekKey={weekKey}
-            onSelectWeek={handleGridSelectWeek}
-            refreshToken={gridRefresh}
-          />
-
-          <section
-            ref={weeklyFormRef}
-            className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
-          >
-        <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-neutral-900 dark:text-gray-100">
-              Editar semana seleccionada
-            </h2>
-            <p className="mt-1 text-sm text-neutral-500 dark:text-gray-400">
-              Asignación manual por semana (lunes a domingo). Independiente del directorio.
-            </p>
-          </div>
-          <div className="flex items-center gap-1 self-start rounded-xl border border-neutral-200 bg-neutral-50 p-1 dark:border-zinc-700 dark:bg-zinc-950">
-            <button
-              type="button"
-              onClick={() => setWeekKey((k) => addWeeks(k, -1))}
-              className="rounded-lg p-2 text-neutral-600 hover:bg-white dark:text-gray-400 dark:hover:bg-zinc-800"
-              aria-label="Semana anterior"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <div className="min-w-[10rem] px-2 text-center text-sm font-medium text-neutral-800 dark:text-gray-200">
-              {getWeekRangeLabel(weekKey)}
-            </div>
-            <button
-              type="button"
-              onClick={() => setWeekKey((k) => addWeeks(k, 1))}
-              className="rounded-lg p-2 text-neutral-600 hover:bg-white dark:text-gray-400 dark:hover:bg-zinc-800"
-              aria-label="Semana siguiente"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            {weekKey !== getWeekKey() && (
-              <button
-                type="button"
-                onClick={() => setWeekKey(getWeekKey())}
-                className="ml-1 rounded-lg px-2 py-1.5 text-xs font-semibold text-brand-primary hover:bg-brand-tint"
-              >
-                Actual
-              </button>
-            )}
-          </div>
-        </header>
-
-        {jefeLoading ? (
-          <div className="h-32 animate-pulse rounded-xl bg-neutral-100 dark:bg-zinc-800" />
-        ) : (
-          <form onSubmit={handleJefeSubmit} className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-gray-400">
-                Nombre
-              </label>
-              <input
-                type="text"
-                value={jefeForm.firstName}
-                onChange={(e) => setJefeForm((f) => ({ ...f, firstName: e.target.value }))}
-                className={inputClassName}
-                placeholder="Ej. Juan"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-gray-400">
-                Apellido
-              </label>
-              <input
-                type="text"
-                value={jefeForm.lastName}
-                onChange={(e) => setJefeForm((f) => ({ ...f, lastName: e.target.value }))}
-                className={inputClassName}
-                placeholder="Ej. Pérez"
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-gray-400">
-                Interno
-              </label>
-              <input
-                type="text"
-                value={jefeForm.internalPhone}
-                onChange={(e) => setJefeForm((f) => ({ ...f, internalPhone: e.target.value }))}
-                className={inputClassName}
-                placeholder="Ej. 1234"
-              />
-            </div>
-            <div className="sm:col-span-3">
-              <button
-                type="submit"
-                disabled={jefeSaving}
-                className="rounded-xl bg-brand-primary px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
-              >
-                {jefeSaving ? 'Guardando…' : 'Guardar jefe de turno'}
-              </button>
-            </div>
-          </form>
-        )}
-          </section>
-        </>
-      )}
-
-      {activeTab === 'sistemas' && (
       <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
         <header className="mb-5">
           <h2 className="text-lg font-bold text-neutral-900 dark:text-gray-100">
@@ -393,12 +240,16 @@ export function ShiftManager() {
               {members.map((name, index) => (
                 <li
                   key={`${name}-${index}`}
+                  data-testid={`rotation-member-${index}`}
                   className="flex flex-wrap items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950/50"
                 >
                   <span className="min-w-[1.5rem] text-xs font-semibold text-neutral-400">
                     {index + 1}.
                   </span>
-                  <span className="flex-1 text-sm font-medium text-neutral-900 dark:text-gray-100">
+                  <span
+                    data-testid="rotation-member-name"
+                    className="flex-1 text-sm font-medium text-neutral-900 dark:text-gray-100"
+                  >
                     {name}
                   </span>
                   <div className="flex items-center gap-1">
@@ -602,7 +453,6 @@ export function ShiftManager() {
           </div>
         </div>
       </section>
-      )}
     </div>
   )
 }

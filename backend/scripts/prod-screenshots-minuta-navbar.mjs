@@ -109,8 +109,11 @@ try {
   }, customToken)
   await page.getByText('Sesión activa').waitFor({ timeout: 120_000 })
   await page.goto(`${VITE}/intranet`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('link', { name: 'Aprobaciones pendientes' }).waitFor({ timeout: 60_000 })
-  await page.screenshot({ path: resolve(OUT, 'prod-navbar-aprobaciones-link.png') })
+  const aprobacionesNav = page.getByRole('link', { name: 'Aprobaciones pendientes' })
+  if ((await aprobacionesNav.count()) > 0) {
+    throw new Error('Navbar no debe mostrar link Aprobaciones pendientes')
+  }
+  await page.screenshot({ path: resolve(OUT, 'prod-navbar-sin-aprobaciones-link.png') })
   await page.goto(`${VITE}/sistemas/mesa-ayuda`, { waitUntil: 'domcontentloaded' })
   await page.getByTestId('helpdesk-mesa-panel').waitFor({ timeout: 120_000 })
   await page.getByTestId('helpdesk-mesa-ticket-row').filter({ hasText: 'E2E PROD Minuta IA' }).first().click()
@@ -130,8 +133,8 @@ try {
     path: resolve(OUT, 'prod-minuta-form-closeup.png'),
   })
   await page.goto(`${VITE}/aprobaciones-pendientes`, { waitUntil: 'domcontentloaded' })
-  await page.getByTestId('aprobaciones-pendientes-page').waitFor({ timeout: 60_000 })
-  await page.screenshot({ path: resolve(OUT, 'prod-navbar-aprobaciones-page.png'), fullPage: true })
+  await page.getByTestId('aprobaciones-pendientes-modal').waitFor({ timeout: 60_000 })
+  await page.screenshot({ path: resolve(OUT, 'prod-aprobaciones-modal.png'), fullPage: false })
   await browser.close()
   console.log('Screenshots OK en', OUT, '(Vite dev + API prod; no login helper en hosting)')
 } finally {

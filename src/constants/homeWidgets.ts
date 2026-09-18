@@ -1,11 +1,12 @@
-/** IDs de widgets configurables en la home (tarjeta de bienvenida). */
-export type HomeWidgetId = 'weather' | 'dollar'
+/** IDs de widgets configurables en la home. */
+export type HomeWidgetId = 'weather' | 'dollar' | 'systemsShift'
 
 export type HomeWidgetPreferences = Record<HomeWidgetId, boolean>
 
 export const DEFAULT_HOME_WIDGET_PREFERENCES: HomeWidgetPreferences = {
   weather: true,
   dollar: true,
+  systemsShift: true,
 }
 
 export interface HomeWidgetDefinition {
@@ -26,6 +27,11 @@ export const HOME_WIDGETS: HomeWidgetDefinition[] = [
     label: 'Dólar',
     description: 'Cotizaciones en vivo (oficial, blue, MEP)',
   },
+  {
+    id: 'systemsShift',
+    label: 'Turno de Sistemas',
+    description: 'Quién cubre Sistemas esta semana (columna lateral)',
+  },
 ]
 
 export function resolveHomeWidgetPreferences(
@@ -34,5 +40,6 @@ export function resolveHomeWidgetPreferences(
   return {
     weather: raw?.weather !== false,
     dollar: raw?.dollar !== false,
+    systemsShift: raw?.systemsShift !== false,
   }
 }

@@ -6,17 +6,24 @@ import {
   HelpdeskApiError,
   HELPDESK_GENERIC_ERROR_MESSAGE,
 } from '../../services/helpdeskApi'
+import { HelpdeskCanceledBanner } from './HelpdeskCanceledBanner'
 
 export function HelpdeskPanelCancelacion({
   ticketId,
   cancelado,
   canceladoMotivo,
+  canceladoPor,
   onUpdated,
+  embedded = false,
+  embeddedInRiskZone = false,
 }: {
   ticketId: string
   cancelado: boolean
   canceladoMotivo?: string | null
+  canceladoPor?: string | null
   onUpdated: () => void
+  embedded?: boolean
+  embeddedInRiskZone?: boolean
 }) {
   const [motivo, setMotivo] = useState(canceladoMotivo ?? '')
   const [busy, setBusy] = useState(false)
@@ -37,15 +44,22 @@ export function HelpdeskPanelCancelacion({
     }
   }
 
-  return (
-    <section
-      className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5"
-      data-testid="helpdesk-cancelacion-section"
-    >
-      <h3 className="text-sm font-semibold text-heading">Cancelación del proyecto</h3>
-      <p className="mt-1 text-xs text-body-muted">
-        Independiente del flujo de análisis. Congela la línea de tiempo en el paso actual.
-      </p>
+  const body = (
+    <>
+      {!embedded || embeddedInRiskZone ? (
+        <>
+          <h3 className="text-sm font-semibold text-heading">Cancelación del proyecto</h3>
+          <p className="mt-1 text-xs text-body-muted">
+            Independiente del flujo de análisis. Congela la línea de tiempo en el paso actual.
+          </p>
+        </>
+      ) : null}
+
+      {cancelado ? (
+        <div className="mt-3">
+          <HelpdeskCanceledBanner motivo={canceladoMotivo} canceladoPor={canceladoPor} />
+        </div>
+      ) : null}
 
       {!cancelado ? (
         <div className="mt-3 space-y-2">
@@ -82,6 +96,30 @@ export function HelpdeskPanelCancelacion({
           </button>
         </div>
       )}
+    </>
+  )
+
+  if (embedded) {
+    return (
+      <div
+        data-testid="helpdesk-cancelacion-section"
+        className={
+          embeddedInRiskZone
+            ? undefined
+            : 'mt-4 border-t border-neutral-100 pt-4 dark:border-zinc-800'
+        }
+      >
+        {body}
+      </div>
+    )
+  }
+
+  return (
+    <section
+      className="rounded-xl border border-neutral-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-5"
+      data-testid="helpdesk-cancelacion-section"
+    >
+      {body}
     </section>
   )
 }

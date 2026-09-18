@@ -1,7 +1,12 @@
-import { Bell, Loader2 } from 'lucide-react'
+import { Bell, CheckCircle2, Loader2, Lock, Wrench } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link, useNavigate } from 'react-router-dom'
+import {
+  NOTIFICATION_TYPE_HELPDESK_ANALISIS_PENDIENTE,
+  NOTIFICATION_TYPE_ST_TICKET_STATUS_CHANGED,
+} from '../constants/notificationTypes'
+import { useAprobacionesModal } from '../context/AprobacionesModalContext'
 import { useNotifications } from '../context/NotificationsContext'
 import {
   approveAccessRequest,
@@ -227,6 +232,42 @@ function ActionableApprovalItem({
   )
 }
 
+/** Mismos tonos por estado que los badges de /soporte-ti. */
+const ST_STATUS_ICON: Record<
+  string,
+  { Icon: typeof Wrench; className: string }
+> = {
+  open: {
+    Icon: Wrench,
+    className: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300',
+  },
+  'in-progress': {
+    Icon: Wrench,
+    className: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+  },
+  resolved: {
+    Icon: CheckCircle2,
+    className: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  },
+  closed: {
+    Icon: Lock,
+    className: 'bg-neutral-100 text-neutral-500 dark:bg-zinc-800 dark:text-zinc-300',
+  },
+}
+
+function StTicketIcon({ item }: { item: NotificationSnapshot }) {
+  const status = typeof item.context?.status === 'string' ? item.context.status : 'open'
+  const { Icon, className } = ST_STATUS_ICON[status] ?? ST_STATUS_ICON.open
+  return (
+    <span
+      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${className}`}
+      aria-hidden
+    >
+      <Icon className="h-4 w-4" />
+    </span>
+  )
+}
+
 function NotificationItem({
   item,
   onOpen,
@@ -234,10 +275,12 @@ function NotificationItem({
   item: NotificationSnapshot
   onOpen: (item: NotificationSnapshot) => void
 }) {
+  const isStTicket = item.type === NOTIFICATION_TYPE_ST_TICKET_STATUS_CHANGED
   return (
     <button
       type="button"
       onClick={() => onOpen(item)}
+      data-testid={isStTicket ? 'notification-st-ticket' : undefined}
       className={`w-full border-b border-neutral-100 px-4 py-3 text-left transition-colors hover:bg-neutral-50 dark:border-zinc-800 dark:hover:bg-zinc-900/70 ${
         item.read ? 'opacity-80' : 'bg-brand-tint/20 dark:bg-brand-tint/10'
       }`}
@@ -246,7 +289,13 @@ function NotificationItem({
         {!item.read && (
           <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-primary" aria-hidden />
         )}
+        {isStTicket && <StTicketIcon item={item} />}
         <div className="min-w-0 flex-1">
+          {isStTicket && (
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-gray-500">
+              Ticket de soporte
+            </p>
+          )}
           <p className="text-sm font-medium text-neutral-900 dark:text-gray-100">{item.title}</p>
           <p className="mt-0.5 text-sm text-neutral-600 dark:text-gray-400">{item.body}</p>
           {item.createdAtMs > 0 && (
@@ -262,6 +311,7 @@ function NotificationItem({
 
 export function NotificationBell() {
   const navigate = useNavigate()
+  const { openModal: openAprobacionesModal } = useAprobacionesModal()
   const { unreadCount, recentNotifications, markRead, markAllRead, loading } = useNotifications()
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -280,6 +330,11 @@ export function NotificationBell() {
   }, [open])
 
   const handleOpenItem = async (item: NotificationSnapshot) => {
+    setOpen(false)
+    if (item.type === NOTIFICATION_TYPE_HELPDESK_ANALISIS_PENDIENTE) {
+      openAprobacionesModal()
+      return
+    }
     if (!item.read) {
       try {
         await markRead(item.id)
@@ -287,7 +342,6 @@ export function NotificationBell() {
         // onSnapshot actualizará cuando la API responda; no bloqueamos navegación.
       }
     }
-    setOpen(false)
     if (item.deepLink?.path) {
       navigate(item.deepLink.path)
     }

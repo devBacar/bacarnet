@@ -14,16 +14,22 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
-const analytics = getAnalytics(app)
 const auth = getAuth(app)
 const db = getFirestore(app)
 
-if (import.meta.env.DEV) {
+if (import.meta.env.DEV || import.meta.env.VITE_E2E === 'true') {
   // @ts-expect-error helpers locales para scripts Playwright / depuración (solo Vite dev)
   window.__getIdToken = () => auth.currentUser?.getIdToken()
   // @ts-expect-error helpers locales para scripts Playwright / depuración (solo Vite dev)
   window.__e2eSignInWithCustomToken = (customToken: string) =>
     signInWithCustomToken(auth, customToken)
+}
+
+let analytics
+try {
+  analytics = getAnalytics(app)
+} catch {
+  analytics = undefined
 }
 
 export { app, analytics, auth, db }

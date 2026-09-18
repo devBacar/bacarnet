@@ -22,7 +22,10 @@ const helpdeskN8nWebhookAvisoInterno = defineSecret('HELPDESK_N8N_WEBHOOK_AVISO_
 const helpdeskN8nWebhookAnalisisPendiente = defineSecret(
   'HELPDESK_N8N_WEBHOOK_ANALISIS_PENDIENTE',
 )
-
+const stTicketsApiKey = defineSecret('ST_INTEGRATION_API_KEY')
+const widgetsOAuthClientSecret = defineSecret('WIDGETS_OAUTH_CLIENT_SECRET')
+const widgetsOAuthTokenEncryptionKey = defineSecret('WIDGETS_OAUTH_TOKEN_ENCRYPTION_KEY')
+const widgetsOAuthStateSecret = defineSecret('WIDGETS_OAUTH_STATE_SECRET')
 const adminMode = initFirebaseAdmin()
 logCredentialDiagnostics(adminMode)
 
@@ -38,6 +41,7 @@ setGlobalOptions({
 type ExpressApp = (req: Request, res: Response) => void
 
 let appPromise: Promise<ExpressApp> | null = null
+let widgetsAppPromise: Promise<ExpressApp> | null = null
 
 /** Carga perezosa: el análisis de deploy de Firebase importa index sin montar Express/googleapis. */
 function loadApp(): Promise<ExpressApp> {
@@ -45,6 +49,13 @@ function loadApp(): Promise<ExpressApp> {
     appPromise = import('./server.js').then((mod) => mod.app)
   }
   return appPromise
+}
+
+function loadWidgetsApp(): Promise<ExpressApp> {
+  if (!widgetsAppPromise) {
+    widgetsAppPromise = import('./widgetsServer.js').then((mod) => mod.app)
+  }
+  return widgetsAppPromise
 }
 
 export const api = onRequest(
@@ -63,10 +74,33 @@ export const api = onRequest(
       n8nMgmtApiKey,
       helpdeskN8nWebhookAvisoInterno,
       helpdeskN8nWebhookAnalisisPendiente,
+      stTicketsApiKey,
     ],
   },
   async (req, res) => {
     const app = await loadApp()
+    app(req, res)
+  },
+)
+
+/**
+ * Gmail/Calendar widgets (OAuth personal). Secretos WIDGETS_OAUTH_* se agregan acá cuando
+ * estén en Secret Manager — ver defineSecret en este archivo — sin bloquear deploy de `api`.
+ */
+export const widgetsApi = onRequest(
+  {
+    cors: false,
+    timeoutSeconds: 120,
+    memory: '512MiB',
+    invoker: 'public',
+    secrets: [
+      widgetsOAuthClientSecret,
+      widgetsOAuthTokenEncryptionKey,
+      widgetsOAuthStateSecret,
+    ],
+  },
+  async (req, res) => {
+    const app = await loadWidgetsApp()
     app(req, res)
   },
 )
@@ -99,6 +133,19 @@ export const recordarSolicitudesHelpdesk = onSchedule(
       './modules/helpdesk/scheduledReminder.js'
     )
     await runScheduledReminder()
+  },
+)
+
+export const reindexRagSemanal = onSchedule(
+  {
+    schedule: '0 4 * * 0',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    timeoutSeconds: 540,
+    memory: '1GiB',
+  },
+  async () => {
+    const { runScheduledRagWeekly } = await import('./modules/rag/scheduledRagWeekly.js')
+    await runScheduledRagWeekly()
   },
 )
 

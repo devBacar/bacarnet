@@ -1,5 +1,5 @@
 /**
- * Reproduce el scroll interno del detalle y captura el encabezado sticky.
+ * Desplaza la página con un ticket largo y verifica cabecera del ticket + secciones colapsables.
  * Uso: node backend/scripts/e2e-helpdesk-sticky-header.mjs before
  */
 import { spawn } from 'node:child_process'
@@ -115,24 +115,23 @@ try {
     throw error
   }
   await page.getByText('E2E Sticky Header', { exact: true }).first().click()
-  const detail = page.getByTestId('helpdesk-mesa-detail-scroll')
   await page.getByTestId('helpdesk-mesa-detail').waitFor()
-  await detail.evaluate((element) => {
-    element.scrollTop = 620
-  })
+  await page.getByTestId('helpdesk-mesa-bitacora-toggle').click()
+  await page.evaluate(() => window.scrollTo(0, 480))
   await page.waitForTimeout(300)
-  const diagnostics = await detail.evaluate((element) => {
-    const header = element.querySelector('[data-testid="helpdesk-ticket-sticky-header"]')
-    if (!(header instanceof HTMLElement)) return null
-    const style = getComputedStyle(header)
-    const rect = header.getBoundingClientRect()
-    const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+  const diagnostics = await page.evaluate(() => {
+    const header = document.querySelector('[data-testid="helpdesk-ticket-sticky-header"]')
+    const detailScroll = document.querySelector('[data-testid="helpdesk-mesa-detail-scroll"]')
+    const bitacoraToggle = document.querySelector('[data-testid="helpdesk-mesa-bitacora-toggle"]')
+    if (!(header instanceof HTMLElement)) return { ok: false, reason: 'missing header' }
+    const detailOverflow =
+      detailScroll instanceof HTMLElement ? getComputedStyle(detailScroll).overflowY : null
     return {
-      scrollTop: element.scrollTop,
-      backgroundColor: style.backgroundColor,
-      opacity: style.opacity,
-      zIndex: style.zIndex,
-      elementAtCenter: point?.textContent?.slice(0, 120) ?? null,
+      ok: true,
+      windowScrollY: window.scrollY,
+      detailOverflowY: detailOverflow,
+      headerVisible: header.getBoundingClientRect().height > 0,
+      bitacoraExpanded: bitacoraToggle?.getAttribute('aria-expanded') === 'true',
     }
   })
   mkdirSync(dirname(output), { recursive: true })

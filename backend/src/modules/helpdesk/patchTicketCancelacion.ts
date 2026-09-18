@@ -2,6 +2,7 @@ import type { Request, Response } from 'express'
 import { FieldValue } from 'firebase-admin/firestore'
 import { logError } from '../../lib/log.js'
 import { getHelpdeskTicketById, updateHelpdeskTicketCancelacion } from './repository.js'
+import { markHelpdeskVistoSeccionNowForUser } from './vistoPorRepository.js'
 
 export async function patchTicketCancelacionHandler(req: Request, res: Response): Promise<void> {
   const user = req.authedUser
@@ -52,6 +53,8 @@ export async function patchTicketCancelacionHandler(req: Request, res: Response)
         canceladoFecha: null,
       })
     }
+
+    await markHelpdeskVistoSeccionNowForUser(ticketId, user.uid, 'seguimiento')
 
     res.json({ ticketId, cancelado: body.cancelado })
   } catch (err) {

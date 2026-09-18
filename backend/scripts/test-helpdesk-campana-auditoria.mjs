@@ -84,9 +84,22 @@ try {
   const sample = rows[0]
   const keysOk =
     sample &&
-    ['nombre', 'area', 'email', 'enviado', 'fecha_envio', 'respondido', 'fecha_respuesta', 'link'].every(
-      (key) => Object.prototype.hasOwnProperty.call(sample, key),
-    )
+    [
+      'nombre',
+      'area',
+      'email',
+      'enviado',
+      'fecha_envio',
+      'respondido',
+      'fecha_respuesta',
+      'link',
+      'respondio_correo',
+      'respondio_formulario',
+      'fecha_formulario',
+      'ticket_id',
+      'campana_cumplida',
+      'respondido_tabla_n8n',
+    ].every((key) => Object.prototype.hasOwnProperty.call(sample, key))
   record(
     '200 equipo con filas de n8n',
     okRes.status === 200 && rows.length >= 1 && keysOk,

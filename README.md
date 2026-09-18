@@ -1,32 +1,59 @@
-***REMOVED*** React + TypeScript + Vite
+# BacarNet (intranet1)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Frontend React + Vite en la raíz; API en `backend/` (Firebase Cloud Functions). Producción: [https://bacarnet.web.app](https://bacarnet.web.app) (proyecto Firebase `bacar-web`).
 
-Currently, two official plugins are available:
+Documentación del backend: [backend/README.md](backend/README.md).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Deploy — Hosting (`hosting:bacarnet`)
 
-***REMOVED******REMOVED*** React Compiler
+**Regla obligatoria:** no desplegar el frontend sin verificar que el bundle **no** incluye `VITE_API_BASE_URL` u otras URLs locales (p. ej. `http://127.0.0.1:8799` de scripts E2E). Si esa URL queda baked en el JS, la intranet en producción llama a localhost y fallan widgets, helpdesk y el resto de la API.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Proceso estándar (usar siempre)
 
-***REMOVED******REMOVED*** Expanding the Oxlint configuration
+1. **Build** de producción (sin `VITE_API_BASE_URL` en `.env.local` ni en `.env.development.local`; borrá `.env.development.local` si quedó de un E2E).
+2. **Verificación local del bundle** (bloqueante):
+   ```bash
+   npm run verify:hosting-bundle
+   ```
+   Equivalente manual:
+   ```bash
+   node backend/scripts/verify-hosting-bundle-local.mjs
+   ```
+   Revisa `dist/assets/*.js` y falla si encuentra `127.0.0.1` o `localhost:` con puerto.
+3. **Deploy** solo si el paso 2 terminó en `OK`:
+   ```bash
+   npx firebase deploy --only hosting:bacarnet --project bacar-web
+   ```
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+Atajo que encadena build + verificación + deploy:
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm run deploy:hosting:bacarnet
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Firebase CLI también ejecuta `predeploy` del target `bacarnet` en `firebase.json` (`npm run build` + `npm run verify:hosting-bundle`) cuando corrés deploy de ese hosting — **no saltees la verificación** desplegando archivos viejos en `dist/` sin rebuild.
+
+### Después del deploy (recomendado)
+
+Comprobar el bundle publicado y una ruta `/api/me` same-origin:
+
+```bash
+npm run verify:hosting-bundle:live
+```
+
+Requiere credenciales en `backend/.env.local` / `.env.local` (token de prueba vía `get-test-token.mjs`).
+
+### Qué evitar
+
+- No agregar `VITE_API_BASE_URL=http://127.0.0.1:…` a `.env.local` para builds de producción.
+- Los scripts E2E de helpdesk pueden crear `.env.development.local` con ese valor; eliminarlo si el script no lo borró al terminar.
+- No usar `npx vite build` con la variable de entorno `VITE_API_BASE_URL` apuntando a localhost y después desplegar sin pasar `verify:hosting-bundle`.
+
+## Desarrollo local
+
+```bash
+npm install
+npm run dev
+```
+
+API local / emuladores: ver [backend/README.md](backend/README.md).

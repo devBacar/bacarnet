@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express'
 import { logError } from '../../lib/log.js'
+import type { CampanaAuditoriaEnrichedRow } from './campanaAuditoriaEnrich.js'
+import { loadCampanaAuditoriaEnrichedRows } from './campanaAuditoriaLoad.js'
 import { listJefesAreasRows, type JefeAreaTableRow } from './n8nJefesAreas.js'
 
 const AUDITORIA_ERROR = 'No se pudo obtener el estado de la campaña, intentá de nuevo'
@@ -35,7 +37,9 @@ function asIsoDate(value: unknown): string | null {
   return date.toISOString()
 }
 
-export function serializeCampanaAuditoriaRow(row: JefeAreaTableRow): CampanaAuditoriaRow {
+export function serializeCampanaAuditoriaRow(
+  row: JefeAreaTableRow,
+): CampanaAuditoriaRow & { respuesta_manual_detectada: boolean | null } {
   const json = row.json
   const source =
     json && typeof json === 'object' && !Array.isArray(json)
@@ -50,13 +54,14 @@ export function serializeCampanaAuditoriaRow(row: JefeAreaTableRow): CampanaAudi
     respondido: asBool(source.respondido),
     fecha_respuesta: asIsoDate(source.fecha_respuesta),
     link: asTrimmedString(source.link),
+    respuesta_manual_detectada: asBool(source.respuesta_manual_detectada),
   }
 }
 
 export async function getCampanaAuditoriaHandler(_req: Request, res: Response): Promise<void> {
   try {
-    const raw = await listJefesAreasRows()
-    res.json({ rows: raw.map(serializeCampanaAuditoriaRow) })
+    const rows: CampanaAuditoriaEnrichedRow[] = await loadCampanaAuditoriaEnrichedRows()
+    res.json({ rows })
   } catch (err) {
     logError('getCampanaAuditoria falló', err)
     res.status(503).json({ error: AUDITORIA_ERROR })

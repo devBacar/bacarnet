@@ -1,4 +1,4 @@
-import { BookOpen, BookUser, ClipboardCheck, Headphones, Home, HardDrive, LayoutDashboard, Link2, LogOut, Menu, Moon, ScrollText, Sun } from 'lucide-react'
+import { BookOpen, BookUser, Headphones, Home, HardDrive, Landmark, LayoutDashboard, Link2, LogOut, Menu, Moon, ScrollText, Sun, Wrench } from 'lucide-react'
 
 import { useMemo, useState } from 'react'
 
@@ -16,7 +16,12 @@ import { useGlobalSettings } from '../context/GlobalSettingsContext'
 
 import { auth } from '../services/firebase'
 
-import { DEFAULT_PERMISSIONS, isExternalAccount, isSuperAdmin } from '../services/userService'
+import {
+  DEFAULT_PERMISSIONS,
+  hasFinanzasAccess,
+  isExternalAccount,
+  isSuperAdmin,
+} from '../services/userService'
 
 import { useBoardsVisibility } from '../hooks/useBoardsVisibility'
 
@@ -90,6 +95,12 @@ export function Navbar() {
 
     }
 
+    if (settings.finanzasEnabled && hasFinanzasAccess(userProfile)) {
+
+      items.push({ to: '/finanzas', label: 'Finanzas', icon: Landmark })
+
+    }
+
     if (canAccessBoards) {
 
       items.push({ to: '/tableros', label: 'Tableros', icon: LayoutDashboard })
@@ -106,7 +117,7 @@ export function Navbar() {
 
       items.push({ to: '/mis-solicitudes-sistemas', label: 'Mis proyectos', icon: Headphones })
 
-      items.push({ to: '/aprobaciones-pendientes', label: 'Aprobaciones pendientes', icon: ClipboardCheck })
+      items.push({ to: '/soporte-ti', label: 'Tickets', icon: Wrench })
 
       items.push({ to: '/sistemas/mesa-ayuda', label: 'Desarrollo', icon: Headphones })
 
@@ -132,9 +143,13 @@ export function Navbar() {
 
     permissions.view_links,
 
+    userProfile,
+
     settings.directoryEnabled,
 
     settings.resourcesEnabled,
+
+    settings.finanzasEnabled,
 
   ])
 
@@ -254,6 +269,16 @@ export function Navbar() {
 
           )}
 
+          {settings.finanzasEnabled && hasFinanzasAccess(userProfile) && (
+
+            <NavLink to="/finanzas" className={navLinkClass}>
+
+              Finanzas
+
+            </NavLink>
+
+          )}
+
           {canAccessBoards && (
 
             <NavLink to="/tableros" className={navLinkClass}>
@@ -286,9 +311,9 @@ export function Navbar() {
 
           {!externalAccount && (
 
-            <NavLink to="/aprobaciones-pendientes" className={navLinkClass}>
+            <NavLink to="/soporte-ti" className={navLinkClass}>
 
-              Aprobaciones pendientes
+              Tickets
 
             </NavLink>
 

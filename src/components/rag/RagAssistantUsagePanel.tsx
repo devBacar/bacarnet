@@ -95,12 +95,13 @@ export function RagAssistantUsagePanel() {
           <p className="mt-1 text-xs text-body-muted">aproximación USD</p>
         </div>
         <div className="surface-card p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-body-muted">Medición</p>
+          <p className="text-xs uppercase tracking-wide text-body-muted">Semana cerrada</p>
           <p className="mt-1 text-2xl font-semibold text-heading">
-            {stats.totals.measuredInteractions}
+            {stats.previousWeekUsage.questions}
           </p>
           <p className="mt-1 text-xs text-body-muted">
-            medidas · {stats.totals.estimatedInteractions} estimadas (histórico)
+            {formatUsd(stats.previousWeekUsage.estimatedCostUsd)} total ·{' '}
+            {formatUsd(stats.previousWeekUsage.averageCostUsdPerQuestion)}/consulta
           </p>
         </div>
       </div>

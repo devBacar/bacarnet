@@ -21,6 +21,7 @@ import {
   updateHelpdeskReunionMinuta,
 
 } from './repository.js'
+import { markHelpdeskVistoSeccionNowForUser } from './vistoPorRepository.js'
 
 
 
@@ -156,6 +157,8 @@ export async function patchReunionMinutaHandler(req: Request, res: Response): Pr
 
       })
 
+      await markHelpdeskVistoSeccionNowForUser(ticketId, req.authedUser?.uid, 'reuniones')
+
       res.status(200).json({ ticketId, reunionId })
 
       return
@@ -195,6 +198,8 @@ export async function patchReunionMinutaHandler(req: Request, res: Response): Pr
       texto,
 
     })
+
+    await markHelpdeskVistoSeccionNowForUser(ticketId, req.authedUser?.uid, 'reuniones')
 
     res.status(200).json({ ticketId, reunionId })
 

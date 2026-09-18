@@ -6,6 +6,7 @@ import {
   getHelpdeskTicketById,
   updateHelpdeskReunion,
 } from './repository.js'
+import { FieldValue } from 'firebase-admin/firestore'
 import type { HelpdeskReunionEstado } from './types.js'
 
 type SyncableTicket = { requesterEmail: string }
@@ -62,7 +63,10 @@ export async function syncReunionEstado(input: {
 
   const changed = estado !== reunion.estado
   if (changed) {
-    await deps.updateReunion(input.ticketId, input.reunionId, { estado })
+    await deps.updateReunion(input.ticketId, input.reunionId, {
+      estado,
+      estadoUpdatedAt: FieldValue.serverTimestamp(),
+    })
   }
 
   return {

@@ -138,17 +138,17 @@ try {
   if (!pending) throw new Error('FAIL: analisis no listado para aprobador vía API')
   console.log('PASS: analisis visible vía API para aprobador')
 
-  if (!page.url().includes('/aprobaciones-pendientes')) {
-    await page.goto(`${VITE}/aprobaciones-pendientes`, { waitUntil: 'domcontentloaded' })
-  }
-  await page.getByTestId('aprobaciones-pendientes-page').waitFor({ timeout: 60_000 })
+  await page.getByTestId('aprobaciones-pendientes-modal').waitFor({ timeout: 60_000 })
   await page.getByTestId('aprobacion-pendiente-item').waitFor({ timeout: 60_000 })
+  if (!page.url().includes('/intranet')) {
+    throw new Error('FAIL: debería abrir modal sobre intranet, no navegar a página')
+  }
   await page.screenshot({
     path: resolve(OUT, 'e2e-notif-aprobaciones-pendientes.png'),
-    fullPage: true,
+    fullPage: false,
   })
   await browser.close()
-  console.log('PASS: Playwright navegó a aprobaciones desde campanita')
+  console.log('PASS: Playwright abrió modal de aprobaciones desde campanita')
 } finally {
   vite.kill('SIGTERM')
   server.close()

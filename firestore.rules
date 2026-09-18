@@ -60,6 +60,11 @@ service cloud.firestore {
       return isSuperAdmin() || hasCallerPermission('manage_links');
     }
 
+    function canAccessFinanzas() {
+      return isSuperAdmin()
+        || (isVerifiedCorporate() && hasCallerPermission('view_finanzas'));
+    }
+
     // Contenido intranet: solo corporativo verificado.
     function canReadIntranetContent() {
       return isVerifiedCorporate();
@@ -93,7 +98,11 @@ service cloud.firestore {
       let keys = request.resource.data.diff(resource.data).affectedKeys();
       return keys.hasOnly(['favoriteApps'])
         || keys.hasOnly(['widgetPreferences'])
-        || keys.hasOnly(['favoriteApps', 'widgetPreferences']);
+        || keys.hasOnly(['personalLinks'])
+        || keys.hasOnly(['favoriteApps', 'widgetPreferences'])
+        || keys.hasOnly(['favoriteApps', 'personalLinks'])
+        || keys.hasOnly(['widgetPreferences', 'personalLinks'])
+        || keys.hasOnly(['favoriteApps', 'widgetPreferences', 'personalLinks']);
     }
 
     // managedAreaIds, memberAreaIds y actionGrants solo vía Admin SDK (backend super_admin).
@@ -110,6 +119,10 @@ service cloud.firestore {
       allow create: if false;
       allow get, list: if isSuperAdmin();
       allow update, delete: if false;
+    }
+
+    match /user_google_integrations/{userId} {
+      allow read, write: if false;
     }
 
     // Perfiles de usuario y permisos
@@ -269,6 +282,11 @@ service cloud.firestore {
       match /notas/{notaId} {
         allow read, write: if false;
       }
+
+      // Seguimiento "visto" por persona (solo el propio uid; corporativo verificado).
+      match /vistoPor/{memberUid} {
+        allow read, write: if isVerifiedCorporate() && request.auth.uid == memberUid;
+      }
     }
 
     match /helpdeskEmailLog/{document} {
@@ -278,6 +296,50 @@ service cloud.firestore {
     match /helpdeskUsedTokens/{document} {
       allow read, write: if false;
     }
+
+    match /campanaAuditoriaArchivos/{document} {
+      allow read, write: if false;
+    }
+
+    match /cuentas/{cuentaId} {
+      allow read: if canAccessFinanzas();
+      allow create, update, delete: if false;
+
+      match /saldosSnapshots/{fecha} {
+        allow read: if canAccessFinanzas();
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /cheques/{chequeId} {
+      allow read: if canAccessFinanzas();
+      allow create, update, delete: if false;
+
+      match /historialEstados/{eventoId} {
+        allow read: if canAccessFinanzas();
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /compromisosPago/{compromisoId} {
+      allow read: if canAccessFinanzas();
+      allow create, update, delete: if false;
+
+      match /historialEstados/{eventoId} {
+        allow read: if canAccessFinanzas();
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /cobrosEsperados/{cobroId} {
+      allow read: if canAccessFinanzas();
+      allow create, update, delete: if false;
+
+      match /historialEstados/{eventoId} {
+        allow read: if canAccessFinanzas();
+        allow create, update, delete: if false;
+      }
+    }
   }
 }
-
+

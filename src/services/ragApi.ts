@@ -6,6 +6,7 @@ export type RagCitationDto = {
   webViewLink: string | null
   chunkIndex: number
   excerpt: string
+  accessFootnote?: string
 }
 
 export type RagIndexStateDto = {
@@ -188,6 +189,13 @@ export type AssistantUsageStatsResponse = {
     byName: Array<{ toolName: string; count: number }>
   }
   monthlyHistory: Array<{ month: string; questions: number; estimatedCostUsd: number }>
+  previousWeekUsage: {
+    weekFrom: string
+    weekTo: string
+    questions: number
+    estimatedCostUsd: number
+    averageCostUsdPerQuestion: number
+  }
   scannedInteractions: number
   generatedAt: string
 }

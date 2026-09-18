@@ -55,6 +55,11 @@ function CitationsList({ citations }: { citations: RagCitationDto[] }) {
           ) : (
             citation.fileName
           )}
+          {citation.accessFootnote ? (
+            <span className="mt-0.5 block text-[11px] leading-snug text-brand-muted/90">
+              {citation.accessFootnote}
+            </span>
+          ) : null}
         </li>
       ))}
     </ul>

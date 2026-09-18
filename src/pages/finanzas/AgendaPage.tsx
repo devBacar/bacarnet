@@ -6,7 +6,9 @@ import {
   VencimientoAlertTag,
   vencimientoRowClass,
 } from '../../components/finanzas/VencimientoAlert'
+import { FinanzasFormField, finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
+import type { FinanzasCuenta } from '../../services/finanzasApi'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
@@ -195,11 +197,12 @@ function CompromisosTable({
   onMarcarPagado,
 }: {
   rows: CompromisoAgendaItem[]
-  cuentas: Array<{ id: string; bancoNombre: string; tipo: string; tipoLabel: string }>
+  cuentas: FinanzasCuenta[]
   onPrioridadChange: (id: string, prioridad: number) => Promise<void>
   onMarcarPagado: (id: string, body: Record<string, unknown>) => Promise<void>
 }) {
   const [historialId, setHistorialId] = useState<string | null>(null)
+  const [marcarPagadoRow, setMarcarPagadoRow] = useState<CompromisoAgendaItem | null>(null)
   const { data: historial = [] } = useQuery({
     queryKey: ['finanzas', 'agenda', 'historial', historialId],
     queryFn: () => fetchCompromisoHistorial(historialId!),
@@ -262,26 +265,7 @@ function CompromisosTable({
                     <button
                       type="button"
                       className="rounded bg-neutral-900 px-2 py-1 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                      onClick={() => {
-                        const medio = window.prompt(
-                          'Medio de pago real (transferencia / cheque / efectivo):',
-                          row.medioPago,
-                        ) as MedioPago | null
-                        if (!medio || !['transferencia', 'cheque', 'efectivo'].includes(medio)) return
-                        let cuentaId: string | undefined
-                        if (medio === 'transferencia' || medio === 'efectivo') {
-                          const opts = cuentas.map((c) => `${c.id}:${c.bancoNombre} ${c.tipo}`).join('\n')
-                          const picked = window.prompt(`cuentaId (cuentas disponibles):\n${opts}`)
-                          if (!picked?.trim()) return
-                          cuentaId = picked.split(':')[0]?.trim()
-                        }
-                        const fecha = window.prompt('Fecha de pago (YYYY-MM-DD):', new Date().toISOString().slice(0, 10))
-                        void onMarcarPagado(row.id, {
-                          medioPago: medio,
-                          cuentaId,
-                          fechaPago: fecha ?? undefined,
-                        })
-                      }}
+                      onClick={() => setMarcarPagadoRow(row)}
                     >
                       Marcar pagado
                     </button>
@@ -298,6 +282,17 @@ function CompromisosTable({
       {historialId ? (
         <HistorialModal historial={historial} onClose={() => setHistorialId(null)} />
       ) : null}
+      {marcarPagadoRow ? (
+        <MarcarPagadoModal
+          row={marcarPagadoRow}
+          cuentas={cuentas}
+          onClose={() => setMarcarPagadoRow(null)}
+          onSubmit={async (body) => {
+            await onMarcarPagado(marcarPagadoRow.id, body)
+            setMarcarPagadoRow(null)
+          }}
+        />
+      ) : null}
     </>
   )
 }
@@ -309,10 +304,12 @@ function CobrosTable({
   onConfirmar,
 }: {
   rows: CobroAgendaItem[]
-  cuentas: Array<{ id: string; bancoNombre: string; tipo: string }>
+  cuentas: FinanzasCuenta[]
   onPrioridadChange: (id: string, prioridad: number) => Promise<void>
   onConfirmar: (id: string, body: Record<string, unknown>) => Promise<void>
 }) {
+  const [confirmarRow, setConfirmarRow] = useState<CobroAgendaItem | null>(null)
+
   return (
     <div className="overflow-x-auto rounded-2xl border border-neutral-200 dark:border-zinc-800">
       <table className="min-w-full text-sm">
@@ -353,17 +350,7 @@ function CobrosTable({
                 <button
                   type="button"
                   className="rounded bg-neutral-900 px-2 py-1 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  onClick={() => {
-                    const opts = cuentas.map((c) => `${c.id}:${c.bancoNombre} ${c.tipo}`).join('\n')
-                    const picked = window.prompt(`Cuenta de ingreso (cuentaId):\n${opts}`)
-                    if (!picked?.trim()) return
-                    const cuentaId = picked.split(':')[0]?.trim()
-                    const fecha = window.prompt(
-                      'Fecha confirmado (YYYY-MM-DD):',
-                      new Date().toISOString().slice(0, 10),
-                    )
-                    void onConfirmar(row.id, { cuentaId, fechaConfirmado: fecha ?? undefined })
-                  }}
+                  onClick={() => setConfirmarRow(row)}
                 >
                   Confirmar cobro
                 </button>
@@ -374,6 +361,17 @@ function CobrosTable({
       </table>
       {rows.length === 0 ? (
         <p className="text-body-muted px-4 py-8 text-center">No hay cobros esperados.</p>
+      ) : null}
+      {confirmarRow ? (
+        <ConfirmarCobroModal
+          row={confirmarRow}
+          cuentas={cuentas}
+          onClose={() => setConfirmarRow(null)}
+          onSubmit={async (body) => {
+            await onConfirmar(confirmarRow.id, body)
+            setConfirmarRow(null)
+          }}
+        />
       ) : null}
     </div>
   )
@@ -472,20 +470,82 @@ function AltaAgendaModal({
         <div className="mt-4 grid gap-3">
           {tab === 'pagos' ? (
             <>
-              <input required className="input-surface rounded-lg border px-3 py-2" placeholder="Concepto" value={form.concepto} onChange={(e) => setForm({ ...form, concepto: e.target.value })} />
-              <input required className="input-surface rounded-lg border px-3 py-2" placeholder="Proveedor" value={form.proveedorONombre} onChange={(e) => setForm({ ...form, proveedorONombre: e.target.value })} />
-              <select className="input-surface rounded-lg border px-3 py-2" value={form.medioPago} onChange={(e) => setForm({ ...form, medioPago: e.target.value as MedioPago })}>
-                <option value="transferencia">Transferencia</option>
-                <option value="cheque">Cheque</option>
-                <option value="efectivo">Efectivo</option>
-              </select>
+              <FinanzasFormField label="Concepto" htmlFor="agenda-alta-concepto">
+                <input
+                  id="agenda-alta-concepto"
+                  required
+                  className={finanzasInputClass}
+                  value={form.concepto}
+                  onChange={(e) => setForm({ ...form, concepto: e.target.value })}
+                />
+              </FinanzasFormField>
+              <FinanzasFormField label="Proveedor" htmlFor="agenda-alta-proveedor">
+                <input
+                  id="agenda-alta-proveedor"
+                  required
+                  className={finanzasInputClass}
+                  value={form.proveedorONombre}
+                  onChange={(e) => setForm({ ...form, proveedorONombre: e.target.value })}
+                />
+              </FinanzasFormField>
+              <FinanzasFormField label="Medio de pago previsto" htmlFor="agenda-alta-medio">
+                <select
+                  id="agenda-alta-medio"
+                  className={finanzasInputClass}
+                  value={form.medioPago}
+                  onChange={(e) => setForm({ ...form, medioPago: e.target.value as MedioPago })}
+                >
+                  <option value="transferencia">Transferencia</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="efectivo">Efectivo</option>
+                </select>
+              </FinanzasFormField>
             </>
           ) : (
-            <input required className="input-surface rounded-lg border px-3 py-2" placeholder="Cliente" value={form.clienteONombre} onChange={(e) => setForm({ ...form, clienteONombre: e.target.value })} />
+            <FinanzasFormField label="Cliente" htmlFor="agenda-alta-cliente">
+              <input
+                id="agenda-alta-cliente"
+                required
+                className={finanzasInputClass}
+                value={form.clienteONombre}
+                onChange={(e) => setForm({ ...form, clienteONombre: e.target.value })}
+              />
+            </FinanzasFormField>
           )}
-          <input required className="input-surface rounded-lg border px-3 py-2" placeholder="Monto ARS" value={form.montoPesos} onChange={(e) => setForm({ ...form, montoPesos: e.target.value })} />
-          <input required type="date" className="input-surface rounded-lg border px-3 py-2" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-          <input type="number" className="input-surface rounded-lg border px-3 py-2" placeholder="Prioridad (menor = más urgente)" value={form.prioridad} onChange={(e) => setForm({ ...form, prioridad: e.target.value })} />
+          <FinanzasFormField label="Monto" htmlFor="agenda-alta-monto">
+            <input
+              id="agenda-alta-monto"
+              required
+              className={finanzasInputClass}
+              inputMode="decimal"
+              placeholder="Ej. 150000,50 (ARS)"
+              value={form.montoPesos}
+              onChange={(e) => setForm({ ...form, montoPesos: e.target.value })}
+            />
+          </FinanzasFormField>
+          <FinanzasFormField
+            label={tab === 'pagos' ? 'Fecha de vencimiento' : 'Fecha esperada'}
+            htmlFor="agenda-alta-fecha"
+          >
+            <input
+              id="agenda-alta-fecha"
+              required
+              type="date"
+              className={finanzasInputClass}
+              value={form.fecha}
+              onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+            />
+          </FinanzasFormField>
+          <FinanzasFormField label="Prioridad" htmlFor="agenda-alta-prioridad" optional>
+            <input
+              id="agenda-alta-prioridad"
+              type="number"
+              className={finanzasInputClass}
+              value={form.prioridad}
+              onChange={(e) => setForm({ ...form, prioridad: e.target.value })}
+            />
+            <p className="text-body-muted mt-1 text-xs">Menor número = más urgente (predeterminado 10).</p>
+          </FinanzasFormField>
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm">
@@ -493,6 +553,191 @@ function AltaAgendaModal({
           </button>
           <button type="submit" disabled={saving} className="rounded-lg bg-brand-primary px-4 py-2 text-sm text-white">
             Guardar
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function MarcarPagadoModal({
+  row,
+  cuentas,
+  onClose,
+  onSubmit,
+}: {
+  row: CompromisoAgendaItem
+  cuentas: FinanzasCuenta[]
+  onClose: () => void
+  onSubmit: (body: Record<string, unknown>) => Promise<void>
+}) {
+  const [saving, setSaving] = useState(false)
+  const [medioPago, setMedioPago] = useState<MedioPago>(row.medioPago)
+  const [cuentaId, setCuentaId] = useState('')
+  const [fechaPago, setFechaPago] = useState(() => new Date().toISOString().slice(0, 10))
+
+  const needsCuenta = medioPago === 'transferencia' || medioPago === 'efectivo'
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (needsCuenta && !cuentaId) {
+      toast.error('Seleccioná la cuenta de pago')
+      return
+    }
+    setSaving(true)
+    try {
+      await onSubmit({
+        medioPago,
+        cuentaId: needsCuenta ? cuentaId : undefined,
+        fechaPago,
+      })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Cerrar" />
+      <form onSubmit={(e) => void submit(e)} className="relative w-full max-w-md rounded-2xl bg-white p-6 dark:bg-zinc-900">
+        <h2 className="text-heading text-lg font-semibold">Marcar pagado</h2>
+        <p className="text-body-muted mt-1 text-sm">
+          {row.concepto} — {row.proveedorONombre}
+        </p>
+        <div className="mt-4 grid gap-3">
+          <FinanzasFormField label="Medio de pago real" htmlFor="agenda-pagado-medio">
+            <select
+              id="agenda-pagado-medio"
+              className={finanzasInputClass}
+              value={medioPago}
+              onChange={(e) => setMedioPago(e.target.value as MedioPago)}
+            >
+              <option value="transferencia">Transferencia</option>
+              <option value="cheque">Cheque</option>
+              <option value="efectivo">Efectivo</option>
+            </select>
+          </FinanzasFormField>
+          {needsCuenta ? (
+            <FinanzasFormField label="Cuenta de pago" htmlFor="agenda-pagado-cuenta">
+              <select
+                id="agenda-pagado-cuenta"
+                required
+                className={finanzasInputClass}
+                value={cuentaId}
+                onChange={(e) => setCuentaId(e.target.value)}
+                disabled={cuentas.length === 0}
+              >
+                <option value="">
+                  {cuentas.length === 0 ? 'No hay cuentas disponibles para vincular' : 'Seleccioná la cuenta'}
+                </option>
+                {cuentas.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.bancoNombre} — {c.tipoLabel} ({c.moneda})
+                  </option>
+                ))}
+              </select>
+            </FinanzasFormField>
+          ) : null}
+          <FinanzasFormField label="Fecha de pago" htmlFor="agenda-pagado-fecha">
+            <input
+              id="agenda-pagado-fecha"
+              required
+              type="date"
+              className={finanzasInputClass}
+              value={fechaPago}
+              onChange={(e) => setFechaPago(e.target.value)}
+            />
+          </FinanzasFormField>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm">
+            Cancelar
+          </button>
+          <button type="submit" disabled={saving} className="rounded-lg bg-brand-primary px-4 py-2 text-sm text-white">
+            Confirmar pago
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function ConfirmarCobroModal({
+  row,
+  cuentas,
+  onClose,
+  onSubmit,
+}: {
+  row: CobroAgendaItem
+  cuentas: FinanzasCuenta[]
+  onClose: () => void
+  onSubmit: (body: Record<string, unknown>) => Promise<void>
+}) {
+  const [saving, setSaving] = useState(false)
+  const [cuentaId, setCuentaId] = useState('')
+  const [fechaConfirmado, setFechaConfirmado] = useState(() => new Date().toISOString().slice(0, 10))
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!cuentaId) {
+      toast.error('Seleccioná la cuenta de ingreso')
+      return
+    }
+    setSaving(true)
+    try {
+      await onSubmit({ cuentaId, fechaConfirmado })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Cerrar" />
+      <form onSubmit={(e) => void submit(e)} className="relative w-full max-w-md rounded-2xl bg-white p-6 dark:bg-zinc-900">
+        <h2 className="text-heading text-lg font-semibold">Confirmar cobro</h2>
+        <p className="text-body-muted mt-1 text-sm">{row.clienteONombre}</p>
+        <div className="mt-4 grid gap-3">
+          <FinanzasFormField label="Cuenta de ingreso" htmlFor="agenda-cobro-cuenta">
+            <select
+              id="agenda-cobro-cuenta"
+              required
+              className={finanzasInputClass}
+              value={cuentaId}
+              onChange={(e) => setCuentaId(e.target.value)}
+              disabled={cuentas.length === 0}
+            >
+              <option value="">
+                {cuentas.length === 0 ? 'No hay cuentas disponibles para vincular' : 'Seleccioná la cuenta'}
+              </option>
+              {cuentas.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.bancoNombre} — {c.tipoLabel} ({c.moneda})
+                </option>
+              ))}
+            </select>
+          </FinanzasFormField>
+          <FinanzasFormField label="Fecha confirmado" htmlFor="agenda-cobro-fecha">
+            <input
+              id="agenda-cobro-fecha"
+              required
+              type="date"
+              className={finanzasInputClass}
+              value={fechaConfirmado}
+              onChange={(e) => setFechaConfirmado(e.target.value)}
+            />
+          </FinanzasFormField>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm">
+            Cancelar
+          </button>
+          <button type="submit" disabled={saving} className="rounded-lg bg-brand-primary px-4 py-2 text-sm text-white">
+            Confirmar cobro
           </button>
         </div>
       </form>

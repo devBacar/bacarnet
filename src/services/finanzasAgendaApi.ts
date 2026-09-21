@@ -3,6 +3,9 @@ import { resolveApiUrl } from './resolveApiUrl'
 
 export type MedioPago = 'transferencia' | 'cheque' | 'efectivo'
 export type VencimientoAlerta = 'vencido' | 'proximo' | 'neutro'
+export type PrioridadUrgencia = 'alta' | 'media' | 'baja'
+export type CompromisosAgendaVista = 'pendientes' | 'pagados'
+export type CobrosAgendaVista = 'esperados' | 'cobrados'
 
 export interface ChequeVinculoResumen {
   id: string
@@ -17,13 +20,14 @@ export interface CompromisoAgendaItem {
   proveedorONombre: string
   montoCentavos: number
   fechaVencimiento: string | null
-  prioridad: number
+  urgenciaManual: PrioridadUrgencia | null
   medioPago: MedioPago
   chequeId: string | null
   cheque: ChequeVinculoResumen | null
   estado: string
   cuentaId: string | null
   fechaPago: string | null
+  updatedAt?: string | null
   alertaVencimiento: VencimientoAlerta
 }
 
@@ -32,12 +36,13 @@ export interface CobroAgendaItem {
   clienteONombre: string
   montoCentavos: number
   fechaEsperada: string | null
-  prioridad: number
+  urgenciaManual: PrioridadUrgencia | null
   chequeId: string | null
   cheque: ChequeVinculoResumen | null
   estado: string
   cuentaId: string | null
   fechaConfirmado: string | null
+  updatedAt?: string | null
   alertaVencimiento: VencimientoAlerta
 }
 
@@ -64,16 +69,18 @@ async function agendaFetch(path: string, init?: RequestInit): Promise<Response> 
   })
 }
 
-export async function fetchCompromisosAgenda(): Promise<CompromisoAgendaItem[]> {
-  const res = await agendaFetch('/compromisos')
-  if (!res.ok) throw new Error('No se pudieron cargar los pagos pendientes')
+export async function fetchCompromisosAgenda(
+  vista: CompromisosAgendaVista = 'pendientes',
+): Promise<CompromisoAgendaItem[]> {
+  const res = await agendaFetch(`/compromisos?vista=${encodeURIComponent(vista)}`)
+  if (!res.ok) throw new Error('No se pudieron cargar los compromisos')
   const data = (await res.json()) as { compromisos: CompromisoAgendaItem[] }
   return data.compromisos
 }
 
-export async function fetchCobrosAgenda(): Promise<CobroAgendaItem[]> {
-  const res = await agendaFetch('/cobros')
-  if (!res.ok) throw new Error('No se pudieron cargar los cobros esperados')
+export async function fetchCobrosAgenda(vista: CobrosAgendaVista = 'esperados'): Promise<CobroAgendaItem[]> {
+  const res = await agendaFetch(`/cobros?vista=${encodeURIComponent(vista)}`)
+  if (!res.ok) throw new Error('No se pudieron cargar los cobros')
   const data = (await res.json()) as { cobros: CobroAgendaItem[] }
   return data.cobros
 }
@@ -96,20 +103,20 @@ export async function createCobroAgenda(body: Record<string, unknown>) {
   return res.json()
 }
 
-export async function patchCompromisoPrioridad(id: string, prioridad: number) {
+export async function patchCompromisoUrgencia(id: string, urgenciaManual: PrioridadUrgencia | null) {
   const res = await agendaFetch(`/compromisos/${id}/prioridad`, {
     method: 'PATCH',
-    body: JSON.stringify({ prioridad }),
+    body: JSON.stringify({ urgenciaManual }),
   })
-  if (!res.ok) throw new Error('No se pudo actualizar la prioridad')
+  if (!res.ok) throw new Error('No se pudo actualizar la urgencia')
 }
 
-export async function patchCobroPrioridad(id: string, prioridad: number) {
+export async function patchCobroUrgencia(id: string, urgenciaManual: PrioridadUrgencia | null) {
   const res = await agendaFetch(`/cobros/${id}/prioridad`, {
     method: 'PATCH',
-    body: JSON.stringify({ prioridad }),
+    body: JSON.stringify({ urgenciaManual }),
   })
-  if (!res.ok) throw new Error('No se pudo actualizar la prioridad')
+  if (!res.ok) throw new Error('No se pudo actualizar la urgencia')
 }
 
 export async function marcarCompromisoPagado(id: string, body: Record<string, unknown>) {
@@ -136,6 +143,13 @@ export async function confirmarCobroAgenda(id: string, body: Record<string, unkn
 
 export async function fetchCompromisoHistorial(id: string): Promise<HistorialAgendaItem[]> {
   const res = await agendaFetch(`/compromisos/${id}/historial`)
+  if (!res.ok) return []
+  const data = (await res.json()) as { historial: HistorialAgendaItem[] }
+  return data.historial
+}
+
+export async function fetchCobroHistorial(id: string): Promise<HistorialAgendaItem[]> {
+  const res = await agendaFetch(`/cobros/${id}/historial`)
   if (!res.ok) return []
   const data = (await res.json()) as { historial: HistorialAgendaItem[] }
   return data.historial

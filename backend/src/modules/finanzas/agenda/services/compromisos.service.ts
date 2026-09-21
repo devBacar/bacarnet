@@ -1,6 +1,16 @@
 import { randomUUID } from 'node:crypto'
 import { buildMarcarPagadoHistorial } from '../domain/agenda.historial.js'
 import { computeVencimientoAlerta } from '../domain/vencimiento.alert.js'
+import {
+  compareAgendaByUrgenciaThenFecha,
+  parsePrioridadUrgencia,
+  type PrioridadUrgencia,
+} from '../domain/agenda.prioridad.js'
+import {
+  filterCompromisosByVista,
+  type CompromisosAgendaVista,
+} from '../domain/agenda.listFilters.js'
+import { agendaTimestampToDate, agendaTimestampToIso } from '../domain/agendaTimestamps.js'
 import type { CompromisoPagoDocument, MedioPago } from '../domain/agenda.types.js'
 import {
   appendCompromisoHistorial,
@@ -10,23 +20,14 @@ import {
   listCompromisoHistorial,
   parseDateInput,
   timestampFromDate,
-  updateCompromisoPrioridad,
+  updateCompromisoUrgencia,
 } from './agenda.repository.js'
 
-function tsToDate(value: unknown): Date | null {
-  if (!value || typeof value !== 'object') return null
-  const maybe = value as { toDate?: () => Date }
-  return typeof maybe.toDate === 'function' ? maybe.toDate() : null
-}
-
-function tsToIso(value: unknown): string | null {
-  const d = tsToDate(value)
-  return d ? d.toISOString() : null
-}
+export type { CompromisosAgendaVista } from '../domain/agenda.listFilters.js'
 
 
 export async function serializeCompromiso(id: string, data: CompromisoPagoDocument) {
-  const fechaVenc = tsToDate(data.fechaVencimiento)
+  const fechaVenc = agendaTimestampToDate(data.fechaVencimiento)
   const alertaVencimiento = fechaVenc
     ? computeVencimientoAlerta({
         fechaVencimiento: fechaVenc,
@@ -41,37 +42,53 @@ export async function serializeCompromiso(id: string, data: CompromisoPagoDocume
     concepto: data.concepto,
     proveedorONombre: data.proveedorONombre,
     montoCentavos: data.montoCentavos,
-    fechaVencimiento: tsToIso(data.fechaVencimiento),
-    prioridad: data.prioridad ?? 0,
+    fechaVencimiento: agendaTimestampToIso(data.fechaVencimiento),
+    urgenciaManual: parsePrioridadUrgencia(data.urgenciaManual) ?? null,
     medioPago: data.medioPago,
     chequeId: data.chequeId,
     cheque,
     estado: data.estado,
     cuentaId: data.cuentaId ?? null,
-    fechaPago: tsToIso(data.fechaPago),
+    fechaPago: agendaTimestampToIso(data.fechaPago),
     pagadoPor: data.pagadoPor,
     alertaVencimiento,
-    createdAt: tsToIso(data.createdAt),
-    updatedAt: tsToIso(data.updatedAt),
+    createdAt: agendaTimestampToIso(data.createdAt),
+    updatedAt: agendaTimestampToIso(data.updatedAt),
   }
 }
 
-export async function listCompromisosAgenda() {
+export async function listCompromisosAgenda(vista: CompromisosAgendaVista = 'pendientes') {
   const rows = await listAllCompromisos()
-  const pendientes = rows.filter(
-    ({ data }) => data.estado === 'pendiente' || data.estado === 'vencido',
-  )
 
-  pendientes.sort((a, b) => {
-    const pa = a.data.prioridad ?? 0
-    const pb = b.data.prioridad ?? 0
-    if (pa !== pb) return pa - pb
-    const da = tsToDate(a.data.fechaVencimiento)?.getTime() ?? 0
-    const db = tsToDate(b.data.fechaVencimiento)?.getTime() ?? 0
-    return da - db
+  const filtered = filterCompromisosByVista(rows, vista)
+
+  if (vista === 'pagados') {
+    filtered.sort((a, b) => {
+      const da =
+        agendaTimestampToDate(a.data.fechaPago)?.getTime() ??
+        agendaTimestampToDate(a.data.updatedAt)?.getTime() ??
+        0
+      const db =
+        agendaTimestampToDate(b.data.fechaPago)?.getTime() ??
+        agendaTimestampToDate(b.data.updatedAt)?.getTime() ??
+        0
+      return db - da
+    })
+    return Promise.all(filtered.map(({ id, data }) => serializeCompromiso(id, data)))
+  }
+
+  filtered.sort((a, b) => {
+    const da = agendaTimestampToDate(a.data.fechaVencimiento)?.getTime() ?? 0
+    const db = agendaTimestampToDate(b.data.fechaVencimiento)?.getTime() ?? 0
+    return compareAgendaByUrgenciaThenFecha(
+      parsePrioridadUrgencia(a.data.urgenciaManual),
+      da,
+      parsePrioridadUrgencia(b.data.urgenciaManual),
+      db,
+    )
   })
 
-  return Promise.all(pendientes.map(({ id, data }) => serializeCompromiso(id, data)))
+  return Promise.all(filtered.map(({ id, data }) => serializeCompromiso(id, data)))
 }
 
 export async function createCompromisoAgenda(input: {
@@ -83,7 +100,10 @@ export async function createCompromisoAgenda(input: {
     typeof input.body.proveedorONombre === 'string' ? input.body.proveedorONombre.trim() : ''
   const montoCentavos = input.body.montoCentavos
   const fechaVencimiento = parseDateInput(input.body.fechaVencimiento)
-  const prioridad = typeof input.body.prioridad === 'number' ? input.body.prioridad : 0
+  const urgenciaManual =
+    input.body.urgenciaManual === null || input.body.urgenciaManual === ''
+      ? null
+      : parsePrioridadUrgencia(input.body.urgenciaManual)
   const medioRaw = input.body.medioPago
   const medioPago: MedioPago =
     medioRaw === 'transferencia' || medioRaw === 'efectivo' || medioRaw === 'cheque'
@@ -112,7 +132,8 @@ export async function createCompromisoAgenda(input: {
       proveedorONombre,
       montoCentavos,
       fechaVencimiento: timestampFromDate(fechaVencimiento),
-      prioridad,
+      prioridad: 0,
+      urgenciaManual,
       medioPago: chequeId ? 'cheque' : medioPago,
       chequeId,
       estado: 'pendiente',
@@ -125,9 +146,11 @@ export async function createCompromisoAgenda(input: {
   return serializeCompromiso(id, created)
 }
 
-export async function patchCompromisoPrioridad(compromisoId: string, prioridad: number) {
-  if (!Number.isFinite(prioridad)) throw new Error('prioridad inválida')
-  await updateCompromisoPrioridad(compromisoId, Math.round(prioridad))
+export async function patchCompromisoUrgencia(
+  compromisoId: string,
+  urgenciaManual: PrioridadUrgencia | null,
+) {
+  await updateCompromisoUrgencia(compromisoId, urgenciaManual)
   const doc = await getCompromisoDocument(compromisoId)
   if (!doc) throw new Error('Compromiso no encontrado')
   return serializeCompromiso(compromisoId, doc)
@@ -188,7 +211,7 @@ export async function getCompromisoHistorialApi(compromisoId: string) {
     id,
     estadoAnterior: data.estadoAnterior,
     estadoNuevo: data.estadoNuevo,
-    fecha: tsToIso(data.fecha),
+    fecha: agendaTimestampToIso(data.fecha),
     usuario: data.usuario,
     nota: data.nota,
   }))

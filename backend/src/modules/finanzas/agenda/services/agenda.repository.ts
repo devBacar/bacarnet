@@ -1,6 +1,7 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { buildAgendaHistorialEntry } from '../domain/agenda.historial.js'
+import type { PrioridadUrgencia } from '../domain/agenda.prioridad.js'
 import type {
   CobroEsperadoDocument,
   CompromisoPagoDocument,
@@ -24,16 +25,16 @@ export function timestampFromDate(date: Date): Timestamp {
 
 function defaultCompromisoFields(): Pick<
   CompromisoPagoDocument,
-  'cuentaId' | 'fechaPago' | 'pagadoPor'
+  'cuentaId' | 'fechaPago' | 'pagadoPor' | 'prioridad' | 'urgenciaManual'
 > {
-  return { cuentaId: null, fechaPago: null, pagadoPor: null }
+  return { cuentaId: null, fechaPago: null, pagadoPor: null, prioridad: 0, urgenciaManual: null }
 }
 
 function defaultCobroFields(): Pick<
   CobroEsperadoDocument,
-  'cuentaId' | 'fechaConfirmado' | 'confirmadoPor' | 'prioridad'
+  'cuentaId' | 'fechaConfirmado' | 'confirmadoPor' | 'prioridad' | 'urgenciaManual'
 > {
-  return { cuentaId: null, fechaConfirmado: null, confirmadoPor: null, prioridad: 0 }
+  return { cuentaId: null, fechaConfirmado: null, confirmadoPor: null, prioridad: 0, urgenciaManual: null }
 }
 
 export async function appendCompromisoHistorial(input: {
@@ -123,8 +124,8 @@ export async function createCobroWithHistorial(input: {
   id: string
   doc: Omit<
     CobroEsperadoDocument,
-    'createdAt' | 'updatedAt' | 'cuentaId' | 'fechaConfirmado' | 'confirmadoPor' | 'prioridad'
-  > & { prioridad?: number }
+    'createdAt' | 'updatedAt' | 'cuentaId' | 'fechaConfirmado' | 'confirmadoPor'
+  >
   usuario: string
   nota: string | null
 }): Promise<void> {
@@ -144,7 +145,6 @@ export async function createCobroWithHistorial(input: {
     tx.set(ref, {
       ...defaultCobroFields(),
       ...input.doc,
-      prioridad: input.doc.prioridad ?? 0,
       createdAt: now,
       updatedAt: now,
     })
@@ -198,16 +198,22 @@ export async function listCobroHistorial(cobroId: string) {
   return snap.docs.map((d) => ({ id: d.id, data: d.data() as HistorialEstadoDocument }))
 }
 
-export async function updateCompromisoPrioridad(compromisoId: string, prioridad: number): Promise<void> {
+export async function updateCompromisoUrgencia(
+  compromisoId: string,
+  urgenciaManual: PrioridadUrgencia | null,
+): Promise<void> {
   await adminDb().collection(COMPROMISOS_COLLECTION).doc(compromisoId).update({
-    prioridad,
+    urgenciaManual,
     updatedAt: FieldValue.serverTimestamp(),
   })
 }
 
-export async function updateCobroPrioridad(cobroId: string, prioridad: number): Promise<void> {
+export async function updateCobroUrgencia(
+  cobroId: string,
+  urgenciaManual: PrioridadUrgencia | null,
+): Promise<void> {
   await adminDb().collection(COBROS_COLLECTION).doc(cobroId).update({
-    prioridad,
+    urgenciaManual,
     updatedAt: FieldValue.serverTimestamp(),
   })
 }

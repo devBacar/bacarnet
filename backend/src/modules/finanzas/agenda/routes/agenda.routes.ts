@@ -1,27 +1,29 @@
 import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { parsePrioridadUrgencia } from '../domain/agenda.prioridad.js'
 import {
   confirmarCobro,
   createCobroAgenda,
   getCobroHistorialApi,
   listCobrosAgenda,
-  patchCobroPrioridad,
+  patchCobroUrgencia,
 } from '../services/cobros.service.js'
 import {
   createCompromisoAgenda,
   getCompromisoHistorialApi,
   listCompromisosAgenda,
   marcarCompromisoPagado,
-  patchCompromisoPrioridad,
+  patchCompromisoUrgencia,
 } from '../services/compromisos.service.js'
 
 export const finanzasAgendaRouter = Router()
 
 finanzasAgendaRouter.use(requireWorkspaceUser, requireViewFinanzas)
 
-finanzasAgendaRouter.get('/compromisos', async (_req, res) => {
+finanzasAgendaRouter.get('/compromisos', async (req, res) => {
   try {
-    const compromisos = await listCompromisosAgenda()
+    const vista = req.query.vista === 'pagados' ? 'pagados' : 'pendientes'
+    const compromisos = await listCompromisosAgenda(vista)
     res.json({ compromisos })
   } catch (err) {
     console.error('[finanzas/agenda] list compromisos', err)
@@ -58,15 +60,23 @@ finanzasAgendaRouter.get('/compromisos/:id/historial', async (req, res) => {
 
 finanzasAgendaRouter.patch('/compromisos/:id/prioridad', async (req, res) => {
   try {
-    const prioridad = (req.body as Record<string, unknown>).prioridad
-    if (typeof prioridad !== 'number') {
-      res.status(400).json({ error: 'prioridad inválida' })
+    const body = req.body as Record<string, unknown>
+    if (!('urgenciaManual' in body)) {
+      res.status(400).json({ error: 'urgenciaManual requerida' })
       return
     }
-    const compromiso = await patchCompromisoPrioridad(req.params.id, prioridad)
+    const urgenciaManual =
+      body.urgenciaManual === null || body.urgenciaManual === ''
+        ? null
+        : parsePrioridadUrgencia(body.urgenciaManual)
+    if (body.urgenciaManual !== null && body.urgenciaManual !== '' && urgenciaManual === null) {
+      res.status(400).json({ error: 'urgenciaManual inválida' })
+      return
+    }
+    const compromiso = await patchCompromisoUrgencia(req.params.id, urgenciaManual)
     res.json({ compromiso })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'No se pudo actualizar prioridad'
+    const message = err instanceof Error ? err.message : 'No se pudo actualizar urgencia'
     res.status(400).json({ error: message })
   }
 })
@@ -85,9 +95,10 @@ finanzasAgendaRouter.post('/compromisos/:id/marcar-pagado', async (req, res) => 
   }
 })
 
-finanzasAgendaRouter.get('/cobros', async (_req, res) => {
+finanzasAgendaRouter.get('/cobros', async (req, res) => {
   try {
-    const cobros = await listCobrosAgenda()
+    const vista = req.query.vista === 'cobrados' ? 'cobrados' : 'esperados'
+    const cobros = await listCobrosAgenda(vista)
     res.json({ cobros })
   } catch (err) {
     console.error('[finanzas/agenda] list cobros', err)
@@ -124,15 +135,23 @@ finanzasAgendaRouter.get('/cobros/:id/historial', async (req, res) => {
 
 finanzasAgendaRouter.patch('/cobros/:id/prioridad', async (req, res) => {
   try {
-    const prioridad = (req.body as Record<string, unknown>).prioridad
-    if (typeof prioridad !== 'number') {
-      res.status(400).json({ error: 'prioridad inválida' })
+    const body = req.body as Record<string, unknown>
+    if (!('urgenciaManual' in body)) {
+      res.status(400).json({ error: 'urgenciaManual requerida' })
       return
     }
-    const cobro = await patchCobroPrioridad(req.params.id, prioridad)
+    const urgenciaManual =
+      body.urgenciaManual === null || body.urgenciaManual === ''
+        ? null
+        : parsePrioridadUrgencia(body.urgenciaManual)
+    if (body.urgenciaManual !== null && body.urgenciaManual !== '' && urgenciaManual === null) {
+      res.status(400).json({ error: 'urgenciaManual inválida' })
+      return
+    }
+    const cobro = await patchCobroUrgencia(req.params.id, urgenciaManual)
     res.json({ cobro })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'No se pudo actualizar prioridad'
+    const message = err instanceof Error ? err.message : 'No se pudo actualizar urgencia'
     res.status(400).json({ error: message })
   }
 })

@@ -13,9 +13,9 @@ export interface FinanzasNavItem {
 export const FINANZAS_NAV_ITEMS: FinanzasNavItem[] = [
   { to: '/finanzas/cuentas', label: 'Saldos', enabled: true },
   { to: '/finanzas/agenda', label: 'Agenda', enabled: true },
+  { to: '/finanzas/cajas', label: 'Cajas', enabled: true },
   // Fases futuras — habilitar cuando exista la ruta:
   // { to: '/finanzas/creditos', label: 'Créditos', enabled: false },
-  // { to: '/finanzas/caja-chica', label: 'Caja chica', enabled: false },
   // { to: '/finanzas/transferencias', label: 'Transferencias', enabled: false },
 ]
 

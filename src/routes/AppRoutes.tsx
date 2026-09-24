@@ -31,7 +31,9 @@ import {
   SoporteTi,
   FinanzasCuentasPage,
   FinanzasAgendaPage,
+  FinanzasCajasPage,
   FinanzasLayout,
+  FinanzasIndexRedirect,
 } from '../pages'
 import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
 import { ProtectedRoute } from './ProtectedRoute'
@@ -42,6 +44,8 @@ import { CorporateAccountRoute } from './CorporateAccountRoute'
 import { RagPilotRoute } from './RagPilotRoute'
 import { SuperAdminRoute } from './SuperAdminRoute'
 import { ModulePermissionRoute } from './ModulePermissionRoute'
+import { FinanzasModuleGate } from './FinanzasModuleGate'
+import { FinanzasFullSectionsGate } from './FinanzasFullSectionsGate'
 
 export function AppRoutes() {
   return (
@@ -73,11 +77,15 @@ export function AppRoutes() {
             <Route element={<ModulePermissionRoute permission="view_directory" module="directoryEnabled" />}>
               <Route path="directorio" element={<Directory />} />
             </Route>
-            <Route element={<ModulePermissionRoute permission="view_finanzas" module="finanzasEnabled" />}>
+            <Route element={<FinanzasModuleGate />}>
               <Route path="finanzas" element={<FinanzasLayout />}>
-                <Route index element={<Navigate to="cuentas" replace />} />
-                <Route path="cuentas" element={<FinanzasCuentasPage />} />
-                <Route path="agenda" element={<FinanzasAgendaPage />} />
+                <Route index element={<FinanzasIndexRedirect />} />
+                <Route element={<FinanzasFullSectionsGate />}>
+                  <Route path="cuentas" element={<FinanzasCuentasPage />} />
+                  <Route path="agenda" element={<FinanzasAgendaPage />} />
+                </Route>
+                <Route path="cajas" element={<FinanzasCajasPage />} />
+                <Route path="cajachica" element={<Navigate to="/finanzas/cajas" replace />} />
               </Route>
             </Route>
             <Route element={<ModulePermissionRoute permission="view_drive" module="resourcesEnabled" />}>

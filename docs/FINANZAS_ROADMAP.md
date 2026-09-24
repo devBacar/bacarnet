@@ -18,7 +18,7 @@ Vista rápida del módulo `/finanzas/*` para priorizar ramas `feature/*` / `fix/
 | **Cheques** | `/finanzas/cheques`, `/api/finanzas/cheques/*` | **Hecho** | Flujos **recibido** y **emitido** separados; sub-nav Recibidos \| Emitidos. |
 | **Agenda** | `/finanzas/agenda`, `/api/finanzas/agenda/*` | **Hecho** | Compromisos y cobros; pendientes de UX de formularios según `FINANZAS_MODULE.md`. |
 | **Créditos** | — | **No iniciado** | Próxima fase grande candidata; ver spec. |
-| **Caja chica** | — | **No iniciado** | Ver spec. |
+| **Cajas** | `/finanzas/cajas`, `/api/finanzas/cajas` | **En progreso** | [FINANZAS_FASE4_CAJAS.md](./FINANZAS_FASE4_CAJAS.md) — principal + chicas, fondeo, cierre. |
 | **Transferencias** | — | **No iniciado** | Ver spec; suele depender de cuentas/agenda estables. |
 
 ## Cómo sumar una sección nueva

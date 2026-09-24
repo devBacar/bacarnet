@@ -65,6 +65,8 @@ export interface UserPermissions {
   rag_assistant: boolean
   /** Módulo Finanzas (saldos bancarios). */
   view_finanzas: boolean
+  /** Líder de cajas (crear cajas, aprobar cierres). */
+  manage_finanzas_caja: boolean
 }
 
 export interface PersonalLink {
@@ -166,6 +168,7 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
   super_admin: false,
   rag_assistant: false,
   view_finanzas: false,
+  manage_finanzas_caja: false,
 }
 
 export const SUPER_ADMIN_EMAILS = [
@@ -184,6 +187,7 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   super_admin: true,
   rag_assistant: true,
   view_finanzas: true,
+  manage_finanzas_caja: true,
 }
 
 export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {

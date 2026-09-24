@@ -44,6 +44,7 @@ export const SUPER_ADMIN_PERMISSIONS = {
   super_admin: true,
   rag_assistant: true,
   view_finanzas: true,
+  manage_finanzas_caja: true,
 } as const
 
 export type BootstrapSource = 'register' | 'google'

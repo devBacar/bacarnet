@@ -2,6 +2,7 @@ import type { Timestamp } from 'firebase-admin/firestore'
 
 export type CajaTipo = 'principal' | 'chica'
 export type CajaMoneda = 'ARS' | 'USD'
+export type CajaEstado = 'activa' | 'inactiva'
 
 export type CajaMovimientoTipo =
   | 'ingreso'
@@ -18,6 +19,8 @@ export interface CajaDocument {
   cajaPadreId: string | null
   responsableUid: string
   saldoActualCentavos: number
+  /** Ausente en docs viejos → tratar como 'activa'. */
+  estado?: CajaEstado
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string

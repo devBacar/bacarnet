@@ -42,7 +42,10 @@ export async function countPrincipalesByMoneda(moneda: CajaMoneda): Promise<numb
     .where('tipo', '==', 'principal')
     .where('moneda', '==', moneda)
     .get()
-  return snap.size
+  return snap.docs.filter((doc) => {
+    const estado = (doc.data() as CajaDocument).estado
+    return estado !== 'inactiva'
+  }).length
 }
 
 export async function createCajaDoc(input: {
@@ -52,7 +55,6 @@ export async function createCajaDoc(input: {
   moneda: CajaMoneda
   cajaPadreId: string | null
   responsableUid: string
-  saldoInicialCentavos: number
   createdBy: string
 }): Promise<void> {
   const ref = adminDb().collection(CAJAS_COLLECTION).doc(input.id)
@@ -66,6 +68,7 @@ export async function createCajaDoc(input: {
     const padre = await getCajaDoc(input.cajaPadreId)
     if (!padre) throw new Error('Caja principal padre no encontrada')
     if (padre.tipo !== 'principal') throw new Error('cajaPadreId debe ser una caja principal')
+    if (padre.estado === 'inactiva') throw new Error('La caja principal padre está inactiva')
     if (padre.moneda !== input.moneda) {
       throw new Error('La caja chica debe usar la misma moneda que su principal')
     }
@@ -81,7 +84,8 @@ export async function createCajaDoc(input: {
       moneda: input.moneda,
       cajaPadreId: input.tipo === 'principal' ? null : input.cajaPadreId,
       responsableUid: input.responsableUid,
-      saldoActualCentavos: input.saldoInicialCentavos,
+      saldoActualCentavos: 0,
+      estado: 'activa',
       createdAt: now,
       updatedAt: now,
       createdBy: input.createdBy,
@@ -95,6 +99,38 @@ export async function createCajaDoc(input: {
       registradoPor: input.createdBy,
     })
   })
+}
+
+export async function softDeleteCajaDoc(cajaId: string): Promise<void> {
+  const ref = adminDb().collection(CAJAS_COLLECTION).doc(cajaId)
+  await ref.update({
+    estado: 'inactiva',
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+}
+
+export async function cajaHasCierrePendienteAprobacion(cajaId: string): Promise<boolean> {
+  const snap = await adminDb()
+    .collection(CIERRES_COLLECTION)
+    .where('cajaId', '==', cajaId)
+    .where('estado', '==', 'cerrada')
+    .limit(1)
+    .get()
+  return !snap.empty
+}
+
+export async function listCierresPendientesDocs(): Promise<
+  Array<{ id: string; data: CajaCierreDocument }>
+> {
+  const snap = await adminDb()
+    .collection(CIERRES_COLLECTION)
+    .where('estado', '==', 'cerrada')
+    .get()
+  const rows = snap.docs.map((doc) => ({ id: doc.id, data: doc.data() as CajaCierreDocument }))
+  rows.sort(
+    (a, b) => (b.data.periodoHasta?.toMillis?.() ?? 0) - (a.data.periodoHasta?.toMillis?.() ?? 0),
+  )
+  return rows
 }
 
 export async function reassignCajaResponsable(input: {
@@ -201,6 +237,9 @@ export async function ejecutarFondeoAtomico(input: {
 
     if (principal.tipo !== 'principal' || chica.tipo !== 'chica') {
       throw new Error('Fondeo solo de principal hacia chica')
+    }
+    if (principal.estado === 'inactiva' || chica.estado === 'inactiva') {
+      throw new Error('No se puede fondear una caja inactiva')
     }
     if (chica.cajaPadreId !== input.principalId) {
       throw new Error('La caja chica no depende de esa principal')

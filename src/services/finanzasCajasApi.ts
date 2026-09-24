@@ -12,6 +12,8 @@ export interface CajaItem {
   cajaPadreId: string | null
   responsableUid: string
   saldoActualCentavos: number
+  estado?: 'activa' | 'inactiva'
+  bloqueadaPorCierre?: boolean
 }
 
 export type CajaMovimientoTipo =
@@ -46,6 +48,9 @@ export interface CajaCierreItem {
   diferencia: number | null
   estado: 'borrador' | 'cerrada' | 'aprobada'
   aprobadaPorUid: string | null
+  cajaNombre?: string | null
+  cajaMoneda?: CajaMoneda | null
+  cajaPadreId?: string | null
 }
 
 async function cajasFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -82,7 +87,6 @@ export async function createCaja(body: {
   tipo: CajaTipo
   moneda: CajaMoneda
   responsableUid: string
-  saldoInicialCentavos: number
   cajaPadreId?: string | null
 }): Promise<CajaItem> {
   const res = await cajasFetch('/', {
@@ -95,6 +99,26 @@ export async function createCaja(body: {
   }
   const data = (await res.json()) as { caja: CajaItem }
   return data.caja
+}
+
+export async function deleteCaja(cajaId: string): Promise<CajaItem> {
+  const res = await cajasFetch(`/${cajaId}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string }
+    throw new Error(err.error ?? 'No se pudo eliminar la caja')
+  }
+  const data = (await res.json()) as { caja: CajaItem }
+  return data.caja
+}
+
+export async function fetchCierresPendientes(): Promise<CajaCierreItem[]> {
+  const res = await cajasFetch('/cierres-pendientes')
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string }
+    throw new Error(err.error ?? 'No se pudieron cargar los cierres pendientes')
+  }
+  const data = (await res.json()) as { cierres: CajaCierreItem[] }
+  return data.cierres
 }
 
 export async function fondearCaja(

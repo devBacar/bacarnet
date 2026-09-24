@@ -11,6 +11,7 @@ import {
   isFinanzasCajaLider,
 } from './caja.access.js'
 import {
+  cajaHasCierrePendienteAprobacion,
   createCajaDoc,
   createMovimientoWithSaldo,
   ejecutarFondeoAtomico,
@@ -18,10 +19,12 @@ import {
   getCierreDoc,
   listCajasDocs,
   listCierresForCaja,
+  listCierresPendientesDocs,
   listMovimientosForCaja,
   parseDateInput,
   reassignCajaResponsable,
   saveCierreDoc,
+  softDeleteCajaDoc,
   timestampFromDate,
   updateCierreDoc,
   userIsResponsableOfAnyCaja,
@@ -33,7 +36,15 @@ function tsToIso(ts: { toDate?: () => Date } | null | undefined): string | null 
   return ts.toDate().toISOString()
 }
 
+function isCajaActiva(doc: CajaDocument): boolean {
+  return doc.estado !== 'inactiva'
+}
+
 async function serializeCaja(id: string, doc: CajaDocument) {
+  const bloqueadaPorCierre =
+    doc.tipo === 'chica' && isCajaActiva(doc)
+      ? await cajaHasCierrePendienteAprobacion(id)
+      : false
   return {
     id,
     nombre: doc.nombre,
@@ -42,6 +53,8 @@ async function serializeCaja(id: string, doc: CajaDocument) {
     cajaPadreId: doc.cajaPadreId,
     responsableUid: doc.responsableUid,
     saldoActualCentavos: doc.saldoActualCentavos,
+    estado: doc.estado === 'inactiva' ? 'inactiva' : 'activa',
+    bloqueadaPorCierre,
     createdAt: tsToIso(doc.createdAt),
     updatedAt: tsToIso(doc.updatedAt),
   }
@@ -95,9 +108,10 @@ export const assertCajaChicaModuleAccess = assertCajasModuleAccess
 
 export async function listCajasForUser(user: AuthedUser) {
   const all = await listCajasDocs()
+  const activas = all.filter((c) => isCajaActiva(c.data))
   const visible = canBrowseAllCajas(user)
-    ? all
-    : all.filter((c) => c.data.responsableUid === user.uid && c.data.tipo === 'chica')
+    ? activas
+    : activas.filter((c) => c.data.responsableUid === user.uid && c.data.tipo === 'chica')
   return Promise.all(visible.map(({ id, data }) => serializeCaja(id, data)))
 }
 
@@ -116,17 +130,9 @@ export async function createCajaForLider(user: AuthedUser, body: Record<string, 
     typeof body.cajaPadreId === 'string' && body.cajaPadreId.trim()
       ? body.cajaPadreId.trim()
       : null
-  const saldoInicialCentavos = body.saldoInicialCentavos
 
   if (!nombre || !responsableUid || !tipo) {
     throw new Error('Nombre, tipo y responsable son obligatorios')
-  }
-  if (
-    typeof saldoInicialCentavos !== 'number' ||
-    !Number.isInteger(saldoInicialCentavos) ||
-    saldoInicialCentavos < 0
-  ) {
-    throw new Error('Saldo inicial inválido')
   }
 
   const id = randomUUID()
@@ -137,12 +143,33 @@ export async function createCajaForLider(user: AuthedUser, body: Record<string, 
     moneda,
     cajaPadreId: tipo === 'chica' ? cajaPadreId : null,
     responsableUid,
-    saldoInicialCentavos,
     createdBy: user.uid,
   })
   const doc = await getCajaDoc(id)
   if (!doc) throw new Error('No se pudo leer la caja creada')
   return serializeCaja(id, doc)
+}
+
+export async function softDeleteCaja(user: AuthedUser, cajaId: string) {
+  if (!isFinanzasCajaLider(user)) {
+    throw new Error('Solo el líder de finanzas puede eliminar cajas')
+  }
+  const caja = await getCajaDoc(cajaId)
+  if (!caja) throw new Error('Caja no encontrada')
+  if (!isCajaActiva(caja)) throw new Error('La caja ya está inactiva')
+  if (caja.tipo === 'principal') {
+    throw new Error('Las cajas principales no se pueden eliminar')
+  }
+  if (caja.saldoActualCentavos !== 0) {
+    throw new Error('Solo se puede eliminar una caja con saldo $0')
+  }
+  if (await cajaHasCierrePendienteAprobacion(cajaId)) {
+    throw new Error('No se puede eliminar: hay un cierre pendiente de aprobación')
+  }
+  await softDeleteCajaDoc(cajaId)
+  const updated = await getCajaDoc(cajaId)
+  if (!updated) throw new Error('Caja no encontrada')
+  return serializeCaja(cajaId, updated)
 }
 
 export async function changeCajaResponsable(
@@ -198,6 +225,13 @@ export async function fondearCajaChica(
     throw new Error('Monto inválido')
   }
 
+  const chica = await getCajaDoc(cajaChicaId)
+  if (!chica) throw new Error('Caja chica no encontrada')
+  if (!isCajaActiva(chica)) throw new Error('No se puede fondear una caja inactiva')
+  if (await cajaHasCierrePendienteAprobacion(cajaChicaId)) {
+    throw new Error('La caja está cerrada esperando aprobación; no se puede fondear')
+  }
+
   const fondeoVinculadoId = randomUUID()
   await ejecutarFondeoAtomico({
     principalId,
@@ -232,11 +266,15 @@ export async function registerMovimiento(input: {
 }) {
   const caja = await getCajaDoc(input.cajaId)
   if (!caja) throw new Error('Caja no encontrada')
+  if (!isCajaActiva(caja)) throw new Error('La caja está inactiva')
   if (!canAccessCaja(input.user, caja.responsableUid)) {
     throw new Error('No tenés acceso a esta caja')
   }
+  if (caja.tipo === 'chica' && (await cajaHasCierrePendienteAprobacion(input.cajaId))) {
+    throw new Error('La caja está cerrada esperando aprobación; no se pueden cargar movimientos')
+  }
   if (caja.tipo === 'principal' && !isFinanzasCajaLider(input.user)) {
-    throw new Error('Los movimientos en caja principal solo se registran vía fondeo')
+    throw new Error('Los movimientos en caja principal solo los registra el líder de finanzas')
   }
   if (
     caja.tipo === 'chica' &&
@@ -249,6 +287,12 @@ export async function registerMovimiento(input: {
   const tipoRaw = input.body.tipo
   const tipo: CajaMovimientoTipo =
     tipoRaw === 'ingreso' || tipoRaw === 'egreso' ? tipoRaw : 'egreso'
+
+  if (caja.tipo === 'chica' && tipo === 'ingreso') {
+    throw new Error(
+      'Una caja chica no admite ingresos libres; el dinero entra solo por fondeo desde la principal',
+    )
+  }
 
   const concepto = typeof input.body.concepto === 'string' ? input.body.concepto.trim() : ''
   const montoRaw = input.body.montoCentavos
@@ -371,14 +415,37 @@ export async function listCierres(user: AuthedUser, cajaId: string) {
   return rows.map(({ id, data }) => serializeCierre(id, data))
 }
 
+export async function listCierresPendientes(user: AuthedUser) {
+  if (!isFinanzasCajaLider(user)) {
+    throw new Error('Solo el líder de finanzas puede ver cierres pendientes')
+  }
+  const rows = await listCierresPendientesDocs()
+  const enriched = await Promise.all(
+    rows.map(async ({ id, data }) => {
+      const caja = await getCajaDoc(data.cajaId)
+      return {
+        ...serializeCierre(id, data),
+        cajaNombre: caja?.nombre ?? null,
+        cajaMoneda: caja?.moneda ?? null,
+        cajaPadreId: caja?.cajaPadreId ?? null,
+      }
+    }),
+  )
+  return enriched
+}
+
 export async function cerrarCaja(user: AuthedUser, cajaId: string, body: Record<string, unknown>) {
   const caja = await getCajaDoc(cajaId)
   if (!caja) throw new Error('Caja no encontrada')
+  if (!isCajaActiva(caja)) throw new Error('La caja está inactiva')
   if (caja.tipo !== 'chica') {
     throw new Error('Solo las cajas chicas tienen cierre de caja')
   }
   if (!canAccessCaja(user, caja.responsableUid)) {
     throw new Error('No tenés acceso a esta caja')
+  }
+  if (await cajaHasCierrePendienteAprobacion(cajaId)) {
+    throw new Error('Ya hay un cierre pendiente de aprobación para esta caja')
   }
 
   const periodoDesde = parseDateInput(body.periodoDesde)

@@ -1,6 +1,7 @@
-import { Camera, PlusCircle, Wallet } from 'lucide-react'
+import { Camera, Wallet } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { UserSinglePicker } from '../../components/access/UserSinglePicker'
 import {
   FinanzasFormField,
   finanzasInputClass,
@@ -12,8 +13,10 @@ import {
   changeCajaResponsable,
   cerrarCajaChica,
   createCaja,
+  deleteCaja,
   fetchCajas,
   fetchCierresCaja,
+  fetchCierresPendientes,
   fetchMovimientosCaja,
   fondearCaja,
   registrarMovimientoCaja,
@@ -24,7 +27,7 @@ import {
   type CajaMovimientoTipo,
   type CajaTipo,
 } from '../../services/finanzasCajasApi'
-import { hasFinanzasAccess } from '../../services/userService'
+import { getAllUsers, hasFinanzasAccess, type UserProfile } from '../../services/userService'
 
 function formatFecha(iso: string | null): string {
   if (!iso) return '—'
@@ -61,11 +64,12 @@ export function FinanzasCajasPage() {
   const [movimientos, setMovimientos] = useState<CajaMovimientoItem[]>([])
   const [cierres, setCierres] = useState<CajaCierreItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [modal, setModal] = useState<'ingreso' | 'egreso' | null>(null)
+  const [modal, setModal] = useState<'egreso' | null>(null)
   const [adminOpen, setAdminOpen] = useState(false)
 
   const caja = useMemo(() => cajas.find((c) => c.id === cajaId) ?? null, [cajas, cajaId])
   const esChicaOperativa = caja?.tipo === 'chica'
+  const cajaBloqueada = Boolean(caja?.bloqueadaPorCierre)
 
   const reload = useCallback(async () => {
     setLoading(true)
@@ -172,8 +176,24 @@ export function FinanzasCajasPage() {
         ) : null}
       </div>
 
-      {esChicaOperativa ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {esChicaOperativa && cajaBloqueada ? (
+        <div
+          className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-4 text-center dark:border-amber-700 dark:bg-amber-950/40"
+          role="status"
+        >
+          <p className="text-base font-semibold text-amber-950 dark:text-amber-100">
+            Esta caja está cerrada, esperando aprobación
+          </p>
+          <p className="text-body-muted mt-1 text-sm">
+            No se pueden anotar gastos hasta que Finanzas apruebe el cierre.
+          </p>
+        </div>
+      ) : null}
+
+      {esLider ? <CierresPendientesBandeja onApproved={() => void reload()} /> : null}
+
+      {esChicaOperativa && !cajaBloqueada ? (
+        <div className="grid grid-cols-1 gap-3">
           <button
             type="button"
             className="flex min-h-[4.5rem] items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-4 text-lg font-semibold text-white shadow-sm hover:bg-red-700"
@@ -181,14 +201,6 @@ export function FinanzasCajasPage() {
           >
             <Wallet className="h-6 w-6" aria-hidden />
             Anotar un gasto
-          </button>
-          <button
-            type="button"
-            className="flex min-h-[4.5rem] items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-4 text-lg font-semibold text-white shadow-sm hover:bg-emerald-700"
-            onClick={() => setModal('ingreso')}
-          >
-            <PlusCircle className="h-6 w-6" aria-hidden />
-            Anotar un ingreso
           </button>
         </div>
       ) : null}
@@ -251,7 +263,13 @@ export function FinanzasCajasPage() {
       </section>
 
       {esChicaOperativa ? (
-        <CerrarCajaSection cajaId={cajaId} moneda={moneda} cierres={cierres} onDone={() => void reloadDetalle(cajaId)} />
+        <CerrarCajaSection
+          cajaId={cajaId}
+          moneda={moneda}
+          cierres={cierres}
+          bloqueada={cajaBloqueada}
+          onDone={() => void reloadDetalle(cajaId)}
+        />
       ) : null}
 
       {esLider ? (
@@ -266,9 +284,9 @@ export function FinanzasCajasPage() {
         </div>
       ) : null}
 
-      {modal && cajaId && esChicaOperativa ? (
+      {modal && cajaId && esChicaOperativa && !cajaBloqueada ? (
         <MovimientoModal
-          tipo={modal}
+          tipo="egreso"
           cajaId={cajaId}
           moneda={moneda}
           onClose={() => setModal(null)}
@@ -299,6 +317,86 @@ export function FinanzasCajasPage() {
 
 /** @deprecated alias de ruta anterior */
 export const FinanzasCajaChicaPage = FinanzasCajasPage
+
+function CierresPendientesBandeja({ onApproved }: { onApproved: () => void }) {
+  const [cierres, setCierres] = useState<CajaCierreItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      setCierres(await fetchCierresPendientes())
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudieron cargar cierres pendientes')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const aprobar = async (cierre: CajaCierreItem) => {
+    setBusyId(cierre.id)
+    try {
+      await aprobarCierreCaja(cierre.cajaId, cierre.id)
+      toast.success('Cierre aprobado — la caja ya puede operar')
+      await load()
+      onApproved()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo aprobar')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border border-amber-300/80 bg-amber-50/80 p-5 dark:border-amber-700 dark:bg-amber-950/30">
+      <h2 className="text-heading text-lg font-semibold">Cierres pendientes de aprobar</h2>
+      <p className="text-body-muted mt-1 text-sm">
+        Cuando apruebes, la caja chica se desbloquea para seguir anotando gastos.
+      </p>
+      {loading ? (
+        <p className="text-body-muted mt-3 text-sm">Cargando…</p>
+      ) : cierres.length === 0 ? (
+        <p className="text-body-muted mt-3 text-sm">No hay cierres esperando aprobación.</p>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {cierres.map((cierre) => (
+            <li
+              key={cierre.id}
+              className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between dark:border-amber-800 dark:bg-zinc-900"
+            >
+              <div>
+                <p className="font-medium text-heading">
+                  {cierre.cajaNombre ?? 'Caja chica'}
+                  {cierre.cajaMoneda ? ` (${cierre.cajaMoneda})` : ''}
+                </p>
+                <p className="text-body-muted text-sm">
+                  Período hasta {formatFecha(cierre.periodoHasta)} · teórico{' '}
+                  {formatMoneyCentavos(cierre.saldoTeorico, cierre.cajaMoneda ?? 'ARS')}
+                  {cierre.diferencia !== null && cierre.diferencia !== 0
+                    ? ` · diferencia ${formatMoneyCentavos(cierre.diferencia, cierre.cajaMoneda ?? 'ARS')}`
+                    : ''}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={busyId === cierre.id}
+                className="btn-brand-primary shrink-0 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
+                onClick={() => void aprobar(cierre)}
+              >
+                {busyId === cierre.id ? 'Aprobando…' : 'Aprobar'}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
 
 function FondeoPanel({
   principal,
@@ -544,16 +642,19 @@ function CerrarCajaSection({
   cajaId,
   moneda,
   cierres,
+  bloqueada,
   onDone,
 }: {
   cajaId: string
   moneda: CajaMoneda
   cierres: CajaCierreItem[]
+  bloqueada: boolean
   onDone: () => void
 }) {
   const [efectivoPesos, setEfectivoPesos] = useState('')
   const [busy, setBusy] = useState(false)
   const ultima = cierres[0]
+  const pendiente = ultima?.estado === 'cerrada' || bloqueada
 
   const cerrar = async () => {
     const centavos = pesosToCentavos(efectivoPesos)
@@ -592,20 +693,51 @@ function CerrarCajaSection({
       <p className="text-body-muted mt-1 text-sm">
         Contá el efectivo que tenés y comparalo con lo que muestra el sistema.
       </p>
-      {ultima?.estado === 'cerrada' || ultima?.estado === 'aprobada' ? (
+      {pendiente ? (
+        <div className="mt-4 rounded-lg bg-amber-50 p-4 text-sm dark:bg-amber-950/40">
+          <p className="font-medium text-amber-950 dark:text-amber-100">
+            Esta caja está cerrada, esperando aprobación
+          </p>
+          {ultima ? (
+            <>
+              <p className="text-body-muted mt-1">
+                Último cierre: {formatFecha(ultima.periodoHasta)}
+              </p>
+              {ultima.saldoTeorico != null ? (
+                <p className="text-body-muted mt-1">
+                  Según el sistema: {formatMoneyCentavos(ultima.saldoTeorico, moneda)}
+                </p>
+              ) : null}
+              {ultima.diferencia !== null && ultima.diferencia !== 0 ? (
+                <p className="mt-2 font-medium text-amber-800 dark:text-amber-200">
+                  Diferencia: {formatMoneyCentavos(ultima.diferencia, moneda)}
+                </p>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      ) : ultima?.estado === 'aprobada' ? (
         <div className="mt-4 rounded-lg bg-neutral-50 p-4 text-sm dark:bg-zinc-800">
           <p>
-            Último cierre: {formatFecha(ultima.periodoHasta)} —{' '}
-            {ultima.estado === 'aprobada' ? 'aprobado por Finanzas' : 'pendiente de aprobación'}
+            Último cierre: {formatFecha(ultima.periodoHasta)} — aprobado por Finanzas
           </p>
-          {ultima.saldoTeorico != null ? (
-            <p className="text-body-muted mt-1">Según el sistema: {formatMoneyCentavos(ultima.saldoTeorico, moneda)}</p>
-          ) : null}
-          {ultima.diferencia !== null && ultima.diferencia !== 0 ? (
-            <p className="mt-2 font-medium text-amber-800 dark:text-amber-200">
-              Diferencia: {formatMoneyCentavos(ultima.diferencia, moneda)}
-            </p>
-          ) : null}
+          <FinanzasFormField label="Efectivo que conté" htmlFor="cerrar-monto">
+            <input
+              id="cerrar-monto"
+              inputMode="decimal"
+              className={`${finanzasInputClass} text-base py-3`}
+              value={efectivoPesos}
+              onChange={(e) => setEfectivoPesos(e.target.value)}
+            />
+          </FinanzasFormField>
+          <button
+            type="button"
+            disabled={busy}
+            className="btn-brand-primary mt-4 w-full rounded-xl py-3 text-base font-semibold disabled:opacity-60"
+            onClick={() => void cerrar()}
+          >
+            {busy ? 'Cerrando…' : 'Cerrar caja'}
+          </button>
         </div>
       ) : (
         <>
@@ -652,13 +784,43 @@ function AdminCajaPanel({
   const [moneda, setMoneda] = useState<CajaMoneda>('ARS')
   const [cajaPadreId, setCajaPadreId] = useState('')
   const [responsableUid, setResponsableUid] = useState('')
-  const [saldoPesos, setSaldoPesos] = useState('0')
   const [motivo, setMotivo] = useState('')
   const [nuevoResponsable, setNuevoResponsable] = useState('')
+  const [directoryUsers, setDirectoryUsers] = useState<UserProfile[]>([])
+  const [directoryLoading, setDirectoryLoading] = useState(true)
+  const [createPersonQuery, setCreatePersonQuery] = useState('')
+  const [reassignPersonQuery, setReassignPersonQuery] = useState('')
+  const [deleting, setDeleting] = useState(false)
 
   const principales = cajas.filter((c) => c.tipo === 'principal')
   const principalMoneda = principales.find((p) => p.moneda === moneda)
   const monedaCajaSeleccionada = cajas.find((c) => c.id === cajaId)?.moneda ?? 'ARS'
+  const cajaSeleccionada = cajas.find((c) => c.id === cajaId) ?? null
+  const puedeEliminar =
+    Boolean(cajaSeleccionada) &&
+    cajaSeleccionada!.tipo === 'chica' &&
+    cajaSeleccionada!.saldoActualCentavos === 0 &&
+    !cajaSeleccionada!.bloqueadaPorCierre
+
+  useEffect(() => {
+    let cancelled = false
+    setDirectoryLoading(true)
+    void getAllUsers()
+      .then((users) => {
+        if (!cancelled) setDirectoryUsers(users)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          toast.error(err instanceof Error ? err.message : 'No se pudo cargar el directorio')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDirectoryLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (tipo === 'chica' && principalMoneda) {
@@ -670,9 +832,8 @@ function AdminCajaPanel({
   if (!esLider) return null
 
   const crear = async () => {
-    const saldo = pesosToCentavos(saldoPesos) ?? 0
     if (!responsableUid.trim()) {
-      toast.error('UID del responsable requerido')
+      toast.error('Elegí un responsable')
       return
     }
     if (tipo === 'chica' && !cajaPadreId) {
@@ -685,10 +846,9 @@ function AdminCajaPanel({
         tipo,
         moneda,
         responsableUid: responsableUid.trim(),
-        saldoInicialCentavos: saldo,
         cajaPadreId: tipo === 'chica' ? cajaPadreId : null,
       })
-      toast.success('Caja creada')
+      toast.success('Caja creada (saldo $0)')
       onChanged()
       onClose()
     } catch (err) {
@@ -697,16 +857,48 @@ function AdminCajaPanel({
   }
 
   const reasignar = async () => {
-    if (!cajaId || !nuevoResponsable.trim()) return
+    if (!cajaId || !nuevoResponsable.trim()) {
+      toast.error('Elegí el nuevo responsable')
+      return
+    }
     try {
       await changeCajaResponsable(cajaId, {
         responsableUid: nuevoResponsable.trim(),
         motivo: motivo.trim() || undefined,
       })
       toast.success('Responsable actualizado')
+      setNuevoResponsable('')
+      setReassignPersonQuery('')
+      setMotivo('')
       onChanged()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error')
+    }
+  }
+
+  const eliminar = async () => {
+    if (!cajaId || !cajaSeleccionada) return
+    if (cajaSeleccionada.tipo === 'principal') {
+      toast.error('Las cajas principales no se pueden eliminar')
+      return
+    }
+    if (
+      !window.confirm(
+        `¿Dar de baja "${cajaSeleccionada.nombre}"? Quedará inactiva (no se borra el historial).`,
+      )
+    ) {
+      return
+    }
+    setDeleting(true)
+    try {
+      await deleteCaja(cajaId)
+      toast.success('Caja dada de baja')
+      onChanged()
+      onClose()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -761,20 +953,42 @@ function AdminCajaPanel({
           <FinanzasFormField label="Nombre" htmlFor="adm-nombre">
             <input id="adm-nombre" className={finanzasInputClass} value={nombre} onChange={(e) => setNombre(e.target.value)} />
           </FinanzasFormField>
-          <FinanzasFormField label="UID responsable (Firebase)" htmlFor="adm-resp">
-            <input id="adm-resp" className={finanzasInputClass} value={responsableUid} onChange={(e) => setResponsableUid(e.target.value)} />
+          <FinanzasFormField label="Responsable" htmlFor="adm-resp">
+            {directoryLoading ? (
+              <p className="text-sm text-neutral-500">Cargando personas…</p>
+            ) : (
+              <UserSinglePicker
+                inputId="adm-resp"
+                allUsers={directoryUsers}
+                selectedUid={responsableUid}
+                onSelectedUidChange={setResponsableUid}
+                query={createPersonQuery}
+                onQueryChange={setCreatePersonQuery}
+                placeholder="Buscar por nombre o email"
+              />
+            )}
           </FinanzasFormField>
-          <FinanzasFormField label="Saldo inicial" htmlFor="adm-saldo">
-            <input id="adm-saldo" className={finanzasInputClass} value={saldoPesos} onChange={(e) => setSaldoPesos(e.target.value)} />
-          </FinanzasFormField>
+          <p className="text-body-muted text-xs">La caja nace en $0. Para cargarle plata usá Fondear desde la principal.</p>
           <button type="button" className="btn-brand-primary w-full rounded-lg py-2" onClick={() => void crear()}>
             Crear caja
           </button>
         </div>
         {cajas.length > 0 && cajaId ? (
           <div className="mt-4 space-y-4">
-            <FinanzasFormField label="Nuevo responsable (UID)" htmlFor="adm-nuevo">
-              <input id="adm-nuevo" className={finanzasInputClass} value={nuevoResponsable} onChange={(e) => setNuevoResponsable(e.target.value)} />
+            <FinanzasFormField label="Nuevo responsable" htmlFor="adm-nuevo">
+              {directoryLoading ? (
+                <p className="text-sm text-neutral-500">Cargando personas…</p>
+              ) : (
+                <UserSinglePicker
+                  inputId="adm-nuevo"
+                  allUsers={directoryUsers}
+                  selectedUid={nuevoResponsable}
+                  onSelectedUidChange={setNuevoResponsable}
+                  query={reassignPersonQuery}
+                  onQueryChange={setReassignPersonQuery}
+                  placeholder="Buscar por nombre o email"
+                />
+              )}
             </FinanzasFormField>
             <FinanzasFormField label="Motivo (opcional)" htmlFor="adm-motivo">
               <input id="adm-motivo" className={finanzasInputClass} value={motivo} onChange={(e) => setMotivo(e.target.value)} />
@@ -782,6 +996,21 @@ function AdminCajaPanel({
             <button type="button" className="btn-brand-secondary w-full rounded-lg py-2" onClick={() => void reasignar()}>
               Cambiar responsable (caja seleccionada)
             </button>
+            {cajaSeleccionada?.tipo === 'chica' ? (
+              <button
+                type="button"
+                disabled={!puedeEliminar || deleting}
+                className="w-full rounded-lg border border-red-300 py-2 text-sm font-medium text-red-700 disabled:opacity-50 dark:border-red-800 dark:text-red-300"
+                onClick={() => void eliminar()}
+                title={
+                  !puedeEliminar
+                    ? 'Solo cajas chicas con saldo $0 y sin cierre pendiente'
+                    : undefined
+                }
+              >
+                {deleting ? 'Eliminando…' : 'Eliminar caja (baja lógica)'}
+              </button>
+            ) : null}
             <div>
               <h3 className="font-medium">Cierres pendientes de aprobación</h3>
               <ul className="mt-2 space-y-2 text-sm">

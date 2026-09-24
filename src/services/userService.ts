@@ -25,6 +25,7 @@ import {
   type AccountStatus,
   type AccountType,
 } from '../utils/accountAccess'
+import { IS_STAGING_APP_ENV } from '../lib/appEnv'
 
 const USERS_COLLECTION = 'users'
 
@@ -200,6 +201,7 @@ export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
   super_admin: false,
   rag_assistant: false,
   view_finanzas: false,
+  manage_finanzas_caja: false,
 }
 
 export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
@@ -212,6 +214,7 @@ export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
   super_admin: false,
   rag_assistant: false,
   view_finanzas: false,
+  manage_finanzas_caja: false,
 }
 
 export {
@@ -292,7 +295,27 @@ export function resolveRoleFromUserData(data: DocumentData): UserRole {
 }
 
 export function isSuperAdmin(profile: UserProfile | null | undefined): boolean {
-  return profile?.role === 'super_admin'
+  if (!profile) return false
+  return profile.role === 'super_admin' || profile.permissions.super_admin === true
+}
+
+/** Staging: perfil mínimo cuando la API no responde pero el email es super admin designado. */
+export function buildDesignatedSuperAdminProfile(uid: string, email: string): UserProfile {
+  const normalized = email.trim().toLowerCase()
+  const local = normalized.split('@')[0] || 'Usuario'
+  return {
+    uid,
+    email: normalized,
+    displayName: local.replace(/[.+]/g, ' ').trim() || 'Usuario',
+    department: 'Sistemas',
+    role: 'super_admin',
+    accountType: 'corporate',
+    accountStatus: 'active',
+    permissions: { ...SUPER_ADMIN_PERMISSIONS },
+    favoriteApps: [],
+    personalLinks: [],
+    widgetPreferences: resolveHomeWidgetPreferences(undefined),
+  }
 }
 
 export function hasRagAssistantAccess(profile: UserProfile | null | undefined): boolean {
@@ -359,6 +382,7 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
       super_admin: permissions.super_admin ?? false,
       rag_assistant: permissions.rag_assistant ?? false,
       view_finanzas: permissions.view_finanzas ?? false,
+      manage_finanzas_caja: permissions.manage_finanzas_caja ?? false,
     },
     favoriteApps: Array.isArray(data.favoriteApps)
       ? (data.favoriteApps as string[])
@@ -488,7 +512,65 @@ export async function ensureSuperAdminPermissions(
   await bootstrapUserProfileAfterAuth({ source: 'google' })
 }
 
-export async function getUserProfile(uid: string): Promise<UserProfile | null> {
+async function fetchUserProfileFromStagingApi(
+  uid: string,
+  emailHint?: string | null,
+): Promise<UserProfile | null> {
+  const token = await auth.currentUser?.getIdToken()
+  const email = emailHint ?? auth.currentUser?.email ?? null
+  if (!token) return null
+
+  const fallbackLocalSuperAdmin = (): UserProfile | null => {
+    if (email && isSuperAdminEmail(email)) {
+      console.warn(
+        '[staging] /api/users/me no disponible; usando perfil super_admin local (revisá Functions en PC-N8N).',
+      )
+      return buildDesignatedSuperAdminProfile(uid, email)
+    }
+    return null
+  }
+
+  try {
+    const res = await fetch('/api/users/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const text = await res.text()
+    let body: { error?: string } = {}
+    try {
+      body = text ? (JSON.parse(text) as { error?: string }) : {}
+    } catch {
+      /* hosting 404 HTML u otro cuerpo no JSON */
+    }
+
+    if (res.ok) {
+      const data = JSON.parse(text) as UserProfile
+      return { ...data, uid: data.uid || uid }
+    }
+
+    if (res.status === 404 && body.error === 'Perfil no encontrado') {
+      return email && isSuperAdminEmail(email)
+        ? buildDesignatedSuperAdminProfile(uid, email)
+        : null
+    }
+
+    const local = fallbackLocalSuperAdmin()
+    if (local) return local
+    throw new Error(body.error ?? `Error ${res.status}`)
+  } catch (err) {
+    const local = fallbackLocalSuperAdmin()
+    if (local) return local
+    throw err
+  }
+}
+
+export async function getUserProfile(
+  uid: string,
+  emailHint?: string | null,
+): Promise<UserProfile | null> {
+  if (IS_STAGING_APP_ENV) {
+    return fetchUserProfileFromStagingApi(uid, emailHint)
+  }
+
   const snapshot = await getDoc(doc(db, USERS_COLLECTION, uid))
 
   if (!snapshot.exists()) {

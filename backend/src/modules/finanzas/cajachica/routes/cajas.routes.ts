@@ -10,8 +10,10 @@ import {
   fondearCajaChica,
   listCajasForUser,
   listCierres,
+  listCierresPendientes,
   listMovimientos,
   registerMovimiento,
+  softDeleteCaja,
 } from '../services/caja.service.js'
 
 export const finanzasCajasRouter = Router()
@@ -34,6 +36,16 @@ finanzasCajasRouter.get('/', async (req, res) => {
   }
 })
 
+finanzasCajasRouter.get('/cierres-pendientes', async (req, res) => {
+  try {
+    const cierres = await listCierresPendientes(req.authedUser!)
+    res.json({ cierres })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudieron listar cierres pendientes'
+    res.status(message.includes('líder') ? 403 : 400).json({ error: message })
+  }
+})
+
 finanzasCajasRouter.post('/', async (req, res) => {
   try {
     const caja = await createCajaForLider(req.authedUser!, req.body as Record<string, unknown>)
@@ -41,6 +53,17 @@ finanzasCajasRouter.post('/', async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'No se pudo crear la caja'
     res.status(400).json({ error: message })
+  }
+})
+
+finanzasCajasRouter.delete('/:id', async (req, res) => {
+  try {
+    const caja = await softDeleteCaja(req.authedUser!, req.params.id)
+    res.json({ caja })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo eliminar la caja'
+    const status = message.includes('líder') ? 403 : 400
+    res.status(status).json({ error: message })
   }
 })
 

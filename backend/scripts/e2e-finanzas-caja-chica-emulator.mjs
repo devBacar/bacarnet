@@ -181,12 +181,7 @@ async function ensureUser(uid, email, permissions) {
 
   try {
 
-    await getAuth().createUser({
-      uid,
-      email,
-      emailVerified: true,
-      password: process.env.E2E_CAJAS_USER_PASSWORD?.trim() || `e2e-${randomUUID()}`,
-    })
+    await getAuth().createUser({ uid, email, emailVerified: true, password: 'E2e-Cajas-Test!' })
 
   } catch (err) {
 

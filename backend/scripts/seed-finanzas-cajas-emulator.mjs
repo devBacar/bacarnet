@@ -7,7 +7,7 @@
  * Usuarios fijos (Auth + Firestore):
  *   seed-finanzas-cajas-lider@bacarsa.com.ar — manage_finanzas_caja
  *   seed-finanzas-cajas-resp@bacarsa.com.ar — responsable caja chica
- * Opcional: SEED_CAJAS_DEV_PASSWORD (si no, se genera una por corrida).
+ * Contraseña dev: Seed-Cajas-Dev1!
  */
 
 import { randomUUID } from 'node:crypto'
@@ -33,13 +33,8 @@ export const SEED_PRINCIPAL_ARS_ID = 'seed-caja-principal-ars'
 export const SEED_PRINCIPAL_USD_ID = 'seed-caja-principal-usd'
 export const SEED_CHICA_ARS_ID = 'seed-caja-chica-recepcion'
 
+const DEV_PASSWORD = 'Seed-Cajas-Dev1!'
 const SEED_ACTOR = SEED_LIDER_UID
-
-function devPasswordForSeed() {
-  const fromEnv = process.env.SEED_CAJAS_DEV_PASSWORD?.trim()
-  if (fromEnv) return fromEnv
-  return `seed-${randomUUID().slice(0, 12)}`
-}
 
 const LEGACY_COLLECTIONS = ['cajasChicas', 'cajaChicaMovimientos', 'cajaChicaRendiciones']
 const CAJAS_COLLECTIONS = ['cajas', 'cajaMovimientos', 'cajaCierres']
@@ -53,19 +48,19 @@ async function deleteCollection(db, name) {
   return snap.size
 }
 
-async function ensureAuthUser(uid, email, password) {
+async function ensureAuthUser(uid, email) {
   try {
     await getAuth().createUser({
       uid,
       email,
       emailVerified: true,
-      password,
+      password: DEV_PASSWORD,
     })
   } catch (err) {
     if (err?.code !== 'auth/uid-already-exists' && err?.code !== 'auth/email-already-exists') {
       throw err
     }
-    await getAuth().updateUser(uid, { emailVerified: true, password })
+    await getAuth().updateUser(uid, { emailVerified: true, password: DEV_PASSWORD })
   }
 }
 
@@ -112,9 +107,8 @@ async function main() {
     }
   }
 
-  const devPassword = devPasswordForSeed()
-  await ensureAuthUser(SEED_LIDER_UID, liderEmail, devPassword)
-  await ensureAuthUser(SEED_RESP_UID, respEmail, devPassword)
+  await ensureAuthUser(SEED_LIDER_UID, liderEmail)
+  await ensureAuthUser(SEED_RESP_UID, respEmail)
   await ensureFirestoreUser(SEED_LIDER_UID, liderEmail, {
     view_finanzas: true,
     manage_finanzas_caja: true,
@@ -133,9 +127,9 @@ async function main() {
       moneda: 'ARS',
       cajaPadreId: null,
       responsableUid: SEED_LIDER_UID,
-      saldoInicialCentavos: 10_000_000,
       createdBy: SEED_ACTOR,
     })
+    await db.collection('cajas').doc(SEED_PRINCIPAL_ARS_ID).update({ saldoActualCentavos: 10_000_000 })
     console.log('Creada caja principal ARS')
   } else {
     console.log('Caja principal ARS ya existe — omitida')
@@ -150,9 +144,9 @@ async function main() {
       moneda: 'USD',
       cajaPadreId: null,
       responsableUid: SEED_LIDER_UID,
-      saldoInicialCentavos: 500_000,
       createdBy: SEED_ACTOR,
     })
+    await db.collection('cajas').doc(SEED_PRINCIPAL_USD_ID).update({ saldoActualCentavos: 500_000 })
     console.log('Creada caja principal USD')
   } else {
     console.log('Caja principal USD ya existe — omitida')
@@ -167,7 +161,6 @@ async function main() {
       moneda: 'ARS',
       cajaPadreId: SEED_PRINCIPAL_ARS_ID,
       responsableUid: SEED_RESP_UID,
-      saldoInicialCentavos: 0,
       createdBy: SEED_ACTOR,
     })
     console.log('Creada caja chica Recepción')
@@ -223,9 +216,6 @@ async function main() {
   console.log(
     `Seed OK — chica saldo=${finalChica.get('saldoActualCentavos')} centavos. Login resp: ${respEmail}`,
   )
-  if (!process.env.SEED_CAJAS_DEV_PASSWORD?.trim()) {
-    console.log('Definí SEED_CAJAS_DEV_PASSWORD para login estable en UI (emulador).')
-  }
 }
 
 main().catch((err) => {

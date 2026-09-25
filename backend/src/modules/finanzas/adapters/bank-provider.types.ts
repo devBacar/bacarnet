@@ -7,7 +7,7 @@ export interface CuentaDTO {
   tipo: TipoCuenta
   moneda: Moneda
   descubiertoCentavos: number | null
-  /** Solo CC; null en CA/USD. */
+  /** Solo CC; null en USD. */
   descubiertoVigenteDesde: Date | null
 }
 

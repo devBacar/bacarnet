@@ -3,7 +3,7 @@ import type { FinanzasCuenta, FinanzasSemaforo } from '../../services/finanzasAp
 /** Orden acordado para posición por banco y grupos de cuentas. */
 export const FINANZAS_BANCO_ORDER = ['Julio', 'Patagonia', 'Córdoba'] as const
 
-export const FINANZAS_TIPO_ORDER = ['CA', 'CC', 'USD'] as const
+export const FINANZAS_TIPO_ORDER = ['CC', 'USD'] as const
 
 export interface PosicionPorBancoRow {
   bancoNombre: string
@@ -38,12 +38,10 @@ export function computePosicionPorBanco(cuentas: FinanzasCuenta[]): PosicionPorB
     let semaforoCc: FinanzasSemaforo | null = null
 
     for (const cuenta of bankAccounts) {
-      if (cuenta.moneda === 'USD') {
+      if (cuenta.tipo === 'USD') {
         usdCentavos += cuenta.saldoActualCentavos
-      } else {
+      } else if (cuenta.tipo === 'CC') {
         arsCentavos += cuenta.saldoActualCentavos
-      }
-      if (cuenta.tipo === 'CC') {
         semaforoCc = cuenta.descubierto?.semaforo ?? null
       }
     }

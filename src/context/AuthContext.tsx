@@ -19,9 +19,11 @@ import {
 } from 'react'
 import { auth } from '../services/firebase'
 import {
+  buildDesignatedSuperAdminProfile,
   ensureGoogleUserProfile,
   ensureSuperAdminPermissions,
   getUserProfile,
+  isSuperAdminEmail,
   type UserProfile,
 } from '../services/userService'
 import { applyPendingUserSetupAfterRegister } from '../services/usersApi'
@@ -52,12 +54,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const loadProfile = useCallback(async (uid: string, email?: string | null) => {
     setProfileLoading(true)
     try {
-      await ensureSuperAdminPermissions(uid, email)
-      const profile = await getUserProfile(uid)
+      await ensureSuperAdminPermissions(uid, email).catch((err) => {
+        console.warn('bootstrap-profile (no bloquea carga de perfil):', err)
+      })
+      const profile = await getUserProfile(uid, email)
       setUserProfile(profile)
     } catch (err) {
       console.error('Error al cargar el perfil de usuario:', err)
-      setUserProfile(null)
+      if (email && isSuperAdminEmail(email)) {
+        console.warn(
+          '[staging] Perfil API falló; usando super_admin local hasta que Functions responda.',
+        )
+        setUserProfile(buildDesignatedSuperAdminProfile(uid, email))
+      } else {
+        setUserProfile(null)
+      }
     } finally {
       setProfileLoading(false)
     }

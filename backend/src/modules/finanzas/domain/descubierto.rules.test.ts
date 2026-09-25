@@ -5,10 +5,18 @@ describe('computeDescubiertoEstado', () => {
   const descubierto = 10_000_00 // ARS 10.000,00
 
   it('no aplica a cuentas que no son CC', () => {
-    expect(computeDescubiertoEstado(-500_00, descubierto, 'CA')).toEqual({
+    expect(computeDescubiertoEstado(-500_00, descubierto, 'USD')).toEqual({
       porcentajeUsado: null,
       semaforo: null,
-      superado: false,
+      superado: null,
+    })
+  })
+
+  it('sin límite de descubierto cargado → superado null', () => {
+    expect(computeDescubiertoEstado(-500_00, null, 'CC')).toEqual({
+      porcentajeUsado: null,
+      semaforo: null,
+      superado: null,
     })
   })
 

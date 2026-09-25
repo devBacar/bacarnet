@@ -12,11 +12,15 @@ import {
 } from './reviewExternalAccount.js'
 import { requireAuthBootstrap } from '../auth/middleware.js'
 import { bootstrapUserProfile } from './bootstrapUserProfile.js'
+import { getCurrentUserProfile } from './getCurrentUserProfile.js'
 
 export const usersRouter = Router()
 
 /** Perfil inicial vía Admin SDK — reemplaza create cliente en Firestore rules. */
 usersRouter.post('/bootstrap-profile', requireAuthBootstrap, bootstrapUserProfile)
+
+/** Staging: perfil desde la misma Firestore que usa el backend (emulador en PC-N8N). */
+usersRouter.get('/me', requireAuthBootstrap, getCurrentUserProfile)
 
 usersRouter.get(
   '/pending-external-accounts',

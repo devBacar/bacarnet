@@ -6,6 +6,7 @@ import { AprobacionesModalProvider } from './context/AprobacionesModalContext'
 import { NotificationsProvider } from './context/NotificationsContext'
 import { AppRoutes } from './routes'
 import { queryClient } from './lib/queryClient'
+import { TestEnvironmentBanner } from './components/TestEnvironmentBanner'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
             <GlobalSettingsProvider>
               <NotificationsProvider>
                 <AprobacionesModalProvider>
+                  <TestEnvironmentBanner />
                   <AppRoutes />
                 </AprobacionesModalProvider>
               </NotificationsProvider>

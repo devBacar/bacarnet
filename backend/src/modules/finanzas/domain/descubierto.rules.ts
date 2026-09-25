@@ -14,7 +14,8 @@ export type SemaforoDescubierto = 'verde' | 'amarillo' | 'rojo'
 export interface DescubiertoEstado {
   porcentajeUsado: number | null
   semaforo: SemaforoDescubierto | null
-  superado: boolean
+  /** null si no hay límite de descubierto cargado (no evaluable). */
+  superado: boolean | null
 }
 
 /**
@@ -27,7 +28,7 @@ export function computeDescubiertoEstado(
   tipo: TipoCuenta,
 ): DescubiertoEstado {
   if (tipo !== 'CC' || descubiertoCentavos == null || descubiertoCentavos <= 0) {
-    return { porcentajeUsado: null, semaforo: null, superado: false }
+    return { porcentajeUsado: null, semaforo: null, superado: null }
   }
 
   if (saldoActualCentavos >= 0) {

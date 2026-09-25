@@ -1,10 +1,11 @@
 /**
- * Carga las 9 cuentas del MockProvider en Firestore (emulador o proyecto activo).
+ * Sincroniza CC desde el proveedor bancario y asegura placeholders USD manuales.
  *
  *   npm run finanzas:seed:dry-run
  *   npm run finanzas:seed
  */
 
+import { resolveFinanzasBankProviderMode } from '../lib/modules/finanzas/adapters/bank-data-provider.factory.js'
 import { syncCuentasFromProvider } from '../lib/modules/finanzas/services/cuentas.service.js'
 import { initAdmin, loadTestEnv } from './get-test-token.mjs'
 
@@ -15,8 +16,11 @@ async function main() {
   loadTestEnv()
   initAdmin()
 
+  const providerMode = resolveFinanzasBankProviderMode()
   if (dryRun) {
-    console.log('[dry-run] Se sincronizarían 9 cuentas desde MockProvider (sin escribir).')
+    console.log(
+      `[dry-run] Se sincronizarían cuentas desde proveedor "${providerMode}" (sin escribir).`,
+    )
     console.log('Ejecutá con --apply para persistir en Firestore.')
     return
   }

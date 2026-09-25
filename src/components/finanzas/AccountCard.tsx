@@ -12,6 +12,8 @@ interface AccountCardProps {
   cuenta: FinanzasCuenta
   /** false cuando la tarjeta va dentro de un grupo por banco */
   showBancoName?: boolean
+  canEditManualSaldo?: boolean
+  onEditManualSaldo?: () => void
 }
 
 function semaforoTexto(semaforo: keyof typeof SEMAFORO_LABEL): string {
@@ -20,8 +22,23 @@ function semaforoTexto(semaforo: keyof typeof SEMAFORO_LABEL): string {
   return 'Superado'
 }
 
-export function AccountCard({ cuenta, showBancoName = false }: AccountCardProps) {
-  const esCC = cuenta.tipo === 'CC'
+function formatManualFecha(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+export function AccountCard({
+  cuenta,
+  showBancoName = false,
+  canEditManualSaldo = false,
+  onEditManualSaldo,
+}: AccountCardProps) {
+  const esCCInterbanking = cuenta.tipo === 'CC' && cuenta.origenSaldo === 'interbanking'
+  const esManual = cuenta.origenSaldo === 'manual'
   const semaforo = cuenta.descubierto?.semaforo
 
   return (
@@ -37,7 +54,7 @@ export function AccountCard({ cuenta, showBancoName = false }: AccountCardProps)
             {cuenta.tipoLabel}
           </p>
         </div>
-        {esCC && semaforo ? (
+        {esCCInterbanking && semaforo ? (
           <div className="flex items-center gap-2 text-sm" title={semaforoTexto(semaforo)}>
             <span className="text-xl leading-none" aria-hidden>
               {SEMAFORO_LABEL[semaforo]}
@@ -54,7 +71,40 @@ export function AccountCard({ cuenta, showBancoName = false }: AccountCardProps)
         </div>
       </div>
 
-      {esCC ? (
+      {esManual ? (
+        <div className="border-t border-neutral-100 pt-4 text-sm dark:border-zinc-800">
+          {cuenta.saldoActualizadoManualmenteEl ? (
+            <p className="text-body-muted">
+              Actualizado a mano el{' '}
+              <span className="text-heading font-medium">
+                {formatManualFecha(cuenta.saldoActualizadoManualmenteEl)}
+              </span>
+              {cuenta.saldoActualizadoManualmentePor ? (
+                <>
+                  {' '}
+                  por{' '}
+                  <span className="text-heading font-medium">
+                    {cuenta.saldoActualizadoManualmentePor}
+                  </span>
+                </>
+              ) : null}
+            </p>
+          ) : (
+            <p className="text-body-muted">Sin saldo cargado a mano todavía.</p>
+          )}
+          {canEditManualSaldo && onEditManualSaldo ? (
+            <button
+              type="button"
+              className="mt-3 text-sm font-medium text-brand-primary hover:underline"
+              onClick={onEditManualSaldo}
+            >
+              {cuenta.saldoActualizadoManualmenteEl ? 'Actualizar saldo' : 'Cargar saldo'}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {esCCInterbanking ? (
         <dl className="grid gap-3 border-t border-neutral-100 pt-4 text-sm dark:border-zinc-800">
           <div className="flex justify-between gap-4">
             <dt className="text-body-muted">Descubierto</dt>
@@ -70,7 +120,7 @@ export function AccountCard({ cuenta, showBancoName = false }: AccountCardProps)
               {cuenta.descubierto?.porcentajeUsado != null
                 ? `${cuenta.descubierto.porcentajeUsado} %`
                 : '—'}
-              {cuenta.descubierto?.superado ? (
+              {cuenta.descubierto?.superado === true ? (
                 <span className="ml-2 text-red-600 dark:text-red-400">(superado)</span>
               ) : null}
             </dd>

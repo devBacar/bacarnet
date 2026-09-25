@@ -1,6 +1,7 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../lib/firebase/admin.js'
-import type { CuentaDocument } from '../domain/cuenta.types.js'
+import type { CuentaDocument, OrigenSaldo } from '../domain/cuenta.types.js'
+import { MANUAL_USD_CUENTA_DEFS } from '../domain/manual-usd.defaults.js'
 
 const CUENTAS_COLLECTION = 'cuentas'
 const SNAPSHOTS_SUB = 'saldosSnapshots'
@@ -13,10 +14,12 @@ export async function listCuentaDocuments(): Promise<
   Array<{ id: string; data: CuentaDocument }>
 > {
   const snap = await cuentasCollection().get()
-  return snap.docs.map((doc) => ({
-    id: doc.id,
-    data: doc.data() as CuentaDocument,
-  }))
+  return snap.docs
+    .map((doc) => ({
+      id: doc.id,
+      data: doc.data() as CuentaDocument,
+    }))
+    .filter(({ data }) => (data.tipo as string) !== 'CA')
 }
 
 export async function getCuentaDocument(
@@ -24,7 +27,9 @@ export async function getCuentaDocument(
 ): Promise<{ id: string; data: CuentaDocument } | null> {
   const snap = await cuentasCollection().doc(cuentaId).get()
   if (!snap.exists) return null
-  return { id: snap.id, data: snap.data() as CuentaDocument }
+  const data = snap.data() as CuentaDocument
+  if ((data.tipo as string) === 'CA') return null
+  return { id: snap.id, data }
 }
 
 export async function upsertCuentaFromSync(input: {
@@ -53,6 +58,9 @@ export async function upsertCuentaFromSync(input: {
       ref,
       {
         ...input.payload,
+        origenSaldo: 'interbanking' satisfies OrigenSaldo,
+        saldoActualizadoManualmenteEl: null,
+        saldoActualizadoManualmentePor: null,
         ...baseAudit,
         updatedAt: now,
       },
@@ -64,6 +72,113 @@ export async function upsertCuentaFromSync(input: {
       ...snapAudit,
       updatedAt: now,
     })
+  })
+}
+
+export async function ensureManualUsdAccounts(actorUid: string): Promise<void> {
+  const now = FieldValue.serverTimestamp()
+
+  for (const def of MANUAL_USD_CUENTA_DEFS) {
+    const ref = cuentasCollection().doc(def.cuentaId)
+    await adminDb().runTransaction(async (tx) => {
+      const existing = await tx.get(ref)
+      if (existing.exists) {
+        const origen = existing.get('origenSaldo') as OrigenSaldo | undefined
+        if (origen === 'interbanking') return
+        if (origen === 'manual') return
+        tx.set(
+          ref,
+          {
+            origenSaldo: 'manual',
+            updatedAt: now,
+          },
+          { merge: true },
+        )
+        return
+      }
+
+      tx.set(ref, {
+        bancoNombre: def.bancoNombre,
+        bancoCodigoInterbanking: def.bancoCodigoInterbanking,
+        tipo: 'USD',
+        moneda: 'USD',
+        origenSaldo: 'manual',
+        saldoActualCentavos: 0,
+        descubiertoCentavos: null,
+        descubiertoVigenteDesde: null,
+        saldoActualizadoManualmenteEl: null,
+        saldoActualizadoManualmentePor: null,
+        createdAt: now,
+        updatedAt: now,
+        createdBy: actorUid,
+      })
+    })
+  }
+}
+
+export async function deleteLegacyCaCuentas(): Promise<number> {
+  const snap = await cuentasCollection().get()
+  const batch = adminDb().batch()
+  let count = 0
+  for (const doc of snap.docs) {
+    const tipo = doc.get('tipo')
+    if (tipo === 'CA') {
+      batch.delete(doc.ref)
+      count += 1
+    }
+  }
+  if (count > 0) await batch.commit()
+  return count
+}
+
+/** Deja USD manuales en 0 sin auditoría (estado «nunca cargadas»). */
+export async function resetManualUsdAccountsNeverLoaded(): Promise<void> {
+  for (const def of MANUAL_USD_CUENTA_DEFS) {
+    const ref = cuentasCollection().doc(def.cuentaId)
+    await ref.update({
+      saldoActualCentavos: 0,
+      origenSaldo: 'manual',
+      saldoActualizadoManualmenteEl: FieldValue.delete(),
+      saldoActualizadoManualmentePor: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+  }
+}
+
+export async function updateManualSaldo(input: {
+  cuentaId: string
+  saldoActualCentavos: number
+  actorUid: string
+  actorEmail: string
+}): Promise<void> {
+  const ref = cuentasCollection().doc(input.cuentaId)
+  const now = FieldValue.serverTimestamp()
+  const manualAt = Timestamp.now()
+
+  await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) throw new Error('Cuenta no encontrada')
+    const data = snap.data() as CuentaDocument
+    if ((data.tipo as string) === 'CA') throw new Error('Cuenta no válida')
+    if (data.origenSaldo === 'interbanking') {
+      throw new Error('Esta cuenta se actualiza por Interbanking; no admite saldo manual')
+    }
+    const origen: OrigenSaldo = data.origenSaldo ?? (data.tipo === 'USD' ? 'manual' : 'interbanking')
+    if (origen !== 'manual') {
+      throw new Error('Solo las cuentas con saldo manual pueden editarse acá')
+    }
+
+    tx.set(
+      ref,
+      {
+        saldoActualCentavos: input.saldoActualCentavos,
+        saldoActualizadoManualmenteEl: manualAt,
+        saldoActualizadoManualmentePor: input.actorEmail,
+        origenSaldo: 'manual',
+        updatedAt: now,
+      },
+      { merge: true },
+    )
   })
 }
 

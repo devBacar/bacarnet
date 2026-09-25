@@ -32,6 +32,7 @@ export async function confeccionarTransferencia(body: {
   compromisoPagoId: string
   cuentaCreditoCbu: string
   cuentaDebitoId?: string
+  tipo?: 'cuentas_propias' | 'proveedores'
 }): Promise<{ transferencia: TransferenciaConfeccionadaItem; provider: string }> {
   const res = await transferenciasFetch('/confeccionar', {
     method: 'POST',

@@ -19,6 +19,14 @@ export async function listCuentaDocuments(): Promise<
   }))
 }
 
+export async function getCuentaDocument(
+  cuentaId: string,
+): Promise<{ id: string; data: CuentaDocument } | null> {
+  const snap = await cuentasCollection().doc(cuentaId).get()
+  if (!snap.exists) return null
+  return { id: snap.id, data: snap.data() as CuentaDocument }
+}
+
 export async function upsertCuentaFromSync(input: {
   cuentaId: string
   payload: Omit<CuentaDocument, 'createdAt' | 'updatedAt'>

@@ -7,9 +7,12 @@ import {
   getCompromisoDocument,
 } from '../../agenda/services/agenda.repository.js'
 import { getCuentaDocument } from '../../services/cuentas.repository.js'
-import { getFinanzasTransferenciasProvider } from '../adapters/transferencias-provider.factory.js'
+import {
+  getFinanzasTransferenciasProvider,
+  resolveFinanzasTransferenciasProviderMode,
+} from '../adapters/transferencias-provider.factory.js'
 import { translateInterbankingErrors } from '../domain/transferencia.errors.js'
-import type { TransferenciaEstado } from '../domain/transferencia.types.js'
+import type { TransferenciaEstado, TransferenciaTipo } from '../domain/transferencia.types.js'
 import {
   appendTransferenciaHistorial,
   createTransferenciaWithHistorial,
@@ -22,6 +25,28 @@ export const COMPROMISO_ESTADO_CONFECCIONADA: CompromisoEstado =
 
 function normalizeCbu(raw: string): string {
   return raw.replace(/\D/g, '')
+}
+
+const TRANSFERENCIA_TIPOS: TransferenciaTipo[] = [
+  'cuentas_propias',
+  'sueldos',
+  'proveedores',
+  'terceros',
+  'pagos_arca',
+]
+
+function resolveTransferenciaTipo(body: Record<string, unknown>): TransferenciaTipo {
+  const mode = resolveFinanzasTransferenciasProviderMode()
+  const raw = typeof body.tipo === 'string' ? body.tipo.trim() : ''
+  if (raw && TRANSFERENCIA_TIPOS.includes(raw as TransferenciaTipo)) {
+    const tipo = raw as TransferenciaTipo
+    if (mode === 'interbanking' && tipo !== 'cuentas_propias') {
+      throw new Error('Con Interbanking real solo está habilitado cuentas_propias por ahora')
+    }
+    return tipo
+  }
+  if (mode === 'interbanking') return 'cuentas_propias'
+  return 'proveedores'
 }
 
 function serializeTransferencia(id: string, data: import('../domain/transferencia.types.js').TransferenciaConfeccionadaDocument) {
@@ -80,10 +105,12 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
   }
 
   const cuentaCreditoCbu = normalizeCbu(cuentaCreditoCbuRaw)
+  const transferenciaTipo = resolveTransferenciaTipo(input.body)
+  const providerMode = resolveFinanzasTransferenciasProviderMode()
   const provider = getFinanzasTransferenciasProvider()
   const providerResult = await provider.confeccionarLote([
     {
-      tipo: 'proveedores',
+      tipo: transferenciaTipo,
       cuentaDebitoId,
       cuentaCreditoCbu,
       montoCentavos: compromiso.montoCentavos,
@@ -101,7 +128,7 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
       id: transferenciaId,
       doc: {
         compromisoPagoId,
-        tipo: 'proveedores',
+        tipo: transferenciaTipo,
         cuentaDebitoId,
         cuentaCreditoCbu,
         montoCentavos: compromiso.montoCentavos,
@@ -143,7 +170,7 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
         id: transferenciaId,
         doc: {
           compromisoPagoId,
-          tipo: 'proveedores',
+          tipo: transferenciaTipo,
           cuentaDebitoId,
           cuentaCreditoCbu,
           montoCentavos: compromiso.montoCentavos,
@@ -180,7 +207,7 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
     id: transferenciaId,
     doc: {
       compromisoPagoId,
-      tipo: 'proveedores',
+      tipo: transferenciaTipo,
       cuentaDebitoId,
       cuentaCreditoCbu,
       montoCentavos: compromiso.montoCentavos,
@@ -198,7 +225,10 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
       estadoAnterior: null,
       estadoNuevo: estado,
       origen: 'api',
-      nota: 'Confección mock (pendiente autorización en Interbanking)',
+      nota:
+        providerMode === 'interbanking'
+          ? 'Confección Interbanking v2 (cuentas propias)'
+          : 'Confección mock',
     },
   })
 
@@ -206,7 +236,7 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
     estadoAnterior: compromiso.estado,
     estadoNuevo: COMPROMISO_ESTADO_CONFECCIONADA,
     usuario: input.actorUid,
-    nota: `Transferencia confeccionada (operation_id ${operationId}). Pendiente autorización en Interbanking.`,
+    nota: `Transferencia confeccionada por API (operation_id ${operationId}).`,
   })
 
   await appendCompromisoHistorial({
@@ -225,7 +255,7 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
   return {
     ok: true as const,
     transferencia: serializeTransferencia(transferenciaId, transferenciaDoc.data),
-    provider: 'mock' as const,
+    provider: providerMode,
   }
 }
 

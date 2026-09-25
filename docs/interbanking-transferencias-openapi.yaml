@@ -1,0 +1,2116 @@
+openapi: 3.0.0
+info:
+  title: Confección de Transferencias
+  description: |
+
+    La **confección de transferencias** es el primer paso dentro del circuito de generación de una operación.</br>
+    A través de las API es posible confeccionar los siguientes tipos de</br> transferencias: </br>
+
+        1. Cuentas propias: movimientos de fondos entre cuentas de la empresa. 
+        2. Sueldos: pago de haberes a empleados.  
+        3. Proveedores: pago a proveedores.  
+        4. Pagos a terceros.  
+        5. Pagos ARCA: pago de VEPs de ARCA.
+
+    </br>**Requisitos previos** para confeccionar una transferencia mediante API:
+
+      • Contar con un operador API habilitado en Interbanking.
+
+      • El operador tenga permiso de confección para el tipo de transferencia
+        seleccionado.
+
+      • Utilizar cuentas habilitadas para operar.
+
+    Cada request enviado genera un **lote de transferencias**, que agrupa las transferencias solicitadas.</br>
+
+      • Lotes de hasta 10 transferencias: se procesan de forma sincrónica. El
+        response incluye las transferencias generadas.
+
+      • Lotes de más de 10 transferencias: se procesan de forma asincrónica. El
+        response no incluye las transferencias generadas, sino que devuelve un
+        <em>process_id</em> para consultar el resultado del procesamiento.
+
+    </br> <em>Ejemplo de una respuesta asincrónica:</em>
+    ```
+    {
+        "data": {
+            "status": true,
+            "operation_id": "APITEF-b899-453e-8ea1-255de791-11824e951357",
+            "process_id": 52695874,
+            "accepted_transfers": null,
+            "validated_transfers": null,
+            "rejected_transfers": null
+        },
+        "success": true,
+        "timestamp": "2025-12-06T14:53:20.117171701"
+    } 
+    ```  
+    </br>
+
+      </br>Una vez confeccionada, la operación debe continuar su proceso de 
+      **autorización y envío** desde las plataformas de Interbanking (web o
+      mobile). 
+
+    **Reglas de normalización**
+
+      Al confeccionar un lote de transferencias, el sistema aplica reglas de normalización sobre ciertos campos del request para garantizar la consistencia de la operación.
+        
+      • Si <em>consolidated_check</em> = true, el campo unified_send será establecido automáticamente en true, independientemente del valor enviado en el request.
+        Esta normalización asegura que los lotes con extracto consolidado se procesen siempre como envío unificado.
+        
+      La normalización se aplica de forma transparente. No genera errores ni rechazos. El request se procesará normalmente y el lote se confeccionará con los valores normalizados.
+      Esta regla aplica a todos los endpoints de confección (v1 y v2).
+
+    </br> **Casos de normalizacion:**  
+     <table border>
+      <tr align="center">
+        <th bgcolor="lightgreen">#</th>
+        <th bgcolor="lightgreen">consolidated_check (request)</th>
+        <th bgcolor="lightgreen">unified_send (request)</th>
+        <th bgcolor="lightgreen">unified_send (valor final)</th>
+        <th bgcolor="lightgreen">¿Se normalizó?</th>
+        <th bgcolor="lightgreen">Descripción</th>
+      </tr>
+      <tr align="center">
+        <td>1</td>
+        <td>true</td>
+        <td>true</td>
+        <td>true</td>
+        <td>No</td>
+        <td>Coincide con la regla; no requiere cambio</td>
+      </tr>
+      <tr align="center">
+        <td>2</td>
+        <td>true</td>
+        <td>false</td>
+        <td>true</td>
+        <td>Si</td>
+        <td>El sistema sobreescribe unified_send a true</td>
+      </tr>
+      <tr align="center">
+        <td>3</td>
+        <td>false</td>
+        <td>true</td>
+        <td>true</td>
+        <td>No</td>
+        <td>Sin regla de normalización; se respeta el valor enviado</td>
+      </tr>
+      <tr align="center">
+        <td>4</td>
+        <td>false</td>
+        <td>false</td>
+        <td>false</td>
+        <td>No</td>
+        <td>Sin regla de normalización; se respete el valor enviado</td>
+      </tr>
+    </table> </br> </br>
+
+      **Campos requeridos**
+
+      Para las transferencias del tipo Pago a Terceros es obligatorio informar
+      el   concepto de la operación y confirmar la aceptación del disclaimer,
+      según corresponda.
+
+
+    Detalle del disclaimer a aceptar:
+    <em>"Estimado Usuario: En virtud del concepto declarado como aplicable a la presente transferencia electrónica de fondos, le informamos que la misma podría encontrarse sujeta a un tratamiento impositivo diferencial. La aplicación de dicho tratamiento por parte de la entidad financiera, en caso de corresponder, podría depender de la acreditación de ciertos requisitos en un plazo determinado. Le sugerimos contactarse directamente con su entidad financiera para obtener más información al respecto."</em>
+
+    Listado de conceptos y si requiere aceptar disclaimer:
+    <table border> <tr align="center"> <th bgcolor="lightgreen">CÓDIGO</th> <th bgcolor="lightgreen">DESCRIPCIÓN</th> <th bgcolor="lightgreen">REQUIERE OK DE DISCLAIMER</th> </tr> <tr align="center"><td>OIH</td><td>Operaciones Inmobiliarias Habitualista</td><td>NO</td></tr> <tr align="center"><td>ALQ</td><td>Alquileres</td><td>NO</td></tr> <tr align="center"><td>CUO</td><td>Cuotas</td><td>NO</td></tr> <tr align="center"><td>EXP</td><td>Expensas</td><td>NO</td></tr> <tr align="center"><td>HON</td><td>Honorarios</td><td>NO</td></tr> <tr align="center"><td>FAC</td><td>Facturas</td><td>NO</td></tr> <tr align="center"><td>PRE</td><td>Préstamos</td><td>NO</td></tr> <tr align="center"><td>SEG</td><td>Seguros</td><td>NO</td></tr> <tr align="center"><td>VAR</td><td>Varios</td><td>NO</td></tr> <tr align="center"><td>OIN</td><td>Operaciones Inmobiliarias</td><td>SI</td></tr> <tr align="center"><td>ROP</td><td>Reintegros de obras sociales y prepagas</td><td>NO</td></tr> <tr align="center"><td>APC</td><td>Aportes de capital</td><td>NO</td></tr> <tr align="center"><td>BRH</td><td>Bienes registrables habitualistas</td><td>NO</td></tr> <tr align="center"><td>BRN</td><td>Bienes registrables no habitualistas</td><td>SI</td></tr> <tr align="center"><td>SIS</td><td>Siniestros de seguros</td><td>NO</td></tr> <tr align="center"><td>SON</td><td>Suscripción obligaciones negociables</td><td>NO</td></tr> <tr align="center"><td>SRF</td><td>Suscripción rescate de fondos</td><td>SI</td></tr> </table></br>
+
+    **Mensajes de Respuesta**</br> </br> Se detallan a continuación los errores asociados a la lógica del negocio.</br>
+
+    <table border>
+      <tr align="center">
+      <th bgcolor="lightgreen">Errores de montos y topes</th>
+      <th bgcolor="lightgreen"><b>Descripción</th>
+      </tr>
+      <tr><td>tef.gestion.error.impctaparte</td><td>El importe de la transferencia supera el tope permitido para la cuenta débito en este tipo de transferencia.</td></tr>
+      <tr><td>tef.gestion.error.topetrxctapartedebito</td><td>El tope por transacción para la cuenta de débito es de xxx.</td></tr>
+      <tr><td>tef.gestion.error.topetrdiaxctapartedebito</td><td>El tope por día para confeccionar transferencias con la cuenta de débito es de xxx.</td></tr>
+      <tr><td>tef.gestion.error.impacctapartedebito</td><td>El importe ingresado supera el tope por xxxx de la cuenta de débito.</td></tr>
+      <tr><td>tef.gestion.error.importetefexcedido</td><td>El monto de la transferencia excede al permitido para el tipo xxx.</td></tr>
+
+      <tr align="center">
+      <th bgcolor="lightgreen">Errores de cuentas – Cuentas de débito</th>
+      <th bgcolor="lightgreen"><b>Descripción</th>
+      </tr>
+      <tr><td>tef.gestion.error.ctacontrol.debito.no.operativa</td><td>La cuenta de débito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.ctadebha</td><td>La cuenta de débito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.cuentadebitousohabilitado</td><td>La cuenta de débito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.cuentainhabilitadadebito</td><td>La cuenta de débito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.cuentapartenohabilitada</td><td>La cuenta de débito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.ctapartenotef</td><td>La cuenta de débito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.operadormodousodebito</td><td>No tenés la habilitación necesaria para operar con la cuenta de débito.</td></tr>
+      <tr><td>tef.gestion.error.opectapartedebito</td><td>No tenés la habilitación necesaria para operar con la cuenta de débito.</td></tr>
+      <tr><td>tef.gestion.error.cuentamodousodebito</td><td>Revisá los usos de cuenta de débito en el módulo ABM o Reportes.</td></tr>
+      <tr><td>tef.gestion.error.openotef</td><td>Esta cuenta no permite realizar transferencias.</td></tr>
+      <tr><td>tef.gestion.error.horariohadebito</td><td>No se encuentra dentro del horario de operación habilitado por el banco de débito para transferencias de tipo xxx.</td></tr>
+
+      <tr align="center">
+      <th bgcolor="lightgreen">Errores de cuentas – Cuentas de crédito</th>
+      <th bgcolor="lightgreen">Descripción</th>
+      </tr>
+      <tr><td>tef.gestion.error.ctacontrol.credito.no.operativa</td><td>La cuenta de crédito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.ctacredha</td><td>La cuenta de crédito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.cuentacreditousohabilitado</td><td>La cuenta de crédito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.cuentacontrapartenohabilitada</td><td>La cuenta de crédito no está habilitada.</td></tr>
+      <tr><td>tef.gestion.error.ctacreditonuevanosuperatiempespera</td><td>Cuenta de crédito no disponible. Podés utilizar la cuenta después de 24 horas de su activación.</td></tr>
+      <tr><td>tef.gestion.error.opectapartecredito</td><td>No tenés la habilitación necesaria para operar con la cuenta de crédito.</td></tr>
+      <tr><td>tef.gestion.error.operadormodousocredito</td><td>No tenés la habilitación necesaria para operar con la cuenta de crédito.</td></tr>
+      <tr><td>tef.gestion.error.cuentamodousocredito</td><td>Revisá los usos de cuenta de crédito en el módulo ABM o Reportes.</td></tr>
+      <tr><td>tef.tratam.error.nosepuedetratarbcocrednoaceptadif</td><td>El banco de crédito no acepta transferencias con esa fecha de solicitud.</td></tr>
+      <tr><td>tef.gestion.error.horariohacredito</td><td>No se encuentra dentro del horario de operación habilitado por el banco de crédito para transferencias de tipo xxx.</td></tr>
+
+      <tr align="center">
+      <th bgcolor="lightgreen">Errores de cuentas – Generales</th>
+      <th bgcolor="lightgreen">Descripción</th>
+      </tr>
+      <tr><td>tef.gestion.error.ctasiguales</td><td>Las cuentas débito y crédito no pueden ser iguales.</td></tr>
+      <tr><td>tef.gestion.error.monedasdistintas</td><td>Las cuentas deben operar con el mismo tipo de moneda.</td></tr>
+      <tr><td>tef.gestion.error.tipomoneda</td><td>La moneda de las cuentas de débito y de crédito debe coincidir.</td></tr>
+      <tr><td>tef.gestion.error.nohayhorario</td><td>No hay horarios cargados para el banco.</td></tr>
+      <tr><td>tef.gestion.error.idinternomuylargo</td><td>Las observaciones soportan un máximo de 60 caracteres.</td></tr>
+      <tr><td>tef.gestion.error.canttefexcedido</td><td>Excede la cantidad máxima de nnn transferencias permitidas para el tipo xxx.</td></tr>
+      <tr><td>transf.conf.error.servicio_no_habilitado</td><td>No tenés habilitado el servicio para confeccionar transferencias de este tipo.</td></tr>
+      <tr align="center">
+      <th bgcolor="lightgreen">Errores de banco</th>
+      <th bgcolor="lightgreen">Descripción</th>
+      </tr>
+      <tr><td>tef.gestion.error.banconooperativo</td><td>El banco xxx no está operativo.</td></tr>
+      <tr><td>tef.gestion.error.banconooperadebitos</td><td>El banco xxx no está habilitado para operar como banco de débito.</td></tr>
+      <tr><td>tef.gestion.error.banconooperacreditos</td><td>El banco xxx no está habilitado para operar como banco de crédito.</td></tr>
+      <tr><td>tef.gestion.error.bancocreditonoaceptatipotransferencia</td><td>El banco de crédito no acepta este tipo de transferencia.</td></tr>
+      <tr><td>tef.gestion.error.bancodebitonoaceptatipotransferencia</td><td>El banco de débito no acepta este tipo de transferencia.</td></tr>
+      <tr><td>tef.gestion.error.bancocreditonoaceptamultibanco</td><td>El banco de crédito no acepta transferencias multibanco.</td></tr>
+      <tr><td>tef.gestion.error.bancodebitonoaceptamultibanco</td><td>El banco de débito no acepta transferencias multibanco.</td></tr>
+      <tr><td>tef.gestion.error.bancoNoOfreceServicio</td><td>El banco no ofrece el servicio xxx.</td></tr>
+      <tr><td>tef.gestion.error.operadornooperaconbanco</td><td>No tenés la habilitación necesaria para operar con este banco.</td></tr>
+
+      <tr align="center">
+      <th bgcolor="lightgreen">Errores de fechas y diferimientos</th>
+      <th bgcolor="lightgreen">Descripción</th>
+      </tr>
+      <tr><td>tef.gestion.error.diasdiferimientomin</td><td>La fecha de pago no es válida, las transferencias de tipo {0} deben realizarse con al menos {1} días de anticipación.</td></tr>
+      <tr><td>tef.gestion.error.diasdiferimientomax</td><td>La fecha de pago no es válida, las transferencias de tipo {0} no pueden superar los {1} días de anticipación.</td></tr>
+    </table> </br>
+
+      **Especificaciones para APIs versión 1:** 
+
+      En caso de producirse un error en alguna de las transferencias incluidas en
+      el lote, todo el lote será rechazado y no se confeccionará ninguna
+      transferencia.
+
+      Para cada transferencia enviada es obligatorio especificar los datos de la
+      cuenta de débito, crédito e importe. Las cuentas de débito y crédito pueden
+      identificarse mediante CBU o mediante el formato de cuenta de Interbanking,
+      que incluye el código de banco según BCRA, el tipo de cuenta, el código de
+      moneda y el número de cuenta. </br>
+
+
+    **Especificaciones para APIs versión 2**: </br>
+    Pueden producirse dos situaciones en caso de que ocurra un error en las transferencias del lote: 
+    Si <em>resend_validated</em> = true, <em>unified_send</em> = false y no  existen errores de horario bancario ni de fecha inválida:
+
+     • Las transferencias correctas se confeccionarán. **Y se informarán en accepted_transfers.**
+
+     • Las rechazadas se informarán en <em>rejected_transfers</em>, junto con sus errores.
+
+
+    Si <em>resend_validated</em> = false, <em>unified_send</em> = true, o existen errores de horario bancario o de fecha inválida: 
+    Las transferencias correctas se agruparán en <em>validated_transfers</em>.  **No se confeccionarán.**
+    Las transferencias rechazadas se informarán en <em>rejected_transfers</em>, junto con sus errores.
+
+    Si se detecta un error que no corresponde a una transferencia específica o si existen confection_id duplicados, el lote completo será rechazado.
+    Para cada transferencia informada, es obligatorio especificar los datos de la cuenta de débito, crédito e importe. Las cuentas de débito y crédito deben referenciarse mediante CBU. Los datos del formato de cuenta de Interbanking (código de banco según BCRA, tipo de cuenta, código de moneda y número de cuenta) son opcionales.    
+  contact:
+    name: Interbanking
+    url: https://interbanking.com.ar/
+    email: consultasapi@interbanking.com.ar
+  version: v1.5.4
+  x-ibm-name: confeccion-de-transferencias
+tags:
+  - name: Transferencias
+paths:
+  /v1/transfers/confection/afip:
+    post:
+      tags:
+        - Transferencias
+      summary: Confeccionar transferencias AFIP
+      description: |
+        API que permite confeccionar transferencias AFIP.  
+        Aplica regla de normalización: si consolidated_check = true, el campo unified_send será establecido automáticamente en true.
+      parameters: []
+      requestBody:
+        description: '⚠️ Regla de normalización: En este ejemplo, aunque unified_send se envía como false, el sistema lo normalizará a true dado que consolidated_check = true. La respuesta reflejará unified_send = true.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfeccionCommandDTOTransferenciaAfipCommandDTO'
+        required: true
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoDTO'
+        '400':
+          description: |-
+            1006 - Tipo de dato incorrecto
+            1014 - El identificador de transferencia debe ser único
+            1005 - Campo obligatorio no informado
+            1007 - El campo excede la longitud máxima
+            1045 - El campo debe ser alfanumérico
+            1047 - El campo no puede contener caracteres especiales
+            1000 - Confección sin transferencias
+            1004 - La fecha de solicitud es inválida
+            1022 - El campo debe ser mayor a cero
+            1021 - El campo decimal está mal especificado
+            1002 - La cuenta de débito es obligatoria
+            1010 - La Fecha de solicitud debe corresponder al día de hoy
+            1076 - Campo obligatorio en cuenta debito
+            1077 - El campo no posee la longitud definida
+            1078 - El operador no tiene acceso o no existe la cuenta débito de la transferencia identificada con el confection_id X
+            1079 - El campo vep_number informado () en la transferencia identificada  con el confection_id X no existe o no pertenece a su empresa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+  /v1/transfers/confection/own-account:
+    post:
+      tags:
+        - Transferencias
+      summary: Confeccionar transferencias a cuentas propias
+      description: |
+        API que permite confeccionar transferencias a cuentas propias.  
+        Aplica regla de normalización: si consolidated_check = true, el campo unified_send será establecido automáticamente en true.
+      parameters: []
+      requestBody:
+        description: ⚠️ **Regla de normalización:** En este ejemplo, aunque unified_send se envía como false, el sistema lo normalizará a true dado que consolidated_check = true. La respuesta reflejará unified_send = true.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfeccionCommandDTOTransferenciaCuentaDestinoCommandDTO'
+        required: true
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoDTO'
+        '400':
+          description: |-
+            1000 - Confección sin transferencias  
+            1002 - La cuenta de débito es obligatoria  
+            1003 - La cuenta de crédito es obligatoria  
+            1004 - La fecha de solicitud es inválida  
+            1005 - Campo obligatorio no informado  
+            1006 - Tipo de dato incorrecto  
+            1007 - El campo excede la longitud máxima  
+            1010 - La Fecha de solicitud debe corresponder al día de hoy  
+            1014 - El identificador de transferencia debe ser único  
+            1021 - El campo decimal está mal especificado  
+            1022 - El campo debe ser mayor a cero  
+            1045 - El campo debe ser alfanumérico  
+            1047 - El campo no puede contener caracteres especiales  
+            1076 - Campo obligatorio en cuenta débito/crédito  
+            1077 - El campo no posee la longitud definida  
+            1078 - El operador no tiene acceso o no existe la cuenta débito/crédito de la transferencia identificada con el confection_id X
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+  /v1/transfers/confection/salary:
+    post:
+      tags:
+        - Transferencias
+      summary: Confeccionar transferencias sueldo
+      description: |
+        API que permite confeccionar transferencias sueldo.  
+        Aplica regla de normalización: si consolidated_check = true, el campo unified_send será establecido automáticamente en true.
+      parameters: []
+      requestBody:
+        description: ⚠️ **Regla de normalización:** En este ejemplo, aunque unified_send se envía como false, el sistema lo normalizará a true dado que consolidated_check = true. La respuesta reflejará unified_send = true.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfeccionCommandDTOTransferenciaCuentaDestinoCommandDTO'
+        required: true
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoDTO'
+        '400':
+          description: |-
+            1000 - Confección sin transferencias  
+            1002 - La cuenta de débito es obligatoria  
+            1003 - La cuenta de crédito es obligatoria  
+            1004 - La fecha de solicitud es inválida  
+            1005 - Campo obligatorio no informado  
+            1006 - Tipo de dato incorrecto  
+            1007 - El campo excede la longitud máxima  
+            1010 - La Fecha de solicitud debe corresponder al día de hoy  
+            1014 - El identificador de transferencia debe ser único  
+            1021 - El campo decimal está mal especificado  
+            1022 - El campo debe ser mayor a cero  
+            1045 - El campo debe ser alfanumérico  
+            1047 - El campo no puede contener caracteres especiales  
+            1076 - Campo obligatorio en cuenta débito/crédito  
+            1077 - El campo no posee la longitud definida  
+            1078 - El operador no tiene acceso o no existe la cuenta débito/crédito de la transferencia identificada con el confection_id X
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+  /v1/transfers/confection/supplier:
+    post:
+      tags:
+        - Transferencias
+      summary: Confeccionar transferencias de proveedores
+      description: |
+        API que permite confeccionar transferencias proveedores.  
+        Aplica regla de normalización: si consolidated_check = true, el campo unified_send será establecido automáticamente en true.
+      parameters: []
+      requestBody:
+        description: ⚠️ **Regla de normalización:** En este ejemplo, aunque unified_send se envía como false, el sistema lo normalizará a true dado que consolidated_check = true. La respuesta reflejará unified_send = true.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfeccionCommandDTOTransferenciaProveedoresCommandDTO'
+        required: true
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoDTO'
+        '400':
+          description: |-
+            1000 - Confección sin transferencias  
+            1002 - La cuenta de débito es obligatoria  
+            1003 - La cuenta de crédito es obligatoria  
+            1004 - La fecha de solicitud es inválida  
+            1005 - Campo obligatorio no informado  
+            1006 - Tipo de dato incorrecto  
+            1007 - El campo excede la longitud máxima  
+            1010 - La Fecha de solicitud debe corresponder al día de hoy  
+            1014 - El identificador de transferencia debe ser único  
+            1022 - El campo debe ser mayor a cero  
+            1021 - El campo decimal está mal especificado  
+            1045 - El campo debe ser alfanumérico  
+            1047 - El campo no puede contener caracteres especiales  
+            1076 - Campo obligatorio en cuenta débito/crédito  
+            1077 - El campo no posee la longitud definida  
+            1078 - El operador no tiene acceso o no existe la cuenta débito/crédito de la transferencia identificada con el confection_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+  /v1/transfers/confection/third-party:
+    post:
+      tags:
+        - Transferencias
+      summary: Confeccionar transferencias de terceros
+      description: |
+        API que permite confeccionar transferencias terceros.  
+        Aplica regla de normalización: si consolidated_check = true, el campo unified_send será establecido automáticamente en true.
+      parameters: []
+      requestBody:
+        description: ⚠️ **Regla de normalización:** En este ejemplo, aunque unified_send se envía como false, el sistema lo normalizará a true dado que consolidated_check = true. La respuesta reflejará unified_send = true.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfeccionCommandDTOTransferenciaTercerosCommandDTO'
+        required: true
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoDTO'
+        '400':
+          description: |-
+            1000 - Confección sin transferencias  
+            1002 - La cuenta de débito es obligatoria  
+            1003 - La cuenta de crédito es obligatoria  
+            1004 - La fecha de solicitud es inválida  
+            1005 - Campo obligatorio no informado  
+            1006 - Tipo de dato incorrecto  
+            1007 - El campo excede la longitud máxima  
+            1010 - La Fecha de solicitud debe corresponder al día de hoy  
+            1014 - El identificador de transferencia debe ser único  
+            1021 - El campo decimal está mal especificado  
+            1022 - El campo debe ser mayor a cero  
+            1045 - El campo debe ser alfanumérico  
+            1047 - El campo no puede contener caracteres especiales  
+            1076 - Campo obligatorio en cuenta débito/crédito  
+            1077 - El campo no posee la longitud definida  
+            1078 - El operador no tiene acceso o no existe la cuenta débito/crédito de la transferencia identificada con el confection_id X
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDto'
+  /v2/transfers/confection/supplier:
+    post:
+      tags:
+        - Transferencias V2
+      summary: Confeccionar transferencias de proveedores - V2
+      description: |
+        API que permite confeccionar transferencias de proveedores - V2.  
+        Aplica regla de normalización: si consolidated_check = true, el campo unified_send será establecido automáticamente en true.
+      parameters: []
+      requestBody:
+        description: ⚠️ **Regla de normalización:** En este ejemplo, aunque unified_send se envía como false, el sistema lo normalizará a true dado que consolidated_check = true. La respuesta reflejará unified_send = true.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfeccionCommandDTOV2TransferenciaProveedoresCommandDTOV2'
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoDTOV2'
+        '400':
+          description: |-
+            1000 - Confección sin transferencias  
+            1002 - La cuenta de débito es obligatoria  
+            1003 - La cuenta de Crédito es obligatoria  
+            1004 - La fecha de solicitud es inválida <br>1005 - Campo obligatorio no informado  
+            1006 - Tipo de dato incorrecto <br>1007 - El campo excede la longitud máxima  
+            1007 - El campo excede la longitud máxima  
+            1010 - La Fecha de solicitud debe corresponder al día de hoy  
+            1012 - Cuenta de débito no existe 
+            1013 - Cuenta de crédito no existe  
+            1014 - El identificador de transferencia debe ser único  
+            1021 - El campo decimal está mal especificado  
+            1022 - El campo debe ser mayor a cero  
+            1045 - El campo debe ser alfanumérico  
+            1047 - El campo no puede contener caracteres especiales  
+            1051 - Parámetro no esperado  
+            1075 - Fecha solicitud vencida  
+            1076 - Campo obligatorio en cuenta debito/crédito  
+            1077 - El campo no posee la longitud definida  
+            1078 - El operador no tiene acceso o no existe la cuenta débito/crédito (confection_id X)    
+            1080 - Error en valor informado en tipo documento o tipo retención en addenda proveedores  
+            1081 - El campo excede el valor máximo  
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+  /v2/transfers/confection/own-account:
+    post:
+      tags:
+        - Transferencias V2
+      summary: Confeccionar transferencias a cuentas propias - V2
+      description: |
+        API que permite confeccionar transferencias a cuentas propias - V2.  
+        Aplica regla de normalización: si consolidated_check = true, el campo unified_send será establecido automáticamente en true.
+      parameters: []
+      requestBody:
+        description: ⚠️ **Regla de normalización:** En este ejemplo, aunque unified_send se envía como false, el sistema lo normalizará a true dado que consolidated_check = true. La respuesta reflejará unified_send = true.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfeccionCommandDTOV2TransferenciaCuentaDestinoCommandDTOV2'
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoDTOV2'
+        '400':
+          description: |-
+            1000 - Confección sin transferencias  
+            1002 - La cuenta de débito es obligatoria  
+            1003 - La cuenta de Crédito es obligatoria  
+            1004 - La fecha de solicitud es inválida <br>1005 - Campo obligatorio no informado  
+            1006 - Tipo de dato incorrecto <br>1007 - El campo excede la longitud máxima  
+            1007 - El campo excede la longitud máxima  
+            1010 - La Fecha de solicitud debe corresponder al día de hoy  
+            1012 - Cuenta de débito no existe 
+            1013 - Cuenta de crédito no existe  
+            1014 - El identificador de transferencia debe ser único  
+            1021 - El campo decimal está mal especificado  
+            1022 - El campo debe ser mayor a cero  
+            1045 - El campo debe ser alfanumérico  
+            1047 - El campo no puede contener caracteres especiales  
+            1051 - Parámetro no esperado  
+            1075 - Fecha solicitud vencida  
+            1076 - Campo obligatorio en cuenta debito/crédito  
+            1077 - El campo no posee la longitud definida  
+            1078 - El operador no tiene acceso o no existe la cuenta débito/crédito (confection_id X)    
+            1080 - Error en valor informado en tipo documento o tipo retención en addenda proveedores  
+            1081 - El campo excede el valor máximo  
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+  /v2/transfers/confection/salary:
+    post:
+      tags:
+        - Transferencias V2
+      summary: Confeccionar transferencias de salarios - V2
+      description: |
+        API que permite confeccionar transferencias de salarios - V2.  
+        Aplica regla de normalización: si consolidated_check = true, el campo unified_send será establecido automáticamente en true.
+      parameters: []
+      requestBody:
+        description: ⚠️ **Regla de normalización:** En este ejemplo, aunque unified_send se envía como false, el sistema lo normalizará a true dado que consolidated_check = true. La respuesta reflejará unified_send = true.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfeccionCommandDTOV2TransferenciaCuentaDestinoCommandDTOV2'
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoDTOV2'
+        '400':
+          description: |-
+            1000 - Confección sin transferencias  
+            1002 - La cuenta de débito es obligatoria  
+            1003 - La cuenta de Crédito es obligatoria  
+            1004 - La fecha de solicitud es inválida <br>1005 - Campo obligatorio no informado  
+            1006 - Tipo de dato incorrecto <br>1007 - El campo excede la longitud máxima  
+            1007 - El campo excede la longitud máxima  
+            1010 - La Fecha de solicitud debe corresponder al día de hoy  
+            1012 - Cuenta de débito no existe 
+            1013 - Cuenta de crédito no existe  
+            1014 - El identificador de transferencia debe ser único  
+            1021 - El campo decimal está mal especificado  
+            1022 - El campo debe ser mayor a cero  
+            1045 - El campo debe ser alfanumérico  
+            1047 - El campo no puede contener caracteres especiales  
+            1051 - Parámetro no esperado  
+            1075 - Fecha solicitud vencida  
+            1076 - Campo obligatorio en cuenta debito/crédito  
+            1077 - El campo no posee la longitud definida  
+            1078 - El operador no tiene acceso o no existe la cuenta débito/crédito (confection_id X)    
+            1080 - Error en valor informado en tipo documento o tipo retención en addenda proveedores  
+            1081 - El campo excede el valor máximo  
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+  /v2/transfers/confection/third-party:
+    post:
+      tags:
+        - Transferencias V2
+      summary: Confeccionar transferencias de terceros - V2
+      description: |
+        API que permite confeccionar transferencias de terceros - V2.  
+        Aplica regla de normalización: si consolidated_check = true, el campo unified_send será establecido automáticamente en true.
+      parameters: []
+      requestBody:
+        description: ⚠️ **Regla de normalización:** En este ejemplo, aunque unified_send se envía como false, el sistema lo normalizará a true dado que consolidated_check = true. La respuesta reflejará unified_send = true.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfeccionCommandDTOV2TransferenciaTercerosCommandDTOV2'
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoDTOV2'
+        '400':
+          description: |-
+            1000 - Confección sin transferencias  
+            1002 - La cuenta de débito es obligatoria  
+            1003 - La cuenta de Crédito es obligatoria  
+            1004 - La fecha de solicitud es inválida <br>1005 - Campo obligatorio no informado  
+            1006 - Tipo de dato incorrecto <br>1007 - El campo excede la longitud máxima  
+            1007 - El campo excede la longitud máxima  
+            1010 - La Fecha de solicitud debe corresponder al día de hoy  
+            1012 - Cuenta de débito no existe 
+            1013 - Cuenta de crédito no existe  
+            1014 - El identificador de transferencia debe ser único  
+            1021 - El campo decimal está mal especificado  
+            1022 - El campo debe ser mayor a cero  
+            1045 - El campo debe ser alfanumérico  
+            1047 - El campo no puede contener caracteres especiales  
+            1051 - Parámetro no esperado  
+            1075 - Fecha solicitud vencida  
+            1076 - Campo obligatorio en cuenta debito/crédito  
+            1077 - El campo no posee la longitud definida  
+            1078 - El operador no tiene acceso o no existe la cuenta débito/crédito (confection_id X)    
+            1080 - Error en valor informado en tipo documento o tipo retención en addenda proveedores  
+            1081 - El campo excede el valor máximo  
+            1084 - El concepto no es valido 
+                        
+            1085 - El disclaimer para el concepto debe ser aceptado (true)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+  /v1/transfers/asynchronous-process/{idProceso}:
+    get:
+      tags:
+        - Transferencias
+      summary: Consulta de proceso asincrónico de transferencias
+      description: API que permite obtener el estado de un proceso asincrónico de confección de transferencias
+      parameters:
+        - name: idProceso
+          in: path
+          description: Número de proceso asincrónico obtenido en la confección
+          required: true
+          schema:
+            type: integer
+            format: int64
+            example: 76491128
+      responses:
+        '200':
+          description: Procesamiento correcto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesoAsincronicoDTO'
+        '400':
+          description: El campo idProcess informado (${process-id}) no existe o no pertenece a su empresa (customer_id ${customer_id}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+        '500':
+          description: 1009 - Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeErrorDtoV2'
+components:
+  schemas:
+    Banco:
+      description: Modelo de datos de bancos
+      type: object
+      properties:
+        bcoIdBco:
+          type: string
+        nombreBanco:
+          type: string
+        bcoLogo:
+          type: string
+    BancoEntity:
+      description: Modelo de datos de bancos
+      type: object
+      properties:
+        bcoIdBco:
+          description: Codigo Banco segun DN
+          type: string
+        nombreBanco:
+          description: Nombre Corto de Banco
+          type: string
+        bcoLogo:
+          description: Logo del Banco
+          type: string
+    ComunidadDTO:
+      type: object
+      properties:
+        community_id:
+          format: int64
+          description: Identificador de la comunidad
+          type: integer
+        community_name:
+          description: Denominación de la comunidad
+          type: string
+        sellers:
+          description: Lista de Vendedores por cada Comunidad
+          type: array
+          items:
+            $ref: '#/components/schemas/VendedorDTO'
+    ComunidadesDTO:
+      type: object
+      properties:
+        communities:
+          description: Lista de comunidades
+          type: array
+          items:
+            $ref: '#/components/schemas/ComunidadDTO'
+    ConfeccionCommandDTOTransferenciaAfipCommandDTO:
+      required:
+        - operator_id
+        - consolidated_check
+        - unified_send
+        - found_transfers
+      type: object
+      properties:
+        operator_id:
+          description: Identificador del Operador
+          example: 12457858
+          type: string
+        consolidated_check:
+          description: 'Indica si se desea mostrar la sumatoria de los montos de las transferencias del lote en un único importe. true/false Nota: Cuando este campo se envíe en true, el sistema asignará automáticamente unified_send = true, independientemente del valor enviado en dicho campo.'
+          example: true
+          type: boolean
+        description:
+          description: Dato que permite identificar la operación unificada
+          example: Descripción que permite identificar la operación unificada
+          type: string
+        payment_number:
+          description: Número de Orden de pago asignado internamente para identificar la transferencia
+          example: 12457888
+          type: string
+        unified_send:
+          description: 'Indica si se desea manejar la transferencia en forma unificada en un solo lote. true/false Nota: Este campo será normalizado automáticamente a true cuando consolidated_check = true, sin importar el valor enviado en el request.'
+          example: false
+          type: boolean
+        found_transfers:
+          description: Transferencias a confeccionar
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaAfipCommandDTO'
+    ConfeccionCommandDTOTransferenciaB2BCommandDTO:
+      required:
+        - operator_id
+        - consolidated_check
+        - unified_send
+        - found_transfers
+      type: object
+      properties:
+        operator_id:
+          description: Identificador del Operador
+          type: string
+        consolidated_check:
+          description: Si desea que se muestre la sumatoria de las transferencias del lote en un único importe. true/false
+          type: boolean
+        description:
+          description: Dato que permite identificar la operación unificada
+          type: string
+        payment_number:
+          description: Número de Orden de pago asignado internamente para identificar la transferencia
+          type: string
+        unified_send:
+          description: Si desea manejar la transferencia en forma unificada en un solo lote. true/false
+          type: boolean
+        found_transfers:
+          description: Transferencias a confeccionar
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaB2BCommandDTO'
+    ConfeccionCommandDTOTransferenciaCuentaDestinoCommandDTO:
+      required:
+        - operator_id
+        - consolidated_check
+        - unified_send
+        - found_transfers
+      type: object
+      properties:
+        operator_id:
+          description: Identificador del Operador
+          example: 12457888
+          type: string
+        consolidated_check:
+          description: 'Indica si se desea mostrar la sumatoria de los montos de las transferencias del lote en un único importe. true/false Nota: Cuando este campo se envíe en true, el sistema asignará automáticamente unified_send = true, independientemente del valor enviado en dicho campo.'
+          example: true
+          type: boolean
+        description:
+          description: Dato que permite identificar la operación unificada
+          example: Descripción que permite identificar la operación unificada
+          type: string
+        payment_number:
+          description: Número de Orden de pago asignado internamente para identificar la transferencia
+          example: 12458777
+          type: string
+        unified_send:
+          description: 'Indica si se desea manejar la transferencia en forma unificada en un solo lote. true/false Nota: Este campo será normalizado automáticamente a true cuando consolidated_check = true, sin importar el valor enviado en el request.'
+          example: false
+          type: boolean
+        found_transfers:
+          description: Transferencias a confeccionar
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaCuentaDestinoCommandDTO'
+    ConfeccionCommandDTOTransferenciaProveedoresCommandDTO:
+      required:
+        - operator_id
+        - consolidated_check
+        - unified_send
+        - found_transfers
+      type: object
+      properties:
+        operator_id:
+          description: Identificador del Operador
+          example: 12457858
+          type: string
+        consolidated_check:
+          description: 'Indica si se desea mostrar la sumatoria de los montos de las transferencias del lote en un único importe. true/false Nota: Cuando este campo se envíe en true, el sistema asignará automáticamente unified_send = true, independientemente del valor enviado en dicho campo.'
+          example: true
+          type: boolean
+        description:
+          description: Dato que permite identificar la operación unificada
+          example: Descripción que permite identificar la operación unificada
+          type: string
+        payment_number:
+          description: Número de Orden de pago asignado internamente para identificar la transferencia
+          example: 12457887
+          type: string
+        unified_send:
+          description: 'Indica si se desea manejar la transferencia en forma unificada en un solo lote. true/false Nota: Este campo será normalizado automáticamente a true cuando consolidated_check = true, sin importar el valor enviado en el request.'
+          example: false
+          type: boolean
+        found_transfers:
+          description: Transferencias a confeccionar
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaProveedoresCommandDTO'
+    ConfeccionCommandDTOTransferenciaTercerosCommandDTO:
+      required:
+        - operator_id
+        - consolidated_check
+        - unified_send
+        - found_transfers
+      type: object
+      properties:
+        operator_id:
+          description: Identificador del Operador
+          example: 12457858
+          type: string
+        consolidated_check:
+          description: 'Indica si se desea mostrar la sumatoria de los montos de las transferencias del lote en un único importe. true/false Nota: Cuando este campo se envíe en true, el sistema asignará automáticamente unified_send = true, independientemente del valor enviado en dicho campo.'
+          example: true
+          type: boolean
+        description:
+          description: Dato que permite identificar la operación unificada
+          example: Descripción que permite identificar la operación unificada
+          type: string
+        payment_number:
+          description: Número de Orden de pago asignado internamente para identificar la transferencia
+          example: 12457888
+          type: string
+        unified_send:
+          description: 'Indica si se desea manejar la transferencia en forma unificada en un solo lote. true/false Nota: Este campo será normalizado automáticamente a true cuando consolidated_check = true, sin importar el valor enviado en el request.'
+          example: false
+          type: boolean
+        found_transfers:
+          description: Transferencias a confeccionar
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaTercerosCommandDTO'
+    ConfeccionCommandDTOV2TransferenciaProveedoresCommandDTOV2:
+      required:
+        - operator_id_number
+        - operator_country_code
+        - consolidated_check
+        - unified_send
+        - resend_validated
+        - found_transfers
+      type: object
+      properties:
+        operator_id_number:
+          description: Documento del Operador
+          example: 12457858
+          type: string
+        operator_country_code:
+          description: Codigo pais del Operador
+          example: AR
+          type: string
+        consolidated_check:
+          description: 'Indica si se desea mostrar la sumatoria de los montos de las transferencias del lote en un único importe. true/false Nota: Cuando este campo se envíe en true, el sistema asignará automáticamente unified_send = true, independientemente del valor enviado en dicho campo.'
+          example: true
+          type: boolean
+        description:
+          description: Dato que permite identificar la operación unificada
+          example: Descripción que permite identificar la operación unificada
+          type: string
+        payment_number:
+          description: Número de Orden de pago asignado internamente para identificar la transferencia
+          example: 12457888
+          type: string
+        unified_send:
+          description: 'Indica si se desea manejar la transferencia en forma unificada en un solo lote. true/false Nota: Este campo será normalizado automáticamente a true cuando consolidated_check = true, sin importar el valor enviado en el request.'
+          example: false
+          type: boolean
+        resend_validated:
+          description: Si desea reenviar las transferencias correctas que no fueron procesadas por haber errores en el lote. No aplica para errores de formato de los datos true/false
+          type: boolean
+        found_transfers:
+          description: Transferencias a confeccionar
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaProveedoresCommandDTOV2'
+    ConfeccionCommandDTOV2TransferenciaCuentaDestinoCommandDTOV2:
+      required:
+        - operator_id_number
+        - operator_country_code
+        - consolidated_check
+        - unified_send
+        - resend_validated
+        - found_transfers
+      type: object
+      properties:
+        operator_id_number:
+          description: Documento del Operador
+          example: 11111111
+          type: string
+        operator_country_code:
+          description: Codigo pais del Operador
+          example: AR
+          type: string
+        consolidated_check:
+          description: 'Indica si se desea mostrar la sumatoria de los montos de las transferencias del lote en un único importe. true/false Nota: Cuando este campo se envíe en true, el sistema asignará automáticamente unified_send = true, independientemente del valor enviado en dicho campo.'
+          example: true
+          type: boolean
+        description:
+          description: Dato que permite identificar la operación unificada
+          example: Descripción que permite identificar la operación unificada
+          type: string
+        payment_number:
+          description: Número de Orden de pago asignado internamente para identificar la transferencia
+          example: 1548745
+          type: string
+        unified_send:
+          description: 'Indica si se desea manejar la transferencia en forma unificada en un solo lote. true/false Nota: Este campo será normalizado automáticamente a true cuando consolidated_check = true, sin importar el valor enviado en el request.'
+          example: false
+          type: boolean
+        resend_validated:
+          description: Si desea reenviar las transferencias correctas que no fueron procesadas por haber errores en el lote. No aplica para errores de formato de los datos true/false
+          type: boolean
+        found_transfers:
+          description: Transferencias a confeccionar
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaCuentaDestinoCommandDTOV2'
+    ConfeccionCommandDTOV2TransferenciaTercerosCommandDTOV2:
+      required:
+        - operator_id_number
+        - operator_country_code
+        - consolidated_check
+        - unified_send
+        - resend_validated
+        - found_transfers
+      type: object
+      properties:
+        operator_id_number:
+          description: Documento del Operador
+          example: 11111111
+          type: string
+        operator_country_code:
+          description: Codigo pais del Operador
+          example: AR
+          type: string
+        consolidated_check:
+          description: 'Indica si se desea mostrar la sumatoria de los montos de las transferencias del lote en un único importe. true/false Nota: Cuando este campo se envíe en true, el sistema asignará automáticamente unified_send = true, independientemente del valor enviado en dicho campo.'
+          example: true
+          type: boolean
+        description:
+          description: Dato que permite identificar la operación unificada
+          example: Descripcion que permite identificar la operación unificada
+          type: string
+        payment_number:
+          description: Número de Orden de pago asignado internamente para identificar la transferencia
+          example: 78451245
+          type: string
+        unified_send:
+          description: 'Indica si se desea manejar la transferencia en forma unificada en un solo lote. true/false Nota: Este campo será normalizado automáticamente a true cuando consolidated_check = true, sin importar el valor enviado en el request.'
+          example: false
+          type: boolean
+        resend_validated:
+          description: Si desea reenviar las transferencias correctas que no fueron procesadas por haber errores en el lote. No aplica para errores de formato de los datos true/false
+          type: boolean
+        found_transfers:
+          description: Transferencias a confeccionar
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaTercerosCommandDTOV2'
+    ConfeccionCommandDTOV2TransferenciaAfipCommandDTOV2:
+      required:
+        - operator_id_number
+        - operator_country_code
+        - consolidated_check
+        - unified_send
+        - resend_validated
+        - found_transfers
+      type: object
+      properties:
+        operator_id_number:
+          description: Documento del Operador
+          example: 12457858
+          type: string
+        operator_country_code:
+          description: Codigo pais del Operador
+          example: AR
+          type: string
+        consolidated_check:
+          description: 'Indica si se desea mostrar la sumatoria de los montos de las transferencias del lote en un único importe. true/false Nota: Cuando este campo se envíe en true, el sistema asignará automáticamente unified_send = true, independientemente del valor enviado en dicho campo.'
+          example: true
+          type: boolean
+        description:
+          description: Dato que permite identificar la operación unificada
+          example: Descripción que permite identificar la operación unificada
+          type: string
+        payment_number:
+          description: Número de Orden de pago asignado internamente para identificar la transferencia
+          example: 12457888
+          type: string
+        unified_send:
+          description: 'Indica si se desea manejar la transferencia en forma unificada en un solo lote. true/false Nota: Este campo será normalizado automáticamente a true cuando consolidated_check = true, sin importar el valor enviado en el request.'
+          example: false
+          type: boolean
+        resend_validated:
+          description: Si desea reenviar las transferencias correctas que no fueron procesadas por haber errores en el lote. No aplica para errores de formato de los datos true/false
+          type: boolean
+        found_transfers:
+          description: Transferencias a confeccionar
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaAfipCommandDTOV2'
+    CuentaCommandDTO:
+      required:
+        - bank_number
+        - account_type
+        - currency
+        - account_number
+      type: object
+      properties:
+        bank_number:
+          description: Número de Banco
+          example: 111
+          type: string
+        account_type:
+          description: |-
+            Tipo de cuenta. 
+            CC: Cuenta Corriente
+            CA: Caja de Ahorro
+          example: CA
+          type: string
+        currency:
+          description: |-
+            Moneda de la cuenta: 
+            ARS 
+            USD
+          example: ARS
+          type: string
+        account_number:
+          description: Número de la cuenta
+          example: 12457845781
+          type: string
+        account_cbu:
+          description: CBU
+          example: 12345678912345
+          type: string
+    CuentaCommandDTOV2:
+      required:
+        - bank_number
+        - account_type
+        - currency
+        - account_number
+      type: object
+      properties:
+        bank_number:
+          description: Número de Banco
+          example: 111
+          type: string
+        account_type:
+          description: |-
+            Tipo de cuenta. 
+            CC: Cuenta Corriente
+            CA: Caja de Ahorro
+          type: string
+          example: CA
+        currency:
+          description: |-
+            Moneda de la cuenta: 
+            ARS 
+            USD
+          example: ARS
+          type: string
+        account_number:
+          description: Número de la cuenta
+          example: 12345678478
+          type: string
+        account_cbu:
+          description: CBU
+          example: 1234567897896541
+          type: string
+    CuentaEntity:
+      description: Modelo de datos de cuenta
+      type: object
+      properties:
+        ctaId:
+          format: int64
+          description: Id de la cuenta
+          type: integer
+        banco:
+          description: Banco al que pertenece la cuenta
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/BancoEntity'
+        tipoCta:
+          description: Tipo de Cuenta
+          type: string
+        monedaCta:
+          description: Moneda de Cuenta
+          type: string
+        codigoMoneda:
+          description: Código de Moneda
+          type: string
+        nroCta:
+          description: Número de la cuenta
+          type: string
+        denominacionCta:
+          description: Denominacion de la cuenta
+          type: string
+        cbu:
+          description: CBU de Cuenta
+          type: string
+        identificador:
+          description: Identificador de Cuenta
+          type: string
+        isCuentaPropia:
+          description: Y/N sobre si la cuenta es propia.
+          type: string
+          allOf:
+            - $ref: '#/components/schemas/YesNo'
+        entVincId:
+          format: int64
+          description: Id de la entidad titular de la cuenta.
+          type: integer
+    ErrorMessageDto:
+      type: object
+      properties:
+        code:
+          description: Error and message code
+          type: string
+        message:
+          description: Error description
+          type: string
+        detail:
+          description: Error detail
+          type: string
+        help:
+          description: Link with helpful information
+          type: string
+    ExcepcionDTO:
+      type: object
+      properties:
+        error_code:
+          description: Estado de la operación
+          example: Codigo de error
+          type: string
+        error_message:
+          description: Descripción de error de la excepción
+          example: Mensaje de error
+          type: string
+        timestamp:
+          description: Fecha y hora de la excepción
+          type: string
+          allOf:
+            - $ref: '#/components/schemas/LocalDateTime'
+    LocalDate:
+      format: date
+      type: string
+      example: '2022-03-10T00:00:00.000Z'
+    LocalDateTime:
+      format: date-time
+      type: string
+      example: '2022-03-10T12:15:50.000Z'
+    MensajeErrorDto:
+      type: object
+      properties:
+        message:
+          description: Información de respuesta
+          type: string
+        error_code:
+          description: Código de error
+          type: string
+        status:
+          format: int32
+          description: Estado
+          type: integer
+        timestamp:
+          description: Fecha y hora
+          type: string
+          allOf:
+            - $ref: '#/components/schemas/LocalDateTime'
+    MensajeErrorDtoV2:
+      type: object
+      properties:
+        errors:
+          description: Response information
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorMessageDto'
+        status:
+          description: Request status
+          type: boolean
+        timestamp:
+          description: Time and date
+          type: string
+          allOf:
+            - $ref: '#/components/schemas/LocalDateTime'
+    ProcesamientoTransferenciaDTO:
+      type: object
+      properties:
+        status:
+          description: Estado del procesamiento de las transferencias
+          type: boolean
+        operation_id:
+          description: Identificador único universal UUID de la operación
+          example: 12345678
+          type: string
+        process_id:
+          format: int32
+          description: Identificador de proceso (Sólo se informa en caso de que las transferencias se procesen de forma asincronica)
+          example: 78451258
+          type: integer
+        accepted_transfers:
+          description: Transferencias aceptadas por el wrapper
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaAceptadaDTO'
+        rejected_transfers:
+          description: Transferencias rechazadas por el wrapper
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaRechazadaDTO'
+    ProcesamientoTransferenciaDTOV2:
+      type: object
+      properties:
+        status:
+          description: Estado del procesamiento de las transferencias
+          type: boolean
+        operation_id:
+          description: Identificador único universal UUID de la operación
+          example: 1113187908845568
+          type: string
+        process_id:
+          format: int32
+          description: Identificador de proceso (Sólo se informa en caso de que las transferencias se procesen de forma asincronica)
+          example: 78451258
+          type: integer
+        accepted_transfers:
+          description: Transferencias aceptadas por el wrapper
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaAceptadaDTOV2'
+        validated_transfers:
+          description: Transferencias aceptadas por el wrapper
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaValidadaDTO'
+        rejected_transfers:
+          description: Transferencias rechazadas por el wrapper
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaRechazadaDTOV2'
+    ProcesoDTO:
+      type: object
+      properties:
+        data:
+          description: Información de respuesta
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/ProcesamientoTransferenciaDTO'
+        exception:
+          description: Excepción devuelta en caso que corresponda
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/ExcepcionDTO'
+        success:
+          description: Representa si la accion es exitosa
+          type: boolean
+    ProcesoDTOV2:
+      type: object
+      properties:
+        data:
+          description: Response information
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/ProcesamientoTransferenciaDTOV2'
+        success:
+          description: Informs if the action was successful
+          type: boolean
+        timestamp:
+          description: Time and date of the action being executed
+          type: string
+          allOf:
+            - $ref: '#/components/schemas/LocalDateTime'
+    ProcesoAsincronicoDTO:
+      type: object
+      properties:
+        data:
+          description: Response information
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/ProcesamientoAsincronicoTransferenciaDTO'
+        success:
+          description: Informs if the action was successful
+          type: boolean
+        timestamp:
+          description: Time and date of the action being executed
+          type: string
+          allOf:
+            - $ref: '#/components/schemas/LocalDateTime'
+    ProcesamientoAsincronicoTransferenciaDTO:
+      type: object
+      properties:
+        status:
+          description: Estado del procesamiento de las transferencias
+          type: boolean
+        description:
+          description: Descripcion del estado del proceso
+          example: Descripcion del estado del proceso
+          type: string
+        accepted_transfers:
+          description: Transferencias aceptadas por el wrapper
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaAceptadaDTOV2'
+        validated_transfers:
+          description: Transferencias aceptadas por el wrapper
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaValidadaDTO'
+        rejected_transfers:
+          description: Transferencias rechazadas por el wrapper
+          type: array
+          items:
+            $ref: '#/components/schemas/TransferenciaRechazadaDTOV2'
+    TransferenciaAceptadaDTO:
+      type: object
+      properties:
+        confection_id:
+          format: int32
+          description: Id de tef confeccion dentro del lote
+          example: 87654321
+          type: integer
+        lot_number:
+          format: int32
+          description: Numero de lote de la transferencia
+          example: 545
+          type: integer
+        order_id:
+          format: int32
+          description: Orden id de la transferencia
+          example: 12345678
+          type: integer
+    TransferenciaAceptadaDTOV2:
+      type: object
+      properties:
+        confection_id:
+          description: Id de tef confeccion dentro del lote
+          example: 87654321
+          type: string
+        lot_number:
+          format: int32
+          description: Numero de lote de la transferencia
+          example: 545
+          type: integer
+        order_id:
+          format: int64
+          description: Orden id de la transferencia
+          example: 12345678
+          type: integer
+    TransferenciaAfipCommandDTO:
+      required:
+        - confection_id
+        - request_date
+        - amount
+      type: object
+      properties:
+        confection_id:
+          description: Id Transferencia Confección
+          example: 12457858
+          type: string
+        request_date:
+          description: Fecha solicitada de acreditación
+          example: '2020-01-01T00:00:00.000Z'
+          type: string
+        amount:
+          description: Monto a transferir
+          example: 100
+          type: string
+        comments:
+          description: Cualquier información adicional que se considere necesario para identificar esta operación
+          example: Comentarios
+          type: string
+        debit_account:
+          description: Cuenta origen
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTO'
+        vep_number:
+          description: Número de VEP (Volante Electrónico de Pago)
+          type: string
+    TransferenciaB2BCommandDTO:
+      required:
+        - confection_id
+        - request_date
+        - amount
+      type: object
+      properties:
+        confection_id:
+          description: Id Tef Confección
+          type: string
+        request_date:
+          description: Fecha solicitada de acreditación
+          type: string
+        amount:
+          description: Monto a transferir
+          type: string
+        comments:
+          description: Cualquier información adicional que se considere necesario para identificar esta operación
+          type: string
+        debit_account:
+          description: Cuenta origen
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTO'
+        credit_account:
+          description: Cuenta destino
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTO'
+        preconfection_id:
+          description: Número identificador de la operación
+          type: string
+        community_id:
+          description: Número de la recaudadora
+          type: string
+        seller_id:
+          description: Número identificador del vendedor de la comunidad recaudadora
+          type: string
+        operation_number:
+          description: Número asignado a la operación
+          type: string
+    TransferenciaCuentaDestinoCommandDTO:
+      required:
+        - confection_id
+        - request_date
+        - amount
+      type: object
+      properties:
+        confection_id:
+          description: Id Transferencia Confección
+          example: 12457858
+          type: string
+        request_date:
+          description: Fecha solicitada de acreditación
+          example: '2020-01-01T00:00:00.000Z'
+          type: string
+        amount:
+          description: Monto a transferir
+          example: 100
+          type: string
+        comments:
+          description: Cualquier información adicional que se considere necesario para identificar esta operación
+          example: Comentarios
+          type: string
+        debit_account:
+          description: Cuenta origen
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTO'
+        credit_account:
+          description: Cuenta destino
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTO'
+    TransferenciaProveedoresCommandDTO:
+      required:
+        - confection_id
+        - request_date
+        - amount
+      type: object
+      properties:
+        confection_id:
+          description: Id Transferencia Confección
+          example: 12457858
+          type: string
+        request_date:
+          description: Fecha solicitada de acreditación
+          example: '2020-01-01T00:00:00.000Z'
+          type: string
+        amount:
+          description: Monto a transferir
+          example: 100
+          type: string
+        comments:
+          description: Cualquier información adicional que se considere necesario para identificar esta operación
+          example: Comentarios
+          type: string
+        debit_account:
+          description: Cuenta origen
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTO'
+        credit_account:
+          description: Cuenta destino
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTO'
+        document_type:
+          description: |-
+            Tipo de documento comercial a abonar en esta operación. 
+            1: Factura 
+            2: Nota Debito
+          type: string
+        cancel_document_number:
+          description: Número de factura o Nota de Debito a abonar en esta operación
+          type: string
+        payment_order_type:
+          description: Tipo de documento comercial a abonar en esta operación.
+          type: string
+        payment_order_number:
+          description: Número de factura o Nota de Debito a abonar en esta operación
+          type: string
+        customer_code:
+          description: Número de proveedor asignado internamente a quien se esta ejecutando la transferencia
+          type: string
+        retention_type_id:
+          description: |-
+            Descripción del tipo de retención en Proveedores
+            01: IVA. 
+            02: Ganancias. 
+            03: Ingresos Brutos. 
+            04: SUSS
+          type: string
+        retention_amount:
+          description: Monto de la retención por la operación efectuada
+          type: string
+        credit_note_number:
+          description: Número de nota de crédito  en Proveedores
+          type: string
+        credit_note_amount:
+          description: Importe de nota de crédito en Proveedores
+          type: string
+    TransferenciaProveedoresCommandDTOV2:
+      required:
+        - confection_id
+        - request_date
+        - amount
+      type: object
+      properties:
+        confection_id:
+          description: Id Transferencia Confección
+          example: 1245788
+          type: string
+        request_date:
+          description: 'Fecha solicitada de acreditación en formato: yyyy-mm-dd'
+          example: '2020-01-01T00:00:00.000Z'
+          type: string
+        amount:
+          description: Monto a transferir
+          example: 100
+          type: string
+        comments:
+          description: Cualquier información adicional que se considere necesario para identificar esta operación
+          example: Comentarios
+          type: string
+        debit_account:
+          description: Cuenta origen
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTOV2'
+        credit_account:
+          description: Cuenta destino
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTOV2'
+        document_type:
+          description: |-
+            Tipo de documento comercial a abonar en esta operación. 
+            FA: Factura 
+            ND: Nota Debito
+            KZ: Pago a proveedores
+            FC: Factura
+            PK o PV: Varios
+            03: Otros
+          type: string
+        cancel_document_number:
+          description: Número de factura o Nota de Debito a abonar en esta operación
+          type: string
+        payment_order_type:
+          description: Tipo de orden de pago a abonar en esta operación.
+          type: string
+        payment_order_number:
+          description: Número de orden de pago a abonar en esta operación
+          type: string
+        customer_code:
+          description: Número de proveedor asignado internamente a quien se esta ejecutando la transferencia
+          type: string
+        retention_type_id:
+          description: |-
+            Descripción del tipo de retención en Proveedores
+            01: IVA  
+            02: Ganancias  
+            03: Ingresos Brutos  
+            04: SUSS
+            05: Otros  
+          type: string
+        retention_amount:
+          description: Monto de la retención por la operación efectuada
+          type: string
+        credit_note_number:
+          description: Número de nota de crédito  en Proveedores
+          type: string
+        credit_note_amount:
+          description: Importe de nota de crédito en Proveedores
+          type: string
+    TransferenciaCuentaDestinoCommandDTOV2:
+      required:
+        - confection_id
+        - request_date
+        - amount
+      type: object
+      properties:
+        confection_id:
+          description: Id Transferencia Confección
+          example: 12457845
+          type: string
+        request_date:
+          description: 'Fecha solicitada de acreditación en formato: yyyy-mm-dd'
+          example: '2020-01-01T00:00:00.000Z'
+          type: string
+        amount:
+          description: Monto a transferir
+          example: 100
+          type: string
+        comments:
+          description: Cualquier información adicional que se considere necesario para identificar esta operación
+          example: Comentarios
+          type: string
+        debit_account:
+          description: Cuenta origen
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTOV2'
+        credit_account:
+          description: Cuenta destino
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTOV2'
+    TransferenciaTercerosCommandDTOV2:
+      required:
+        - confection_id
+        - request_date
+        - amount
+      type: object
+      properties:
+        confection_id:
+          description: Id Transferencia Confección
+          example: 78451245
+          type: string
+        request_date:
+          description: 'Fecha solicitada de acreditación en formato: yyyy-mm-dd'
+          example: '2020-01-01T00:00:00.000Z'
+          type: string
+        amount:
+          description: Monto a transferir
+          example: 100
+          type: string
+        comments:
+          description: Cualquier información adicional que se considere necesario para identificar esta operación
+          example: Comentarios
+          type: string
+        debit_account:
+          description: Cuenta origen
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTOV2'
+        credit_account:
+          description: Cuenta destino
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTOV2'
+        concept:
+          description: |-
+            Corresponde a los 3 primeros caracteres que abrevian el concepto:                                                   ALQ Alquileres
+            APC Aportes de capital
+            BRH Bienes registrables habitualistas
+            BRN Bienes registrables no habitualistas
+            CUO Cuotas
+            DON Donaciones
+            EXP Expensas
+            FAC Facturas
+            HON Honorarios
+            OIH Operaciones Inmobiliarias Habitualista
+            OIN Operaciones Inmobiliarias
+            PRE Prestamos
+            ROP Reintegros de obras sociales y prepagas
+            SEG Seguros
+            SIS Siniestros de seguros
+            VAR Varios
+            VIA Viáticos
+            COM Comercio
+            SUB Subsidios
+            ESE Estado expropiaciones u otros
+            SON Suscripción obligaciones negociales
+          example: ALQ
+          type: string
+        disclaimer_accepted:
+          description: Indica si se acepta o no el disclaimer del concepto (en caso de ser requerido).
+          type: boolean
+        reason:
+          description: Descripción de motivo por el cual se realiza esta operación.
+          example: Descripción reason
+          type: string
+        voucher:
+          description: Número de comprobante asignado a la transferencia en curso.
+          example: 12457845
+          type: string
+    TransferenciaAfipCommandDTOV2:
+      required:
+        - confection_id
+        - request_date
+        - amount
+      type: object
+      properties:
+        confection_id:
+          description: Id Transferencia Confección
+          example: 12457858
+          type: string
+        request_date:
+          description: 'Fecha solicitada de acreditación en formato: yyyy-mm-dd'
+          example: '2020-01-01T00:00:00.000Z'
+          type: string
+        amount:
+          description: Monto a transferir
+          example: 100
+          type: string
+        comments:
+          description: Cualquier información adicional que se considere necesario para identificar esta operación
+          example: Comentarios
+          type: string
+        debit_account:
+          description: Cuenta origen
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTOV2'
+        vep_number:
+          description: Número de VEP (Volante Electrónico de Pago)
+          type: string
+    TransferenciaRechazadaDTO:
+      type: object
+      properties:
+        confection_id:
+          format: int32
+          description: Id de tef confeccion dentro del lote
+          example: 87654321
+          type: integer
+        lot_number:
+          format: int32
+          description: Numero de lote de la transferencia
+          example: 545
+          type: integer
+        order_id:
+          format: int32
+          description: Orden id de la transferencia
+          example: 12345678
+          type: integer
+        message:
+          description: Mensaje de rechazo
+          example: Mensaje de rechazo
+          type: string
+    TransferenciaRechazadaDTOV2:
+      type: object
+      properties:
+        confection_id:
+          description: Id de tef confeccion dentro del lote
+          example: 87654321
+          type: string
+        lot_number:
+          format: int32
+          description: Numero de lote de la transferencia
+          example: 545
+          type: integer
+        order_id:
+          format: int64
+          description: Orden id de la transferencia
+          example: 12345678
+          type: integer
+        errors:
+          description: Mensajes de error
+          type: array
+          example: 404
+          items:
+            $ref: '#/components/schemas/TransferenciaRechazadaErrorDTO'
+    TransferenciaRechazadaErrorDTO:
+      type: object
+      properties:
+        code:
+          description: Codigo del error
+          type: string
+        message:
+          description: Mensaje de rechazo
+          type: string
+    TransferenciaTercerosCommandDTO:
+      required:
+        - confection_id
+        - request_date
+        - amount
+      type: object
+      properties:
+        confection_id:
+          description: Id Transferencia Confección
+          example: 12457858
+          type: string
+        request_date:
+          description: Fecha solicitada de acreditación
+          example: '2020-01-01T00:00:00.000Z'
+          type: string
+        amount:
+          description: Monto a transferir
+          example: 100
+          type: string
+        comments:
+          description: Cualquier información adicional que se considere necesario para identificar esta operación
+          example: Comentarios
+          type: string
+        debit_account:
+          description: Cuenta origen
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTO'
+        credit_account:
+          description: Cuenta destino
+          type: object
+          allOf:
+            - $ref: '#/components/schemas/CuentaCommandDTO'
+        concept:
+          description: |-
+            Corresponde a los 3 primeros caracteres que abrevian el concepto:                                                  ALQ Alquileres
+            APC Aportes de capital
+            BRH Bienes registrables habitualistas
+            BRN Bienes registrables no habitualistas
+            CUO Cuotas
+            DON Donaciones
+            EXP Expensas
+            FAC Facturas
+            HON Honorarios
+            OIH Operaciones Inmobiliarias Habitualista
+            OIN Operaciones Inmobiliarias
+            PRE Prestamos
+            ROP Reintegros de obras sociales y prepagas
+            SEG Seguros
+            SIS Siniestros de seguros
+            VAR Varios
+            VIA Viáticos
+            COM Comercio
+            SUB Subsidios
+            ESE Estado expropiaciones u otros
+            SON Suscripción obligaciones negociales
+          type: string
+        disclaimer_accepted:
+          description: Indica si se acepta o no el disclaimer del concepto (en caso de ser requerido)
+          type: boolean
+        reason:
+          description: Descripción de motivo por el cual se realiza esta operación
+          type: string
+        voucher:
+          description: Número de comprobante asignado a la transferencia en curso
+          type: string
+    TransferenciaValidadaDTO:
+      type: object
+      properties:
+        confection_id:
+          description: Id de tef confeccion dentro del lote
+          example: 87654321
+          type: string
+        lot_number:
+          format: int32
+          description: Numero de lote de la transferencia
+          example: 545
+          type: integer
+        order_id:
+          format: int64
+          description: Orden id de la transferencia
+          example: 12345678
+          type: integer
+    VendedorCuentaDTO:
+      type: object
+      properties:
+        account_id:
+          format: int64
+          description: Identificador de cuenta
+          type: integer
+        bank_number:
+          description: Codigo BCRA de Banco de cuenta
+          type: string
+        account_type:
+          description: Tipo de cuenta
+          type: string
+        currency:
+          description: Codigo de Moneda de cuenta
+          type: string
+        account_number:
+          description: Numero de cuenta
+          type: string
+        account_cbu:
+          description: CBU de cuenta
+          type: string
+        account_label:
+          description: Denominacion de cuenta
+          type: string
+        account_name:
+          description: Nombre de la cuenta
+          type: string
+    VendedorDTO:
+      type: object
+      properties:
+        seller_id:
+          format: int64
+          description: Identificador del vendedor
+          type: integer
+        seller_name:
+          description: Nombre del vendedor
+          type: string
+        accounts:
+          description: Lista de Cuentas
+          type: array
+          items:
+            $ref: '#/components/schemas/VendedorCuentaDTO'
+    VepEntity:
+      description: Modelo de datos de vep
+      type: object
+      properties:
+        idVep:
+          format: int32
+          description: Id de vep
+          type: integer
+        fechaExpiracion:
+          description: Fecha de expiración
+          type: string
+          allOf:
+            - $ref: '#/components/schemas/LocalDate'
+        importe:
+          description: Importe
+          type: number
+        numeroVep:
+          description: Número Vep
+          type: string
+        numeroControl:
+          description: Número de control
+          type: string
+        codigoConcepto:
+          format: int32
+          description: Código de concepto
+          type: integer
+        descripcionConcepto:
+          description: Descripción de concepto
+          type: string
+        impuesto:
+          description: Impuesto
+          type: string
+        periodo:
+          description: Período
+          type: string
+        cuitContribuyente:
+          description: CUIT del contribuyente
+          type: string
+        firmaComprobante:
+          description: Firma del comprobante
+          type: string
+        estadoPresentacion:
+          description: Estado de la pesentación
+          type: string
+        cuitUsuario:
+          description: CUIT del usuario
+          type: string
+    YesNo:
+      enum:
+        - 'Y'
+        - 'N'
+      type: string
+  securitySchemes:
+    ClientID:
+      type: apiKey
+      name: client_id
+      x-key-type: client_id
+      in: header
+    CAS:
+      type: oauth2
+      x-ibm-oauth-provider: cas
+      flows:
+        password:
+          tokenUrl: https://auth.interbanking.com.ar/cas/oidc/accessToken
+          scopes:
+            transferencias-confeccion: Confeccion de Transferencia
+x-ibm-configuration:
+  type: rest
+  phase: realized
+  enforced: true
+  testable: true
+  cors:
+    enabled: true
+  oauth-servers:
+    CAS:
+      password:
+        tokenUrls:
+          - https://auth.interbanking.com.ar/cas/oidc/accessToken
+        authorizationUrls: []
+        refreshUrls: []
+servers:
+  - url: https://api-gw.interbanking.com.ar/api/prod
+security:
+  - ClientID: []
+    CAS:
+      - transferencias-confeccion
+x-ibm-endpoints:
+  - url: https://api-gw.interbanking.com.ar/api/prod

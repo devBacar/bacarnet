@@ -185,8 +185,13 @@ export function FinanzasAgendaPage() {
                 invalidate()
               }}
               onConfeccionar={async (id, body) => {
-                await confeccionarTransferencia({ compromisoPagoId: id, ...body })
-                toast.success('Transferencia confeccionada (mock). Pendiente autorización en Interbanking.')
+                const res = await confeccionarTransferencia({ compromisoPagoId: id, ...body })
+                const op = res.transferencia?.operationId
+                toast.success(
+                  op
+                    ? `Transferencia confeccionada (operation_id ${op}).`
+                    : 'Transferencia confeccionada por API.',
+                )
                 invalidate()
               }}
             />
@@ -319,7 +324,7 @@ function CompromisosTable({
   onMarcarPagado: (id: string, body: Record<string, unknown>) => Promise<void>
   onConfeccionar: (
     id: string,
-    body: { cuentaCreditoCbu: string; cuentaDebitoId: string },
+    body: { cuentaCreditoCbu: string; cuentaDebitoId: string; tipo?: 'cuentas_propias' },
   ) => Promise<void>
 }) {
   const [historialId, setHistorialId] = useState<string | null>(null)
@@ -495,7 +500,11 @@ function ConfeccionarTransferenciaModal({
   row: CompromisoAgendaItem
   cuentasCc: FinanzasCuenta[]
   onClose: () => void
-  onSubmit: (body: { cuentaCreditoCbu: string; cuentaDebitoId: string }) => Promise<void>
+  onSubmit: (body: {
+    cuentaCreditoCbu: string
+    cuentaDebitoId: string
+    tipo: 'cuentas_propias'
+  }) => Promise<void>
 }) {
   const [cuentaDebitoId, setCuentaDebitoId] = useState(
     row.cuentaId && cuentasCc.some((c) => c.id === row.cuentaId) ? row.cuentaId : (cuentasCc[0]?.id ?? ''),
@@ -506,7 +515,7 @@ function ConfeccionarTransferenciaModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="surface-card w-full max-w-lg rounded-2xl border border-neutral-200 p-6 dark:border-zinc-700">
-        <h2 className="text-heading text-lg font-semibold">Confeccionar transferencia (mock)</h2>
+        <h2 className="text-heading text-lg font-semibold">Confeccionar transferencia por API</h2>
         <p className="text-body-muted mt-2 text-sm">
           Se enviará a Interbanking para confección. La autorización y el envío del dinero ocurren solo en
           la plataforma del banco.
@@ -551,7 +560,7 @@ function ConfeccionarTransferenciaModal({
             className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             onClick={() => {
               setSaving(true)
-              void onSubmit({ cuentaCreditoCbu: cbu, cuentaDebitoId })
+              void onSubmit({ cuentaCreditoCbu: cbu, cuentaDebitoId, tipo: 'cuentas_propias' })
                 .catch((err: unknown) => {
                   toast.error(err instanceof Error ? err.message : 'Error al confeccionar')
                 })

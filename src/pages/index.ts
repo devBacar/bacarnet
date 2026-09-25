@@ -29,5 +29,8 @@ export { SoporteTi } from './SoporteTi'
 export { FinanzasLayout } from './finanzas/FinanzasLayout'
 export { FinanzasCuentasPage } from './finanzas/CuentasPage'
 export { FinanzasAgendaPage } from './finanzas/AgendaPage'
-export { FinanzasCajasPage, FinanzasCajaChicaPage } from './finanzas/CajasPage'
+export {
+  CajasWorkspace as FinanzasCajasPage,
+  CajasWorkspace as FinanzasCajaChicaPage,
+} from './finanzas/CajasWorkspace'
 export { FinanzasIndexRedirect } from './finanzas/FinanzasIndexRedirect'

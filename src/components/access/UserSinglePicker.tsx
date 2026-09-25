@@ -1,10 +1,17 @@
 import { Search, X } from 'lucide-react'
 import { useMemo } from 'react'
-import type { UserProfile } from '../../services/userService'
+import type { UserRole } from '../../services/userService'
 import { isPrivilegedAccessIdentity } from '../../utils/privilegedAccess'
 
+interface UserSinglePickerOption {
+  uid: string
+  displayName: string | null
+  email: string
+  role: UserRole | null
+}
+
 interface UserSinglePickerProps {
-  allUsers: UserProfile[]
+  allUsers: UserSinglePickerOption[]
   selectedUid: string
   onSelectedUidChange: (uid: string) => void
   query: string

@@ -347,6 +347,11 @@ service cloud.firestore {
       }
     }
 
+    // El historial se expone únicamente por la API autenticada.
+    match /finanzasPosicionCierres/{cierreId} {
+      allow read, create, update, delete: if false;
+    }
+
     match /compromisosPago/{compromisoId} {
       allow read: if canAccessFinanzas();
       allow create, update, delete: if false;

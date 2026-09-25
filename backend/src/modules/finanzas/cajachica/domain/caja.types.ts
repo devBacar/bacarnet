@@ -34,6 +34,7 @@ export interface HistorialCustodiaDocument {
   registradoPor: string
 }
 
+/** Asiento inmutable: no se edita ni se borra. Retención mínima 2 años. */
 export interface CajaMovimientoDocument {
   cajaId: string
   tipo: CajaMovimientoTipo
@@ -46,6 +47,9 @@ export interface CajaMovimientoDocument {
   esViatico: boolean
   beneficiarioEmpleado: string | null
   fondeoVinculadoId: string | null
+  operacionVinculadaId: string | null
+  /** Cotización ARS por USD expresada en centavos; solo para Compra USD. */
+  cotizacionCentavosPorUsd: number | null
   registradoPor: string
   createdAt: Timestamp
 }

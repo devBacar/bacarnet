@@ -30,6 +30,31 @@ export async function listCajasDocs(): Promise<Array<{ id: string; data: CajaDoc
   return snap.docs.map((doc) => ({ id: doc.id, data: doc.data() as CajaDocument }))
 }
 
+export async function listCajaResponsableOptions(): Promise<
+  Array<{ uid: string; displayName: string | null; email: string; role: string | null }>
+> {
+  const snap = await adminDb().collection('users').get()
+  return snap.docs
+    .map((doc) => {
+      const data = doc.data()
+      return {
+        uid: doc.id,
+        displayName:
+          typeof data.displayName === 'string' && data.displayName.trim()
+            ? data.displayName.trim()
+            : null,
+        email: typeof data.email === 'string' ? data.email : '',
+        role: typeof data.role === 'string' ? data.role : null,
+        active: data.accountStatus !== 'disabled',
+      }
+    })
+    .filter((user) => user.active && user.email)
+    .map(({ active: _active, ...user }) => user)
+    .sort((a, b) =>
+      (a.displayName ?? a.email).localeCompare(b.displayName ?? b.email, 'es'),
+    )
+}
+
 export async function getCajaDoc(cajaId: string): Promise<CajaDocument | null> {
   const snap = await adminDb().collection(CAJAS_COLLECTION).doc(cajaId).get()
   if (!snap.exists) return null
@@ -109,6 +134,13 @@ export async function softDeleteCajaDoc(cajaId: string): Promise<void> {
   })
 }
 
+export async function renameCajaDoc(cajaId: string, nombre: string): Promise<void> {
+  await adminDb().collection(CAJAS_COLLECTION).doc(cajaId).update({
+    nombre,
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+}
+
 export async function cajaHasCierrePendienteAprobacion(cajaId: string): Promise<boolean> {
   const snap = await adminDb()
     .collection(CIERRES_COLLECTION)
@@ -166,6 +198,7 @@ export async function reassignCajaResponsable(input: {
   })
 }
 
+/** El libro no se purga: no hay delete de cajaMovimientos (retención ≥ 2 años). */
 export async function listMovimientosForCaja(
   cajaId: string,
 ): Promise<Array<{ id: string; data: CajaMovimientoDocument }>> {
@@ -261,6 +294,8 @@ export async function ejecutarFondeoAtomico(input: {
       esViatico: false,
       beneficiarioEmpleado: null,
       fondeoVinculadoId: input.fondeoVinculadoId,
+      operacionVinculadaId: input.fondeoVinculadoId,
+      cotizacionCentavosPorUsd: null,
       registradoPor: input.registradoPor,
       createdAt: now,
     }
@@ -278,6 +313,97 @@ export async function ejecutarFondeoAtomico(input: {
 
     tx.update(principalRef, { saldoActualCentavos: saldoPrincipal, updatedAt: now })
     tx.update(chicaRef, { saldoActualCentavos: saldoChica, updatedAt: now })
+  })
+}
+
+export async function ejecutarCompraUsdAtomica(input: {
+  cajaArsId: string
+  cajaUsdId: string
+  montoPesosCentavos: number
+  montoUsdCentavos: number
+  cotizacionCentavosPorUsd: number
+  concepto: string
+  comprobanteStoragePath: string | null
+  registradoPor: string
+  operacionVinculadaId: string
+  movimientoArsId: string
+  movimientoUsdId: string
+  fecha: Timestamp
+}): Promise<void> {
+  if (
+    !Number.isSafeInteger(input.montoPesosCentavos) ||
+    input.montoPesosCentavos <= 0 ||
+    !Number.isSafeInteger(input.montoUsdCentavos) ||
+    input.montoUsdCentavos <= 0 ||
+    !Number.isSafeInteger(input.cotizacionCentavosPorUsd) ||
+    input.cotizacionCentavosPorUsd <= 0
+  ) {
+    throw new Error('Importes inválidos para la compra de USD')
+  }
+  const montoPesosEsperado = Math.round(
+    (input.cotizacionCentavosPorUsd * input.montoUsdCentavos) / 100,
+  )
+  if (montoPesosEsperado !== input.montoPesosCentavos) {
+    throw new Error('El monto ARS no coincide con la cotización y los USD')
+  }
+
+  const cajaArsRef = adminDb().collection(CAJAS_COLLECTION).doc(input.cajaArsId)
+  const cajaUsdRef = adminDb().collection(CAJAS_COLLECTION).doc(input.cajaUsdId)
+  const movArsRef = adminDb().collection(MOVIMIENTOS_COLLECTION).doc(input.movimientoArsId)
+  const movUsdRef = adminDb().collection(MOVIMIENTOS_COLLECTION).doc(input.movimientoUsdId)
+  const now = FieldValue.serverTimestamp()
+
+  await adminDb().runTransaction(async (tx) => {
+    const [arsSnap, usdSnap] = await Promise.all([tx.get(cajaArsRef), tx.get(cajaUsdRef)])
+    if (!arsSnap.exists || !usdSnap.exists) throw new Error('Caja principal no encontrada')
+    const cajaArs = arsSnap.data() as CajaDocument
+    const cajaUsd = usdSnap.data() as CajaDocument
+
+    if (cajaArs.tipo !== 'principal' || cajaArs.moneda !== 'ARS') {
+      throw new Error('La compra de USD debe salir de una caja principal ARS')
+    }
+    if (cajaUsd.tipo !== 'principal' || cajaUsd.moneda !== 'USD') {
+      throw new Error('No se encontró una caja principal USD válida')
+    }
+    if (cajaArs.estado === 'inactiva' || cajaUsd.estado === 'inactiva') {
+      throw new Error('No se puede operar con una caja inactiva')
+    }
+
+    const nuevoSaldoArs = cajaArs.saldoActualCentavos - input.montoPesosCentavos
+    if (nuevoSaldoArs < 0) throw new Error('Saldo insuficiente en la caja principal ARS')
+    const nuevoSaldoUsd = cajaUsd.saldoActualCentavos + input.montoUsdCentavos
+
+    const base = {
+      fecha: input.fecha,
+      categoria: 'compra_usd',
+      esViatico: false,
+      beneficiarioEmpleado: null,
+      fondeoVinculadoId: null,
+      operacionVinculadaId: input.operacionVinculadaId,
+      cotizacionCentavosPorUsd: input.cotizacionCentavosPorUsd,
+      registradoPor: input.registradoPor,
+      createdAt: now,
+    }
+
+    tx.set(movArsRef, {
+      ...base,
+      cajaId: input.cajaArsId,
+      tipo: 'egreso',
+      concepto: input.concepto,
+      montoCentavos: input.montoPesosCentavos,
+      comprobanteStoragePath: input.comprobanteStoragePath,
+    })
+    tx.set(movUsdRef, {
+      ...base,
+      cajaId: input.cajaUsdId,
+      tipo: 'ingreso',
+      concepto: `${input.concepto} · ${input.montoUsdCentavos / 100} USD`,
+      montoCentavos: input.montoUsdCentavos,
+      comprobanteStoragePath: null,
+    })
+
+    tx.update(cajaArsRef, { saldoActualCentavos: nuevoSaldoArs, updatedAt: now })
+    tx.update(cajaUsdRef, { saldoActualCentavos: nuevoSaldoUsd, updatedAt: now })
   })
 }
 
@@ -324,4 +450,13 @@ export async function userIsResponsableOfAnyCaja(uid: string): Promise<boolean> 
     .limit(1)
     .get()
   return !snap.empty
+}
+
+export async function userIsResponsableOfPrincipal(uid: string): Promise<boolean> {
+  const snap = await adminDb()
+    .collection(CAJAS_COLLECTION)
+    .where('responsableUid', '==', uid)
+    .where('tipo', '==', 'principal')
+    .get()
+  return snap.docs.some((doc) => (doc.data() as CajaDocument).estado !== 'inactiva')
 }

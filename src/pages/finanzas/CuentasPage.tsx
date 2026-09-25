@@ -7,10 +7,11 @@ import { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 
 import { AccountCard } from '../../components/finanzas/AccountCard'
-
+import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
 import { AccountsSummary } from '../../components/finanzas/AccountsSummary'
 
 import { BankPositionsSection } from '../../components/finanzas/BankPositionsSection'
+import { PositionHistorySection } from '../../components/finanzas/PositionHistorySection'
 
 import {
   computePosicionPorBanco,
@@ -28,9 +29,11 @@ import { useAuth } from '../../context'
 
 import {
   fetchFinanzasCuentas,
+  fetchFinanzasPosicionHistorial,
   patchFinanzasSaldoManual,
   syncFinanzasCuentas,
   type FinanzasCuenta,
+  type FinanzasMoneda,
 } from '../../services/finanzasApi'
 
 import { hasFinanzasAccess } from '../../services/userService'
@@ -40,6 +43,10 @@ export function FinanzasCuentasPage() {
   const queryClient = useQueryClient()
   const [manualCuenta, setManualCuenta] = useState<FinanzasCuenta | null>(null)
   const [savingManual, setSavingManual] = useState(false)
+  const [detalle, setDetalle] = useState<{
+    moneda: FinanzasMoneda
+    bancoNombre: string | null
+  } | null>(null)
 
   const canEditManual = hasFinanzasAccess(userProfile)
 
@@ -47,6 +54,13 @@ export function FinanzasCuentasPage() {
     queryKey: ['finanzas', 'cuentas'],
     queryFn: fetchFinanzasCuentas,
     enabled: Boolean(user),
+  })
+
+  const historialQuery = useQuery({
+    queryKey: ['finanzas', 'cuentas', 'historial'],
+    queryFn: fetchFinanzasPosicionHistorial,
+    enabled: Boolean(user),
+    refetchInterval: 60_000,
   })
 
   const posicionPorBanco = useMemo(
@@ -131,9 +145,19 @@ export function FinanzasCuentasPage() {
           <AccountsSummary
             arsCentavos={data.totales.arsCentavos}
             usdCentavos={data.totales.usdCentavos}
+            onSelectMoneda={(moneda) => setDetalle({ moneda, bancoNombre: null })}
           />
 
-          <BankPositionsSection rows={posicionPorBanco} />
+          <BankPositionsSection
+            rows={posicionPorBanco}
+            onSelectPosicion={(bancoNombre, moneda) => setDetalle({ moneda, bancoNombre })}
+          />
+
+          <PositionHistorySection
+            rows={historialQuery.data?.cierres ?? []}
+            isLoading={historialQuery.isLoading}
+            error={historialQuery.error}
+          />
 
           <section aria-labelledby="finanzas-cuentas-heading" className="space-y-6">
             <div className="space-y-4">
@@ -181,6 +205,15 @@ export function FinanzasCuentasPage() {
         </div>
       ) : null}
 
+      <AccountsDetailModal
+        open={detalle != null}
+        cuentas={data?.cuentas ?? []}
+        moneda={detalle?.moneda ?? 'ARS'}
+        bancoNombre={detalle?.bancoNombre}
+        canEditManual={canEditManual}
+        onClose={() => setDetalle(null)}
+        onEditManual={setManualCuenta}
+      />
       <ManualSaldoModal
         cuenta={manualCuenta}
         open={manualCuenta != null}

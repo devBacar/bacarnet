@@ -2,7 +2,9 @@ import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../auth/middleware.js'
 import { resetManualUsdAccountsNeverLoaded } from '../services/cuentas.repository.js'
 import {
+  capturePosicionCierre,
   listCuentasForApi,
+  listPosicionCierresUltimos30Dias,
   setManualSaldoForCuenta,
   syncCuentasFromProvider,
 } from '../services/cuentas.service.js'
@@ -32,6 +34,47 @@ finanzasCuentasRouter.post(
     } catch (err) {
       console.error('[finanzas/cuentas] reiniciar-usd-manual', err)
       res.status(500).json({ error: 'No se pudieron reiniciar las cuentas USD manuales' })
+    }
+  },
+)
+
+finanzasCuentasRouter.get(
+  '/historial',
+  requireWorkspaceUser,
+  requireViewFinanzas,
+  async (_req, res) => {
+    try {
+      const cierres = await listPosicionCierresUltimos30Dias()
+      res.json({ cierres, retencionDias: 30, horaCierre: '15:00' })
+    } catch (err) {
+      console.error('[finanzas/cuentas] historial', err)
+      res.status(500).json({ error: 'No se pudo cargar el historial de posiciones' })
+    }
+  },
+)
+
+/** Captura manual idempotente para pruebas del emulador y recuperación operativa. */
+finanzasCuentasRouter.post(
+  '/historial/capturar',
+  requireWorkspaceUser,
+  requireViewFinanzas,
+  async (req, res) => {
+    const actorUid = req.authedUser?.uid
+    if (!actorUid) {
+      res.status(401).json({ error: 'No autenticado' })
+      return
+    }
+    try {
+      const body = req.body as { sincronizar?: unknown }
+      const cierre = await capturePosicionCierre({
+        actorUid,
+        syncBeforeCapture: body.sincronizar === true,
+      })
+      res.status(201).json({ cierre })
+    } catch (err) {
+      console.error('[finanzas/cuentas] capturar historial', err)
+      const message = err instanceof Error ? err.message : 'No se pudo capturar la posición'
+      res.status(400).json({ error: message })
     }
   },
 )

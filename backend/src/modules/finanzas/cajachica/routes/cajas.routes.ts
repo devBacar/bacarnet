@@ -6,13 +6,16 @@ import {
   assertCajasModuleAccess,
   cerrarCaja,
   changeCajaResponsable,
+  comprarUsdDesdePrincipal,
   createCajaForLider,
   fondearCajaChica,
   listCajasForUser,
   listCierres,
   listCierresPendientes,
   listMovimientos,
+  listResponsablesForLider,
   registerMovimiento,
+  renameCaja,
   softDeleteCaja,
 } from '../services/caja.service.js'
 
@@ -46,6 +49,16 @@ finanzasCajasRouter.get('/cierres-pendientes', async (req, res) => {
   }
 })
 
+finanzasCajasRouter.get('/responsables', async (req, res) => {
+  try {
+    const responsables = await listResponsablesForLider(req.authedUser!)
+    res.json({ responsables })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudieron listar responsables'
+    res.status(message.includes('líder') ? 403 : 400).json({ error: message })
+  }
+})
+
 finanzasCajasRouter.post('/', async (req, res) => {
   try {
     const caja = await createCajaForLider(req.authedUser!, req.body as Record<string, unknown>)
@@ -67,6 +80,16 @@ finanzasCajasRouter.delete('/:id', async (req, res) => {
   }
 })
 
+finanzasCajasRouter.patch('/:id', async (req, res) => {
+  try {
+    const caja = await renameCaja(req.authedUser!, req.params.id, req.body as Record<string, unknown>)
+    res.json({ caja })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo editar la caja'
+    res.status(message.includes('líder') ? 403 : 400).json({ error: message })
+  }
+})
+
 finanzasCajasRouter.post('/:principalId/fondear', async (req, res) => {
   try {
     const result = await fondearCajaChica(
@@ -78,6 +101,37 @@ finanzasCajasRouter.post('/:principalId/fondear', async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'No se pudo fondear'
     res.status(400).json({ error: message })
+  }
+})
+
+finanzasCajasRouter.post('/:principalId/comprar-usd', async (req, res) => {
+  try {
+    let body: Record<string, unknown> = {}
+    let comprobante: { fileName: string; mimeType: string; buffer: Buffer } | null = null
+    const contentType = req.headers['content-type'] ?? ''
+    if (contentType.includes('multipart/form-data')) {
+      const parsed = await parseMultipartUpload(req)
+      body = parsed.fields
+      if (parsed.file) {
+        comprobante = {
+          fileName: parsed.file.originalname,
+          mimeType: parsed.file.mimetype,
+          buffer: parsed.file.buffer,
+        }
+      }
+    } else {
+      body = req.body as Record<string, unknown>
+    }
+    const result = await comprarUsdDesdePrincipal({
+      user: req.authedUser!,
+      cajaArsId: req.params.principalId,
+      body,
+      comprobante,
+    })
+    res.status(201).json(result)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo registrar la compra de USD'
+    res.status(message.includes('Solo el líder') ? 403 : 400).json({ error: message })
   }
 })
 
@@ -97,8 +151,14 @@ finanzasCajasRouter.post('/:id/responsable', async (req, res) => {
 
 finanzasCajasRouter.get('/:id/movimientos', async (req, res) => {
   try {
-    const movimientos = await listMovimientos(req.authedUser!, req.params.id)
-    res.json({ movimientos })
+    const query = req.query as Record<string, unknown>
+    const result = await listMovimientos(req.authedUser!, req.params.id, {
+      desde: typeof query.desde === 'string' ? query.desde : undefined,
+      hasta: typeof query.hasta === 'string' ? query.hasta : undefined,
+      tipo: typeof query.tipo === 'string' ? query.tipo : undefined,
+      q: typeof query.q === 'string' ? query.q : undefined,
+    })
+    res.json(result)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'No se pudieron listar movimientos'
     res.status(message.includes('acceso') ? 403 : 400).json({ error: message })

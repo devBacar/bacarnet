@@ -91,7 +91,7 @@ export function FinanzasCajasPage() {
         fetchMovimientosCaja(id),
         fetchCierresCaja(id),
       ])
-      setMovimientos(movs)
+      setMovimientos(movs.movimientos)
       setCierres(cierresList)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error al cargar movimientos')

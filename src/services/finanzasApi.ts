@@ -63,6 +63,41 @@ export async function syncFinanzasCuentas(): Promise<{ synced: number; provider:
   return res.json() as Promise<{ synced: number; provider: string }>
 }
 
+export interface FinanzasPosicionCierre {
+  fechaId: string
+  cerradoAt: string | null
+  totales: {
+    arsCentavos: number
+    usdCentavos: number
+  }
+  bancos: Array<{
+    bancoNombre: string
+    arsCentavos: number
+    usdCentavos: number
+  }>
+  syncProveedor: {
+    intentado: boolean
+    ok: boolean
+    provider: string | null
+    error: string | null
+  }
+}
+
+export interface FinanzasPosicionHistorialResponse {
+  cierres: FinanzasPosicionCierre[]
+  retencionDias: number
+  horaCierre: string
+}
+
+export async function fetchFinanzasPosicionHistorial(): Promise<FinanzasPosicionHistorialResponse> {
+  const res = await finanzasFetch('/cuentas/historial')
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error ?? 'No se pudo cargar el historial de posiciones')
+  }
+  return res.json() as Promise<FinanzasPosicionHistorialResponse>
+}
+
 export async function patchFinanzasSaldoManual(
   cuentaId: string,
   saldoActualCentavos: number,

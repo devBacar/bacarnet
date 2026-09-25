@@ -1,5 +1,6 @@
 import { auth } from './firebase'
 import { resolveApiUrl } from './resolveApiUrl'
+import type { UserRole } from './userService'
 
 export type CajaMoneda = 'ARS' | 'USD'
 export type CajaTipo = 'principal' | 'chica'
@@ -33,6 +34,17 @@ export interface CajaMovimientoItem {
   categoria: string | null
   esViatico: boolean
   beneficiarioEmpleado: string | null
+  fondeoVinculadoId: string | null
+  operacionVinculadaId: string | null
+  cotizacionCentavosPorUsd: number | null
+  saldoPosteriorCentavos?: number
+}
+
+export interface CajaResponsableOption {
+  uid: string
+  displayName: string | null
+  email: string
+  role: UserRole | null
 }
 
 export interface CajaCierreItem {
@@ -111,6 +123,29 @@ export async function deleteCaja(cajaId: string): Promise<CajaItem> {
   return data.caja
 }
 
+export async function renameCaja(cajaId: string, nombre: string): Promise<CajaItem> {
+  const res = await cajasFetch(`/${cajaId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ nombre }),
+  })
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string }
+    throw new Error(err.error ?? 'No se pudo editar la caja')
+  }
+  const data = (await res.json()) as { caja: CajaItem }
+  return data.caja
+}
+
+export async function fetchCajaResponsables(): Promise<CajaResponsableOption[]> {
+  const res = await cajasFetch('/responsables')
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string }
+    throw new Error(err.error ?? 'No se pudieron cargar los responsables')
+  }
+  const data = (await res.json()) as { responsables: CajaResponsableOption[] }
+  return data.responsables
+}
+
 export async function fetchCierresPendientes(): Promise<CajaCierreItem[]> {
   const res = await cajasFetch('/cierres-pendientes')
   if (!res.ok) {
@@ -135,6 +170,37 @@ export async function fondearCaja(
   }
 }
 
+export async function comprarUsdDesdeCaja(
+  principalArsId: string,
+  input: {
+    cotizacionCentavosPorUsd: number
+    montoUsdCentavos: number
+    comprobanteFile?: File | null
+  },
+): Promise<{
+  operacionVinculadaId: string
+  cajaArsId: string
+  cajaUsdId: string
+  montoPesosCentavos: number
+  montoUsdCentavos: number
+  cotizacionCentavosPorUsd: number
+}> {
+  const form = new FormData()
+  form.set('cotizacionCentavosPorUsd', String(input.cotizacionCentavosPorUsd))
+  form.set('montoUsdCentavos', String(input.montoUsdCentavos))
+  if (input.comprobanteFile) form.set('comprobante', input.comprobanteFile)
+
+  const res = await cajasFetch(`/${principalArsId}/comprar-usd`, {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    const err = (await res.json()) as { error?: string }
+    throw new Error(err.error ?? 'No se pudo registrar la compra de USD')
+  }
+  return res.json()
+}
+
 export async function changeCajaResponsable(
   cajaId: string,
   body: { responsableUid: string; motivo?: string },
@@ -151,11 +217,28 @@ export async function changeCajaResponsable(
   return data.caja
 }
 
-export async function fetchMovimientosCaja(cajaId: string): Promise<CajaMovimientoItem[]> {
-  const res = await cajasFetch(`/${cajaId}/movimientos`)
+export async function fetchMovimientosCaja(
+  cajaId: string,
+  filters: {
+    desde?: string
+    hasta?: string
+    tipo?: 'todos' | 'ingreso' | 'egreso' | 'fondeo'
+    q?: string
+  } = {},
+): Promise<{
+  movimientos: CajaMovimientoItem[]
+  totalSinFiltro: number
+  retencionAnios: number
+}> {
+  const params = new URLSearchParams()
+  if (filters.desde) params.set('desde', filters.desde)
+  if (filters.hasta) params.set('hasta', filters.hasta)
+  if (filters.tipo && filters.tipo !== 'todos') params.set('tipo', filters.tipo)
+  if (filters.q) params.set('q', filters.q)
+  const query = params.size > 0 ? `?${params.toString()}` : ''
+  const res = await cajasFetch(`/${cajaId}/movimientos${query}`)
   if (!res.ok) throw new Error('No se pudieron cargar los movimientos')
-  const data = (await res.json()) as { movimientos: CajaMovimientoItem[] }
-  return data.movimientos
+  return res.json()
 }
 
 export async function registrarMovimientoCaja(

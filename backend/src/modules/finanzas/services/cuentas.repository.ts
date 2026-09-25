@@ -1,10 +1,15 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../lib/firebase/admin.js'
-import type { CuentaDocument, OrigenSaldo } from '../domain/cuenta.types.js'
+import type {
+  CuentaDocument,
+  OrigenSaldo,
+  PosicionCierreDocument,
+} from '../domain/cuenta.types.js'
 import { MANUAL_USD_CUENTA_DEFS } from '../domain/manual-usd.defaults.js'
 
 const CUENTAS_COLLECTION = 'cuentas'
 const SNAPSHOTS_SUB = 'saldosSnapshots'
+const POSICION_CIERRES_COLLECTION = 'finanzasPosicionCierres'
 
 export function cuentasCollection() {
   return adminDb().collection(CUENTAS_COLLECTION)
@@ -180,6 +185,46 @@ export async function updateManualSaldo(input: {
       { merge: true },
     )
   })
+}
+
+export async function savePosicionCierreDocument(input: {
+  fechaId: string
+  data: Omit<PosicionCierreDocument, 'createdAt' | 'updatedAt' | 'createdBy'>
+  actorUid: string
+}): Promise<void> {
+  const ref = adminDb().collection(POSICION_CIERRES_COLLECTION).doc(input.fechaId)
+  const now = FieldValue.serverTimestamp()
+  await adminDb().runTransaction(async (tx) => {
+    const existing = await tx.get(ref)
+    tx.set(ref, {
+      ...input.data,
+      createdAt: existing.exists ? existing.get('createdAt') : now,
+      createdBy: existing.exists ? existing.get('createdBy') : input.actorUid,
+      updatedAt: now,
+    })
+  })
+}
+
+export async function getPosicionCierreDocument(
+  fechaId: string,
+): Promise<{ id: string; data: PosicionCierreDocument } | null> {
+  const snap = await adminDb().collection(POSICION_CIERRES_COLLECTION).doc(fechaId).get()
+  if (!snap.exists) return null
+  return { id: snap.id, data: snap.data() as PosicionCierreDocument }
+}
+
+export async function listPosicionCierreDocuments(
+  limit = 31,
+): Promise<Array<{ id: string; data: PosicionCierreDocument }>> {
+  const snap = await adminDb()
+    .collection(POSICION_CIERRES_COLLECTION)
+    .orderBy('fechaId', 'desc')
+    .limit(limit)
+    .get()
+  return snap.docs.map((doc) => ({
+    id: doc.id,
+    data: doc.data() as PosicionCierreDocument,
+  }))
 }
 
 export function dateIdInArgentina(date: Date): string {

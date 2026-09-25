@@ -18,11 +18,15 @@ import {
 
   type OrigenSaldo,
 
+  type PosicionCierreBancoSnapshot,
+
+  type PosicionCierreCuentaSnapshot,
+
   type TipoCuenta,
 
 } from '../domain/cuenta.types.js'
 
-import type { Timestamp } from 'firebase-admin/firestore'
+import { Timestamp } from 'firebase-admin/firestore'
 
 import {
 
@@ -34,7 +38,13 @@ import {
 
   getCuentaDocument,
 
+  getPosicionCierreDocument,
+
   listCuentaDocuments,
+
+  listPosicionCierreDocuments,
+
+  savePosicionCierreDocument,
 
   toTimestampOrNull,
 
@@ -415,6 +425,131 @@ export async function setManualSaldoForCuenta(input: {
 
   return mapRow(row.id, row.data)
 
+}
+
+export interface PosicionCierreListItem {
+  fechaId: string
+  cerradoAt: string | null
+  totales: {
+    arsCentavos: number
+    usdCentavos: number
+  }
+  bancos: PosicionCierreBancoSnapshot[]
+  cuentas: PosicionCierreCuentaSnapshot[]
+  syncProveedor: {
+    intentado: boolean
+    ok: boolean
+    provider: string | null
+    error: string | null
+  }
+}
+
+function posicionTimestampToIso(value: Timestamp | null | undefined): string | null {
+  if (!value || typeof value.toDate !== 'function') return null
+  return value.toDate().toISOString()
+}
+
+function mapPosicionCierre(
+  data: import('../domain/cuenta.types.js').PosicionCierreDocument,
+): PosicionCierreListItem {
+  return {
+    fechaId: data.fechaId,
+    cerradoAt: posicionTimestampToIso(data.cerradoAt),
+    totales: data.totales,
+    bancos: data.bancos,
+    cuentas: data.cuentas,
+    syncProveedor: data.syncProveedor,
+  }
+}
+
+export async function capturePosicionCierre(input: {
+  actorUid: string
+  asOf?: Date
+  syncBeforeCapture?: boolean
+}): Promise<PosicionCierreListItem> {
+  const asOf = input.asOf ?? new Date()
+  let syncProveedor: PosicionCierreListItem['syncProveedor'] = {
+    intentado: false,
+    ok: true,
+    provider: null,
+    error: null,
+  }
+
+  if (input.syncBeforeCapture) {
+    try {
+      const result = await syncCuentasFromProvider({
+        actorUid: input.actorUid,
+        asOf,
+      })
+      syncProveedor = {
+        intentado: true,
+        ok: true,
+        provider: result.provider,
+        error: null,
+      }
+    } catch (error) {
+      syncProveedor = {
+        intentado: true,
+        ok: false,
+        provider: resolveFinanzasBankProviderMode(),
+        error: error instanceof Error ? error.message.slice(0, 500) : 'Error de sincronización',
+      }
+      console.error('[finanzas/cuentas] cierre diario continuó con último saldo conocido', error)
+    }
+  }
+
+  const current = await listCuentasForApi()
+  const bancosMap = new Map<string, PosicionCierreBancoSnapshot>()
+  const cuentas: PosicionCierreCuentaSnapshot[] = current.cuentas.map((cuenta) => {
+    const banco = bancosMap.get(cuenta.bancoNombre) ?? {
+      bancoNombre: cuenta.bancoNombre,
+      arsCentavos: 0,
+      usdCentavos: 0,
+    }
+    if (cuenta.moneda === 'ARS') banco.arsCentavos += cuenta.saldoActualCentavos
+    else banco.usdCentavos += cuenta.saldoActualCentavos
+    bancosMap.set(cuenta.bancoNombre, banco)
+    return {
+      cuentaId: cuenta.id,
+      bancoNombre: cuenta.bancoNombre,
+      tipo: cuenta.tipo,
+      moneda: cuenta.moneda,
+      origenSaldo: cuenta.origenSaldo,
+      saldoCentavos: cuenta.saldoActualCentavos,
+      descubiertoCentavos: cuenta.descubiertoCentavos,
+    }
+  })
+
+  const fechaId = dateIdInArgentina(asOf)
+  await savePosicionCierreDocument({
+    fechaId,
+    actorUid: input.actorUid,
+    data: {
+      fechaId,
+      cerradoAt: Timestamp.fromDate(asOf),
+      timeZone: 'America/Argentina/Buenos_Aires',
+      totales: current.totales,
+      bancos: [...bancosMap.values()].sort((a, b) =>
+        a.bancoNombre.localeCompare(b.bancoNombre, 'es'),
+      ),
+      cuentas,
+      syncProveedor,
+    },
+  })
+
+  const saved = await getPosicionCierreDocument(fechaId)
+  if (!saved) throw new Error('No se pudo leer el cierre diario guardado')
+  return mapPosicionCierre(saved.data)
+}
+
+export async function listPosicionCierresUltimos30Dias(): Promise<PosicionCierreListItem[]> {
+  const desde = new Date()
+  desde.setDate(desde.getDate() - 30)
+  const desdeId = dateIdInArgentina(desde)
+  const rows = await listPosicionCierreDocuments(35)
+  return rows
+    .filter(({ data }) => data.fechaId >= desdeId)
+    .map(({ data }) => mapPosicionCierre(data))
 }
 
 

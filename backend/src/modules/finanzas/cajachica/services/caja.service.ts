@@ -14,26 +14,52 @@ import {
   cajaHasCierrePendienteAprobacion,
   createCajaDoc,
   createMovimientoWithSaldo,
+  ejecutarCompraUsdAtomica,
   ejecutarFondeoAtomico,
   getCajaDoc,
   getCierreDoc,
+  listCajaResponsableOptions,
   listCajasDocs,
   listCierresForCaja,
   listCierresPendientesDocs,
   listMovimientosForCaja,
   parseDateInput,
   reassignCajaResponsable,
+  renameCajaDoc,
   saveCierreDoc,
   softDeleteCajaDoc,
   timestampFromDate,
   updateCierreDoc,
   userIsResponsableOfAnyCaja,
+  userIsResponsableOfPrincipal,
 } from './caja.repository.js'
 import { saveCajaComprobante, signedComprobanteUrl } from './cajaComprobanteStorage.js'
 
-function tsToIso(ts: { toDate?: () => Date } | null | undefined): string | null {
-  if (!ts || typeof ts.toDate !== 'function') return null
-  return ts.toDate().toISOString()
+function timestampToDate(ts: unknown): Date | null {
+  if (!ts) return null
+  if (ts instanceof Date) return Number.isNaN(ts.getTime()) ? null : ts
+  if (typeof ts === 'string') {
+    const parsed = new Date(ts)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+  if (typeof ts === 'object') {
+    const maybe = ts as { toDate?: () => Date; seconds?: number; _seconds?: number; nanoseconds?: number; _nanoseconds?: number }
+    if (typeof maybe.toDate === 'function') {
+      const parsed = maybe.toDate()
+      return parsed instanceof Date && !Number.isNaN(parsed.getTime()) ? parsed : null
+    }
+    const seconds = maybe.seconds ?? maybe._seconds
+    if (typeof seconds === 'number') {
+      const nanos = maybe.nanoseconds ?? maybe._nanoseconds ?? 0
+      return new Date(seconds * 1000 + nanos / 1e6)
+    }
+  }
+  return null
+}
+
+function tsToIso(ts: unknown): string | null {
+  const parsed = timestampToDate(ts)
+  return parsed ? parsed.toISOString() : null
 }
 
 function isCajaActiva(doc: CajaDocument): boolean {
@@ -72,7 +98,9 @@ async function serializeMovimiento(id: string, data: CajaMovimientoDocument) {
     categoria: data.categoria,
     esViatico: data.esViatico,
     beneficiarioEmpleado: data.beneficiarioEmpleado,
-    fondeoVinculadoId: data.fondeoVinculadoId,
+    fondeoVinculadoId: data.fondeoVinculadoId ?? null,
+    operacionVinculadaId: data.operacionVinculadaId ?? data.fondeoVinculadoId ?? null,
+    cotizacionCentavosPorUsd: data.cotizacionCentavosPorUsd ?? null,
     registradoPor: data.registradoPor,
     createdAt: tsToIso(data.createdAt),
   }
@@ -106,13 +134,32 @@ export async function assertCajasModuleAccess(user: AuthedUser): Promise<boolean
 
 export const assertCajaChicaModuleAccess = assertCajasModuleAccess
 
+export async function listResponsablesForLider(user: AuthedUser) {
+  if (!isFinanzasCajaLider(user)) {
+    throw new Error('Solo el líder de finanzas puede consultar responsables')
+  }
+  return listCajaResponsableOptions()
+}
+
 export async function listCajasForUser(user: AuthedUser) {
   const all = await listCajasDocs()
   const activas = all.filter((c) => isCajaActiva(c.data))
-  const visible = canBrowseAllCajas(user)
+  const puedeVerTodas =
+    canBrowseAllCajas(user) || (await userIsResponsableOfPrincipal(user.uid))
+  const visible = puedeVerTodas
     ? activas
     : activas.filter((c) => c.data.responsableUid === user.uid && c.data.tipo === 'chica')
-  return Promise.all(visible.map(({ id, data }) => serializeCaja(id, data)))
+  const cajas = await Promise.all(visible.map(({ id, data }) => serializeCaja(id, data)))
+  return cajas.sort((a, b) => {
+    if (a.tipo !== b.tipo) return a.tipo === 'principal' ? -1 : 1
+    if (a.moneda !== b.moneda) return a.moneda === 'ARS' ? -1 : 1
+    return a.nombre.localeCompare(b.nombre, 'es')
+  })
+}
+
+async function canReadCajaForUser(user: AuthedUser, responsableUid: string): Promise<boolean> {
+  if (canAccessCaja(user, responsableUid)) return true
+  return userIsResponsableOfPrincipal(user.uid)
 }
 
 export async function createCajaForLider(user: AuthedUser, body: Record<string, unknown>) {
@@ -198,13 +245,38 @@ export async function changeCajaResponsable(
   return serializeCaja(cajaId, updated)
 }
 
+export async function renameCaja(
+  user: AuthedUser,
+  cajaId: string,
+  body: Record<string, unknown>,
+) {
+  if (!isFinanzasCajaLider(user)) {
+    throw new Error('Solo el líder de finanzas puede editar cajas')
+  }
+  const caja = await getCajaDoc(cajaId)
+  if (!caja) throw new Error('Caja no encontrada')
+  if (!isCajaActiva(caja)) throw new Error('La caja está inactiva')
+  const nombre = typeof body.nombre === 'string' ? body.nombre.trim() : ''
+  if (nombre.length < 3) throw new Error('El nombre debe tener al menos 3 caracteres')
+  if (nombre.length > 80) throw new Error('El nombre no puede superar 80 caracteres')
+  await renameCajaDoc(cajaId, nombre)
+  const updated = await getCajaDoc(cajaId)
+  if (!updated) throw new Error('Caja no encontrada')
+  return serializeCaja(cajaId, updated)
+}
+
 export async function fondearCajaChica(
   user: AuthedUser,
   principalId: string,
   body: Record<string, unknown>,
 ) {
-  if (!isFinanzasCajaLider(user)) {
-    throw new Error('Solo el líder de finanzas puede fondear cajas chicas')
+  const principal = await getCajaDoc(principalId)
+  if (!principal) throw new Error('Caja principal no encontrada')
+  if (
+    !isFinanzasCajaLider(user) &&
+    !(principal.tipo === 'principal' && principal.responsableUid === user.uid)
+  ) {
+    throw new Error('Solo el líder o responsable de la principal puede fondear cajas chicas')
   }
   const cajaChicaId =
     typeof body.cajaChicaId === 'string' ? body.cajaChicaId.trim() : ''
@@ -248,14 +320,164 @@ export async function fondearCajaChica(
   return { ok: true as const, fondeoVinculadoId, principalId, cajaChicaId, montoCentavos }
 }
 
-export async function listMovimientos(user: AuthedUser, cajaId: string) {
+export async function comprarUsdDesdePrincipal(input: {
+  user: AuthedUser
+  cajaArsId: string
+  body: Record<string, unknown>
+  comprobante?: { fileName: string; mimeType: string; buffer: Buffer } | null
+}) {
+  const cajaArs = await getCajaDoc(input.cajaArsId)
+  if (!cajaArs) throw new Error('Caja principal ARS no encontrada')
+  if (!isCajaActiva(cajaArs)) throw new Error('La caja está inactiva')
+  if (cajaArs.tipo !== 'principal' || cajaArs.moneda !== 'ARS') {
+    throw new Error('La compra de USD debe registrarse desde una caja principal ARS')
+  }
+  if (
+    !isFinanzasCajaLider(input.user) &&
+    cajaArs.responsableUid !== input.user.uid
+  ) {
+    throw new Error('Solo el líder o responsable de la principal ARS puede comprar USD')
+  }
+
+  const parsePositiveInteger = (value: unknown): number => {
+    if (typeof value === 'number') return value
+    if (typeof value === 'string' && value.trim()) return Number.parseInt(value, 10)
+    return NaN
+  }
+  const cotizacionCentavosPorUsd = parsePositiveInteger(input.body.cotizacionCentavosPorUsd)
+  const montoUsdCentavos = parsePositiveInteger(input.body.montoUsdCentavos)
+  if (!Number.isSafeInteger(cotizacionCentavosPorUsd) || cotizacionCentavosPorUsd <= 0) {
+    throw new Error('Cotización inválida')
+  }
+  if (!Number.isSafeInteger(montoUsdCentavos) || montoUsdCentavos <= 0) {
+    throw new Error('Cantidad de dólares inválida')
+  }
+  const producto = cotizacionCentavosPorUsd * montoUsdCentavos
+  if (!Number.isSafeInteger(producto)) throw new Error('El monto de la operación es demasiado grande')
+  const montoPesosCentavos = Math.round(producto / 100)
+  if (montoPesosCentavos <= 0) throw new Error('Monto en pesos inválido')
+
+  const cajas = await listCajasDocs()
+  const cajaUsd = cajas.find(
+    ({ data }) =>
+      data.tipo === 'principal' &&
+      data.moneda === 'USD' &&
+      isCajaActiva(data),
+  )
+  if (!cajaUsd) throw new Error('No existe una caja principal USD activa')
+
+  let comprobanteStoragePath: string | null = null
+  if (input.comprobante && input.comprobante.buffer.length > 0) {
+    comprobanteStoragePath = await saveCajaComprobante(
+      input.cajaArsId,
+      input.comprobante.fileName,
+      input.comprobante.mimeType,
+      input.comprobante.buffer,
+    )
+  }
+
+  const operacionVinculadaId = randomUUID()
+  const cotizacion = (cotizacionCentavosPorUsd / 100).toLocaleString('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  const concepto = `Compra USD · TC $${cotizacion}`
+  await ejecutarCompraUsdAtomica({
+    cajaArsId: input.cajaArsId,
+    cajaUsdId: cajaUsd.id,
+    montoPesosCentavos,
+    montoUsdCentavos,
+    cotizacionCentavosPorUsd,
+    concepto,
+    comprobanteStoragePath,
+    registradoPor: input.user.uid,
+    operacionVinculadaId,
+    movimientoArsId: randomUUID(),
+    movimientoUsdId: randomUUID(),
+    fecha: timestampFromDate(new Date()),
+  })
+
+  return {
+    ok: true as const,
+    operacionVinculadaId,
+    cajaArsId: input.cajaArsId,
+    cajaUsdId: cajaUsd.id,
+    montoPesosCentavos,
+    montoUsdCentavos,
+    cotizacionCentavosPorUsd,
+  }
+}
+
+const RETENCION_MOVIMIENTOS_ANIOS = 2
+
+function parseFiltroFecha(value: string | undefined, finDelDia: boolean): Date | undefined {
+  if (!value?.trim()) return undefined
+  const raw = value.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const iso = `${raw}T${finDelDia ? '23:59:59.999' : '00:00:00.000'}-03:00`
+    const parsed = new Date(iso)
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed
+  }
+  return parseDateInput(raw)
+}
+
+export async function listMovimientos(
+  user: AuthedUser,
+  cajaId: string,
+  filters: { desde?: string; hasta?: string; tipo?: string; q?: string } = {},
+) {
   const caja = await getCajaDoc(cajaId)
   if (!caja) throw new Error('Caja no encontrada')
-  if (!canAccessCaja(user, caja.responsableUid)) {
+  if (!(await canReadCajaForUser(user, caja.responsableUid))) {
     throw new Error('No tenés acceso a esta caja')
   }
   const rows = await listMovimientosForCaja(cajaId)
-  return Promise.all(rows.map(({ id, data }) => serializeMovimiento(id, data)))
+  let saldo = caja.saldoActualCentavos
+  const conSaldo = rows.map((row) => {
+    const saldoPosteriorCentavos = saldo
+    const signo =
+      row.data.tipo === 'ingreso' || row.data.tipo === 'fondeo_recibido' ? 1 : -1
+    saldo -= signo * row.data.montoCentavos
+    return { ...row, saldoPosteriorCentavos }
+  })
+
+  const desde = parseFiltroFecha(filters.desde, false)
+  const hasta = parseFiltroFecha(filters.hasta, true)
+  const tipo = filters.tipo?.trim()
+  const q = filters.q?.trim().toLocaleLowerCase('es')
+  const filtrados = conSaldo.filter(({ data }) => {
+    const fecha = timestampToDate(data.fecha)
+    if (desde && fecha && fecha.getTime() < desde.getTime()) return false
+    if (hasta && fecha && fecha.getTime() > hasta.getTime()) return false
+    if (tipo === 'ingreso' && data.tipo !== 'ingreso' && data.tipo !== 'fondeo_recibido') {
+      return false
+    }
+    if (tipo === 'egreso' && data.tipo !== 'egreso' && data.tipo !== 'fondeo_enviado') {
+      return false
+    }
+    if (tipo === 'fondeo' && data.tipo !== 'fondeo_recibido' && data.tipo !== 'fondeo_enviado') {
+      return false
+    }
+    if (q) {
+      const haystack = `${data.concepto} ${data.categoria ?? ''} ${data.beneficiarioEmpleado ?? ''}`.toLocaleLowerCase(
+        'es',
+      )
+      if (!haystack.includes(q)) return false
+    }
+    return true
+  })
+
+  const movimientos = await Promise.all(
+    filtrados.map(async ({ id, data, saldoPosteriorCentavos }) => ({
+      ...(await serializeMovimiento(id, data)),
+      saldoPosteriorCentavos,
+    })),
+  )
+  return {
+    movimientos,
+    totalSinFiltro: rows.length,
+    retencionAnios: RETENCION_MOVIMIENTOS_ANIOS,
+  }
 }
 
 export async function registerMovimiento(input: {
@@ -267,14 +489,18 @@ export async function registerMovimiento(input: {
   const caja = await getCajaDoc(input.cajaId)
   if (!caja) throw new Error('Caja no encontrada')
   if (!isCajaActiva(caja)) throw new Error('La caja está inactiva')
-  if (!canAccessCaja(input.user, caja.responsableUid)) {
+  if (!(await canReadCajaForUser(input.user, caja.responsableUid))) {
     throw new Error('No tenés acceso a esta caja')
   }
   if (caja.tipo === 'chica' && (await cajaHasCierrePendienteAprobacion(input.cajaId))) {
     throw new Error('La caja está cerrada esperando aprobación; no se pueden cargar movimientos')
   }
-  if (caja.tipo === 'principal' && !isFinanzasCajaLider(input.user)) {
-    throw new Error('Los movimientos en caja principal solo los registra el líder de finanzas')
+  if (
+    caja.tipo === 'principal' &&
+    !isFinanzasCajaLider(input.user) &&
+    caja.responsableUid !== input.user.uid
+  ) {
+    throw new Error('Los movimientos en caja principal solo los registra su responsable o el líder')
   }
   if (
     caja.tipo === 'chica' &&
@@ -342,6 +568,8 @@ export async function registerMovimiento(input: {
     esViatico,
     beneficiarioEmpleado: esViatico ? beneficiarioEmpleado : null,
     fondeoVinculadoId: null,
+    operacionVinculadaId: null,
+    cotizacionCentavosPorUsd: null,
     registradoPor: input.user.uid,
   }
 
@@ -408,7 +636,7 @@ async function resolveSaldoInicialPeriodo(cajaId: string, periodoDesde: Date): P
 export async function listCierres(user: AuthedUser, cajaId: string) {
   const caja = await getCajaDoc(cajaId)
   if (!caja) throw new Error('Caja no encontrada')
-  if (!canAccessCaja(user, caja.responsableUid)) {
+  if (!(await canReadCajaForUser(user, caja.responsableUid))) {
     throw new Error('No tenés acceso a esta caja')
   }
   const rows = await listCierresForCaja(cajaId)

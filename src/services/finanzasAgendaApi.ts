@@ -14,6 +14,12 @@ export interface ChequeVinculoResumen {
   estadoLabel: string
 }
 
+export type CompromisoEstadoAgenda =
+  | 'pendiente'
+  | 'vencido'
+  | 'confeccionada_pendiente_autorizacion'
+  | 'pagado'
+
 export interface CompromisoAgendaItem {
   id: string
   concepto: string
@@ -24,11 +30,14 @@ export interface CompromisoAgendaItem {
   medioPago: MedioPago
   chequeId: string | null
   cheque: ChequeVinculoResumen | null
-  estado: string
+  transferenciaConfeccionadaId: string | null
+  estado: CompromisoEstadoAgenda | string
   cuentaId: string | null
   fechaPago: string | null
   updatedAt?: string | null
   alertaVencimiento: VencimientoAlerta
+  esViatico?: boolean
+  beneficiarioEmpleado?: string | null
 }
 
 export interface CobroAgendaItem {

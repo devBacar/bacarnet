@@ -10,7 +10,12 @@ export function filterCompromisosByVista(
   if (vista === 'pagados') {
     return rows.filter(({ data }) => data.estado === 'pagado')
   }
-  return rows.filter(({ data }) => data.estado === 'pendiente' || data.estado === 'vencido')
+  return rows.filter(
+    ({ data }) =>
+      data.estado === 'pendiente' ||
+      data.estado === 'vencido' ||
+      data.estado === 'confeccionada_pendiente_autorizacion',
+  )
 }
 
 export function filterCobrosByVista(

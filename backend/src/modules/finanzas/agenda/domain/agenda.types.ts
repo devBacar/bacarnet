@@ -3,7 +3,11 @@ import type { PrioridadUrgencia } from './agenda.prioridad.js'
 
 export type MedioPago = 'transferencia' | 'cheque' | 'efectivo'
 
-export type CompromisoEstado = 'pendiente' | 'pagado' | 'vencido'
+export type CompromisoEstado =
+  | 'pendiente'
+  | 'vencido'
+  | 'confeccionada_pendiente_autorizacion'
+  | 'pagado'
 
 export type CobroEstado = 'esperado' | 'confirmado' | 'incobrable'
 
@@ -17,10 +21,13 @@ export interface CompromisoPagoDocument {
   urgenciaManual: PrioridadUrgencia | null
   medioPago: MedioPago
   chequeId: string | null
+  transferenciaConfeccionadaId: string | null
   estado: CompromisoEstado
   cuentaId: string | null
   fechaPago: Timestamp | null
   pagadoPor: string | null
+  esViatico: boolean
+  beneficiarioEmpleado: string | null
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string

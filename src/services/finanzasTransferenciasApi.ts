@@ -28,6 +28,39 @@ async function transferenciasFetch(path: string, init?: RequestInit): Promise<Re
   })
 }
 
+export async function cancelarTransferenciaConfeccionada(transferenciaId: string): Promise<{
+  transferencia: TransferenciaConfeccionadaItem
+  compromiso: {
+    id: string
+    estado: string
+    transferenciaConfeccionadaId: string | null
+  }
+  nota: string
+}> {
+  const res = await transferenciasFetch(`/${encodeURIComponent(transferenciaId)}/cancelar`, {
+    method: 'POST',
+    body: '{}',
+  })
+  const payload = (await res.json().catch(() => ({}))) as {
+    error?: string
+    transferencia?: TransferenciaConfeccionadaItem
+    compromiso?: {
+      id: string
+      estado: string
+      transferenciaConfeccionadaId: string | null
+    }
+    nota?: string
+  }
+  if (!res.ok || !payload.transferencia || !payload.compromiso) {
+    throw new Error(payload.error ?? 'No se pudo marcar la transferencia como cancelada')
+  }
+  return {
+    transferencia: payload.transferencia,
+    compromiso: payload.compromiso,
+    nota: payload.nota ?? '',
+  }
+}
+
 export async function confeccionarTransferencia(body: {
   compromisoPagoId: string
   cuentaCreditoCbu: string

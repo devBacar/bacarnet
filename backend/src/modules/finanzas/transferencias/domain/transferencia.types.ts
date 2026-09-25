@@ -12,6 +12,7 @@ export type TransferenciaEstado =
   | 'pendiente_proceso'
   | 'rechazada'
   | 'efectivizada'
+  | 'cancelada'
 
 export type TransferenciaHistorialOrigen = 'api' | 'sync_automatico' | 'usuario'
 

@@ -1,5 +1,6 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
+import { COMPROMISOS_COLLECTION } from '../../agenda/services/agenda.repository.js'
 import type {
   TransferenciaConfeccionadaDocument,
   TransferenciaHistorialDocument,
@@ -94,4 +95,52 @@ export async function listTransferenciaHistorial(transferenciaId: string) {
 
 export function timestampNow(): Timestamp {
   return Timestamp.now()
+}
+
+/**
+ * Marca la transferencia como cancelada en BacarNet y reabre el compromiso.
+ * No llama a Interbanking. No borra transferenciaConfeccionadaId.
+ */
+export async function cancelarTransferenciaYReabrirCompromiso(input: {
+  transferenciaId: string
+  compromisoId: string
+  estadoAnteriorTransferencia: string
+  estadoAnteriorCompromiso: string
+  nota: string
+  usuarioUid: string
+}): Promise<void> {
+  const transferenciaRef = transferenciasCollection().doc(input.transferenciaId)
+  const compromisoRef = adminDb().collection(COMPROMISOS_COLLECTION).doc(input.compromisoId)
+  const now = FieldValue.serverTimestamp()
+
+  await adminDb().runTransaction(async (tx) => {
+    const transferenciaSnap = await tx.get(transferenciaRef)
+    if (!transferenciaSnap.exists) throw new Error('Transferencia no encontrada')
+    const compromisoSnap = await tx.get(compromisoRef)
+    if (!compromisoSnap.exists) throw new Error('Compromiso no encontrado')
+
+    tx.update(transferenciaRef, {
+      estado: 'cancelada',
+      updatedAt: now,
+    })
+    tx.set(transferenciaRef.collection(HISTORIAL_SUB).doc(), {
+      estadoAnterior: input.estadoAnteriorTransferencia,
+      estadoNuevo: 'cancelada',
+      origen: 'usuario' satisfies TransferenciaHistorialOrigen,
+      nota: input.nota,
+      fecha: now,
+    })
+
+    tx.update(compromisoRef, {
+      estado: 'pendiente',
+      updatedAt: now,
+    })
+    tx.set(compromisoRef.collection(HISTORIAL_SUB).doc(), {
+      estadoAnterior: input.estadoAnteriorCompromiso,
+      estadoNuevo: 'pendiente',
+      usuario: input.usuarioUid,
+      nota: input.nota,
+      fecha: now,
+    })
+  })
 }

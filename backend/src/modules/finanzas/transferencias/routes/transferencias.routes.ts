@@ -1,6 +1,8 @@
 import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import {
+  TransferenciaCancelacionError,
+  cancelarTransferenciaConfeccionada,
   confeccionarTransferenciaDesdeCompromiso,
   getTransferenciaEstadoApi,
 } from '../services/transferencias.service.js'
@@ -27,6 +29,29 @@ finanzasTransferenciasRouter.post('/confeccionar', async (req, res) => {
   } catch (err) {
     console.error('[finanzas/transferencias] confeccionar', err)
     const message = err instanceof Error ? err.message : 'No se pudo confeccionar la transferencia'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasTransferenciasRouter.post('/:id/cancelar', async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) {
+      res.status(400).json({ error: 'Id de transferencia inválido' })
+      return
+    }
+    const result = await cancelarTransferenciaConfeccionada({
+      actorUid: req.authedUser!.uid,
+      transferenciaId: id,
+    })
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/transferencias] cancelar', err)
+    if (err instanceof TransferenciaCancelacionError) {
+      res.status(err.status).json({ error: err.message })
+      return
+    }
+    const message = err instanceof Error ? err.message : 'No se pudo cancelar la transferencia'
     res.status(400).json({ error: message })
   }
 })

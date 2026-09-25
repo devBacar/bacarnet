@@ -28,7 +28,10 @@ import {
   type MedioPago,
   type PrioridadUrgencia,
 } from '../../services/finanzasAgendaApi'
-import { confeccionarTransferencia } from '../../services/finanzasTransferenciasApi'
+import {
+  cancelarTransferenciaConfeccionada,
+  confeccionarTransferencia,
+} from '../../services/finanzasTransferenciasApi'
 
 type Tab = 'pagos' | 'cobros'
 
@@ -60,6 +63,9 @@ const COMPROMISO_ESTADO_CONFECCIONADA = 'confeccionada_pendiente_autorizacion'
 
 const TRANSFERENCIA_CONFECCIONADA_MSG =
   'Confeccionada — un aprobador tiene que autorizarla en Interbanking. El sistema va a detectar solo cuándo se efectivice.'
+
+const CANCELAR_TRANSFERENCIA_AVISO =
+  '⚠️ Esto NO cancela la transferencia en Interbanking. Solo la marca como cancelada acá, en BacarNet. Si la transferencia sigue activa en la plataforma de Interbanking, andá ahí a cancelarla también — de lo contrario, alguien podría autorizarla igual sin saber que acá la dimos por cancelada.'
 
 function filterCobrosForVista(rows: CobroAgendaItem[], vista: CobrosAgendaVista): CobroAgendaItem[] {
   if (vista === 'cobrados') return rows.filter((r) => r.estado === 'confirmado')
@@ -194,6 +200,11 @@ export function FinanzasAgendaPage() {
                 )
                 invalidate()
               }}
+              onCancelarTransferencia={async (transferenciaId) => {
+                await cancelarTransferenciaConfeccionada(transferenciaId)
+                toast.success('Marcada como cancelada en BacarNet. Interbanking no se modificó.')
+                invalidate()
+              }}
             />
           )}
         </>
@@ -316,6 +327,7 @@ function CompromisosTable({
   onUrgenciaChange,
   onMarcarPagado,
   onConfeccionar,
+  onCancelarTransferencia,
 }: {
   rows: CompromisoAgendaItem[]
   vista: CompromisosAgendaVista
@@ -326,10 +338,12 @@ function CompromisosTable({
     id: string,
     body: { cuentaCreditoCbu: string; cuentaDebitoId: string; tipo?: 'cuentas_propias' },
   ) => Promise<void>
+  onCancelarTransferencia: (transferenciaId: string) => Promise<void>
 }) {
   const [historialId, setHistorialId] = useState<string | null>(null)
   const [marcarRow, setMarcarRow] = useState<CompromisoAgendaItem | null>(null)
   const [confeccionarRow, setConfeccionarRow] = useState<CompromisoAgendaItem | null>(null)
+  const [cancelarRow, setCancelarRow] = useState<CompromisoAgendaItem | null>(null)
   const cuentasCc = useMemo(() => cuentas.filter((c) => c.tipo === 'CC'), [cuentas])
   const { data: historial = [] } = useQuery({
     queryKey: ['finanzas', 'agenda', 'historial', 'compromiso', historialId],
@@ -443,6 +457,15 @@ function CompromisosTable({
                         Confeccionar por API
                       </button>
                     ) : null}
+                    {vista === 'pendientes' && row.estado === COMPROMISO_ESTADO_CONFECCIONADA ? (
+                      <button
+                        type="button"
+                        className="rounded border border-amber-600 px-2 py-1 text-xs font-medium text-amber-900 dark:border-amber-400 dark:text-amber-100"
+                        onClick={() => setCancelarRow(row)}
+                      >
+                        Marcar como cancelada
+                      </button>
+                    ) : null}
                     {vista === 'pendientes' &&
                     row.estado !== COMPROMISO_ESTADO_CONFECCIONADA &&
                     !(row.medioPago === 'transferencia' && (row.estado === 'pendiente' || row.estado === 'vencido')) ? (
@@ -484,6 +507,20 @@ function CompromisosTable({
           onSubmit={async (body) => {
             await onConfeccionar(confeccionarRow.id, body)
             setConfeccionarRow(null)
+          }}
+        />
+      ) : null}
+      {cancelarRow ? (
+        <CancelarTransferenciaModal
+          row={cancelarRow}
+          onClose={() => setCancelarRow(null)}
+          onConfirm={async () => {
+            const transferenciaId = cancelarRow.transferenciaConfeccionadaId
+            if (!transferenciaId) {
+              throw new Error('Este compromiso no tiene una transferencia vinculada.')
+            }
+            await onCancelarTransferencia(transferenciaId)
+            setCancelarRow(null)
           }}
         />
       ) : null}
@@ -568,6 +605,53 @@ function ConfeccionarTransferenciaModal({
             }}
           >
             {saving ? 'Confeccionando…' : 'Confeccionar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CancelarTransferenciaModal({
+  row,
+  onClose,
+  onConfirm,
+}: {
+  row: CompromisoAgendaItem
+  onClose: () => void
+  onConfirm: () => Promise<void>
+}) {
+  const [saving, setSaving] = useState(false)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="surface-card w-full max-w-xl rounded-2xl border border-neutral-200 p-6 dark:border-zinc-700">
+        <h2 className="text-heading text-lg font-semibold">Marcar como cancelada</h2>
+        <p className="text-body-muted mt-2 text-sm">
+          <span className="text-heading font-medium">{row.concepto}</span> —{' '}
+          {formatMoneyCentavos(row.montoCentavos, 'ARS')}
+        </p>
+        <p className="mt-4 rounded-xl border-2 border-amber-600 bg-amber-50 px-4 py-4 text-base font-semibold leading-relaxed text-amber-950 dark:border-amber-400 dark:bg-amber-950/50 dark:text-amber-50">
+          {CANCELAR_TRANSFERENCIA_AVISO}
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" className="rounded-lg px-4 py-2 text-sm" onClick={onClose} disabled={saving}>
+            Volver
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            onClick={() => {
+              setSaving(true)
+              void onConfirm()
+                .catch((err: unknown) => {
+                  toast.error(err instanceof Error ? err.message : 'No se pudo marcar como cancelada')
+                })
+                .finally(() => setSaving(false))
+            }}
+          >
+            {saving ? 'Marcando…' : 'Marcar como cancelada'}
           </button>
         </div>
       </div>

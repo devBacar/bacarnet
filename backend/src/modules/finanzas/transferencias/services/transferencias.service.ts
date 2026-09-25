@@ -15,6 +15,7 @@ import { translateInterbankingErrors } from '../domain/transferencia.errors.js'
 import type { TransferenciaEstado, TransferenciaTipo } from '../domain/transferencia.types.js'
 import {
   appendTransferenciaHistorial,
+  cancelarTransferenciaYReabrirCompromiso,
   createTransferenciaWithHistorial,
   getTransferenciaDocument,
   timestampNow,
@@ -22,6 +23,20 @@ import {
 
 export const COMPROMISO_ESTADO_CONFECCIONADA: CompromisoEstado =
   'confeccionada_pendiente_autorizacion'
+
+/** Registro local únicamente. No se envía nada a Interbanking. */
+export const NOTA_CANCELACION_MANUAL_BACARNET =
+  'Cancelada manualmente en BacarNet — verificar que también esté cancelada/rechazada en Interbanking'
+
+export class TransferenciaCancelacionError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'TransferenciaCancelacionError'
+    this.status = status
+  }
+}
 
 function normalizeCbu(raw: string): string {
   return raw.replace(/\D/g, '')
@@ -256,6 +271,72 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
     ok: true as const,
     transferencia: serializeTransferencia(transferenciaId, transferenciaDoc.data),
     provider: providerMode,
+  }
+}
+
+export async function cancelarTransferenciaConfeccionada(input: {
+  actorUid: string
+  transferenciaId: string
+}) {
+  const transferenciaId = input.transferenciaId.trim()
+  if (!transferenciaId) {
+    throw new TransferenciaCancelacionError('Id de transferencia inválido', 400)
+  }
+
+  const row = await getTransferenciaDocument(transferenciaId)
+  if (!row) throw new TransferenciaCancelacionError('Transferencia no encontrada', 404)
+  if (row.data.estado === 'cancelada') {
+    throw new TransferenciaCancelacionError('La transferencia ya está cancelada en BacarNet', 400)
+  }
+  if (row.data.estado !== 'confeccionada') {
+    throw new TransferenciaCancelacionError(
+      'Solo se puede marcar como cancelada una transferencia en estado confeccionada',
+      400,
+    )
+  }
+
+  const compromiso = await getCompromisoDocument(row.data.compromisoPagoId)
+  if (!compromiso) throw new TransferenciaCancelacionError('Compromiso no encontrado', 404)
+  if (compromiso.transferenciaConfeccionadaId !== transferenciaId) {
+    throw new TransferenciaCancelacionError(
+      'El compromiso no apunta a esta transferencia. No se modificó ningún registro.',
+      409,
+    )
+  }
+  if (compromiso.estado === 'pagado') {
+    throw new TransferenciaCancelacionError(
+      'El compromiso ya está pagado. No se puede reabrir desde esta cancelación.',
+      400,
+    )
+  }
+  if (compromiso.estado !== COMPROMISO_ESTADO_CONFECCIONADA) {
+    throw new TransferenciaCancelacionError(
+      'El compromiso no está pendiente de autorización. No se modificó ningún registro.',
+      409,
+    )
+  }
+
+  await cancelarTransferenciaYReabrirCompromiso({
+    transferenciaId,
+    compromisoId: row.data.compromisoPagoId,
+    estadoAnteriorTransferencia: row.data.estado,
+    estadoAnteriorCompromiso: compromiso.estado,
+    nota: NOTA_CANCELACION_MANUAL_BACARNET,
+    usuarioUid: input.actorUid,
+  })
+
+  const updated = await getTransferenciaDocument(transferenciaId)
+  if (!updated) throw new TransferenciaCancelacionError('Transferencia no encontrada', 404)
+  const compromisoActualizado = await getCompromisoDocument(row.data.compromisoPagoId)
+
+  return {
+    transferencia: serializeTransferencia(transferenciaId, updated.data),
+    compromiso: {
+      id: row.data.compromisoPagoId,
+      estado: compromisoActualizado?.estado ?? 'pendiente',
+      transferenciaConfeccionadaId: compromisoActualizado?.transferenciaConfeccionadaId ?? null,
+    },
+    nota: NOTA_CANCELACION_MANUAL_BACARNET,
   }
 }
 

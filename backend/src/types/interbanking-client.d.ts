@@ -8,6 +8,7 @@ declare module 'interbanking-client' {
     apiBaseUrl?: string
     logger?: null | ((message: string) => void)
   }): {
+    getToken: () => Promise<string>
     getBalances: (queryParams?: Record<string, string>) => Promise<{ accounts: unknown[] }>
   }
 }

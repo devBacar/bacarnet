@@ -68,6 +68,14 @@
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "aprobadoresEmails", "arrayConfig": "CONTAINS" }
       ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cuentaId", "order": "ASCENDING" },
+        { "fieldPath": "fechaProceso", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

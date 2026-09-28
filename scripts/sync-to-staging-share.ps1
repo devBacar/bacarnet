@@ -9,8 +9,16 @@ if (-not (Test-Path $Target)) {
   throw "No existe $Target. Monta la unidad de red del servidor."
 }
 
+# /XD: nunca sincronizar control de versiones ni deps (evita pisar .git del servidor con el de Desktop).
+$robocopyExcludeDirs = @(
+  '.git',
+  '.svn',
+  '.hg',
+  'node_modules',
+  'dist'
+)
 Write-Host "Sync codigo $Source -> $Target"
-robocopy $Source $Target /E /XD node_modules backend\node_modules dist .git\objects\tmp /XF firebase-debug.log /R:2 /W:3 /NFL /NDL /NJH /NJS
+robocopy $Source $Target /E /XD @robocopyExcludeDirs /XF firebase-debug.log /R:2 /W:3 /NFL /NDL /NJH /NJS
 if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
 
 Write-Host 'Build local (npm no confiable sobre unidad de red Z:)'

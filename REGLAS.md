@@ -62,6 +62,17 @@ Más detalle: [README.md](./README.md), [backend/README.md](./backend/README.md)
 - El **desarrollador humano** aprueba, commitea, abre PR, mergea y **despliega**.
 - La IA **no** asume que puede pushear, mergear o desplegar sin instrucción explícita.
 
+### 3.4 Trabajo en paralelo entre varias personas
+
+Cuando dos personas trabajan en Finanzas al mismo tiempo, en módulos distintos:
+
+- **Cada persona, su propia rama, siempre desde `main` actualizado** — nunca compartir una rama entre dos personas, y nunca ramificar desde la rama de otra persona si se puede evitar.
+- **GitHub es el único repositorio real.** Cualquier PC (de desarrollo, de pruebas, la que sea) es solo una copia local — el código "vive" en GitHub, no en ninguna PC puntual.
+- **Identificar de antemano los archivos "de conexión" compartidos** entre módulos (`routes/index.ts`, `finanzasNavConfig.ts`, `AppRoutes.tsx`, `pages/index.ts`, y similares) — son los únicos lugares donde dos ramas de módulos distintos suelen chocar. Avisar al equipo antes de tocarlos.
+- **Commits chicos y frecuentes, de ambas partes** — no acumular días de trabajo sin pushear. Mientras menos tiempo pase una rama sin fusionar a `main`, menos chance de conflicto real.
+- **Nunca editar el mismo código desde dos lugares a la vez sin que el otro lo sepa** — si algo se prueba en una máquina de staging o una segunda ventana, tiene que quedar claro quién está tocando qué en cada momento. Acá fue donde más tiempo se perdió en la práctica.
+- Antes de arrancar una tarea nueva, `git pull origin main` para partir de la base más actualizada posible.
+
 ---
 
 ## 4. Seguridad y secretos

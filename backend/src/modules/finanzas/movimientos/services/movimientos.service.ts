@@ -16,6 +16,7 @@ import {
   sumMovimientosCentavos,
   type MovimientoListadoItem,
 } from './movimientos.repository.js'
+import { reconciliarTransferenciasConMovimientos } from '../../transferencias/services/reconciliar-movimientos.js'
 
 const TZ = 'America/Argentina/Buenos_Aires'
 const DIAS_HISTORIA_INICIAL = 90
@@ -44,6 +45,13 @@ export interface MovimientosSyncResult {
   eliminados: number
   enFirestore: number
   cuentas: MovimientosSyncCuentaResult[]
+  reconciliacion: {
+    revisadas: number
+    efectivizadas: number
+    sinCandidato: number
+    requierenConfirmacion: number
+    reservasReanudadas: number
+  }
 }
 
 function addIsoDays(iso: string, days: number): string {
@@ -169,6 +177,8 @@ export async function syncMovimientosBancarios(input: { actorUid: string }): Pro
     porCuenta.push(await syncCuenta({ session, cuenta, actorUid: input.actorUid, now }))
   }
 
+  const reconciliacion = await reconciliarTransferenciasConMovimientos({ actorUid: input.actorUid })
+
   return {
     hoy: hoyArgentina(now),
     traidos: porCuenta.reduce((acc, c) => acc + c.traidos, 0),
@@ -176,6 +186,7 @@ export async function syncMovimientosBancarios(input: { actorUid: string }): Pro
     eliminados: porCuenta.reduce((acc, c) => acc + c.eliminados, 0),
     enFirestore: await countMovimientosBancarios(),
     cuentas: porCuenta,
+    reconciliacion,
   }
 }
 

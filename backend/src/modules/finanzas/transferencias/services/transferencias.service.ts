@@ -23,6 +23,7 @@ import {
   listTransferenciasConfeccionadas,
   timestampNow,
 } from './transferencias.repository.js'
+import { resumirMovimientosCandidatos } from './reconciliar-movimientos.js'
 
 export const COMPROMISO_ESTADO_CONFECCIONADA: CompromisoEstado =
   'confeccionada_pendiente_autorizacion'
@@ -469,7 +470,7 @@ export async function listTransferenciasApi(filters: TransferenciasListFilters) 
   )
   const compromisoPorId = new Map(compromisos)
 
-  const transferencias = rows
+  const filtradas = rows
     .filter((row) => {
       if (estado && row.data.estado !== estado) return false
       if (tipo && row.data.tipo !== tipo) return false
@@ -484,7 +485,13 @@ export async function listTransferenciasApi(filters: TransferenciasListFilters) 
       const tb = agendaTimestampToDate(b.data.fechaConfeccion)?.getTime() ?? 0
       return tb - ta
     })
-    .map((row) => {
+
+  const candidatoIds = filtradas.flatMap((row) =>
+    row.data.requiereConfirmacionManual ? (row.data.movimientoCandidatosIds ?? []) : [],
+  )
+  const candidatosPorId = await resumirMovimientosCandidatos(candidatoIds)
+
+  const transferencias = filtradas.map((row) => {
       const debito = cuentasPorId.get(row.data.cuentaDebitoId)
       const debitoLabel = debito
         ? etiquetaCuenta(debito.bancoNombre, debito.tipo)
@@ -511,6 +518,11 @@ export async function listTransferenciasApi(filters: TransferenciasListFilters) 
         direccion: `${debitoLabel} → ${destinoLabel}`,
         erroresInterbanking: row.data.erroresInterbanking,
         puedeCancelar: row.data.estado === 'confeccionada',
+        movimientoId: row.data.movimientoId ?? null,
+        requiereConfirmacionManual: row.data.requiereConfirmacionManual === true,
+        candidatos: (row.data.movimientoCandidatosIds ?? [])
+          .map((id) => candidatosPorId.get(id))
+          .filter((candidato): candidato is NonNullable<typeof candidato> => Boolean(candidato)),
       }
     })
 

@@ -47,6 +47,12 @@ export interface MovimientoBancarioDocument {
   voucherNumber: number | null
   /** Tal cual lo manda el banco. No es único. */
   correlativeNumber: number | null
+  /**
+   * Transferencia que ya usó este débito. Un sync que reemplaza el día borra
+   * el documento y, con él, esta marca; la reconciliación la vuelve a poner
+   * si el débito reaparece como único candidato.
+   */
+  reservadoPorTransferenciaId?: string | null
   createdAt: Timestamp
   syncedBy: string
 }

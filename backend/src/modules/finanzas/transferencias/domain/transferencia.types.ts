@@ -31,6 +31,15 @@ export interface TransferenciaConfeccionadaDocument {
   confeccionadaPor: string
   fechaConfeccion: Timestamp
   fechaDeteccionEfectivizada: Timestamp | null
+  /**
+   * Débito de movimientosBancarios que se tomó como esta transferencia.
+   * El id se pierde si un sync posterior reemplaza ese día: la reconciliación
+   * lo reasigna cuando queda un único débito equivalente.
+   */
+  movimientoId?: string | null
+  /** Más de un débito coincide. No se efectiviza hasta que alguien elija. */
+  requiereConfirmacionManual?: boolean
+  movimientoCandidatosIds?: string[]
   createdAt: Timestamp
   updatedAt: Timestamp
 }

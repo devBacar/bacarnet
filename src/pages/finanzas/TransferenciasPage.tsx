@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
@@ -8,6 +8,7 @@ import { useAuth } from '../../context'
 import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
   cancelarTransferenciaConfeccionada,
+  confirmarMovimientoTransferencia,
   fetchTransferenciaHistorial,
   fetchTransferencias,
   type TransferenciaEstadoUi,
@@ -61,6 +62,7 @@ export function FinanzasTransferenciasPage() {
   const [hasta, setHasta] = useState('')
   const [historialId, setHistorialId] = useState<string | null>(null)
   const [cancelarRow, setCancelarRow] = useState<TransferenciaListItem | null>(null)
+  const [confirmando, setConfirmando] = useState<string | null>(null)
 
   const filters: TransferenciasListFilters = { estado, cuentaId, tipo, desde, hasta }
 
@@ -83,6 +85,20 @@ export function FinanzasTransferenciasPage() {
   })
 
   const cuentas = (cuentasData?.cuentas ?? []).filter((cuenta) => cuenta.tipo === 'CC')
+
+  async function elegirCandidato(transferenciaId: string, movimientoId: string) {
+    const clave = `${transferenciaId}:${movimientoId}`
+    setConfirmando(clave)
+    try {
+      await confirmarMovimientoTransferencia(transferenciaId, movimientoId)
+      toast.success('Transferencia efectivizada')
+      await queryClient.invalidateQueries({ queryKey: ['finanzas', 'transferencias'] })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo confirmar el movimiento')
+    } finally {
+      setConfirmando(null)
+    }
+  }
 
   return (
     <>
@@ -159,7 +175,8 @@ export function FinanzasTransferenciasPage() {
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-zinc-800">
               {rows.map((row) => (
-                <tr key={row.id} className="bg-white dark:bg-zinc-900">
+                <Fragment key={row.id}>
+                <tr className="bg-white dark:bg-zinc-900">
                   <td className="px-3 py-3 whitespace-nowrap">{formatFecha(row.fechaConfeccion)}</td>
                   <td className="px-3 py-3">
                     <div className="font-medium">{row.direccion}</div>
@@ -200,6 +217,45 @@ export function FinanzasTransferenciasPage() {
                     </div>
                   </td>
                 </tr>
+                {row.requiereConfirmacionManual ? (
+                  <tr className="bg-amber-50 dark:bg-amber-950/30">
+                    <td colSpan={6} className="px-3 py-3">
+                      <p className="font-medium text-amber-950 dark:text-amber-100">
+                        Múltiples movimientos podrían corresponder a esta transferencia
+                      </p>
+                      <ul className="mt-2 space-y-2">
+                        {(row.candidatos ?? []).map((candidato) => {
+                          const clave = `${row.id}:${candidato.id}`
+                          return (
+                            <li
+                              key={candidato.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded border border-amber-200 bg-white px-3 py-2 dark:border-amber-800 dark:bg-zinc-900"
+                            >
+                              <span>
+                                <span className="tabular-nums">{candidato.fechaProceso}</span>
+                                {' · '}
+                                <span className="tabular-nums">
+                                  {formatMoneyCentavos(candidato.montoCentavos, 'ARS')}
+                                </span>
+                                {' · '}
+                                {candidato.descripcion || 'Sin descripción'}
+                              </span>
+                              <button
+                                type="button"
+                                className="rounded border border-emerald-700 px-2 py-1 text-xs font-medium text-emerald-900 disabled:opacity-50 dark:text-emerald-200"
+                                disabled={confirmando !== null}
+                                onClick={() => void elegirCandidato(row.id, candidato.id)}
+                              >
+                                {confirmando === clave ? 'Confirmando…' : 'Elegir este'}
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    </td>
+                  </tr>
+                ) : null}
+                </Fragment>
               ))}
             </tbody>
           </table>

@@ -9,6 +9,7 @@ import {
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import type { BancoNombre } from '../../domain/cuenta.types.js'
 import type { MovimientoBancarioMapped } from '../domain/movimiento-bancario.map.js'
+import { emparejarAnotaciones, huellaMovimiento, type AnotacionMovimiento } from '../domain/movimiento-huella.js'
 import type { MovimientoBancarioSyncDocument } from '../domain/movimiento-bancario.types.js'
 
 export const MOVIMIENTOS_BANCARIOS_COLLECTION = 'movimientosBancarios'
@@ -38,10 +39,22 @@ export async function countMovimientosBancarios(cuentaId?: string): Promise<numb
   return snap.data().count
 }
 
-/** Borra todo lo que esa cuenta tenga en [desde, hasta]. Devuelve cuántos borró. */
-async function deleteRango(input: { cuentaId: string; desde: string; hasta: string }): Promise<number> {
+function anotacionDeDocumento(data: DocumentData): AnotacionMovimiento | null {
+  const categoriaId = typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null
+  const nota = typeof data.nota === 'string' && data.nota.trim() ? data.nota.trim() : null
+  if (!categoriaId && !nota) return null
+  return { huella: huellaMovimiento(data), categoriaId, nota }
+}
+
+/** Borra el tramo y devuelve categoría/nota para reaplicarlas en las filas nuevas. */
+async function deleteRango(input: {
+  cuentaId: string
+  desde: string
+  hasta: string
+}): Promise<{ eliminados: number; anotaciones: AnotacionMovimiento[] }> {
   const db = adminDb()
   let eliminados = 0
+  const anotaciones: AnotacionMovimiento[] = []
   for (;;) {
     const snap = await movimientosBancariosCollection()
       .where('cuentaId', '==', input.cuentaId)
@@ -49,21 +62,30 @@ async function deleteRango(input: { cuentaId: string; desde: string; hasta: stri
       .where('fechaProceso', '<=', input.hasta)
       .limit(WRITE_CHUNK)
       .get()
-    if (snap.empty) return eliminados
+    if (snap.empty) return { eliminados, anotaciones }
     const batch = db.batch()
-    snap.docs.forEach((doc) => batch.delete(doc.ref))
+    for (const doc of snap.docs) {
+      const anotacion = anotacionDeDocumento(doc.data())
+      if (anotacion) anotaciones.push(anotacion)
+      batch.delete(doc.ref)
+    }
     await batch.commit()
     eliminados += snap.size
-    if (snap.size < WRITE_CHUNK) return eliminados
+    if (snap.size < WRITE_CHUNK) return { eliminados, anotaciones }
   }
 }
 
-async function insertRows(input: { rows: MovimientoBancarioMapped[]; syncedBy: string }): Promise<number> {
+async function insertRows(input: {
+  rows: MovimientoBancarioMapped[]
+  syncedBy: string
+  anotaciones: AnotacionMovimiento[]
+}): Promise<number> {
   const db = adminDb()
   const col = movimientosBancariosCollection()
+  const conAnotacion = emparejarAnotaciones(input.rows, input.anotaciones)
   let insertados = 0
-  for (let i = 0; i < input.rows.length; i += WRITE_CHUNK) {
-    const slice = input.rows.slice(i, i + WRITE_CHUNK)
+  for (let i = 0; i < conAnotacion.length; i += WRITE_CHUNK) {
+    const slice = conAnotacion.slice(i, i + WRITE_CHUNK)
     const batch = db.batch()
     for (const row of slice) {
       batch.set(col.doc(), {
@@ -91,8 +113,16 @@ export async function replaceMovimientosRango(input: {
   syncedBy: string
   primeraFechaCargada: string
 }): Promise<{ eliminados: number; insertados: number }> {
-  const eliminados = await deleteRango({ cuentaId: input.cuenta.cuentaId, desde: input.desde, hasta: input.hasta })
-  const insertados = await insertRows({ rows: input.rows, syncedBy: input.syncedBy })
+  const { eliminados, anotaciones } = await deleteRango({
+    cuentaId: input.cuenta.cuentaId,
+    desde: input.desde,
+    hasta: input.hasta,
+  })
+  const insertados = await insertRows({
+    rows: input.rows,
+    syncedBy: input.syncedBy,
+    anotaciones,
+  })
 
   const ref = syncCollection().doc(input.cuenta.cuentaId)
   const now = FieldValue.serverTimestamp()
@@ -127,6 +157,8 @@ export interface MovimientoListadoItem {
   customerCuit: string | null
   tipo: 'debito' | 'credito'
   montoCentavos: number
+  categoriaId: string | null
+  nota: string | null
 }
 
 export interface MovimientosListadoFiltro {
@@ -134,14 +166,14 @@ export interface MovimientosListadoFiltro {
   desde: string
   hasta: string
   tipo: 'debito' | 'credito' | null
+  categoriaId: string | null
 }
 
 function rangoQuery(filtro: MovimientosListadoFiltro, tipo: 'debito' | 'credito' | null): Query {
-  let query: Query = movimientosBancariosCollection()
-    .where('cuentaId', '==', filtro.cuentaId)
-    .where('fechaProceso', '>=', filtro.desde)
-    .where('fechaProceso', '<=', filtro.hasta)
+  let query: Query = movimientosBancariosCollection().where('cuentaId', '==', filtro.cuentaId)
   if (tipo) query = query.where('tipo', '==', tipo)
+  if (filtro.categoriaId) query = query.where('categoriaId', '==', filtro.categoriaId)
+  query = query.where('fechaProceso', '>=', filtro.desde).where('fechaProceso', '<=', filtro.hasta)
   return query
 }
 
@@ -162,6 +194,8 @@ function toListadoItem(id: string, data: DocumentData): MovimientoListadoItem {
     customerCuit: typeof data.customerCuit === 'string' && data.customerCuit ? data.customerCuit : null,
     tipo: data.tipo === 'credito' ? 'credito' : 'debito',
     montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
+    categoriaId: typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null,
+    nota: typeof data.nota === 'string' && data.nota.trim() ? data.nota.trim() : null,
   }
 }
 

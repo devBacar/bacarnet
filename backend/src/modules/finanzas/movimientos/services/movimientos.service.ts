@@ -6,10 +6,13 @@ import {
   type InterbankingInfoSession,
 } from '../adapters/interbanking-movimientos.js'
 import { mapInterbankingMovement } from '../domain/movimiento-bancario.map.js'
+import { normalizarNotaMovimiento } from '../domain/categoria-movimiento.js'
+import { getCategoriaMovimientoDocument } from './categorias-movimientos.repository.js'
 import {
   countMovimientosBancarios,
   countMovimientosFiltrados,
   getMovimientosSyncEstado,
+  movimientosBancariosCollection,
   pageMovimientos,
   replaceMovimientosRango,
   scanMovimientosPorTexto,
@@ -194,11 +197,22 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 export const MOVIMIENTOS_PAGE_DEFAULT = 50
 export const MOVIMIENTOS_PAGE_MAX = 100
 
+export class MovimientoAnotacionError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'MovimientoAnotacionError'
+    this.status = status
+  }
+}
+
 export interface MovimientosListadoQuery {
   cuentaId?: string
   desde?: string
   hasta?: string
   tipo?: string
+  categoriaId?: string
   q?: string
   page?: string
   limit?: string
@@ -209,6 +223,7 @@ export interface MovimientosListadoResponse {
   desde: string
   hasta: string
   tipo: 'debito' | 'credito' | null
+  categoriaId: string | null
   q: string | null
   page: number
   limit: number
@@ -246,12 +261,14 @@ export async function listMovimientosApi(query: MovimientosListadoQuery): Promis
   }
   const tipo: 'debito' | 'credito' | null =
     tipoRaw === 'debito' || tipoRaw === 'credito' ? tipoRaw : null
+  const categoriaId = query.categoriaId?.trim() ?? ''
+  if (categoriaId.length > 200) throw new Error('categoriaId inválido')
   const page = parsePositiveInt(query.page, 1, 10_000)
   const limit = parsePositiveInt(query.limit, MOVIMIENTOS_PAGE_DEFAULT, MOVIMIENTOS_PAGE_MAX)
   const q = query.q?.trim().toLocaleLowerCase('es') ?? ''
   if (q.length > 80) throw new Error('La búsqueda puede tener hasta 80 caracteres')
 
-  const filtro = { cuentaId, desde, hasta, tipo }
+  const filtro = { cuentaId, desde, hasta, tipo, categoriaId: categoriaId || null }
   const offset = (page - 1) * limit
 
   if (q) {
@@ -261,6 +278,7 @@ export async function listMovimientosApi(query: MovimientosListadoQuery): Promis
       desde,
       hasta,
       tipo,
+      categoriaId: categoriaId || null,
       q,
       page,
       limit,
@@ -286,11 +304,66 @@ export async function listMovimientosApi(query: MovimientosListadoQuery): Promis
     desde,
     hasta,
     tipo,
+    categoriaId: categoriaId || null,
     q: null,
     page,
     limit,
     total,
     totales: { entradasCentavos, salidasCentavos, cantidad: total },
     movimientos,
+  }
+}
+
+export async function actualizarAnotacionMovimiento(input: {
+  movimientoId: string
+  categoriaId?: string | null
+  nota?: string | null
+}): Promise<MovimientoListadoItem> {
+  const id = input.movimientoId.trim()
+  if (!id || id === 'sync') {
+    throw new MovimientoAnotacionError('Id de movimiento inválido', 400)
+  }
+  const tieneCategoria = Object.prototype.hasOwnProperty.call(input, 'categoriaId')
+  const tieneNota = Object.prototype.hasOwnProperty.call(input, 'nota')
+  if (!tieneCategoria && !tieneNota) {
+    throw new MovimientoAnotacionError('Indicá una categoría o una nota', 400)
+  }
+
+  const ref = movimientosBancariosCollection().doc(id)
+  const snap = await ref.get()
+  if (!snap.exists) throw new MovimientoAnotacionError('Movimiento no encontrado', 404)
+
+  const patch: { categoriaId?: string | null; nota?: string | null } = {}
+  if (tieneCategoria) {
+    if (input.categoriaId == null || input.categoriaId === '') {
+      patch.categoriaId = null
+    } else {
+      const categoria = await getCategoriaMovimientoDocument(input.categoriaId.trim())
+      if (!categoria) throw new MovimientoAnotacionError('La categoría no existe', 404)
+      patch.categoriaId = categoria.id
+    }
+  }
+  if (tieneNota) {
+    patch.nota = normalizarNotaMovimiento(input.nota)
+  }
+
+  await ref.update(patch)
+  const updated = await ref.get()
+  const data = updated.data() ?? {}
+  return {
+    id,
+    cuentaId: String(data.cuentaId ?? ''),
+    bancoNombre: String(data.bancoNombre ?? ''),
+    fechaProceso: String(data.fechaProceso ?? ''),
+    descripcion: String(data.descripcion ?? ''),
+    contraparte:
+      typeof data.depositorDescription === 'string' && data.depositorDescription
+        ? data.depositorDescription
+        : null,
+    customerCuit: typeof data.customerCuit === 'string' && data.customerCuit ? data.customerCuit : null,
+    tipo: data.tipo === 'credito' ? 'credito' : 'debito',
+    montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
+    categoriaId: typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null,
+    nota: typeof data.nota === 'string' && data.nota.trim() ? data.nota.trim() : null,
   }
 }

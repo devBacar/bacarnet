@@ -53,6 +53,10 @@ export interface MovimientoBancarioDocument {
    * si el débito reaparece como único candidato.
    */
   reservadoPorTransferenciaId?: string | null
+  /** Categoría libre. Se reaplica si un sync reemplaza el día y la fila reaparece. */
+  categoriaId?: string | null
+  /** Texto libre del usuario. También se reaplica junto con la categoría. */
+  nota?: string | null
   createdAt: Timestamp
   syncedBy: string
 }

@@ -407,6 +407,11 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    match /categoriasMovimientos/{categoriaId} {
+      allow read: if canAccessFinanzas();
+      allow create, update, delete: if false;
+    }
+
     match /cajaCierres/{cierreId} {
       allow read: if isFinanzasCajaLider()
         || (isVerifiedCorporate()

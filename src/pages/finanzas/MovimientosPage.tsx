@@ -1,13 +1,18 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
+  actualizarMovimiento,
+  crearCategoriaMovimiento,
+  fetchCategoriasMovimientos,
   fetchMovimientos,
   type MovimientoTipo,
 } from '../../services/finanzasMovimientosApi'
+import { CategoriaMovimientoCampo, NotaMovimientoCampo } from './CategoriaMovimientoCampo'
 
 const PAGE_SIZE = 50
 
@@ -35,14 +40,17 @@ function formatFecha(iso: string): string {
 
 export function FinanzasMovimientosPage() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const inicial = rangoInicial()
   const [cuentaId, setCuentaId] = useState('')
   const [desde, setDesde] = useState(inicial.desde)
   const [hasta, setHasta] = useState(inicial.hasta)
   const [tipo, setTipo] = useState<'' | MovimientoTipo>('')
+  const [categoriaId, setCategoriaId] = useState('')
   const [q, setQ] = useState('')
   const [qAplicada, setQAplicada] = useState('')
   const [page, setPage] = useState(1)
+  const [guardandoId, setGuardandoId] = useState<string | null>(null)
 
   const { data: cuentasData } = useQuery({
     queryKey: ['finanzas', 'cuentas'],
@@ -59,14 +67,21 @@ export function FinanzasMovimientosPage() {
 
   const filtrosListos = Boolean(cuentaId && desde && hasta && desde <= hasta)
 
+  const { data: categorias = [] } = useQuery({
+    queryKey: ['finanzas', 'categorias-movimientos'],
+    queryFn: fetchCategoriasMovimientos,
+    enabled: Boolean(user),
+  })
+
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ['finanzas', 'movimientos', cuentaId, desde, hasta, tipo, qAplicada, page],
+    queryKey: ['finanzas', 'movimientos', cuentaId, desde, hasta, tipo, categoriaId, qAplicada, page],
     queryFn: () =>
       fetchMovimientos({
         cuentaId,
         desde,
         hasta,
         tipo,
+        categoriaId,
         q: qAplicada,
         page,
         limit: PAGE_SIZE,
@@ -74,6 +89,28 @@ export function FinanzasMovimientosPage() {
     enabled: Boolean(user) && filtrosListos,
     placeholderData: (prev) => prev,
   })
+
+  async function guardarMovimiento(
+    movimientoId: string,
+    patch: { categoriaId?: string | null; nota?: string | null },
+  ) {
+    setGuardandoId(movimientoId)
+    try {
+      await actualizarMovimiento(movimientoId, patch)
+      await queryClient.invalidateQueries({ queryKey: ['finanzas', 'movimientos'] })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
+      throw err
+    } finally {
+      setGuardandoId(null)
+    }
+  }
+
+  async function crearYRecordar(nombre: string) {
+    const creada = await crearCategoriaMovimiento(nombre)
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'categorias-movimientos'] })
+    return creada
+  }
 
   function cambiarFiltro(apply: () => void) {
     apply()
@@ -93,7 +130,7 @@ export function FinanzasMovimientosPage() {
         </p>
       </header>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <label className="text-sm">
           <span className="text-body-muted mb-1 block">Cuenta</span>
           <select
@@ -136,6 +173,21 @@ export function FinanzasMovimientosPage() {
             <option value="">Todos</option>
             <option value="credito">Entradas</option>
             <option value="debito">Salidas</option>
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="text-body-muted mb-1 block">Categoría</span>
+          <select
+            className={finanzasInputClass}
+            value={categoriaId}
+            onChange={(e) => cambiarFiltro(() => setCategoriaId(e.target.value))}
+          >
+            <option value="">Todas</option>
+            {categorias.map((categoria) => (
+              <option key={categoria.id} value={categoria.id}>
+                {categoria.nombre}
+              </option>
+            ))}
           </select>
         </label>
         <form
@@ -191,6 +243,8 @@ export function FinanzasMovimientosPage() {
                 <th className="px-3 py-2">Contraparte</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2 text-right">Monto</th>
+                <th className="px-3 py-2">Categoría</th>
+                <th className="px-3 py-2">Nota</th>
               </tr>
             </thead>
             <tbody>
@@ -218,6 +272,22 @@ export function FinanzasMovimientosPage() {
                     <td className={`whitespace-nowrap px-3 py-2 text-right font-medium ${entrada ? 'text-emerald-800' : 'text-red-800'}`}>
                       {entrada ? '' : '−'}
                       {formatMoneyCentavos(row.montoCentavos, 'ARS')}
+                    </td>
+                    <td className="px-3 py-2">
+                      <CategoriaMovimientoCampo
+                        categorias={categorias}
+                        categoriaId={row.categoriaId}
+                        disabled={guardandoId === row.id}
+                        onCrear={crearYRecordar}
+                        onAsignar={(siguiente) => guardarMovimiento(row.id, { categoriaId: siguiente })}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <NotaMovimientoCampo
+                        nota={row.nota}
+                        disabled={guardandoId === row.id}
+                        onGuardar={(nota) => guardarMovimiento(row.id, { nota })}
+                      />
                     </td>
                   </tr>
                 )

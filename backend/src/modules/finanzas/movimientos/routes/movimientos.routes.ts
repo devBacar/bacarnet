@@ -1,6 +1,11 @@
 import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
-import { syncMovimientosBancarios, listMovimientosApi } from '../services/movimientos.service.js'
+import {
+  MovimientoAnotacionError,
+  actualizarAnotacionMovimiento,
+  listMovimientosApi,
+  syncMovimientosBancarios,
+} from '../services/movimientos.service.js'
 
 export const finanzasMovimientosRouter = Router()
 
@@ -14,6 +19,7 @@ finanzasMovimientosRouter.get('/', async (req, res) => {
       desde: one(req.query.desde),
       hasta: one(req.query.hasta),
       tipo: one(req.query.tipo),
+      categoriaId: one(req.query.categoriaId),
       q: one(req.query.q),
       page: one(req.query.page),
       limit: one(req.query.limit),
@@ -22,6 +28,46 @@ finanzasMovimientosRouter.get('/', async (req, res) => {
   } catch (err) {
     console.error('[finanzas/movimientos] listar', err)
     const message = err instanceof Error ? err.message : 'No se pudieron listar los movimientos'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasMovimientosRouter.patch('/:id', async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) {
+      res.status(400).json({ error: 'Id de movimiento inválido' })
+      return
+    }
+    const body = (req.body ?? {}) as { categoriaId?: unknown; nota?: unknown }
+    const input: { movimientoId: string; categoriaId?: string | null; nota?: string | null } = {
+      movimientoId: id,
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'categoriaId')) {
+      if (body.categoriaId == null || body.categoriaId === '') input.categoriaId = null
+      else if (typeof body.categoriaId === 'string') input.categoriaId = body.categoriaId
+      else {
+        res.status(400).json({ error: 'categoriaId inválido' })
+        return
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'nota')) {
+      if (body.nota == null) input.nota = null
+      else if (typeof body.nota === 'string') input.nota = body.nota
+      else {
+        res.status(400).json({ error: 'La nota tiene que ser texto' })
+        return
+      }
+    }
+    const movimiento = await actualizarAnotacionMovimiento(input)
+    res.json({ movimiento })
+  } catch (err) {
+    console.error('[finanzas/movimientos] anotar', err)
+    if (err instanceof MovimientoAnotacionError) {
+      res.status(err.status).json({ error: err.message })
+      return
+    }
+    const message = err instanceof Error ? err.message : 'No se pudo actualizar el movimiento'
     res.status(400).json({ error: message })
   }
 })

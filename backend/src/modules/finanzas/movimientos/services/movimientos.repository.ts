@@ -1,4 +1,11 @@
-import { FieldValue } from 'firebase-admin/firestore'
+import {
+  AggregateField,
+  FieldPath,
+  FieldValue,
+  type DocumentData,
+  type Query,
+  type QueryDocumentSnapshot,
+} from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import type { BancoNombre } from '../../domain/cuenta.types.js'
 import type { MovimientoBancarioMapped } from '../domain/movimiento-bancario.map.js'
@@ -108,4 +115,119 @@ export async function replaceMovimientosRango(input: {
   })
 
   return { eliminados, insertados }
+}
+
+export interface MovimientoListadoItem {
+  id: string
+  cuentaId: string
+  bancoNombre: string
+  fechaProceso: string
+  descripcion: string
+  contraparte: string | null
+  customerCuit: string | null
+  tipo: 'debito' | 'credito'
+  montoCentavos: number
+}
+
+export interface MovimientosListadoFiltro {
+  cuentaId: string
+  desde: string
+  hasta: string
+  tipo: 'debito' | 'credito' | null
+}
+
+function rangoQuery(filtro: MovimientosListadoFiltro, tipo: 'debito' | 'credito' | null): Query {
+  let query: Query = movimientosBancariosCollection()
+    .where('cuentaId', '==', filtro.cuentaId)
+    .where('fechaProceso', '>=', filtro.desde)
+    .where('fechaProceso', '<=', filtro.hasta)
+  if (tipo) query = query.where('tipo', '==', tipo)
+  return query
+}
+
+function ordenado(filtro: MovimientosListadoFiltro): Query {
+  return rangoQuery(filtro, filtro.tipo)
+    .orderBy('fechaProceso', 'desc')
+    .orderBy(FieldPath.documentId(), 'desc')
+}
+
+function toListadoItem(id: string, data: DocumentData): MovimientoListadoItem {
+  return {
+    id,
+    cuentaId: String(data.cuentaId ?? ''),
+    bancoNombre: String(data.bancoNombre ?? ''),
+    fechaProceso: String(data.fechaProceso ?? ''),
+    descripcion: String(data.descripcion ?? ''),
+    contraparte: typeof data.depositorDescription === 'string' && data.depositorDescription ? data.depositorDescription : null,
+    customerCuit: typeof data.customerCuit === 'string' && data.customerCuit ? data.customerCuit : null,
+    tipo: data.tipo === 'credito' ? 'credito' : 'debito',
+    montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
+  }
+}
+
+export async function sumMovimientosCentavos(
+  filtro: MovimientosListadoFiltro,
+  tipo: 'debito' | 'credito',
+): Promise<number> {
+  if (filtro.tipo && filtro.tipo !== tipo) return 0
+  const snap = await rangoQuery(filtro, tipo)
+    .aggregate({ total: AggregateField.sum('montoCentavos') })
+    .get()
+  const total = snap.data().total
+  return typeof total === 'number' ? total : 0
+}
+
+export async function countMovimientosFiltrados(filtro: MovimientosListadoFiltro): Promise<number> {
+  const snap = await rangoQuery(filtro, filtro.tipo).count().get()
+  return snap.data().count
+}
+
+export async function pageMovimientos(input: {
+  filtro: MovimientosListadoFiltro
+  offset: number
+  limit: number
+}): Promise<MovimientoListadoItem[]> {
+  const snap = await ordenado(input.filtro).offset(input.offset).limit(input.limit).get()
+  return snap.docs.map((doc) => toListadoItem(doc.id, doc.data()))
+}
+
+/** Recorre el rango en orden para un texto libre. Firestore no puede filtrar "contiene". */
+export async function scanMovimientosPorTexto(input: {
+  filtro: MovimientosListadoFiltro
+  texto: string
+  offset: number
+  limit: number
+}): Promise<{ total: number; entradasCentavos: number; salidasCentavos: number; items: MovimientoListadoItem[] }> {
+  const needle = input.texto
+  let total = 0
+  let entradasCentavos = 0
+  let salidasCentavos = 0
+  const items: MovimientoListadoItem[] = []
+  let cursor: QueryDocumentSnapshot | null = null
+
+  for (;;) {
+    let query = ordenado(input.filtro).limit(400)
+    if (cursor) query = query.startAfter(cursor)
+    const snap = await query.get()
+    if (snap.empty) break
+
+    for (const doc of snap.docs) {
+      const data = doc.data()
+      const item = toListadoItem(doc.id, data)
+      const haystack = [item.descripcion, item.contraparte, item.customerCuit]
+        .filter((part): part is string => Boolean(part))
+        .join(' ')
+        .toLocaleLowerCase('es')
+      if (!haystack.includes(needle)) continue
+      if (item.tipo === 'credito') entradasCentavos += item.montoCentavos
+      else salidasCentavos += item.montoCentavos
+      if (total >= input.offset && items.length < input.limit) items.push(item)
+      total += 1
+    }
+
+    cursor = snap.docs[snap.docs.length - 1] ?? null
+    if (snap.size < 400) break
+  }
+
+  return { total, entradasCentavos, salidasCentavos, items }
 }

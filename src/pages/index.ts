@@ -30,6 +30,7 @@ export { FinanzasLayout } from './finanzas/FinanzasLayout'
 export { FinanzasCuentasPage } from './finanzas/CuentasPage'
 export { FinanzasAgendaPage } from './finanzas/AgendaPage'
 export { FinanzasTransferenciasPage } from './finanzas/TransferenciasPage'
+export { FinanzasMovimientosPage } from './finanzas/MovimientosPage'
 export {
   CajasWorkspace as FinanzasCajasPage,
   CajasWorkspace as FinanzasCajaChicaPage,

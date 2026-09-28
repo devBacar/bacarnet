@@ -8,8 +8,13 @@ import {
 import { mapInterbankingMovement } from '../domain/movimiento-bancario.map.js'
 import {
   countMovimientosBancarios,
+  countMovimientosFiltrados,
   getMovimientosSyncEstado,
+  pageMovimientos,
   replaceMovimientosRango,
+  scanMovimientosPorTexto,
+  sumMovimientosCentavos,
+  type MovimientoListadoItem,
 } from './movimientos.repository.js'
 
 const TZ = 'America/Argentina/Buenos_Aires'
@@ -171,5 +176,110 @@ export async function syncMovimientosBancarios(input: { actorUid: string }): Pro
     eliminados: porCuenta.reduce((acc, c) => acc + c.eliminados, 0),
     enFirestore: await countMovimientosBancarios(),
     cuentas: porCuenta,
+  }
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+export const MOVIMIENTOS_PAGE_DEFAULT = 50
+export const MOVIMIENTOS_PAGE_MAX = 100
+
+export interface MovimientosListadoQuery {
+  cuentaId?: string
+  desde?: string
+  hasta?: string
+  tipo?: string
+  q?: string
+  page?: string
+  limit?: string
+}
+
+export interface MovimientosListadoResponse {
+  cuentaId: string
+  desde: string
+  hasta: string
+  tipo: 'debito' | 'credito' | null
+  q: string | null
+  page: number
+  limit: number
+  total: number
+  totales: {
+    entradasCentavos: number
+    salidasCentavos: number
+    cantidad: number
+  }
+  movimientos: MovimientoListadoItem[]
+}
+
+function parsePositiveInt(raw: string | undefined, fallback: number, max: number): number {
+  if (!raw) return fallback
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 1) {
+    throw new Error('page y limit tienen que ser enteros mayores a 0')
+  }
+  return Math.min(n, max)
+}
+
+export async function listMovimientosApi(query: MovimientosListadoQuery): Promise<MovimientosListadoResponse> {
+  const cuentaId = query.cuentaId?.trim() ?? ''
+  const desde = query.desde?.trim() ?? ''
+  const hasta = query.hasta?.trim() ?? ''
+  if (!cuentaId) throw new Error('cuentaId es obligatorio')
+  if (!ISO_DATE.test(desde) || !ISO_DATE.test(hasta)) {
+    throw new Error('desde y hasta son obligatorios, con formato AAAA-MM-DD')
+  }
+  if (desde > hasta) throw new Error('desde no puede ser posterior a hasta')
+
+  const tipoRaw = query.tipo?.trim() ?? ''
+  if (tipoRaw && tipoRaw !== 'debito' && tipoRaw !== 'credito') {
+    throw new Error('tipo debe ser debito o credito')
+  }
+  const tipo: 'debito' | 'credito' | null =
+    tipoRaw === 'debito' || tipoRaw === 'credito' ? tipoRaw : null
+  const page = parsePositiveInt(query.page, 1, 10_000)
+  const limit = parsePositiveInt(query.limit, MOVIMIENTOS_PAGE_DEFAULT, MOVIMIENTOS_PAGE_MAX)
+  const q = query.q?.trim().toLocaleLowerCase('es') ?? ''
+  if (q.length > 80) throw new Error('La búsqueda puede tener hasta 80 caracteres')
+
+  const filtro = { cuentaId, desde, hasta, tipo }
+  const offset = (page - 1) * limit
+
+  if (q) {
+    const scanned = await scanMovimientosPorTexto({ filtro, texto: q, offset, limit })
+    return {
+      cuentaId,
+      desde,
+      hasta,
+      tipo,
+      q,
+      page,
+      limit,
+      total: scanned.total,
+      totales: {
+        entradasCentavos: scanned.entradasCentavos,
+        salidasCentavos: scanned.salidasCentavos,
+        cantidad: scanned.total,
+      },
+      movimientos: scanned.items,
+    }
+  }
+
+  const [total, entradasCentavos, salidasCentavos, movimientos] = await Promise.all([
+    countMovimientosFiltrados(filtro),
+    sumMovimientosCentavos(filtro, 'credito'),
+    sumMovimientosCentavos(filtro, 'debito'),
+    pageMovimientos({ filtro, offset, limit }),
+  ])
+
+  return {
+    cuentaId,
+    desde,
+    hasta,
+    tipo,
+    q: null,
+    page,
+    limit,
+    total,
+    totales: { entradasCentavos, salidasCentavos, cantidad: total },
+    movimientos,
   }
 }

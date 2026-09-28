@@ -1,7 +1,9 @@
 import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import {
+  CategoriaMovimientoError,
   crearCategoriaMovimientoApi,
+  eliminarCategoriaMovimientoApi,
   listCategoriasMovimientosApi,
 } from '../services/categorias-movimientos.service.js'
 
@@ -35,6 +37,26 @@ finanzasCategoriasMovimientosRouter.post('/', async (req, res) => {
   } catch (err) {
     console.error('[finanzas/categorias-movimientos] crear', err)
     const message = err instanceof Error ? err.message : 'No se pudo crear la categoría'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasCategoriasMovimientosRouter.delete('/:id', async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) {
+      res.status(400).json({ error: 'Id de categoría inválido' })
+      return
+    }
+    const result = await eliminarCategoriaMovimientoApi({ categoriaId: id })
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/categorias-movimientos] eliminar', err)
+    if (err instanceof CategoriaMovimientoError) {
+      res.status(err.status).json({ error: err.message })
+      return
+    }
+    const message = err instanceof Error ? err.message : 'No se pudo eliminar la categoría'
     res.status(400).json({ error: message })
   }
 })

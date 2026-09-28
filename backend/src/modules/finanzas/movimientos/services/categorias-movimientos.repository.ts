@@ -46,3 +46,7 @@ export async function createCategoriaMovimientoDocument(input: {
   })
   return ref.id
 }
+
+export async function deleteCategoriaMovimientoDocument(id: string): Promise<void> {
+  await categoriasMovimientosCollection().doc(id).delete()
+}

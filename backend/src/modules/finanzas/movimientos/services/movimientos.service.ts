@@ -37,6 +37,8 @@ export interface MovimientosSyncCuentaResult {
   traidos: number
   eliminados: number
   insertados: number
+  /** Filas nuevas que entraron ya categorizadas por una regla. */
+  autoCategorizados: number
   enFirestore: number
   ultimaFechaSincronizada: string
 }
@@ -46,6 +48,7 @@ export interface MovimientosSyncResult {
   traidos: number
   insertados: number
   eliminados: number
+  autoCategorizados: number
   enFirestore: number
   cuentas: MovimientosSyncCuentaResult[]
   reconciliacion: {
@@ -125,6 +128,7 @@ async function syncCuenta(input: {
       traidos: 0,
       eliminados: 0,
       insertados: 0,
+      autoCategorizados: 0,
       enFirestore: await countMovimientosBancarios(input.cuenta.cuentaId),
       ultimaFechaSincronizada: estado?.ultimaFechaSincronizada ?? '',
     }
@@ -161,6 +165,7 @@ async function syncCuenta(input: {
     traidos: rows.length,
     eliminados: write.eliminados,
     insertados: write.insertados,
+    autoCategorizados: write.autoCategorizados,
     enFirestore: await countMovimientosBancarios(input.cuenta.cuentaId),
     ultimaFechaSincronizada: plan.hasta,
   }
@@ -187,6 +192,7 @@ export async function syncMovimientosBancarios(input: { actorUid: string }): Pro
     traidos: porCuenta.reduce((acc, c) => acc + c.traidos, 0),
     insertados: porCuenta.reduce((acc, c) => acc + c.insertados, 0),
     eliminados: porCuenta.reduce((acc, c) => acc + c.eliminados, 0),
+    autoCategorizados: porCuenta.reduce((acc, c) => acc + c.autoCategorizados, 0),
     enFirestore: await countMovimientosBancarios(),
     cuentas: porCuenta,
     reconciliacion,

@@ -11,6 +11,8 @@ import type { BancoNombre } from '../../domain/cuenta.types.js'
 import type { MovimientoBancarioMapped } from '../domain/movimiento-bancario.map.js'
 import { emparejarAnotaciones, huellaMovimiento, type AnotacionMovimiento } from '../domain/movimiento-huella.js'
 import type { MovimientoBancarioSyncDocument } from '../domain/movimiento-bancario.types.js'
+import { aplicarReglasAFilas, type ReglaCategorizacionAplicable } from '../domain/regla-categorizacion.js'
+import { listReglaCategorizacionDocuments } from './reglas-categorizacion.repository.js'
 
 export const MOVIMIENTOS_BANCARIOS_COLLECTION = 'movimientosBancarios'
 export const MOVIMIENTOS_BANCARIOS_SYNC_COLLECTION = 'movimientosBancariosSync'
@@ -75,17 +77,25 @@ async function deleteRango(input: {
   }
 }
 
+async function cargarReglasAplicables(): Promise<ReglaCategorizacionAplicable[]> {
+  const reglas = await listReglaCategorizacionDocuments()
+  return reglas
+    .filter((regla) => regla.data.descripcionKey && regla.data.categoriaId)
+    .map((regla) => ({ descripcionKey: regla.data.descripcionKey, categoriaId: regla.data.categoriaId }))
+}
+
 async function insertRows(input: {
   rows: MovimientoBancarioMapped[]
   syncedBy: string
   anotaciones: AnotacionMovimiento[]
-}): Promise<number> {
+}): Promise<{ insertados: number; autoCategorizados: number }> {
   const db = adminDb()
   const col = movimientosBancariosCollection()
   const conAnotacion = emparejarAnotaciones(input.rows, input.anotaciones)
+  const { filas, categorizadas } = aplicarReglasAFilas(conAnotacion, await cargarReglasAplicables())
   let insertados = 0
-  for (let i = 0; i < conAnotacion.length; i += WRITE_CHUNK) {
-    const slice = conAnotacion.slice(i, i + WRITE_CHUNK)
+  for (let i = 0; i < filas.length; i += WRITE_CHUNK) {
+    const slice = filas.slice(i, i + WRITE_CHUNK)
     const batch = db.batch()
     for (const row of slice) {
       batch.set(col.doc(), {
@@ -97,7 +107,46 @@ async function insertRows(input: {
     await batch.commit()
     insertados += slice.length
   }
-  return insertados
+  return { insertados, autoCategorizados: categorizadas }
+}
+
+/** Recorre todos los documentos de una query de a tandas y aplica un update a cada uno. */
+async function updateEnTandas(query: Query, patch: Record<string, unknown>): Promise<number> {
+  const db = adminDb()
+  let actualizados = 0
+  let cursor: QueryDocumentSnapshot | null = null
+  for (;;) {
+    let page = query.orderBy(FieldPath.documentId()).limit(WRITE_CHUNK)
+    if (cursor) page = page.startAfter(cursor)
+    const snap = await page.get()
+    if (snap.empty) return actualizados
+    const batch = db.batch()
+    for (const doc of snap.docs) batch.update(doc.ref, patch)
+    await batch.commit()
+    actualizados += snap.size
+    cursor = snap.docs[snap.docs.length - 1] ?? null
+    if (snap.size < WRITE_CHUNK) return actualizados
+  }
+}
+
+/** Pone la categoría a TODOS los movimientos (de cualquier cuenta) con esa descripción exacta. */
+export async function asignarCategoriaPorDescripcion(input: {
+  descripcionExacta: string
+  categoriaId: string
+}): Promise<number> {
+  const query = movimientosBancariosCollection().where('descripcion', '==', input.descripcionExacta)
+  return updateEnTandas(query, { categoriaId: input.categoriaId })
+}
+
+/** Deja sin categoría a los movimientos que la tenían. No borra nada más. */
+export async function desasignarCategoriaEnMovimientos(categoriaId: string): Promise<number> {
+  const query = movimientosBancariosCollection().where('categoriaId', '==', categoriaId)
+  return updateEnTandas(query, { categoriaId: null })
+}
+
+export async function countMovimientosPorCategoria(categoriaId: string): Promise<number> {
+  const snap = await movimientosBancariosCollection().where('categoriaId', '==', categoriaId).count().get()
+  return snap.data().count
 }
 
 /**
@@ -112,13 +161,13 @@ export async function replaceMovimientosRango(input: {
   rows: MovimientoBancarioMapped[]
   syncedBy: string
   primeraFechaCargada: string
-}): Promise<{ eliminados: number; insertados: number }> {
+}): Promise<{ eliminados: number; insertados: number; autoCategorizados: number }> {
   const { eliminados, anotaciones } = await deleteRango({
     cuentaId: input.cuenta.cuentaId,
     desde: input.desde,
     hasta: input.hasta,
   })
-  const insertados = await insertRows({
+  const { insertados, autoCategorizados } = await insertRows({
     rows: input.rows,
     syncedBy: input.syncedBy,
     anotaciones,
@@ -144,7 +193,7 @@ export async function replaceMovimientosRango(input: {
     }
   })
 
-  return { eliminados, insertados }
+  return { eliminados, insertados, autoCategorizados }
 }
 
 export interface MovimientoListadoItem {

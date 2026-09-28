@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import toast from 'react-hot-toast'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
@@ -8,11 +8,20 @@ import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
   actualizarMovimiento,
   crearCategoriaMovimiento,
+  crearReglaCategorizacion,
+  eliminarCategoriaMovimiento,
   fetchCategoriasMovimientos,
   fetchMovimientos,
+  type CategoriaMovimiento,
+  type MovimientoListItem,
   type MovimientoTipo,
 } from '../../services/finanzasMovimientosApi'
-import { CategoriaMovimientoCampo, NotaMovimientoCampo } from './CategoriaMovimientoCampo'
+import {
+  CategoriaMovimientoChip,
+  CategoriaMovimientoModal,
+  CategoriasGestionModal,
+  type GuardarMovimientoInput,
+} from './CategoriaMovimientoCampo'
 
 const PAGE_SIZE = 50
 
@@ -50,7 +59,10 @@ export function FinanzasMovimientosPage() {
   const [q, setQ] = useState('')
   const [qAplicada, setQAplicada] = useState('')
   const [page, setPage] = useState(1)
-  const [guardandoId, setGuardandoId] = useState<string | null>(null)
+  const [editando, setEditando] = useState<MovimientoListItem | null>(null)
+  const [guardando, setGuardando] = useState(false)
+  const [gestionAbierta, setGestionAbierta] = useState(false)
+  const categoriaFiltroId = useId()
 
   const { data: cuentasData } = useQuery({
     queryKey: ['finanzas', 'cuentas'],
@@ -90,19 +102,33 @@ export function FinanzasMovimientosPage() {
     placeholderData: (prev) => prev,
   })
 
-  async function guardarMovimiento(
-    movimientoId: string,
-    patch: { categoriaId?: string | null; nota?: string | null },
-  ) {
-    setGuardandoId(movimientoId)
+  async function invalidarMovimientosYCategorias() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['finanzas', 'movimientos'] }),
+      queryClient.invalidateQueries({ queryKey: ['finanzas', 'categorias-movimientos'] }),
+    ])
+  }
+
+  async function guardarMovimiento(input: GuardarMovimientoInput) {
+    if (!editando) return
+    setGuardando(true)
     try {
-      await actualizarMovimiento(movimientoId, patch)
-      await queryClient.invalidateQueries({ queryKey: ['finanzas', 'movimientos'] })
+      await actualizarMovimiento(editando.id, { categoriaId: input.categoriaId, nota: input.nota })
+      if (input.aplicarATodos && input.categoriaId) {
+        const regla = await crearReglaCategorizacion({
+          descripcionExacta: editando.descripcion,
+          categoriaId: input.categoriaId,
+        })
+        toast.success(
+          `Regla guardada: ${regla.movimientosActualizados.toLocaleString('es-AR')} movimientos con «${editando.descripcion}» categorizados`,
+        )
+      }
+      setEditando(null)
+      await invalidarMovimientosYCategorias()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
-      throw err
     } finally {
-      setGuardandoId(null)
+      setGuardando(false)
     }
   }
 
@@ -110,6 +136,15 @@ export function FinanzasMovimientosPage() {
     const creada = await crearCategoriaMovimiento(nombre)
     await queryClient.invalidateQueries({ queryKey: ['finanzas', 'categorias-movimientos'] })
     return creada
+  }
+
+  async function eliminarCategoria(categoria: CategoriaMovimiento) {
+    const result = await eliminarCategoriaMovimiento(categoria.id)
+    if (categoriaId === categoria.id) setCategoriaId('')
+    toast.success(
+      `«${categoria.nombre}» eliminada. ${result.movimientosDesasignados.toLocaleString('es-AR')} movimientos quedaron sin categoría.`,
+    )
+    await invalidarMovimientosYCategorias()
   }
 
   function cambiarFiltro(apply: () => void) {
@@ -175,9 +210,19 @@ export function FinanzasMovimientosPage() {
             <option value="debito">Salidas</option>
           </select>
         </label>
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Categoría</span>
+        <div className="text-sm">
+          <div className="text-body-muted mb-1 flex items-center justify-between">
+            <label htmlFor={categoriaFiltroId}>Categoría</label>
+            <button
+              type="button"
+              className="text-xs text-brand-primary hover:underline"
+              onClick={() => setGestionAbierta(true)}
+            >
+              Gestionar
+            </button>
+          </div>
           <select
+            id={categoriaFiltroId}
             className={finanzasInputClass}
             value={categoriaId}
             onChange={(e) => cambiarFiltro(() => setCategoriaId(e.target.value))}
@@ -189,7 +234,7 @@ export function FinanzasMovimientosPage() {
               </option>
             ))}
           </select>
-        </label>
+        </div>
         <form
           className="text-sm"
           onSubmit={(e) => {
@@ -244,7 +289,6 @@ export function FinanzasMovimientosPage() {
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2 text-right">Monto</th>
                 <th className="px-3 py-2">Categoría</th>
-                <th className="px-3 py-2">Nota</th>
               </tr>
             </thead>
             <tbody>
@@ -273,20 +317,11 @@ export function FinanzasMovimientosPage() {
                       {entrada ? '' : '−'}
                       {formatMoneyCentavos(row.montoCentavos, 'ARS')}
                     </td>
-                    <td className="px-3 py-2">
-                      <CategoriaMovimientoCampo
-                        categorias={categorias}
-                        categoriaId={row.categoriaId}
-                        disabled={guardandoId === row.id}
-                        onCrear={crearYRecordar}
-                        onAsignar={(siguiente) => guardarMovimiento(row.id, { categoriaId: siguiente })}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <NotaMovimientoCampo
+                    <td className="px-3 py-1.5">
+                      <CategoriaMovimientoChip
+                        categoria={categorias.find((categoria) => categoria.id === row.categoriaId) ?? null}
                         nota={row.nota}
-                        disabled={guardandoId === row.id}
-                        onGuardar={(nota) => guardarMovimiento(row.id, { nota })}
+                        onClick={() => setEditando(row)}
                       />
                     </td>
                   </tr>
@@ -323,6 +358,22 @@ export function FinanzasMovimientosPage() {
           </button>
         </div>
       ) : null}
+
+      <CategoriaMovimientoModal
+        movimiento={editando}
+        categorias={categorias}
+        saving={guardando}
+        onClose={() => setEditando(null)}
+        onGuardar={guardarMovimiento}
+        onCrear={crearYRecordar}
+      />
+      <CategoriasGestionModal
+        open={gestionAbierta}
+        categorias={categorias}
+        onClose={() => setGestionAbierta(false)}
+        onCrear={crearYRecordar}
+        onEliminar={eliminarCategoria}
+      />
     </>
   )
 }

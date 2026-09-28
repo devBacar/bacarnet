@@ -25,6 +25,20 @@ const ROUTING_BY_CBU = new Map<string, InterbankingTransferAccountV2>(
     .map((a) => [a.account_cbu!, a]),
 )
 
+const CUENTA_ID_BY_CBU = new Map<string, string>(
+  Object.entries(ROUTING_BY_CUENTA_ID)
+    .filter((entry): entry is [string, InterbankingTransferAccountV2 & { account_cbu: string }] =>
+      Boolean(entry[1].account_cbu),
+    )
+    .map(([cuentaId, account]) => [account.account_cbu, cuentaId]),
+)
+
+/** Cuenta propia conocida a partir del CBU, sin exponer el número. */
+export function findCuentaIdByCbu(cbuRaw: string): string | null {
+  const cbu = cbuRaw.replace(/\D/g, '')
+  return CUENTA_ID_BY_CBU.get(cbu) ?? null
+}
+
 export function resolveInterbankingDebitAccount(cuentaId: string): InterbankingTransferAccountV2 {
   const row = ROUTING_BY_CUENTA_ID[cuentaId]
   if (!row) {

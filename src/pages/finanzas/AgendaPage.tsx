@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
   VencimientoAlertTag,
@@ -84,6 +85,8 @@ export function FinanzasAgendaPage() {
   const [vistaPagos, setVistaPagos] = useState<CompromisosAgendaVista>('pendientes')
   const [vistaCobros, setVistaCobros] = useState<CobrosAgendaVista>('esperados')
   const [showAlta, setShowAlta] = useState(false)
+  const [searchParams] = useSearchParams()
+  const compromisoDestacado = searchParams.get('compromiso')
   const queryClient = useQueryClient()
 
   const { data: compromisosRaw = [], isLoading: loadingPagos } = useQuery({
@@ -200,6 +203,7 @@ export function FinanzasAgendaPage() {
                 )
                 invalidate()
               }}
+              compromisoDestacado={compromisoDestacado}
               onCancelarTransferencia={async (transferenciaId) => {
                 await cancelarTransferenciaConfeccionada(transferenciaId)
                 toast.success('Marcada como cancelada en BacarNet. Interbanking no se modificó.')
@@ -328,6 +332,7 @@ function CompromisosTable({
   onMarcarPagado,
   onConfeccionar,
   onCancelarTransferencia,
+  compromisoDestacado,
 }: {
   rows: CompromisoAgendaItem[]
   vista: CompromisosAgendaVista
@@ -339,6 +344,7 @@ function CompromisosTable({
     body: { cuentaCreditoCbu: string; cuentaDebitoId: string; tipo?: 'cuentas_propias' },
   ) => Promise<void>
   onCancelarTransferencia: (transferenciaId: string) => Promise<void>
+  compromisoDestacado: string | null
 }) {
   const [historialId, setHistorialId] = useState<string | null>(null)
   const [marcarRow, setMarcarRow] = useState<CompromisoAgendaItem | null>(null)
@@ -382,7 +388,7 @@ function CompromisosTable({
                 key={row.id}
                 className={`bg-white dark:bg-zinc-900 ${
                   vista === 'pendientes' ? vencimientoRowClass(row.alertaVencimiento) : ''
-                }`}
+                } ${compromisoDestacado === row.id ? 'ring-2 ring-inset ring-brand-primary' : ''}`}
               >
                 {vista === 'pendientes' ? (
                   <td className="px-3 py-3">

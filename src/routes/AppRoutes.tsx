@@ -31,6 +31,7 @@ import {
   SoporteTi,
   FinanzasCuentasPage,
   FinanzasAgendaPage,
+  FinanzasTransferenciasPage,
   FinanzasCajasPage,
   FinanzasLayout,
   FinanzasIndexRedirect,
@@ -83,6 +84,7 @@ export function AppRoutes() {
                 <Route element={<FinanzasFullSectionsGate />}>
                   <Route path="cuentas" element={<FinanzasCuentasPage />} />
                   <Route path="agenda" element={<FinanzasAgendaPage />} />
+                  <Route path="transferencias" element={<FinanzasTransferenciasPage />} />
                 </Route>
                 <Route path="cajas" element={<FinanzasCajasPage />} />
                 <Route path="cajachica" element={<Navigate to="/finanzas/cajas" replace />} />

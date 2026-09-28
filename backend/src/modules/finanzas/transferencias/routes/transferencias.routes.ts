@@ -5,11 +5,32 @@ import {
   cancelarTransferenciaConfeccionada,
   confeccionarTransferenciaDesdeCompromiso,
   getTransferenciaEstadoApi,
+  getTransferenciaHistorialApi,
+  listTransferenciasApi,
 } from '../services/transferencias.service.js'
 
 export const finanzasTransferenciasRouter = Router()
 
 finanzasTransferenciasRouter.use(requireWorkspaceUser, requireViewFinanzas)
+
+finanzasTransferenciasRouter.get('/', async (req, res) => {
+  try {
+    const query = req.query
+    const one = (value: unknown) => (typeof value === 'string' ? value : undefined)
+    const result = await listTransferenciasApi({
+      estado: one(query.estado),
+      cuentaId: one(query.cuentaId),
+      tipo: one(query.tipo),
+      desde: one(query.desde),
+      hasta: one(query.hasta),
+    })
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/transferencias] listar', err)
+    const message = err instanceof Error ? err.message : 'No se pudo listar las transferencias'
+    res.status(400).json({ error: message })
+  }
+})
 
 finanzasTransferenciasRouter.post('/confeccionar', async (req, res) => {
   try {
@@ -53,6 +74,25 @@ finanzasTransferenciasRouter.post('/:id/cancelar', async (req, res) => {
     }
     const message = err instanceof Error ? err.message : 'No se pudo cancelar la transferencia'
     res.status(400).json({ error: message })
+  }
+})
+
+finanzasTransferenciasRouter.get('/:id/historial', async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) {
+      res.status(400).json({ error: 'Id de transferencia inválido' })
+      return
+    }
+    const historial = await getTransferenciaHistorialApi(id)
+    if (!historial) {
+      res.status(404).json({ error: 'Transferencia no encontrada' })
+      return
+    }
+    res.json({ historial })
+  } catch (err) {
+    console.error('[finanzas/transferencias] historial', err)
+    res.status(500).json({ error: 'No se pudo leer el historial' })
   }
 })
 

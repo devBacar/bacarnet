@@ -84,6 +84,13 @@ export async function appendTransferenciaHistorial(input: {
   })
 }
 
+export async function listTransferenciasConfeccionadas(): Promise<
+  Array<{ id: string; data: TransferenciaConfeccionadaDocument }>
+> {
+  const snap = await transferenciasCollection().get()
+  return snap.docs.map((d) => ({ id: d.id, data: d.data() as TransferenciaConfeccionadaDocument }))
+}
+
 export async function listTransferenciaHistorial(transferenciaId: string) {
   const snap = await transferenciasCollection()
     .doc(transferenciaId)

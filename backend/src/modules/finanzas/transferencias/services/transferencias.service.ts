@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { buildAgendaHistorialEntry } from '../../agenda/domain/agenda.historial.js'
-import { agendaTimestampToIso } from '../../agenda/domain/agendaTimestamps.js'
-import type { CompromisoEstado } from '../../agenda/domain/agenda.types.js'
+import { agendaTimestampToDate, agendaTimestampToIso } from '../../agenda/domain/agendaTimestamps.js'
+import type { CompromisoEstado, CompromisoPagoDocument } from '../../agenda/domain/agenda.types.js'
 import {
   appendCompromisoHistorial,
   getCompromisoDocument,
 } from '../../agenda/services/agenda.repository.js'
-import { getCuentaDocument } from '../../services/cuentas.repository.js'
+import { findCuentaIdByCbu } from '../adapters/interbanking-cuenta.routing.js'
+import { getCuentaDocument, listCuentaDocuments } from '../../services/cuentas.repository.js'
 import {
   getFinanzasTransferenciasProvider,
   resolveFinanzasTransferenciasProviderMode,
@@ -18,6 +19,8 @@ import {
   cancelarTransferenciaYReabrirCompromiso,
   createTransferenciaWithHistorial,
   getTransferenciaDocument,
+  listTransferenciaHistorial,
+  listTransferenciasConfeccionadas,
   timestampNow,
 } from './transferencias.repository.js'
 
@@ -386,4 +389,144 @@ export async function getTransferenciaEstadoApi(transferenciaId: string) {
   }
 
   return serializeTransferencia(transferenciaId, data)
+}
+
+const TRANSFERENCIA_ESTADOS: TransferenciaEstado[] = [
+  'confeccionada',
+  'pendiente_proceso',
+  'rechazada',
+  'efectivizada',
+  'cancelada',
+]
+
+export interface TransferenciasListFilters {
+  estado?: string
+  cuentaId?: string
+  tipo?: string
+  desde?: string
+  hasta?: string
+}
+
+function parseDiaFiltro(value: string | undefined, label: string): string | null {
+  if (!value?.trim()) return null
+  const dia = value.trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia)) {
+    throw new Error(`${label} tiene que ser una fecha AAAA-MM-DD`)
+  }
+  return dia
+}
+
+function diaArgentina(value: unknown): string | null {
+  const date = agendaTimestampToDate(value)
+  if (!date) return null
+  return date.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
+function etiquetaCuenta(bancoNombre: string, tipo: string): string {
+  return `${bancoNombre} ${tipo === 'USD' ? 'USD' : 'CC'}`
+}
+
+function nombreDestinoNoPropio(
+  tipo: TransferenciaTipo,
+  compromiso: CompromisoPagoDocument | null,
+): string {
+  if (tipo === 'pagos_arca') return 'ARCA'
+  if (tipo === 'sueldos') {
+    return (
+      compromiso?.beneficiarioEmpleado?.trim() ||
+      compromiso?.proveedorONombre?.trim() ||
+      'Beneficiario'
+    )
+  }
+  return compromiso?.proveedorONombre?.trim() || 'Beneficiario'
+}
+
+export async function listTransferenciasApi(filters: TransferenciasListFilters) {
+  const estado = filters.estado?.trim() || ''
+  const tipo = filters.tipo?.trim() || ''
+  const cuentaId = filters.cuentaId?.trim() || ''
+  if (estado && !TRANSFERENCIA_ESTADOS.includes(estado as TransferenciaEstado)) {
+    throw new Error('Estado de transferencia inválido')
+  }
+  if (tipo && !TRANSFERENCIA_TIPOS.includes(tipo as TransferenciaTipo)) {
+    throw new Error('Tipo de transferencia inválido')
+  }
+  const desde = parseDiaFiltro(filters.desde, 'desde')
+  const hasta = parseDiaFiltro(filters.hasta, 'hasta')
+  if (desde && hasta && desde > hasta) {
+    throw new Error('La fecha desde no puede ser posterior a hasta')
+  }
+
+  const [rows, cuentas] = await Promise.all([
+    listTransferenciasConfeccionadas(),
+    listCuentaDocuments(),
+  ])
+  const cuentasPorId = new Map(cuentas.map((row) => [row.id, row.data]))
+
+  const compromisoIds = [...new Set(rows.map((row) => row.data.compromisoPagoId).filter(Boolean))]
+  const compromisos = await Promise.all(
+    compromisoIds.map(async (id) => [id, await getCompromisoDocument(id)] as const),
+  )
+  const compromisoPorId = new Map(compromisos)
+
+  const transferencias = rows
+    .filter((row) => {
+      if (estado && row.data.estado !== estado) return false
+      if (tipo && row.data.tipo !== tipo) return false
+      if (cuentaId && row.data.cuentaDebitoId !== cuentaId) return false
+      const dia = diaArgentina(row.data.fechaConfeccion)
+      if (desde && (!dia || dia < desde)) return false
+      if (hasta && (!dia || dia > hasta)) return false
+      return true
+    })
+    .sort((a, b) => {
+      const ta = agendaTimestampToDate(a.data.fechaConfeccion)?.getTime() ?? 0
+      const tb = agendaTimestampToDate(b.data.fechaConfeccion)?.getTime() ?? 0
+      return tb - ta
+    })
+    .map((row) => {
+      const debito = cuentasPorId.get(row.data.cuentaDebitoId)
+      const debitoLabel = debito
+        ? etiquetaCuenta(debito.bancoNombre, debito.tipo)
+        : 'Cuenta de débito'
+      const compromiso = compromisoPorId.get(row.data.compromisoPagoId) ?? null
+      let destinoLabel = nombreDestinoNoPropio(row.data.tipo, compromiso)
+      if (row.data.tipo === 'cuentas_propias') {
+        const creditoId = findCuentaIdByCbu(row.data.cuentaCreditoCbu)
+        const credito = creditoId ? cuentasPorId.get(creditoId) : undefined
+        destinoLabel = credito
+          ? etiquetaCuenta(credito.bancoNombre, credito.tipo)
+          : 'Cuenta propia'
+      }
+      return {
+        id: row.id,
+        compromisoPagoId: row.data.compromisoPagoId,
+        tipo: row.data.tipo,
+        estado: row.data.estado,
+        montoCentavos: row.data.montoCentavos,
+        concepto: row.data.concepto,
+        fechaConfeccion: agendaTimestampToIso(row.data.fechaConfeccion),
+        operationId: row.data.operationId,
+        cuentaDebitoId: row.data.cuentaDebitoId,
+        direccion: `${debitoLabel} → ${destinoLabel}`,
+        erroresInterbanking: row.data.erroresInterbanking,
+        puedeCancelar: row.data.estado === 'confeccionada',
+      }
+    })
+
+  return { transferencias }
+}
+
+export async function getTransferenciaHistorialApi(transferenciaId: string) {
+  const row = await getTransferenciaDocument(transferenciaId.trim())
+  if (!row) return null
+  const historial = await listTransferenciaHistorial(transferenciaId.trim())
+  return historial.map((item) => ({
+    id: item.id,
+    estadoAnterior: item.data.estadoAnterior,
+    estadoNuevo: item.data.estadoNuevo,
+    fecha: agendaTimestampToIso(item.data.fecha),
+    origen: item.data.origen,
+    nota: item.data.nota,
+  }))
 }

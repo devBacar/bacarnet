@@ -51,6 +51,13 @@ export interface TransferenciaHistorialItem {
   nota: string | null
 }
 
+export interface TransferenciaCandidatoMovimiento {
+  id: string
+  fechaProceso: string
+  montoCentavos: number
+  descripcion: string
+}
+
 export interface TransferenciaListItem {
   id: string
   compromisoPagoId: string
@@ -64,6 +71,9 @@ export interface TransferenciaListItem {
   direccion: string
   erroresInterbanking: string[] | null
   puedeCancelar: boolean
+  movimientoId: string | null
+  requiereConfirmacionManual: boolean
+  candidatos: TransferenciaCandidatoMovimiento[]
 }
 
 export interface TransferenciasListFilters {
@@ -101,6 +111,21 @@ export async function fetchTransferenciaHistorial(
   }
   if (!res.ok) throw new Error(payload.error ?? 'No se pudo leer el historial')
   return payload.historial ?? []
+}
+
+export async function confirmarMovimientoTransferencia(
+  transferenciaId: string,
+  movimientoId: string,
+): Promise<void> {
+  const res = await transferenciasFetch(
+    `/${encodeURIComponent(transferenciaId)}/confirmar-movimiento`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ movimientoId }),
+    },
+  )
+  const payload = (await res.json().catch(() => ({}))) as { error?: string }
+  if (!res.ok) throw new Error(payload.error ?? 'No se pudo confirmar el movimiento')
 }
 
 export async function cancelarTransferenciaConfeccionada(transferenciaId: string): Promise<{

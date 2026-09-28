@@ -1,6 +1,10 @@
 import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import {
+  ReconciliacionError,
+  confirmarMovimientoDeTransferencia,
+} from '../services/reconciliar-movimientos.js'
+import {
   TransferenciaCancelacionError,
   cancelarTransferenciaConfeccionada,
   confeccionarTransferenciaDesdeCompromiso,
@@ -50,6 +54,42 @@ finanzasTransferenciasRouter.post('/confeccionar', async (req, res) => {
   } catch (err) {
     console.error('[finanzas/transferencias] confeccionar', err)
     const message = err instanceof Error ? err.message : 'No se pudo confeccionar la transferencia'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasTransferenciasRouter.post('/:id/confirmar-movimiento', async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) {
+      res.status(400).json({ error: 'Id de transferencia inválido' })
+      return
+    }
+    const movimientoId = (req.body as { movimientoId?: unknown })?.movimientoId
+    if (typeof movimientoId !== 'string' || !movimientoId.trim()) {
+      res.status(400).json({ error: 'Elegí el movimiento que corresponde' })
+      return
+    }
+    const result = await confirmarMovimientoDeTransferencia({
+      actorUid: req.authedUser!.uid,
+      transferenciaId: id,
+      movimientoId,
+    })
+    res.json({
+      transferencia: {
+        id: result.id,
+        estado: result.data.estado,
+        movimientoId: result.data.movimientoId ?? null,
+        compromisoPagoId: result.data.compromisoPagoId,
+      },
+    })
+  } catch (err) {
+    console.error('[finanzas/transferencias] confirmar-movimiento', err)
+    if (err instanceof ReconciliacionError) {
+      res.status(err.status).json({ error: err.message })
+      return
+    }
+    const message = err instanceof Error ? err.message : 'No se pudo confirmar el movimiento'
     res.status(400).json({ error: message })
   }
 })

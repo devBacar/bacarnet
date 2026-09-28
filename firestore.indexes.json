@@ -68,6 +68,40 @@
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "aprobadoresEmails", "arrayConfig": "CONTAINS" }
       ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cuentaId", "order": "ASCENDING" },
+        { "fieldPath": "fechaProceso", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cuentaId", "order": "ASCENDING" },
+        { "fieldPath": "fechaProceso", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cuentaId", "order": "ASCENDING" },
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "fechaProceso", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cuentaId", "order": "ASCENDING" },
+        { "fieldPath": "tipo", "order": "ASCENDING" },
+        { "fieldPath": "fechaProceso", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

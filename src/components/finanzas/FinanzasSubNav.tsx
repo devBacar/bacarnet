@@ -1,4 +1,6 @@
 import { NavLink } from 'react-router-dom'
+import { useAuth } from '../../context'
+import { hasFinanzasAccess } from '../../services/userService'
 import { FINANZAS_NAV_ITEMS } from './finanzasNavConfig'
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
@@ -9,7 +11,11 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
   }`
 
 export function FinanzasSubNav() {
-  const items = FINANZAS_NAV_ITEMS.filter((item) => item.enabled !== false)
+  const { userProfile } = useAuth()
+  const finanzasCompleto = hasFinanzasAccess(userProfile)
+  const items = FINANZAS_NAV_ITEMS.filter((item) => item.enabled !== false).filter(
+    (item) => finanzasCompleto || item.to.includes('/finanzas/cajas'),
+  )
 
   return (
     <nav

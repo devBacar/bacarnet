@@ -31,7 +31,10 @@ export async function serializeCompromiso(id: string, data: CompromisoPagoDocume
   const alertaVencimiento = fechaVenc
     ? computeVencimientoAlerta({
         fechaVencimiento: fechaVenc,
-        estadoPendiente: data.estado === 'pendiente' || data.estado === 'vencido',
+        estadoPendiente:
+          data.estado === 'pendiente' ||
+          data.estado === 'vencido' ||
+          data.estado === 'confeccionada_pendiente_autorizacion',
       })
     : 'neutro'
 
@@ -47,10 +50,13 @@ export async function serializeCompromiso(id: string, data: CompromisoPagoDocume
     medioPago: data.medioPago,
     chequeId: data.chequeId,
     cheque,
+    transferenciaConfeccionadaId: data.transferenciaConfeccionadaId ?? null,
     estado: data.estado,
     cuentaId: data.cuentaId ?? null,
     fechaPago: agendaTimestampToIso(data.fechaPago),
     pagadoPor: data.pagadoPor,
+    esViatico: data.esViatico === true,
+    beneficiarioEmpleado: data.beneficiarioEmpleado ?? null,
     alertaVencimiento,
     createdAt: agendaTimestampToIso(data.createdAt),
     updatedAt: agendaTimestampToIso(data.updatedAt),
@@ -114,12 +120,20 @@ export async function createCompromisoAgenda(input: {
       ? input.body.chequeId.trim()
       : null
   const nota = typeof input.body.nota === 'string' ? input.body.nota.trim() : null
+  const esViatico = input.body.esViatico === true
+  const beneficiarioEmpleado =
+    typeof input.body.beneficiarioEmpleado === 'string'
+      ? input.body.beneficiarioEmpleado.trim() || null
+      : null
 
   if (!concepto || !proveedorONombre || !fechaVencimiento) {
     throw new Error('Faltan campos del compromiso')
   }
   if (typeof montoCentavos !== 'number' || !Number.isInteger(montoCentavos) || montoCentavos <= 0) {
     throw new Error('montoCentavos inválido')
+  }
+  if (esViatico && !beneficiarioEmpleado) {
+    throw new Error('Indicá el beneficiario del viático')
   }
 
   const id = randomUUID()
@@ -136,7 +150,10 @@ export async function createCompromisoAgenda(input: {
       urgenciaManual,
       medioPago: chequeId ? 'cheque' : medioPago,
       chequeId,
+      transferenciaConfeccionadaId: null,
       estado: 'pendiente',
+      esViatico,
+      beneficiarioEmpleado: esViatico ? beneficiarioEmpleado : null,
       createdBy: input.actorUid,
     },
   })
@@ -164,6 +181,17 @@ export async function marcarCompromisoPagado(
   const current = await getCompromisoDocument(compromisoId)
   if (!current) throw new Error('Compromiso no encontrado')
   if (current.estado === 'pagado') throw new Error('El compromiso ya está pagado')
+  if (current.estado === 'confeccionada_pendiente_autorizacion') {
+    throw new Error(
+      'Transferencia confeccionada: el pago se registrará cuando se detecte en el banco (o contactá a sistemas).',
+    )
+  }
+  if (
+    current.medioPago === 'transferencia' &&
+    (current.estado === 'pendiente' || current.estado === 'vencido')
+  ) {
+    throw new Error('Para transferencias usá «Confeccionar por API» en lugar de marcar pagado a mano')
+  }
 
   const medioRaw = body.medioPago
   const medioPago: MedioPago =

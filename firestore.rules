@@ -65,6 +65,42 @@ service cloud.firestore {
         || (isVerifiedCorporate() && hasCallerPermission('view_finanzas'));
     }
 
+    function isFinanzasCajaLider() {
+      return isSuperAdmin()
+        || (isVerifiedCorporate() && hasCallerPermission('manage_finanzas_caja'));
+    }
+
+    function isCajaResponsable(cajaId) {
+      return isVerifiedCorporate()
+        && callerUserDocExists()
+        && exists(/databases/$(database)/documents/cajas/$(cajaId))
+        && get(/databases/$(database)/documents/cajas/$(cajaId)).data.responsableUid
+            == request.auth.uid;
+    }
+
+    /** Lectura directa de documento cajas/{id} — usa resource (queries seguras por responsableUid). */
+    function canReadCajaDocument() {
+      return isFinanzasCajaLider()
+        || canAccessFinanzas()
+        || (isVerifiedCorporate()
+          && callerUserDocExists()
+          && resource.data.responsableUid == request.auth.uid);
+    }
+
+    function canReadCaja(cajaId) {
+      return isFinanzasCajaLider()
+        || canAccessFinanzas()
+        || isCajaResponsable(cajaId);
+    }
+
+    function canReadCajaMovimiento() {
+      return isFinanzasCajaLider()
+        || canAccessFinanzas()
+        || (isVerifiedCorporate()
+          && resource.data.cajaId is string
+          && isCajaResponsable(resource.data.cajaId));
+    }
+
     // Contenido intranet: solo corporativo verificado.
     function canReadIntranetContent() {
       return isVerifiedCorporate();
@@ -311,7 +347,22 @@ service cloud.firestore {
       }
     }
 
+    // El historial se expone únicamente por la API autenticada.
+    match /finanzasPosicionCierres/{cierreId} {
+      allow read, create, update, delete: if false;
+    }
+
     match /compromisosPago/{compromisoId} {
+      allow read: if canAccessFinanzas();
+      allow create, update, delete: if false;
+
+      match /historialEstados/{eventoId} {
+        allow read: if canAccessFinanzas();
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /transferenciasConfeccionadas/{transferenciaId} {
       allow read: if canAccessFinanzas();
       allow create, update, delete: if false;
 
@@ -329,6 +380,39 @@ service cloud.firestore {
         allow read: if canAccessFinanzas();
         allow create, update, delete: if false;
       }
+    }
+
+    match /cajas/{cajaId} {
+      allow read: if canReadCajaDocument();
+      allow create, update, delete: if false;
+
+      match /historialCustodia/{eventoId} {
+        allow read: if canReadCaja(cajaId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /cajaMovimientos/{movimientoId} {
+      allow read: if canReadCajaMovimiento();
+      allow create, update, delete: if false;
+    }
+
+    match /movimientosBancarios/{movimientoId} {
+      allow read: if canAccessFinanzas();
+      allow create, update, delete: if false;
+    }
+
+    match /movimientosBancariosSync/{cuentaId} {
+      allow read: if canAccessFinanzas();
+      allow create, update, delete: if false;
+    }
+
+    match /cajaCierres/{cierreId} {
+      allow read: if isFinanzasCajaLider()
+        || (isVerifiedCorporate()
+          && resource.data.cajaId is string
+          && isCajaResponsable(resource.data.cajaId));
+      allow create, update, delete: if false;
     }
   }
 }

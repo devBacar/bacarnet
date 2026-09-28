@@ -149,5 +149,20 @@ export const reindexRagSemanal = onSchedule(
   },
 )
 
+export const cerrarPosicionBancariaDiaria = onSchedule(
+  {
+    schedule: '0 15 * * 1-5',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async () => {
+    const { runScheduledPosicionCierre } = await import(
+      './modules/finanzas/scheduledPosicionCierre.js'
+    )
+    await runScheduledPosicionCierre()
+  },
+)
+
 // Trigger Firestore pendiente de IAM Eventarc en prod; pendingUserSetup usa POST /api/users/apply-pending-setup.
 // export { applyPendingUserSetup } from './triggers/onUserCreated.js'

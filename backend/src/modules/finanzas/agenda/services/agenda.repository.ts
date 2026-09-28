@@ -25,9 +25,25 @@ export function timestampFromDate(date: Date): Timestamp {
 
 function defaultCompromisoFields(): Pick<
   CompromisoPagoDocument,
-  'cuentaId' | 'fechaPago' | 'pagadoPor' | 'prioridad' | 'urgenciaManual'
+  | 'cuentaId'
+  | 'fechaPago'
+  | 'pagadoPor'
+  | 'prioridad'
+  | 'urgenciaManual'
+  | 'esViatico'
+  | 'beneficiarioEmpleado'
+  | 'transferenciaConfeccionadaId'
 > {
-  return { cuentaId: null, fechaPago: null, pagadoPor: null, prioridad: 0, urgenciaManual: null }
+  return {
+    cuentaId: null,
+    fechaPago: null,
+    pagadoPor: null,
+    prioridad: 0,
+    urgenciaManual: null,
+    esViatico: false,
+    beneficiarioEmpleado: null,
+    transferenciaConfeccionadaId: null,
+  }
 }
 
 function defaultCobroFields(): Pick<
@@ -266,6 +282,7 @@ export async function listCompromisosPendientes(): Promise<
   const rows = await listAllCompromisos()
   return rows
     .filter(({ data }) => data.estado === 'pendiente' || data.estado === 'vencido')
+    // confeccionada_pendiente_autorizacion no se ofrece para nuevos cheques
     .slice(0, 100)
     .map(({ id, data }) => ({
       id,

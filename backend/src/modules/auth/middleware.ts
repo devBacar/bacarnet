@@ -8,6 +8,8 @@ export interface AuthedUserPermissions {
   super_admin?: boolean
   view_drive?: boolean
   view_finanzas?: boolean
+  /** Líder de caja chica: crear cajas, reasignar responsable, aprobar rendiciones. */
+  manage_finanzas_caja?: boolean
   rag_assistant?: boolean
 }
 
@@ -126,6 +128,8 @@ export async function requireWorkspaceUser(
               (permissionsRaw as Record<string, unknown>).super_admin === true,
             view_drive: (permissionsRaw as Record<string, unknown>).view_drive === true,
             view_finanzas: (permissionsRaw as Record<string, unknown>).view_finanzas === true,
+            manage_finanzas_caja:
+              (permissionsRaw as Record<string, unknown>).manage_finanzas_caja === true,
             rag_assistant: (permissionsRaw as Record<string, unknown>).rag_assistant === true,
           }
         : {}
@@ -263,6 +267,45 @@ export async function requireViewFinanzas(
   } catch (err) {
     logError('Fallo al verificar permiso view_finanzas', err)
     res.status(500).json({ error: 'No se pudo verificar el acceso a Finanzas' })
+  }
+}
+
+/** Caja chica: líder, view_finanzas o responsable de al menos una caja. */
+export async function requireFinanzasCajaModule(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const user = req.authedUser
+  if (!user) {
+    res.status(401).json({ error: 'No autenticado' })
+    return
+  }
+
+  if (isSuperAdminUser(user)) {
+    next()
+    return
+  }
+
+  try {
+    const moduleEnabled = await isFinanzasModuleEnabled()
+    if (!moduleEnabled) {
+      res.status(403).json({ error: 'Finanzas no está habilitado' })
+      return
+    }
+
+    const { assertCajaChicaModuleAccess } = await import(
+      '../finanzas/cajachica/services/caja.service.js'
+    )
+    const ok = await assertCajaChicaModuleAccess(user)
+    if (!ok) {
+      res.status(403).json({ error: 'No tenés acceso a Cajas' })
+      return
+    }
+    next()
+  } catch (err) {
+    logError('Fallo al verificar acceso caja chica', err)
+    res.status(500).json({ error: 'No se pudo verificar el acceso' })
   }
 }
 

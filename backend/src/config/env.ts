@@ -15,8 +15,11 @@ function loadLocalEnvFiles(): void {
   const localPath = resolve(backendDir, '.env.local')
   const envPath = resolve(backendDir, '.env')
 
+  // En emulador, Firebase ya inyectó .env* al arrancar; override en .env.local evita quedar
+  // con valores vacíos si el archivo se editó después (p. ej. INTERBANKING_CLIENT_ID).
+  const overrideLocal = process.env.FUNCTIONS_EMULATOR === 'true'
   if (existsSync(localPath)) {
-    loadEnv({ path: localPath, override: false })
+    loadEnv({ path: localPath, override: overrideLocal })
   }
   if (existsSync(envPath)) {
     loadEnv({ path: envPath, override: false })

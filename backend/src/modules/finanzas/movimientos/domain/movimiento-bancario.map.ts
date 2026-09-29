@@ -85,6 +85,12 @@ function integerOrNull(raw: unknown, options?: { zeroIsNull?: boolean }): number
  */
 const DESCRIPCION_BANCO_SIN_DATO = new Set(['NO INFORMADO', 'NO INFORMADA', 'S/D', 'N/A', '-', '.'])
 
+/** "No Informado.", "NO  INFORMADO" → "NO INFORMADO"; los textos que son solo signos quedan en "-". */
+function normalizarSinDato(texto: string): string {
+  const limpio = texto.toUpperCase().replace(/\s+/g, ' ').replace(/[.\s]+$/, '').trim()
+  return limpio === '' ? '-' : limpio
+}
+
 /**
  * Descripción visible: el texto del banco. Si viene vacío o como "NO INFORMADO",
  * se usa la descripción de Interbanking, que es la que matchean las reglas.
@@ -92,7 +98,7 @@ const DESCRIPCION_BANCO_SIN_DATO = new Set(['NO INFORMADO', 'NO INFORMADA', 'S/D
 export function descripcionVisible(row: InterbankingMovementRow): string {
   const bank = optionalText(row.code_description_bank)
   const ib = optionalText(row.code_description_ib)
-  if (bank && !DESCRIPCION_BANCO_SIN_DATO.has(bank.toUpperCase())) return bank
+  if (bank && !DESCRIPCION_BANCO_SIN_DATO.has(normalizarSinDato(bank))) return bank
   return ib ?? bank ?? 'Movimiento'
 }
 

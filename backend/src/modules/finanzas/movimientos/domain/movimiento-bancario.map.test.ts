@@ -89,4 +89,12 @@ describe('movimiento bancario', () => {
       }),
     ).toBe('IVA RI')
   })
+
+  it('reconoce variantes de NO INFORMADO (mayúsculas, espacios, punto final)', () => {
+    for (const bank of ['No Informado.', 'NO  INFORMADO', ' no informado ', '..']) {
+      expect(
+        descripcionVisible({ code_description_bank: bank, code_description_ib: 'COM.MOV.CH' }),
+      ).toBe('COM.MOV.CH')
+    }
+  })
 })

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import {
   fetchMovimientosAnterioresCompleto,
   fetchMovimientosDia,
@@ -13,11 +14,13 @@ import {
   countMovimientosBancarios,
   countMovimientosFiltrados,
   getMovimientosSyncEstado,
+  liberarTurnoSyncMovimientos,
   movimientosBancariosCollection,
   pageMovimientos,
   replaceMovimientosRango,
   scanMovimientosPorTexto,
   sumMovimientosCentavos,
+  tomarTurnoSyncMovimientos,
   type MovimientoListadoItem,
 } from './movimientos.repository.js'
 import { reconciliarTransferenciasConMovimientos } from '../../transferencias/services/reconciliar-movimientos.js'
@@ -226,7 +229,33 @@ async function syncDiaCuenta(input: {
   }
 }
 
+/** Ya hay otro sync de movimientos corriendo (botón o programado). */
+export class MovimientosSyncEnCursoError extends Error {
+  constructor() {
+    super('Ya se están trayendo los movimientos del banco. Probá de nuevo en un minuto.')
+    this.name = 'MovimientosSyncEnCursoError'
+  }
+}
+
+/** Tope del turno: si el proceso se cae, a los 10 minutos otro puede volver a sincronizar. */
+const SYNC_TURNO_MS = 10 * 60 * 1000
+
 export async function syncMovimientosBancarios(input: { actorUid: string }): Promise<MovimientosSyncResult> {
+  const token = randomUUID()
+  const tomado = await tomarTurnoSyncMovimientos({
+    token,
+    actorUid: input.actorUid,
+    duracionMs: SYNC_TURNO_MS,
+  })
+  if (!tomado) throw new MovimientosSyncEnCursoError()
+  try {
+    return await syncMovimientosConTurno(input)
+  } finally {
+    await liberarTurnoSyncMovimientos(token)
+  }
+}
+
+async function syncMovimientosConTurno(input: { actorUid: string }): Promise<MovimientosSyncResult> {
   const now = new Date()
   const session = await openInterbankingInfoSession()
   const cuentas = await listCuentasCorrientesArs(session)

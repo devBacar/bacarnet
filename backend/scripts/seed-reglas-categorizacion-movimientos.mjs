@@ -1,15 +1,17 @@
 /**
- * Carga la semilla inicial de categorías y reglas de auto-categorización de
- * Movimientos (ver src/modules/finanzas/movimientos/domain/reglas-semilla.ts) y
- * categoriza retroactivamente los movimientos existentes que coincidan.
+ * Carga la semilla de categorías (con grupo) y reglas de auto-categorización de
+ * Movimientos (ver src/modules/finanzas/movimientos/domain/reglas-semilla.ts):
+ * texto, código de Interbanking y CUIT. Después categoriza lo que quedó sin categoría.
  *
  * Idempotente: se puede correr más de una vez.
+ * `--simular` arma el mismo reporte sin escribir.
  *
  * Requiere el backend compilado (npm run build en esta carpeta).
  *
  * Emulador:
  *   $env:FIRESTORE_EMULATOR_HOST='127.0.0.1:8080'; $env:GCLOUD_PROJECT='bacar-web'
  *   node scripts/seed-reglas-categorizacion-movimientos.mjs
+ *   node scripts/seed-reglas-categorizacion-movimientos.mjs --simular
  *
  * Producción (usa ADMIN_SDK_KEY_PATH de .env.local):
  *   node scripts/seed-reglas-categorizacion-movimientos.mjs --prod
@@ -22,6 +24,7 @@ import { initAdmin, loadTestEnv } from './get-test-token.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const esProd = process.argv.includes('--prod')
+const simular = process.argv.includes('--simular')
 
 if (!esProd && !process.env.FIRESTORE_EMULATOR_HOST) {
   console.error('Sin FIRESTORE_EMULATOR_HOST. Para producción pasá --prod explícitamente.')
@@ -47,19 +50,52 @@ const { sembrarReglasCategorizacion } = await import(
 )
 
 const actorUid = process.env.SEED_ACTOR_UID?.trim() || 'seed-reglas-categorizacion'
-const resultado = await sembrarReglasCategorizacion({ actorUid })
+const resultado = await sembrarReglasCategorizacion({ actorUid, simular })
 
-console.log(`Destino: ${esProd ? 'PRODUCCIÓN' : `emulador ${process.env.FIRESTORE_EMULATOR_HOST}`}`)
-console.log('\nCategorías:')
-for (const c of resultado.categorias) {
-  console.log(`  ${c.creada ? 'creada    ' : 'ya existía'}  ${c.nombre}  (${c.id})`)
+const destino = esProd ? 'PRODUCCIÓN' : `emulador ${process.env.FIRESTORE_EMULATOR_HOST}`
+console.log(`Destino: ${destino}`)
+console.log(simular ? 'Modo: simulación (no se escribe nada)' : 'Modo: escritura')
+
+function listar(titulo, filas, linea) {
+  console.log(`\n${titulo} (${filas.length}):`)
+  if (filas.length === 0) {
+    console.log('  (ninguna)')
+    return
+  }
+  for (const fila of filas) console.log(`  ${linea(fila)}`)
 }
-console.log('\nReglas:')
-let total = 0
-for (const r of resultado.reglas) {
-  total += r.movimientosActualizados
-  console.log(
-    `  ${r.creada ? 'creada    ' : 'ya existía'}  ${r.descripcionExacta.padEnd(28)} → ${r.categoria.padEnd(22)} movimientos: ${r.movimientosActualizados}`,
-  )
+
+listar('Categorías creadas', resultado.categoriasCreadas, (c) => `${c.nombre}  [${c.grupo}]  (${c.id})`)
+listar(
+  'Categorías actualizadas',
+  resultado.categoriasActualizadas,
+  (c) => `${c.nombre}  grupo → ${c.grupo}  (${c.id})`,
+)
+listar(
+  'Reglas creadas',
+  resultado.reglasCreadas,
+  (r) => `[${r.tipo}]  ${r.valor}  →  ${r.categoria}`,
+)
+listar(
+  'Reglas movidas',
+  resultado.reglasMovidas,
+  (r) => `[${r.tipo}]  ${r.valor}  ${r.desde}  →  ${r.hacia}`,
+)
+listar(
+  'Reglas respetadas',
+  resultado.reglasRespetadas,
+  (r) => `[${r.tipo}]  ${r.valor}  se queda en ${r.categoriaActual}`,
+)
+
+console.log(`\nMovimientos movidos por migración de reglas: ${resultado.movimientosMigrados}`)
+console.log(`Movimientos movidos por CUIT: ${resultado.movimientosPorCuit}`)
+console.log(`Movimientos categorizados en el retroactivo: ${resultado.movimientosRetroactivos}`)
+const porCategoria = Object.entries(resultado.porCategoriaRetroactivo)
+if (porCategoria.length === 0) {
+  console.log('  (ninguna categoría)')
+} else {
+  for (const [nombre, cantidad] of porCategoria) console.log(`  ${nombre}: ${cantidad}`)
 }
-console.log(`\nMovimientos categorizados en total: ${total}`)
+
+listar('Categorías retiradas', resultado.categoriasRetiradas, (c) => `${c.nombre}  (${c.id})`)
+listar('Categorías que se mantienen', resultado.categoriasMantenidas, (c) => `${c.nombre}: ${c.motivo}`)

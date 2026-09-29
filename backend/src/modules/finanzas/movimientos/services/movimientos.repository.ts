@@ -9,9 +9,18 @@ import {
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import type { BancoNombre } from '../../domain/cuenta.types.js'
 import type { MovimientoBancarioMapped } from '../domain/movimiento-bancario.map.js'
-import { emparejarAnotaciones, huellaMovimiento, type AnotacionMovimiento } from '../domain/movimiento-huella.js'
+import {
+  emparejarAnotaciones,
+  huellaMovimiento,
+  huellaMovimientoSinDescripcion,
+  type AnotacionMovimiento,
+} from '../domain/movimiento-huella.js'
 import type { MovimientoBancarioSyncDocument } from '../domain/movimiento-bancario.types.js'
-import { aplicarReglasAFilas, type ReglaCategorizacionAplicable } from '../domain/regla-categorizacion.js'
+import {
+  aplicarReglasAFilas,
+  reglaAplicableDesdeDocumento,
+  type ReglaCategorizacionAplicable,
+} from '../domain/regla-categorizacion.js'
 import { listReglaCategorizacionDocuments } from './reglas-categorizacion.repository.js'
 
 export const MOVIMIENTOS_BANCARIOS_COLLECTION = 'movimientosBancarios'
@@ -25,6 +34,40 @@ export function movimientosBancariosCollection() {
 
 function syncCollection() {
   return adminDb().collection(MOVIMIENTOS_BANCARIOS_SYNC_COLLECTION)
+}
+
+/** Turno del sync: evita que el botón y el programado reemplacen el mismo tramo a la vez. */
+function syncTurnoRef() {
+  return adminDb().collection('finanzasLocks').doc('movimientos-sync')
+}
+
+/** true si tomó el turno. Un turno vencido (proceso caído) se puede volver a tomar. */
+export async function tomarTurnoSyncMovimientos(input: {
+  token: string
+  actorUid: string
+  duracionMs: number
+}): Promise<boolean> {
+  const ref = syncTurnoRef()
+  return adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    const hasta = snap.exists ? Number(snap.get('hastaMs') ?? 0) : 0
+    if (hasta > Date.now()) return false
+    tx.set(ref, {
+      token: input.token,
+      actorUid: input.actorUid,
+      hastaMs: Date.now() + input.duracionMs,
+      tomadoAt: FieldValue.serverTimestamp(),
+    })
+    return true
+  })
+}
+
+export async function liberarTurnoSyncMovimientos(token: string): Promise<void> {
+  const ref = syncTurnoRef()
+  await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (snap.exists && snap.get('token') === token) tx.delete(ref)
+  })
 }
 
 export async function getMovimientosSyncEstado(
@@ -45,7 +88,12 @@ function anotacionDeDocumento(data: DocumentData): AnotacionMovimiento | null {
   const categoriaId = typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null
   const nota = typeof data.nota === 'string' && data.nota.trim() ? data.nota.trim() : null
   if (!categoriaId && !nota) return null
-  return { huella: huellaMovimiento(data), categoriaId, nota }
+  return {
+    huella: huellaMovimiento(data),
+    huellaSinDescripcion: huellaMovimientoSinDescripcion(data),
+    categoriaId,
+    nota,
+  }
 }
 
 /** Borra el tramo y devuelve categoría/nota para reaplicarlas en las filas nuevas. */
@@ -79,9 +127,12 @@ async function deleteRango(input: {
 
 async function cargarReglasAplicables(): Promise<ReglaCategorizacionAplicable[]> {
   const reglas = await listReglaCategorizacionDocuments()
-  return reglas
-    .filter((regla) => regla.data.descripcionKey && regla.data.categoriaId)
-    .map((regla) => ({ descripcionKey: regla.data.descripcionKey, categoriaId: regla.data.categoriaId }))
+  const aplicables: ReglaCategorizacionAplicable[] = []
+  for (const regla of reglas) {
+    const aplicable = reglaAplicableDesdeDocumento(regla.data)
+    if (aplicable) aplicables.push(aplicable)
+  }
+  return aplicables
 }
 
 async function insertRows(input: {
@@ -129,13 +180,11 @@ async function updateEnTandas(query: Query, patch: Record<string, unknown>): Pro
   }
 }
 
-/** Pone la categoría a TODOS los movimientos (de cualquier cuenta) con esa descripción exacta. */
-export async function asignarCategoriaPorDescripcion(input: {
-  descripcionExacta: string
-  categoriaId: string
-}): Promise<number> {
-  const query = movimientosBancariosCollection().where('descripcion', '==', input.descripcionExacta)
-  return updateEnTandas(query, { categoriaId: input.categoriaId })
+/** Pasa todos los movimientos de una categoría a otra. */
+export async function moverCategoriaEnMovimientos(origenId: string, destinoId: string): Promise<number> {
+  return updateEnTandas(movimientosBancariosCollection().where('categoriaId', '==', origenId), {
+    categoriaId: destinoId,
+  })
 }
 
 /** Deja sin categoría a los movimientos que la tenían. No borra nada más. */
@@ -147,6 +196,61 @@ export async function desasignarCategoriaEnMovimientos(categoriaId: string): Pro
 export async function countMovimientosPorCategoria(categoriaId: string): Promise<number> {
   const snap = await movimientosBancariosCollection().where('categoriaId', '==', categoriaId).count().get()
   return snap.data().count
+}
+
+export interface MovimientoParaRegla {
+  id: string
+  descripcion: string
+  codeDescriptionIb: string | null
+  customerCuit: string | null
+  categoriaId: string | null
+}
+
+function movimientoParaRegla(id: string, data: DocumentData): MovimientoParaRegla {
+  return {
+    id,
+    descripcion: typeof data.descripcion === 'string' ? data.descripcion : '',
+    codeDescriptionIb:
+      typeof data.codeDescriptionIb === 'string' && data.codeDescriptionIb ? data.codeDescriptionIb : null,
+    customerCuit: typeof data.customerCuit === 'string' && data.customerCuit ? data.customerCuit : null,
+    categoriaId: typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null,
+  }
+}
+
+/**
+ * Recorre movimientos de a WRITE_CHUNK, ordenados por id.
+ * `sinCategoria` = categoriaId vacío. Firestore no encuentra con `== null` los documentos
+ * que directamente no tienen el campo (hay miles así), por eso se filtra en memoria.
+ */
+export async function eachMovimientoParaCategorizar(
+  filtro: { kind: 'sinCategoria' } | { kind: 'categoria'; categoriaId: string } | { kind: 'todos' },
+  visit: (rows: MovimientoParaRegla[]) => Promise<void> | void,
+): Promise<void> {
+  let cursor: QueryDocumentSnapshot | null = null
+  for (;;) {
+    let query: Query = movimientosBancariosCollection()
+    if (filtro.kind === 'categoria') query = query.where('categoriaId', '==', filtro.categoriaId)
+    query = query.orderBy(FieldPath.documentId()).limit(WRITE_CHUNK)
+    if (cursor) query = query.startAfter(cursor)
+    const snap = await query.get()
+    if (snap.empty) return
+    const rows = snap.docs.map((doc) => movimientoParaRegla(doc.id, doc.data()))
+    await visit(filtro.kind === 'sinCategoria' ? rows.filter((row) => !row.categoriaId) : rows)
+    cursor = snap.docs[snap.docs.length - 1] ?? null
+    if (snap.size < WRITE_CHUNK) return
+  }
+}
+
+export async function guardarCategoriasEnBatch(updates: Array<{ id: string; categoriaId: string }>): Promise<void> {
+  if (updates.length === 0) return
+  const db = adminDb()
+  const col = movimientosBancariosCollection()
+  for (let i = 0; i < updates.length; i += WRITE_CHUNK) {
+    const slice = updates.slice(i, i + WRITE_CHUNK)
+    const batch = db.batch()
+    for (const update of slice) batch.update(col.doc(update.id), { categoriaId: update.categoriaId })
+    await batch.commit()
+  }
 }
 
 /**
@@ -330,6 +434,9 @@ export interface MovimientoCashflowRow {
   tipo: 'debito' | 'credito'
   montoCentavos: number
   categoriaId: string | null
+  descripcion: string
+  cuentaId: string
+  bancoNombre: string
 }
 
 /** Filas de un día (todas las cuentas) con los campos que usa el cashflow. */
@@ -338,7 +445,7 @@ export async function listMovimientosCashflowDelDia(
 ): Promise<MovimientoCashflowRow[]> {
   const snap = await movimientosBancariosCollection()
     .where('fechaProceso', '==', fechaProceso)
-    .select('moneda', 'tipo', 'montoCentavos', 'categoriaId')
+    .select('moneda', 'tipo', 'montoCentavos', 'categoriaId', 'descripcion', 'cuentaId', 'bancoNombre')
     .get()
 
   const rows: MovimientoCashflowRow[] = []
@@ -352,6 +459,9 @@ export async function listMovimientosCashflowDelDia(
       montoCentavos: data.montoCentavos,
       categoriaId:
         typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null,
+      descripcion: typeof data.descripcion === 'string' ? data.descripcion : '',
+      cuentaId: typeof data.cuentaId === 'string' ? data.cuentaId : '',
+      bancoNombre: typeof data.bancoNombre === 'string' ? data.bancoNombre : '',
     })
   }
   return rows

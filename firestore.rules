@@ -412,6 +412,12 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Reglas de auto-categorización (descripción exacta → categoría). Solo el backend escribe.
+    match /reglasCategorizacionMovimientos/{reglaId} {
+      allow read: if canAccessFinanzas();
+      allow create, update, delete: if false;
+    }
+
     match /cajaCierres/{cierreId} {
       allow read: if isFinanzasCajaLider()
         || (isVerifiedCorporate()

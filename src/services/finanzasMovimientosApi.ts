@@ -50,6 +50,16 @@ export interface CategoriaMovimiento {
   id: string
   nombre: string
   color: string | null
+  /** Movimientos que la tienen asignada. El backend ya ordena por este campo. */
+  usos: number
+  createdAt: string | null
+  createdBy: string
+}
+
+export interface ReglaCategorizacion {
+  id: string
+  descripcionExacta: string
+  categoriaId: string
   createdAt: string | null
   createdBy: string
 }
@@ -112,6 +122,43 @@ export async function crearCategoriaMovimiento(nombre: string): Promise<Categori
     throw new Error(body?.error ?? 'No se pudo crear la categoría')
   }
   return body.categoria
+}
+
+export async function eliminarCategoriaMovimiento(
+  categoriaId: string,
+): Promise<{ movimientosDesasignados: number; reglasEliminadas: number }> {
+  const res = await finanzasFetch(`/api/finanzas/categorias-movimientos/${encodeURIComponent(categoriaId)}`, {
+    method: 'DELETE',
+  })
+  const body = (await res.json().catch(() => null)) as {
+    error?: string
+    movimientosDesasignados?: number
+    reglasEliminadas?: number
+  } | null
+  if (!res.ok) throw new Error(body?.error ?? 'No se pudo eliminar la categoría')
+  return {
+    movimientosDesasignados: body?.movimientosDesasignados ?? 0,
+    reglasEliminadas: body?.reglasEliminadas ?? 0,
+  }
+}
+
+/** Crea la regla "descripción exacta → categoría" y categoriza todos los movimientos que ya digan eso. */
+export async function crearReglaCategorizacion(input: {
+  descripcionExacta: string
+  categoriaId: string
+}): Promise<{ regla: ReglaCategorizacion; creada: boolean; movimientosActualizados: number }> {
+  const res = await finanzasFetch('/api/finanzas/reglas-categorizacion', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  const body = (await res.json().catch(() => null)) as {
+    error?: string
+    regla?: ReglaCategorizacion
+    creada?: boolean
+    movimientosActualizados?: number
+  } | null
+  if (!res.ok || !body?.regla) throw new Error(body?.error ?? 'No se pudo crear la regla')
+  return { regla: body.regla, creada: Boolean(body.creada), movimientosActualizados: body.movimientosActualizados ?? 0 }
 }
 
 export async function actualizarMovimiento(

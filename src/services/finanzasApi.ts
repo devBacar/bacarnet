@@ -15,6 +15,9 @@ export interface FinanzasCuenta {
   origenSaldo: FinanzasOrigenSaldo
   saldoActualCentavos: number
   descubiertoCentavos: number | null
+  descubiertoVigenteDesde: string | null
+  descubiertoActualizadoEl: string | null
+  descubiertoActualizadoPor: string | null
   saldoActualizadoManualmenteEl: string | null
   saldoActualizadoManualmentePor: string | null
   descubierto: {
@@ -98,6 +101,81 @@ export async function fetchFinanzasPosicionHistorial(): Promise<FinanzasPosicion
   return res.json() as Promise<FinanzasPosicionHistorialResponse>
 }
 
+export interface CashflowDetalleItem {
+  descripcion: string
+  cuentaId: string
+  bancoNombre: string
+  centavos: number
+  cantidad: number
+}
+
+export interface CashflowCategoriaItem {
+  categoriaId: string | null
+  nombre: string
+  color: string | null
+  centavos: number
+  /** Porcentaje sobre el total del grupo. */
+  porcentaje: number
+  /** Textos del banco que componen la categoría, por cuenta. Máximo 15. */
+  detalle: CashflowDetalleItem[]
+  /** Cuántos textos más hay que no vinieron en `detalle`. */
+  detalleRestantes: number
+}
+
+export interface CashflowGrupoItem {
+  /** Nombre del grupo, o "Sin categoría". */
+  grupo: string
+  sinCategoria: boolean
+  color: string | null
+  centavos: number
+  /** Porcentaje sobre el total de entradas o de salidas. */
+  porcentaje: number
+  categorias: CashflowCategoriaItem[]
+}
+
+export interface CashflowBancoFila {
+  bancoNombre: string
+  saldoInicioCentavos: number | null
+  entradasCentavos: number
+  salidasCentavos: number
+  saldoFinCentavos: number | null
+  faltanteCentavos: number
+}
+
+export interface CashflowAviso {
+  bancoNombre: string
+  faltanteCentavos: number
+  texto: string
+}
+
+export interface CashflowDiario {
+  fecha: string
+  moneda: FinanzasMoneda
+  saldoInicial: { fechaId: string; centavos: number } | null
+  entradasCentavos: number
+  salidasCentavos: number
+  saldoFinal: { estado: 'cerrado' | 'en_curso' | 'pendiente'; centavos: number | null }
+  /** 'banco' si todas las cuentas usaron el cierre diario del banco. */
+  origenSaldos: 'banco' | 'cierre15'
+  bancos: CashflowBancoFila[]
+  avisos: CashflowAviso[]
+  entradas: CashflowGrupoItem[]
+  salidas: CashflowGrupoItem[]
+}
+
+export async function fetchCashflowDiario(
+  fecha: string,
+  moneda: FinanzasMoneda,
+): Promise<CashflowDiario> {
+  const params = new URLSearchParams({ fecha, moneda })
+  const res = await finanzasFetch(`/cashflow?${params.toString()}`)
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error ?? 'No se pudo calcular el cashflow')
+  }
+  return res.json() as Promise<CashflowDiario>
+}
+
 export async function patchFinanzasSaldoManual(
   cuentaId: string,
   saldoActualCentavos: number,
@@ -110,6 +188,24 @@ export async function patchFinanzasSaldoManual(
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string }
     throw new Error(body.error ?? 'No se pudo guardar el saldo')
+  }
+  const data = (await res.json()) as { cuenta: FinanzasCuenta }
+  return data.cuenta
+}
+
+/** Acuerdo de descubierto de una CC (null = sin acuerdo). Solo líder de Finanzas o super admin. */
+export async function patchFinanzasDescubierto(
+  cuentaId: string,
+  body: { descubiertoCentavos: number | null; vigenteDesde: string | null },
+): Promise<FinanzasCuenta> {
+  const res = await finanzasFetch(`/cuentas/${encodeURIComponent(cuentaId)}/descubierto`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(payload.error ?? 'No se pudo guardar el descubierto')
   }
   const data = (await res.json()) as { cuenta: FinanzasCuenta }
   return data.cuenta

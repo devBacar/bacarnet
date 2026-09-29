@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import {
   MovimientoAnotacionError,
+  MovimientosSyncEnCursoError,
   actualizarAnotacionMovimiento,
   listMovimientosApi,
   syncMovimientosBancarios,
@@ -82,6 +83,10 @@ finanzasMovimientosRouter.post('/sync', async (req, res) => {
     const result = await syncMovimientosBancarios({ actorUid })
     res.json(result)
   } catch (err) {
+    if (err instanceof MovimientosSyncEnCursoError) {
+      res.status(409).json({ error: err.message, enCurso: true })
+      return
+    }
     console.error('[finanzas/movimientos] sync', err)
     const message = err instanceof Error ? err.message : 'No se pudieron sincronizar los movimientos'
     res.status(502).json({ error: message })

@@ -122,20 +122,24 @@ function sleep(ms: number): Promise<void> {
 async function fetchSinglePage(input: {
   session: InterbankingInfoSession
   cuenta: CuentaCorrienteObjetivo
-  dateSince: string
-  dateUntil: string
+  movementType: 'anteriores' | 'dia'
+  dateSince?: string
+  dateUntil?: string
 }): Promise<MovementsPage> {
   const params = new URLSearchParams({
     'customer-id': input.session.customerId,
     'bank-number': input.cuenta.bancoNumero,
     'account-type': 'CC',
     currency: 'ARS',
-    'date-since': input.dateSince,
-    'date-until': input.dateUntil,
     limit: String(SINGLE_PAGE_LIMIT),
     page: '0',
   })
-  const url = `${API_ORIGIN}/v2/accounts/${encodeURIComponent(input.cuenta.numeroCuenta)}/movements/anteriores?${params}`
+  // `dia` es el día de la fecha: el banco rechaza date-since y date-until (código 1052).
+  if (input.movementType === 'anteriores') {
+    params.set('date-since', input.dateSince ?? '')
+    params.set('date-until', input.dateUntil ?? '')
+  }
+  const url = `${API_ORIGIN}/v2/accounts/${encodeURIComponent(input.cuenta.numeroCuenta)}/movements/${input.movementType}?${params}`
 
   let lastError: Error | null = null
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
@@ -163,8 +167,10 @@ async function fetchSinglePage(input: {
         ? record.message
         : text.replace(/\s+/g, ' ').slice(0, 180) || `HTTP ${res.status}`
     const code = record.code != null ? String(record.code) : null
+    const rango =
+      input.movementType === 'dia' ? 'dia' : `${input.dateSince}..${input.dateUntil}`
     const err = new InterbankingMovimientosError(
-      `Interbanking movimientos ${input.cuenta.cuentaId} ${input.dateSince}..${input.dateUntil} HTTP ${res.status}${code ? ` ${code}` : ''}: ${message}`,
+      `Interbanking movimientos ${input.cuenta.cuentaId} ${rango} HTTP ${res.status}${code ? ` ${code}` : ''}: ${message}`,
       res.status,
       code,
     )
@@ -214,7 +220,7 @@ export async function fetchMovimientosAnterioresCompleto(input: {
 
   let page: MovementsPage | null = null
   try {
-    page = await fetchSinglePage(input)
+    page = await fetchSinglePage({ ...input, movementType: 'anteriores' })
   } catch (err) {
     if (!isRangeTooWide(err) || days <= 1) throw err
   }
@@ -253,4 +259,25 @@ export async function fetchMovimientosAnterioresCompleto(input: {
     rows: [...left.rows, ...right.rows],
     requests: 1 + left.requests + right.requests,
   }
+}
+
+/** Movimientos del día en curso (`movement-type=dia`). Un solo día, una sola página. */
+export async function fetchMovimientosDia(input: {
+  session: InterbankingInfoSession
+  cuenta: CuentaCorrienteObjetivo
+  fecha: string
+}): Promise<{ rows: InterbankingMovementRow[]; requests: number }> {
+  const page = await fetchSinglePage({
+    session: input.session,
+    cuenta: input.cuenta,
+    movementType: 'dia',
+  })
+  const detail = Array.isArray(page.movements_detail) ? page.movements_detail : []
+  const declared = Number(page.general_data?.total_rows ?? detail.length)
+  if (Number.isFinite(declared) && detail.length < declared) {
+    throw new Error(
+      `Interbanking dia devolvió ${detail.length} de ${declared} movimientos para ${input.cuenta.cuentaId} el ${input.fecha}`,
+    )
+  }
+  return { rows: detail, requests: 1 }
 }

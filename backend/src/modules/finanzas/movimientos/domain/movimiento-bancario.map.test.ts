@@ -74,4 +74,27 @@ describe('movimiento bancario', () => {
       }),
     ).toBe('TRF.DATA')
   })
+
+  it('si el banco manda NO INFORMADO, la regla puede matchear el texto de Interbanking', () => {
+    expect(
+      descripcionVisible({
+        code_description_bank: 'NO INFORMADO',
+        code_description_ib: 'IMPUESTO AL DEBITO',
+      }),
+    ).toBe('IMPUESTO AL DEBITO')
+    expect(
+      descripcionVisible({
+        code_description_bank: 'IVA RI',
+        code_description_ib: 'IMPUESTO AL DEBITO',
+      }),
+    ).toBe('IVA RI')
+  })
+
+  it('reconoce variantes de NO INFORMADO (mayúsculas, espacios, punto final)', () => {
+    for (const bank of ['No Informado.', 'NO  INFORMADO', ' no informado ', '..']) {
+      expect(
+        descripcionVisible({ code_description_bank: bank, code_description_ib: 'COM.MOV.CH' }),
+      ).toBe('COM.MOV.CH')
+    }
+  })
 })

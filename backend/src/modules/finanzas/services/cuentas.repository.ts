@@ -59,10 +59,20 @@ export async function upsertCuentaFromSync(input: {
       ? { createdAt: snapExisting.get('createdAt'), createdBy: snapExisting.get('createdBy') }
       : { createdAt: now, createdBy: input.actorUid }
 
+    // Interbanking no informa el acuerdo de descubierto (llega null): se conserva el cargado a mano.
+    const { descubiertoCentavos, descubiertoVigenteDesde, ...payloadSinDescubierto } = input.payload
+    const descubiertoFields =
+      descubiertoCentavos != null
+        ? { descubiertoCentavos, descubiertoVigenteDesde }
+        : existing.exists
+          ? {}
+          : { descubiertoCentavos: null, descubiertoVigenteDesde: null }
+
     tx.set(
       ref,
       {
-        ...input.payload,
+        ...payloadSinDescubierto,
+        ...descubiertoFields,
         origenSaldo: 'interbanking' satisfies OrigenSaldo,
         saldoActualizadoManualmenteEl: null,
         saldoActualizadoManualmentePor: null,
@@ -187,6 +197,37 @@ export async function updateManualSaldo(input: {
   })
 }
 
+export async function updateDescubierto(input: {
+  cuentaId: string
+  descubiertoCentavos: number | null
+  vigenteDesde: Date | null
+  actorEmail: string
+}): Promise<void> {
+  const ref = cuentasCollection().doc(input.cuentaId)
+
+  await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) throw new Error('Cuenta no encontrada')
+    const data = snap.data() as CuentaDocument
+    if (data.tipo !== 'CC') {
+      throw new Error('El descubierto solo aplica a cuentas corrientes en pesos')
+    }
+
+    tx.set(
+      ref,
+      {
+        descubiertoCentavos: input.descubiertoCentavos,
+        descubiertoVigenteDesde:
+          input.descubiertoCentavos == null ? null : toTimestampOrNull(input.vigenteDesde),
+        descubiertoActualizadoEl: Timestamp.now(),
+        descubiertoActualizadoPor: input.actorEmail,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    )
+  })
+}
+
 export async function savePosicionCierreDocument(input: {
   fechaId: string
   data: Omit<PosicionCierreDocument, 'createdAt' | 'updatedAt' | 'createdBy'>
@@ -211,6 +252,21 @@ export async function getPosicionCierreDocument(
   const snap = await adminDb().collection(POSICION_CIERRES_COLLECTION).doc(fechaId).get()
   if (!snap.exists) return null
   return { id: snap.id, data: snap.data() as PosicionCierreDocument }
+}
+
+/** Último cierre estrictamente anterior a `fechaId` (el viernes, si el día previo es fin de semana). */
+export async function getPosicionCierreAnterior(
+  fechaId: string,
+): Promise<{ id: string; data: PosicionCierreDocument } | null> {
+  const snap = await adminDb()
+    .collection(POSICION_CIERRES_COLLECTION)
+    .where('fechaId', '<', fechaId)
+    .orderBy('fechaId', 'desc')
+    .limit(1)
+    .get()
+  const doc = snap.docs[0]
+  if (!doc) return null
+  return { id: doc.id, data: doc.data() as PosicionCierreDocument }
 }
 
 export async function listPosicionCierreDocuments(

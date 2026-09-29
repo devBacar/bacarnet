@@ -16,7 +16,28 @@ export interface SaldoDTO {
   saldoActualCentavos: number
 }
 
+export interface SaldoDiarioHoyDTO {
+  saldoInicioCentavos: number
+  saldoActualCentavos: number
+}
+
+export interface SaldoDiarioDiaDTO {
+  fecha: string
+  saldoFinCentavos: number
+  debitosCentavos: number | null
+  creditosCentavos: number | null
+}
+
+export interface SaldosDiariosCuentaDTO {
+  cuentaId: string
+  bancoNombre: BancoNombre
+  moneda: Moneda
+  hoy: SaldoDiarioHoyDTO | null
+  dias: SaldoDiarioDiaDTO[]
+}
+
 export interface BankDataProvider {
   getAccounts(): Promise<CuentaDTO[]>
   getBalances(): Promise<SaldoDTO[]>
+  getSaldosDiarios?(input: { desde: string; hasta: string }): Promise<SaldosDiariosCuentaDTO[]>
 }

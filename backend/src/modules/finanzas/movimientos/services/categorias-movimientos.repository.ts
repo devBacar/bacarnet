@@ -7,6 +7,8 @@ export interface CategoriaMovimientoDocument {
   nombre: string
   nombreKey: string
   color: string | null
+  /** Ausente en documentos viejos: se lee como null. */
+  grupo?: string | null
   createdAt: Timestamp
   createdBy: string
 }
@@ -34,6 +36,7 @@ export async function createCategoriaMovimientoDocument(input: {
   nombre: string
   nombreKey: string
   color: string | null
+  grupo?: string | null
   createdBy: string
 }): Promise<string> {
   const ref = categoriasMovimientosCollection().doc()
@@ -41,10 +44,18 @@ export async function createCategoriaMovimientoDocument(input: {
     nombre: input.nombre,
     nombreKey: input.nombreKey,
     color: input.color,
+    grupo: input.grupo ?? null,
     createdBy: input.createdBy,
     createdAt: FieldValue.serverTimestamp(),
   })
   return ref.id
+}
+
+export async function updateCategoriaMovimientoDocument(
+  id: string,
+  patch: Partial<Pick<CategoriaMovimientoDocument, 'nombre' | 'nombreKey' | 'color' | 'grupo'>>,
+): Promise<void> {
+  await categoriasMovimientosCollection().doc(id).update(patch)
 }
 
 export async function deleteCategoriaMovimientoDocument(id: string): Promise<void> {

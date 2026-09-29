@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { emparejarAnotaciones, huellaMovimiento } from './movimiento-huella.js'
+import {
+  emparejarAnotaciones,
+  huellaMovimiento,
+  huellaMovimientoSinDescripcion,
+} from './movimiento-huella.js'
 
 const base = {
   fechaProceso: '2026-09-25',
@@ -32,6 +36,40 @@ describe('huella de movimiento', () => {
     expect(conNota.nota).toBe('IIBB')
     expect(libre.categoriaId).toBeNull()
     expect(libre.nota).toBeNull()
+  })
+
+  it('conserva la categoría si al otro día el banco cambia solo el texto', () => {
+    const delDia = { ...base, descripcion: 'IMP' }
+    const [definitiva] = emparejarAnotaciones(
+      [{ ...base, descripcion: 'IMPUESTO LEY 25413' }],
+      [
+        {
+          huella: huellaMovimiento(delDia),
+          huellaSinDescripcion: huellaMovimientoSinDescripcion(delDia),
+          categoriaId: 'cat-imp',
+          nota: 'ley cheque',
+        },
+      ],
+    )
+    expect(definitiva.categoriaId).toBe('cat-imp')
+    expect(definitiva.nota).toBe('ley cheque')
+  })
+
+  it('el respaldo sin descripción no pisa una coincidencia exacta', () => {
+    const exacta = { ...base, descripcion: 'A' }
+    const otra = { ...base, descripcion: 'B' }
+    const filas = emparejarAnotaciones(
+      [exacta, otra],
+      [
+        {
+          huella: huellaMovimiento(exacta),
+          huellaSinDescripcion: huellaMovimientoSinDescripcion(exacta),
+          categoriaId: 'cat-a',
+          nota: null,
+        },
+      ],
+    )
+    expect(filas.map((fila) => fila.categoriaId)).toEqual(['cat-a', null])
   })
 
   it('si hay dos filas idénticas, la anotación no se duplica', () => {

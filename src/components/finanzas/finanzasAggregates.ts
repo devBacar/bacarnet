@@ -10,6 +10,27 @@ export interface PosicionPorBancoRow {
   arsCentavos: number
   usdCentavos: number
   semaforoCc: FinanzasSemaforo | null
+  /** Límite acordado de la CC en pesos; null si no está cargado. */
+  descubiertoCentavos: number | null
+  /** Saldo en pesos + descubierto acordado (lo que queda para usar); null sin descubierto. */
+  disponibleCentavos: number | null
+}
+
+/** Total disponible en pesos con descubierto: saldo de todos los bancos + los acuerdos cargados. */
+export function computeDisponibleTotal(bancos: PosicionPorBancoRow[]): {
+  disponibleCentavos: number
+  descubiertoCentavos: number
+  bancosSinDescubierto: string[]
+} {
+  let disponibleCentavos = 0
+  let descubiertoCentavos = 0
+  const bancosSinDescubierto: string[] = []
+  for (const banco of bancos) {
+    disponibleCentavos += banco.arsCentavos + (banco.descubiertoCentavos ?? 0)
+    descubiertoCentavos += banco.descubiertoCentavos ?? 0
+    if (banco.descubiertoCentavos == null) bancosSinDescubierto.push(banco.bancoNombre)
+  }
+  return { disponibleCentavos, descubiertoCentavos, bancosSinDescubierto }
 }
 
 export function posicionTag(centavos: number): '(a cubrir)' | '(a favor)' {
@@ -36,6 +57,7 @@ export function computePosicionPorBanco(cuentas: FinanzasCuenta[]): PosicionPorB
     let arsCentavos = 0
     let usdCentavos = 0
     let semaforoCc: FinanzasSemaforo | null = null
+    let descubiertoCentavos: number | null = null
 
     for (const cuenta of bankAccounts) {
       if (cuenta.tipo === 'USD') {
@@ -43,10 +65,14 @@ export function computePosicionPorBanco(cuentas: FinanzasCuenta[]): PosicionPorB
       } else if (cuenta.tipo === 'CC') {
         arsCentavos += cuenta.saldoActualCentavos
         semaforoCc = cuenta.descubierto?.semaforo ?? null
+        if (cuenta.descubiertoCentavos != null && cuenta.descubiertoCentavos > 0) {
+          descubiertoCentavos = (descubiertoCentavos ?? 0) + cuenta.descubiertoCentavos
+        }
       }
     }
 
-    return { bancoNombre, arsCentavos, usdCentavos, semaforoCc }
+    const disponibleCentavos = descubiertoCentavos == null ? null : arsCentavos + descubiertoCentavos
+    return { bancoNombre, arsCentavos, usdCentavos, semaforoCc, descubiertoCentavos, disponibleCentavos }
   })
 }
 

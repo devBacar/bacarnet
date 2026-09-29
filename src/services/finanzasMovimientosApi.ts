@@ -50,15 +50,22 @@ export interface CategoriaMovimiento {
   id: string
   nombre: string
   color: string | null
+  /** Agrupación para el cashflow. Vacío si todavía no tiene grupo. */
+  grupo: string | null
   /** Movimientos que la tienen asignada. El backend ya ordena por este campo. */
   usos: number
   createdAt: string | null
   createdBy: string
 }
 
+export type ReglaCategorizacionTipo = 'descripcion' | 'codigoIb' | 'cuit'
+
 export interface ReglaCategorizacion {
   id: string
-  descripcionExacta: string
+  tipo: ReglaCategorizacionTipo
+  descripcionExacta: string | null
+  codigoIb: string | null
+  cuit: string | null
   categoriaId: string
   createdAt: string | null
   createdBy: string
@@ -80,6 +87,18 @@ async function finanzasFetch(path: string, init?: RequestInit): Promise<Response
 
 async function movimientosFetch(path: string, init?: RequestInit): Promise<Response> {
   return finanzasFetch(`/api/finanzas/movimientos${path}`, init)
+}
+
+/** Trae ya mismo los movimientos del banco (lo mismo que hace el sync programado cada 30 min). */
+export async function syncMovimientosBancarios(): Promise<{ insertados: number; autoCategorizados: number }> {
+  const res = await movimientosFetch('/sync', { method: 'POST' })
+  const payload = (await res.json().catch(() => ({}))) as {
+    error?: string
+    insertados?: number
+    autoCategorizados?: number
+  }
+  if (!res.ok) throw new Error(payload.error ?? 'No se pudieron traer los movimientos del banco')
+  return { insertados: payload.insertados ?? 0, autoCategorizados: payload.autoCategorizados ?? 0 }
 }
 
 export async function fetchMovimientos(filters: MovimientosListFilters): Promise<MovimientosListResponse> {
@@ -109,10 +128,14 @@ export async function fetchCategoriasMovimientos(): Promise<CategoriaMovimiento[
   return body?.categorias ?? []
 }
 
-export async function crearCategoriaMovimiento(nombre: string): Promise<CategoriaMovimiento> {
+export async function crearCategoriaMovimiento(
+  nombre: string,
+  grupo?: string | null,
+): Promise<CategoriaMovimiento> {
+  const grupoLimpio = grupo?.trim()
   const res = await finanzasFetch('/api/finanzas/categorias-movimientos', {
     method: 'POST',
-    body: JSON.stringify({ nombre }),
+    body: JSON.stringify(grupoLimpio ? { nombre, grupo: grupoLimpio } : { nombre }),
   })
   const body = (await res.json().catch(() => null)) as {
     error?: string
@@ -142,6 +165,47 @@ export async function eliminarCategoriaMovimiento(
   }
 }
 
+export async function patchCategoriaMovimiento(
+  categoriaId: string,
+  patch: { nombre?: string; color?: string | null; grupo?: string | null },
+): Promise<CategoriaMovimiento> {
+  const res = await finanzasFetch(`/api/finanzas/categorias-movimientos/${encodeURIComponent(categoriaId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  })
+  const body = (await res.json().catch(() => null)) as {
+    error?: string
+    categoria?: CategoriaMovimiento
+  } | null
+  if (!res.ok || !body?.categoria) {
+    throw new Error(body?.error ?? 'No se pudo guardar la categoría')
+  }
+  return body.categoria
+}
+
+export async function fusionarCategoriaMovimiento(
+  categoriaId: string,
+  destinoId: string,
+): Promise<{ movimientosMovidos: number; reglasMovidas: number }> {
+  const res = await finanzasFetch(
+    `/api/finanzas/categorias-movimientos/${encodeURIComponent(categoriaId)}/fusionar`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ destinoId }),
+    },
+  )
+  const body = (await res.json().catch(() => null)) as {
+    error?: string
+    movimientosMovidos?: number
+    reglasMovidas?: number
+  } | null
+  if (!res.ok) throw new Error(body?.error ?? 'No se pudo fusionar la categoría')
+  return {
+    movimientosMovidos: body?.movimientosMovidos ?? 0,
+    reglasMovidas: body?.reglasMovidas ?? 0,
+  }
+}
+
 /** Crea la regla "descripción exacta → categoría" y categoriza todos los movimientos que ya digan eso. */
 export async function crearReglaCategorizacion(input: {
   descripcionExacta: string
@@ -159,6 +223,27 @@ export async function crearReglaCategorizacion(input: {
   } | null
   if (!res.ok || !body?.regla) throw new Error(body?.error ?? 'No se pudo crear la regla')
   return { regla: body.regla, creada: Boolean(body.creada), movimientosActualizados: body.movimientosActualizados ?? 0 }
+}
+
+/** Aplica las reglas ya guardadas a los movimientos que siguen sin categoría. */
+export async function aplicarReglasCategorizacion(): Promise<{
+  revisados: number
+  categorizados: number
+  porCategoria: Record<string, number>
+}> {
+  const res = await finanzasFetch('/api/finanzas/reglas-categorizacion/aplicar', { method: 'POST' })
+  const body = (await res.json().catch(() => null)) as {
+    error?: string
+    revisados?: number
+    categorizados?: number
+    porCategoria?: Record<string, number>
+  } | null
+  if (!res.ok) throw new Error(body?.error ?? 'No se pudieron aplicar las reglas')
+  return {
+    revisados: body?.revisados ?? 0,
+    categorizados: body?.categorizados ?? 0,
+    porCategoria: body?.porCategoria ?? {},
+  }
 }
 
 export async function actualizarMovimiento(

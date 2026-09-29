@@ -2,6 +2,7 @@ import { agendaTimestampToIso } from '../../agenda/domain/agendaTimestamps.js'
 import {
   claveNombreCategoria,
   normalizarColorCategoria,
+  normalizarGrupoCategoria,
   validarNombreCategoria,
 } from '../domain/categoria-movimiento.js'
 import {
@@ -9,15 +10,21 @@ import {
   deleteCategoriaMovimientoDocument,
   getCategoriaMovimientoDocument,
   listCategoriaMovimientoDocuments,
+  updateCategoriaMovimientoDocument,
   type CategoriaMovimientoDocument,
 } from './categorias-movimientos.repository.js'
-import { countMovimientosPorCategoria, desasignarCategoriaEnMovimientos } from './movimientos.repository.js'
-import { deleteReglasDeCategoria } from './reglas-categorizacion.repository.js'
+import {
+  countMovimientosPorCategoria,
+  desasignarCategoriaEnMovimientos,
+  moverCategoriaEnMovimientos,
+} from './movimientos.repository.js'
+import { deleteReglasDeCategoria, moverReglasDeCategoria } from './reglas-categorizacion.repository.js'
 
 export interface CategoriaMovimientoApi {
   id: string
   nombre: string
   color: string | null
+  grupo: string | null
   /** Cantidad de movimientos que la tienen asignada hoy. */
   usos: number
   createdAt: string | null
@@ -34,11 +41,16 @@ export class CategoriaMovimientoError extends Error {
   }
 }
 
+function grupoDe(data: CategoriaMovimientoDocument): string | null {
+  return typeof data.grupo === 'string' && data.grupo.trim() ? data.grupo : null
+}
+
 function serialize(id: string, data: CategoriaMovimientoDocument, usos: number): CategoriaMovimientoApi {
   return {
     id,
     nombre: data.nombre,
     color: data.color ?? null,
+    grupo: grupoDe(data),
     usos,
     createdAt: agendaTimestampToIso(data.createdAt),
     createdBy: data.createdBy,
@@ -68,10 +80,12 @@ export async function crearCategoriaMovimientoApi(input: {
   }
 
   const color = normalizarColorCategoria(input.body.color, nombre)
+  const grupo = normalizarGrupoCategoria(input.body.grupo)
   const id = await createCategoriaMovimientoDocument({
     nombre,
     nombreKey: key,
     color,
+    grupo,
     createdBy: input.actorUid,
   })
   const creada = await getCategoriaMovimientoDocument(id)
@@ -95,4 +109,68 @@ export async function eliminarCategoriaMovimientoApi(input: {
   const movimientosDesasignados = await desasignarCategoriaEnMovimientos(id)
   await deleteCategoriaMovimientoDocument(id)
   return { movimientosDesasignados, reglasEliminadas }
+}
+
+export async function actualizarCategoriaMovimientoApi(input: {
+  categoriaId: string
+  body: Record<string, unknown>
+}): Promise<CategoriaMovimientoApi> {
+  const id = input.categoriaId.trim()
+  if (!id) throw new CategoriaMovimientoError('Id de categoría inválido', 400)
+  const actual = await getCategoriaMovimientoDocument(id)
+  if (!actual) throw new CategoriaMovimientoError('La categoría no existe', 404)
+
+  const patch: { nombre?: string; nombreKey?: string; color?: string | null; grupo?: string | null } = {}
+  let nombre = actual.data.nombre
+  if (Object.prototype.hasOwnProperty.call(input.body, 'nombre')) {
+    nombre = validarNombreCategoria(typeof input.body.nombre === 'string' ? input.body.nombre : '')
+    const key = claveNombreCategoria(nombre)
+    const existentes = await listCategoriaMovimientoDocuments()
+    const choca = existentes.find((row) => row.id !== id && row.data.nombreKey === key)
+    if (choca) throw new CategoriaMovimientoError('Ya hay una categoría con ese nombre', 400)
+    patch.nombre = nombre
+    patch.nombreKey = key
+  }
+  if (Object.prototype.hasOwnProperty.call(input.body, 'color')) {
+    patch.color = normalizarColorCategoria(input.body.color, nombre)
+  }
+  if (Object.prototype.hasOwnProperty.call(input.body, 'grupo')) {
+    patch.grupo = normalizarGrupoCategoria(input.body.grupo)
+  }
+
+  if (Object.keys(patch).length > 0) {
+    await updateCategoriaMovimientoDocument(id, patch)
+  }
+  const guardada = await getCategoriaMovimientoDocument(id)
+  if (!guardada) throw new Error('No se pudo leer la categoría recién actualizada')
+  return serialize(guardada.id, guardada.data, await countMovimientosPorCategoria(id))
+}
+
+/**
+ * Pasa movimientos y reglas de una categoría a otra y borra la de origen.
+ * No deduplica reglas: si las dos tenían el mismo texto, quedan las dos en el destino.
+ */
+export async function fusionarCategoriaMovimientoApi(input: {
+  categoriaId: string
+  destinoId: string
+}): Promise<{ movimientosMovidos: number; reglasMovidas: number }> {
+  const id = input.categoriaId.trim()
+  const destinoId = input.destinoId.trim()
+  if (!id) throw new CategoriaMovimientoError('Id de categoría inválido', 400)
+  if (!destinoId) throw new CategoriaMovimientoError('Elegí la categoría de destino', 400)
+  if (id === destinoId) {
+    throw new CategoriaMovimientoError('No se puede fusionar una categoría consigo misma', 400)
+  }
+
+  const [origen, destino] = await Promise.all([
+    getCategoriaMovimientoDocument(id),
+    getCategoriaMovimientoDocument(destinoId),
+  ])
+  if (!origen) throw new CategoriaMovimientoError('La categoría no existe', 404)
+  if (!destino) throw new CategoriaMovimientoError('La categoría de destino no existe', 404)
+
+  const reglasMovidas = await moverReglasDeCategoria(id, destinoId)
+  const movimientosMovidos = await moverCategoriaEnMovimientos(id, destinoId)
+  await deleteCategoriaMovimientoDocument(id)
+  return { movimientosMovidos, reglasMovidas }
 }

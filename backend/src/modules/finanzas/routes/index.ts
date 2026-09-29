@@ -6,11 +6,13 @@ import { finanzasTransferenciasRouter } from '../transferencias/routes/transfere
 import { finanzasDestinatariosRouter } from '../transferencias/routes/destinatarios.routes.js'
 import { finanzasCategoriasMovimientosRouter } from '../movimientos/routes/categorias-movimientos.routes.js'
 import { finanzasMovimientosRouter } from '../movimientos/routes/movimientos.routes.js'
+import { finanzasCashflowRouter } from '../cashflow/routes/cashflow.routes.js'
 import { finanzasReglasCategorizacionRouter } from '../movimientos/routes/reglas-categorizacion.routes.js'
 
 export const finanzasRouter = Router()
 
 finanzasRouter.use('/cuentas', finanzasCuentasRouter)
+finanzasRouter.use('/cashflow', finanzasCashflowRouter)
 finanzasRouter.use('/agenda', finanzasAgendaRouter)
 finanzasRouter.use('/cajas', finanzasCajasRouter)
 finanzasRouter.use('/transferencias', finanzasTransferenciasRouter)

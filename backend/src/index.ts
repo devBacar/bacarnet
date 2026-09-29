@@ -164,5 +164,39 @@ export const cerrarPosicionBancariaDiaria = onSchedule(
   },
 )
 
+export const sincronizarFinanzasCada30Min = onSchedule(
+  {
+    schedule: '0,30 8-18 * * 1-5',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    timeoutSeconds: 540,
+    memory: '512MiB',
+  },
+  async () => {
+    const actorUid = 'system:finanzas-sync-30min'
+    try {
+      const { syncCuentasFromProvider } = await import('./modules/finanzas/services/cuentas.service.js')
+      await syncCuentasFromProvider({ actorUid })
+    } catch (error) {
+      console.error('[finanzas/sync-30min] falló la actualización de saldos', error)
+    }
+    try {
+      const { syncMovimientosBancarios, MovimientosSyncEnCursoError } = await import(
+        './modules/finanzas/movimientos/services/movimientos.service.js'
+      )
+      try {
+        await syncMovimientosBancarios({ actorUid })
+      } catch (error) {
+        if (error instanceof MovimientosSyncEnCursoError) {
+          console.info('[finanzas/sync-30min] los movimientos ya se estaban actualizando')
+          return
+        }
+        throw error
+      }
+    } catch (error) {
+      console.error('[finanzas/sync-30min] falló la actualización de movimientos', error)
+    }
+  },
+)
+
 // Trigger Firestore pendiente de IAM Eventarc en prod; pendingUserSetup usa POST /api/users/apply-pending-setup.
 // export { applyPendingUserSetup } from './triggers/onUserCreated.js'

@@ -1,17 +1,22 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useId, useState } from 'react'
 import toast from 'react-hot-toast'
+import { useSearchParams } from 'react-router-dom'
+import { CategoriasGestionModal } from '../../components/finanzas/CategoriasGestionModal'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
   actualizarMovimiento,
+  aplicarReglasCategorizacion,
   crearCategoriaMovimiento,
   crearReglaCategorizacion,
   eliminarCategoriaMovimiento,
   fetchCategoriasMovimientos,
   fetchMovimientos,
+  fusionarCategoriaMovimiento,
+  patchCategoriaMovimiento,
   type CategoriaMovimiento,
   type MovimientoListItem,
   type MovimientoTipo,
@@ -19,7 +24,6 @@ import {
 import {
   CategoriaMovimientoChip,
   CategoriaMovimientoModal,
-  CategoriasGestionModal,
   type GuardarMovimientoInput,
 } from './CategoriaMovimientoCampo'
 
@@ -36,8 +40,13 @@ function addIsoDays(iso: string, days: number): string {
   return date.toISOString().slice(0, 10)
 }
 
-function rangoInicial(): { desde: string; hasta: string } {
+const ISO_RE = /^\d{4}-\d{2}-\d{2}$/
+
+function rangoInicial(params: URLSearchParams): { desde: string; hasta: string } {
   const hoy = isoArgentina(new Date())
+  const desde = params.get('desde') ?? ''
+  const hasta = params.get('hasta') ?? ''
+  if (ISO_RE.test(desde) && ISO_RE.test(hasta) && desde <= hasta) return { desde, hasta }
   return { desde: addIsoDays(hoy, -29), hasta: hoy }
 }
 
@@ -50,14 +59,20 @@ function formatFecha(iso: string): string {
 export function FinanzasMovimientosPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const inicial = rangoInicial()
-  const [cuentaId, setCuentaId] = useState('')
+  // El Cashflow manda acá con ?cuenta=&desde=&hasta=&q= para categorizar lo que falta.
+  const [searchParams] = useSearchParams()
+  const [inicial] = useState(() => ({
+    ...rangoInicial(searchParams),
+    cuentaId: searchParams.get('cuenta') ?? '',
+    q: searchParams.get('q')?.trim() ?? '',
+  }))
+  const [cuentaId, setCuentaId] = useState(inicial.cuentaId)
   const [desde, setDesde] = useState(inicial.desde)
   const [hasta, setHasta] = useState(inicial.hasta)
   const [tipo, setTipo] = useState<'' | MovimientoTipo>('')
   const [categoriaId, setCategoriaId] = useState('')
-  const [q, setQ] = useState('')
-  const [qAplicada, setQAplicada] = useState('')
+  const [q, setQ] = useState(inicial.q)
+  const [qAplicada, setQAplicada] = useState(inicial.q)
   const [page, setPage] = useState(1)
   const [editando, setEditando] = useState<MovimientoListItem | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -69,7 +84,8 @@ export function FinanzasMovimientosPage() {
     queryFn: fetchFinanzasCuentas,
     enabled: Boolean(user),
   })
-  const cuentas = (cuentasData?.cuentas ?? []).filter((cuenta) => cuenta.tipo === 'CC' && cuenta.moneda === 'ARS')
+  // Las cuentas que sincronizan con Interbanking son las que tienen movimientos (incluye CC en USD si aparecen).
+  const cuentas = (cuentasData?.cuentas ?? []).filter((cuenta) => cuenta.origenSaldo === 'interbanking')
 
   useEffect(() => {
     if (cuentaId || cuentas.length === 0) return
@@ -102,10 +118,11 @@ export function FinanzasMovimientosPage() {
     placeholderData: (prev) => prev,
   })
 
-  async function invalidarMovimientosYCategorias() {
+  async function invalidarTrasCambio() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['finanzas', 'movimientos'] }),
       queryClient.invalidateQueries({ queryKey: ['finanzas', 'categorias-movimientos'] }),
+      queryClient.invalidateQueries({ queryKey: ['finanzas', 'cashflow'] }),
     ])
   }
 
@@ -124,7 +141,7 @@ export function FinanzasMovimientosPage() {
         )
       }
       setEditando(null)
-      await invalidarMovimientosYCategorias()
+      await invalidarTrasCambio()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
     } finally {
@@ -134,8 +151,35 @@ export function FinanzasMovimientosPage() {
 
   async function crearYRecordar(nombre: string) {
     const creada = await crearCategoriaMovimiento(nombre)
-    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'categorias-movimientos'] })
+    await invalidarTrasCambio()
     return creada
+  }
+
+  async function crearCategoriaConGrupo(nombre: string, grupo: string | null) {
+    await crearCategoriaMovimiento(nombre, grupo)
+    await invalidarTrasCambio()
+  }
+
+  async function guardarGrupoCategoria(categoria: CategoriaMovimiento, grupo: string | null) {
+    await patchCategoriaMovimiento(categoria.id, { grupo })
+    await invalidarTrasCambio()
+    toast.success(grupo ? `«${categoria.nombre}» quedó en ${grupo}` : `«${categoria.nombre}» quedó sin grupo`)
+  }
+
+  async function fusionarCategoria(origen: CategoriaMovimiento, destinoId: string) {
+    const destino = categorias.find((item) => item.id === destinoId)
+    await fusionarCategoriaMovimiento(origen.id, destinoId)
+    if (categoriaId === origen.id) setCategoriaId('')
+    await invalidarTrasCambio()
+    toast.success(`«${origen.nombre}» pasó a «${destino?.nombre ?? 'la otra categoría'}».`)
+  }
+
+  async function aplicarReglas() {
+    const result = await aplicarReglasCategorizacion()
+    await invalidarTrasCambio()
+    toast.success(
+      `Se categorizaron ${result.categorizados.toLocaleString('es-AR')} de ${result.revisados.toLocaleString('es-AR')} movimientos`,
+    )
   }
 
   async function eliminarCategoria(categoria: CategoriaMovimiento) {
@@ -144,7 +188,7 @@ export function FinanzasMovimientosPage() {
     toast.success(
       `«${categoria.nombre}» eliminada. ${result.movimientosDesasignados.toLocaleString('es-AR')} movimientos quedaron sin categoría.`,
     )
-    await invalidarMovimientosYCategorias()
+    await invalidarTrasCambio()
   }
 
   function cambiarFiltro(apply: () => void) {
@@ -176,6 +220,7 @@ export function FinanzasMovimientosPage() {
             {cuentas.map((cuenta) => (
               <option key={cuenta.id} value={cuenta.id}>
                 {cuenta.bancoNombre} {cuenta.tipo}
+                {cuenta.moneda === 'USD' ? ' (USD)' : ''}
               </option>
             ))}
           </select>
@@ -371,8 +416,11 @@ export function FinanzasMovimientosPage() {
         open={gestionAbierta}
         categorias={categorias}
         onClose={() => setGestionAbierta(false)}
-        onCrear={crearYRecordar}
+        onCrear={crearCategoriaConGrupo}
         onEliminar={eliminarCategoria}
+        onGuardarGrupo={guardarGrupoCategoria}
+        onFusionar={fusionarCategoria}
+        onAplicarReglas={aplicarReglas}
       />
     </>
   )

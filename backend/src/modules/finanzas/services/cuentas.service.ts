@@ -8,7 +8,7 @@ import {
 
 } from '../adapters/bank-data-provider.factory.js'
 
-import { computeDescubiertoEstado } from '../domain/descubierto.rules.js'
+import { computeDescubiertoEstado, parseDescubiertoManual } from '../domain/descubierto.rules.js'
 
 import {
 
@@ -48,11 +48,15 @@ import {
 
   toTimestampOrNull,
 
+  updateDescubierto,
+
   updateManualSaldo,
 
   upsertCuentaFromSync,
 
 } from './cuentas.repository.js'
+
+import { guardarSaldosDiarios, sumarDiasFechaId } from './saldos-diarios.repository.js'
 
 
 
@@ -73,6 +77,12 @@ export interface CuentaListItem {
   saldoActualCentavos: number
 
   descubiertoCentavos: number | null
+
+  descubiertoVigenteDesde: string | null
+
+  descubiertoActualizadoEl: string | null
+
+  descubiertoActualizadoPor: string | null
 
   saldoActualizadoManualmenteEl: string | null
 
@@ -171,6 +181,12 @@ function mapRow(
 
     descubiertoCentavos: number | null
 
+    descubiertoVigenteDesde?: Timestamp | null
+
+    descubiertoActualizadoEl?: Timestamp | null
+
+    descubiertoActualizadoPor?: string | null
+
     saldoActualizadoManualmenteEl?: Timestamp | null
 
     saldoActualizadoManualmentePor?: string | null
@@ -210,6 +226,12 @@ function mapRow(
     saldoActualCentavos: data.saldoActualCentavos,
 
     descubiertoCentavos: data.descubiertoCentavos,
+
+    descubiertoVigenteDesde: timestampToIso(data.descubiertoVigenteDesde),
+
+    descubiertoActualizadoEl: timestampToIso(data.descubiertoActualizadoEl),
+
+    descubiertoActualizadoPor: data.descubiertoActualizadoPor ?? null,
 
     saldoActualizadoManualmenteEl: timestampToIso(data.saldoActualizadoManualmenteEl),
 
@@ -389,7 +411,22 @@ export async function syncCuentasFromProvider(input: {
 
   await ensureManualUsdAccounts(input.actorUid)
 
-
+  if (provider.getSaldosDiarios) {
+    try {
+      const hoy = snapshotDateId
+      const desde = sumarDiasFechaId(hoy, -9)
+      const saldosDiarios = await provider.getSaldosDiarios({ desde, hasta: hoy })
+      const guardados = await guardarSaldosDiarios(saldosDiarios, hoy)
+      console.info(
+        '[finanzas/cuentas] saldos diarios guardados=%d desde=%s hasta=%s',
+        guardados,
+        desde,
+        hoy,
+      )
+    } catch (error) {
+      console.error('[finanzas/cuentas] no se pudieron guardar los saldos diarios del banco', error)
+    }
+  }
 
   return { synced: accounts.length, provider: providerMode }
 
@@ -425,6 +462,23 @@ export async function setManualSaldoForCuenta(input: {
 
   return mapRow(row.id, row.data)
 
+}
+
+export async function setDescubiertoForCuenta(input: {
+  cuentaId: string
+  body: { descubiertoCentavos?: unknown; vigenteDesde?: unknown }
+  actorEmail: string
+}): Promise<CuentaListItem> {
+  const parsed = parseDescubiertoManual(input.body)
+  await updateDescubierto({
+    cuentaId: input.cuentaId,
+    descubiertoCentavos: parsed.descubiertoCentavos,
+    vigenteDesde: parsed.vigenteDesde,
+    actorEmail: input.actorEmail,
+  })
+  const row = await getCuentaDocument(input.cuentaId)
+  if (!row) throw new Error('Cuenta no encontrada')
+  return mapRow(row.id, row.data)
 }
 
 export interface PosicionCierreListItem {

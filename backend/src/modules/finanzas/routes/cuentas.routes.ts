@@ -1,10 +1,12 @@
 import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../auth/middleware.js'
+import { isFinanzasCajaLider } from '../cajachica/services/caja.access.js'
 import { resetManualUsdAccountsNeverLoaded } from '../services/cuentas.repository.js'
 import {
   capturePosicionCierre,
   listCuentasForApi,
   listPosicionCierresUltimos30Dias,
+  setDescubiertoForCuenta,
   setManualSaldoForCuenta,
   syncCuentasFromProvider,
 } from '../services/cuentas.service.js'
@@ -107,6 +109,40 @@ finanzasCuentasRouter.patch(
     } catch (err) {
       console.error('[finanzas/cuentas] saldo-manual', err)
       const message = err instanceof Error ? err.message : 'No se pudo actualizar el saldo'
+      const status = message.includes('no encontrada') ? 404 : 400
+      res.status(status).json({ error: message })
+    }
+  },
+)
+
+/** Acuerdo de descubierto por cuenta corriente: Interbanking no lo informa, se carga a mano. */
+finanzasCuentasRouter.patch(
+  '/:id/descubierto',
+  requireWorkspaceUser,
+  requireViewFinanzas,
+  async (req, res) => {
+    const user = req.authedUser
+    const actorEmail = user?.email?.trim()
+    if (!user || !actorEmail) {
+      res.status(401).json({ error: 'No autenticado' })
+      return
+    }
+    if (!isFinanzasCajaLider(user)) {
+      res
+        .status(403)
+        .json({ error: 'Solo el líder de Finanzas o un super admin pueden cambiar el descubierto' })
+      return
+    }
+    try {
+      const cuenta = await setDescubiertoForCuenta({
+        cuentaId: req.params.id,
+        body: (req.body ?? {}) as { descubiertoCentavos?: unknown; vigenteDesde?: unknown },
+        actorEmail,
+      })
+      res.json({ cuenta })
+    } catch (err) {
+      console.error('[finanzas/cuentas] descubierto', err)
+      const message = err instanceof Error ? err.message : 'No se pudo guardar el descubierto'
       const status = message.includes('no encontrada') ? 404 : 400
       res.status(status).json({ error: message })
     }

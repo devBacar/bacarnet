@@ -14,6 +14,8 @@ interface AccountCardProps {
   showBancoName?: boolean
   canEditManualSaldo?: boolean
   onEditManualSaldo?: () => void
+  canEditDescubierto?: boolean
+  onEditDescubierto?: () => void
 }
 
 function semaforoTexto(semaforo: keyof typeof SEMAFORO_LABEL): string {
@@ -36,6 +38,8 @@ export function AccountCard({
   showBancoName = false,
   canEditManualSaldo = false,
   onEditManualSaldo,
+  canEditDescubierto = false,
+  onEditDescubierto,
 }: AccountCardProps) {
   const esCCInterbanking = cuenta.tipo === 'CC' && cuenta.origenSaldo === 'interbanking'
   const esManual = cuenta.origenSaldo === 'manual'
@@ -125,6 +129,31 @@ export function AccountCard({
               ) : null}
             </dd>
           </div>
+          {cuenta.descubiertoVigenteDesde ? (
+            <div className="flex justify-between gap-4">
+              <dt className="text-body-muted">Acuerdo vigente desde</dt>
+              <dd className="text-heading font-medium tabular-nums">
+                {new Date(cuenta.descubiertoVigenteDesde).toLocaleDateString('es-AR', {
+                  timeZone: 'America/Argentina/Buenos_Aires',
+                })}
+              </dd>
+            </div>
+          ) : null}
+          {cuenta.descubiertoActualizadoEl ? (
+            <p className="text-body-muted text-xs">
+              Cargado a mano el {formatManualFecha(cuenta.descubiertoActualizadoEl)}
+              {cuenta.descubiertoActualizadoPor ? ` por ${cuenta.descubiertoActualizadoPor}` : ''}
+            </p>
+          ) : null}
+          {canEditDescubierto && onEditDescubierto ? (
+            <button
+              type="button"
+              className="justify-self-start text-sm font-medium text-brand-primary hover:underline"
+              onClick={onEditDescubierto}
+            >
+              {cuenta.descubiertoCentavos != null ? 'Cambiar descubierto' : 'Cargar descubierto'}
+            </button>
+          ) : null}
         </dl>
       ) : null}
     </article>

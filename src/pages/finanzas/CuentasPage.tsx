@@ -6,55 +6,56 @@ import { useMemo, useState } from 'react'
 
 import toast from 'react-hot-toast'
 
-import { AccountCard } from '../../components/finanzas/AccountCard'
 import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
-import { AccountsSummary } from '../../components/finanzas/AccountsSummary'
-
-import { BankPositionsSection } from '../../components/finanzas/BankPositionsSection'
 import { CashflowSection } from '../../components/finanzas/CashflowSection'
+import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
+import { PosicionResumen } from '../../components/finanzas/PosicionResumen'
 import { PositionHistorySection } from '../../components/finanzas/PositionHistorySection'
 
-import {
-  computePosicionPorBanco,
-  groupCuentasByBanco,
-} from '../../components/finanzas/finanzasAggregates'
+import { computePosicionPorBanco } from '../../components/finanzas/finanzasAggregates'
 
 import {
   ManualSaldoModal,
   parseUsdInputToCentavos,
 } from '../../components/finanzas/ManualSaldoModal'
 
-import { SemaforoLegend } from '../../components/finanzas/SemaforoLegend'
-
 import { useAuth } from '../../context'
 
 import {
   fetchFinanzasCuentas,
   fetchFinanzasPosicionHistorial,
+  patchFinanzasDescubierto,
   patchFinanzasSaldoManual,
   syncFinanzasCuentas,
   type FinanzasCuenta,
   type FinanzasMoneda,
 } from '../../services/finanzasApi'
 
-import { hasFinanzasAccess } from '../../services/userService'
+import { hasFinanzasAccess, isSuperAdmin } from '../../services/userService'
 
 export function FinanzasCuentasPage() {
   const { user, userProfile } = useAuth()
   const queryClient = useQueryClient()
   const [manualCuenta, setManualCuenta] = useState<FinanzasCuenta | null>(null)
   const [savingManual, setSavingManual] = useState(false)
+  const [descubiertoCuenta, setDescubiertoCuenta] = useState<FinanzasCuenta | null>(null)
+  const [savingDescubierto, setSavingDescubierto] = useState(false)
   const [detalle, setDetalle] = useState<{
     moneda: FinanzasMoneda
     bancoNombre: string | null
   } | null>(null)
 
   const canEditManual = hasFinanzasAccess(userProfile)
+  /** Líder de Finanzas (permiso manage_finanzas_caja) o super admin; el backend valida lo mismo. */
+  const canEditDescubierto =
+    isSuperAdmin(userProfile) || userProfile?.permissions.manage_finanzas_caja === true
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['finanzas', 'cuentas'],
     queryFn: fetchFinanzasCuentas,
     enabled: Boolean(user),
+    // Relee los saldos guardados; no dispara un sync con Interbanking.
+    refetchInterval: 60_000,
   })
 
   const historialQuery = useQuery({
@@ -66,10 +67,6 @@ export function FinanzasCuentasPage() {
 
   const posicionPorBanco = useMemo(
     () => (data ? computePosicionPorBanco(data.cuentas) : []),
-    [data],
-  )
-  const gruposPorBanco = useMemo(
-    () => (data ? groupCuentasByBanco(data.cuentas) : []),
     [data],
   )
 
@@ -107,17 +104,31 @@ export function FinanzasCuentasPage() {
     }
   }
 
+  const handleSaveDescubierto = async (body: {
+    descubiertoCentavos: number | null
+    vigenteDesde: string | null
+  }) => {
+    if (!descubiertoCuenta) return
+    setSavingDescubierto(true)
+    try {
+      await patchFinanzasDescubierto(descubiertoCuenta.id, body)
+      await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cuentas'] })
+      toast.success(body.descubiertoCentavos == null ? 'Descubierto quitado' : 'Descubierto guardado')
+      setDescubiertoCuenta(null)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar el descubierto')
+    } finally {
+      setSavingDescubierto(false)
+    }
+  }
+
   return (
     <>
-      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-heading text-2xl font-bold tracking-tight sm:text-3xl">
-            Saldos bancarios
-          </h1>
-          <p className="text-body-muted mt-2 max-w-2xl text-sm">
-            Posición consolidada por moneda (pesos y dólares por separado), alineada al mail diario
-            de finanzas. Las cuentas corrientes se sincronizan con Interbanking; los saldos en USD
-            se cargan a mano.
+          <h1 className="text-heading text-2xl font-bold tracking-tight">Saldos bancarios</h1>
+          <p className="text-body-muted mt-1 max-w-2xl text-sm">
+            Los pesos se actualizan solos desde Interbanking; los dólares se cargan a mano.
           </p>
         </div>
         <button
@@ -142,69 +153,33 @@ export function FinanzasCuentasPage() {
           </p>
         </div>
       ) : data ? (
-        <div className="space-y-8">
-          <AccountsSummary
-            arsCentavos={data.totales.arsCentavos}
-            usdCentavos={data.totales.usdCentavos}
-            onSelectMoneda={(moneda) => setDetalle({ moneda, bancoNombre: null })}
-          />
-
-          <BankPositionsSection
-            rows={posicionPorBanco}
-            onSelectPosicion={(bancoNombre, moneda) => setDetalle({ moneda, bancoNombre })}
-          />
-
-          <CashflowSection />
-
-          <PositionHistorySection
-            rows={historialQuery.data?.cierres ?? []}
-            isLoading={historialQuery.isLoading}
-            error={historialQuery.error}
-          />
-
-          <section aria-labelledby="finanzas-cuentas-heading" className="space-y-6">
-            <div className="space-y-4">
-              <h2
-                id="finanzas-cuentas-heading"
-                className="text-heading text-lg font-semibold tracking-tight"
-              >
-                Detalle por cuenta
-              </h2>
-              <SemaforoLegend />
-            </div>
-
+        <div className="space-y-4">
+          <div className="grid items-start gap-4 lg:grid-cols-2">
             {data.cuentas.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-neutral-300 bg-neutral-50 px-6 py-10 text-center dark:border-zinc-700 dark:bg-zinc-950/50">
+              <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6 text-center dark:border-zinc-700 dark:bg-zinc-950/50">
                 <p className="text-sm font-medium text-neutral-700 dark:text-gray-300">
                   No hay cuentas cargadas
                 </p>
-                <p className="text-body-muted mx-auto mt-2 max-w-md text-sm">
-                  Ejecutá «Actualizar» para sincronizar las CC con Interbanking o el seed de
-                  Finanzas en el emulador.
+                <p className="text-body-muted mt-1 text-xs">
+                  Tocá «Actualizar» para traer las cuentas desde Interbanking.
                 </p>
               </div>
             ) : (
-              <div className="space-y-10">
-                {gruposPorBanco.map((grupo) => (
-                  <div key={grupo.bancoNombre} className="space-y-4">
-                    <h3 className="text-heading border-b border-neutral-200 pb-2 text-base font-semibold dark:border-zinc-800">
-                      {grupo.bancoNombre}
-                    </h3>
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                      {grupo.cuentas.map((cuenta) => (
-                        <AccountCard
-                          key={cuenta.id}
-                          cuenta={cuenta}
-                          canEditManualSaldo={canEditManual && cuenta.origenSaldo === 'manual'}
-                          onEditManualSaldo={() => setManualCuenta(cuenta)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <PosicionResumen
+                arsCentavos={data.totales.arsCentavos}
+                usdCentavos={data.totales.usdCentavos}
+                bancos={posicionPorBanco}
+                onSelect={(moneda, bancoNombre) => setDetalle({ moneda, bancoNombre })}
+              />
             )}
-          </section>
+            <PositionHistorySection
+              rows={historialQuery.data?.cierres ?? []}
+              isLoading={historialQuery.isLoading}
+              error={historialQuery.error}
+            />
+          </div>
+
+          <CashflowSection />
         </div>
       ) : null}
 
@@ -214,8 +189,17 @@ export function FinanzasCuentasPage() {
         moneda={detalle?.moneda ?? 'ARS'}
         bancoNombre={detalle?.bancoNombre}
         canEditManual={canEditManual}
+        canEditDescubierto={canEditDescubierto}
         onClose={() => setDetalle(null)}
         onEditManual={setManualCuenta}
+        onEditDescubierto={setDescubiertoCuenta}
+      />
+      <DescubiertoModal
+        cuenta={descubiertoCuenta}
+        open={descubiertoCuenta != null}
+        saving={savingDescubierto}
+        onClose={() => setDescubiertoCuenta(null)}
+        onSave={(body) => void handleSaveDescubierto(body)}
       />
       <ManualSaldoModal
         cuenta={manualCuenta}

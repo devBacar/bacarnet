@@ -17,6 +17,9 @@ export interface CuentaDocument {
   saldoActualCentavos: number
   descubiertoCentavos: number | null
   descubiertoVigenteDesde: Timestamp | null
+  /** Carga manual del acuerdo de descubierto (Interbanking no lo informa). */
+  descubiertoActualizadoEl?: Timestamp | null
+  descubiertoActualizadoPor?: string | null
   saldoActualizadoManualmenteEl: Timestamp | null
   /** Email del usuario que cargó el saldo manual (legible en UI). */
   saldoActualizadoManualmentePor: string | null

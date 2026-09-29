@@ -59,10 +59,20 @@ export async function upsertCuentaFromSync(input: {
       ? { createdAt: snapExisting.get('createdAt'), createdBy: snapExisting.get('createdBy') }
       : { createdAt: now, createdBy: input.actorUid }
 
+    // Interbanking no informa el acuerdo de descubierto (llega null): se conserva el cargado a mano.
+    const { descubiertoCentavos, descubiertoVigenteDesde, ...payloadSinDescubierto } = input.payload
+    const descubiertoFields =
+      descubiertoCentavos != null
+        ? { descubiertoCentavos, descubiertoVigenteDesde }
+        : existing.exists
+          ? {}
+          : { descubiertoCentavos: null, descubiertoVigenteDesde: null }
+
     tx.set(
       ref,
       {
-        ...input.payload,
+        ...payloadSinDescubierto,
+        ...descubiertoFields,
         origenSaldo: 'interbanking' satisfies OrigenSaldo,
         saldoActualizadoManualmenteEl: null,
         saldoActualizadoManualmentePor: null,
@@ -181,6 +191,37 @@ export async function updateManualSaldo(input: {
         saldoActualizadoManualmentePor: input.actorEmail,
         origenSaldo: 'manual',
         updatedAt: now,
+      },
+      { merge: true },
+    )
+  })
+}
+
+export async function updateDescubierto(input: {
+  cuentaId: string
+  descubiertoCentavos: number | null
+  vigenteDesde: Date | null
+  actorEmail: string
+}): Promise<void> {
+  const ref = cuentasCollection().doc(input.cuentaId)
+
+  await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) throw new Error('Cuenta no encontrada')
+    const data = snap.data() as CuentaDocument
+    if (data.tipo !== 'CC') {
+      throw new Error('El descubierto solo aplica a cuentas corrientes en pesos')
+    }
+
+    tx.set(
+      ref,
+      {
+        descubiertoCentavos: input.descubiertoCentavos,
+        descubiertoVigenteDesde:
+          input.descubiertoCentavos == null ? null : toTimestampOrNull(input.vigenteDesde),
+        descubiertoActualizadoEl: Timestamp.now(),
+        descubiertoActualizadoPor: input.actorEmail,
+        updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     )

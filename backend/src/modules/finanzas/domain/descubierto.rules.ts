@@ -50,3 +50,49 @@ export function computeDescubiertoEstado(
 
   return { porcentajeUsado, semaforo, superado }
 }
+
+/** Tope de cordura para la carga manual: $ 1 billón. */
+export const DESCUBIERTO_MAXIMO_CENTAVOS = 100_000_000_000_000
+
+export interface DescubiertoManualInput {
+  /** null o 0 = la cuenta no tiene acuerdo de descubierto. */
+  descubiertoCentavos: number | null
+  /** Fecha del acuerdo en Argentina (YYYY-MM-DD); opcional. */
+  vigenteDesde: string | null
+}
+
+/**
+ * Valida la carga manual del acuerdo de descubierto de una cuenta corriente.
+ * Interbanking no informa el límite: lo carga el líder de Finanzas o un super admin.
+ */
+export function parseDescubiertoManual(
+  input: { descubiertoCentavos?: unknown; vigenteDesde?: unknown },
+  hoy: Date = new Date(),
+): { descubiertoCentavos: number | null; vigenteDesde: Date | null } {
+  const raw = input.descubiertoCentavos
+  if (raw !== null && (typeof raw !== 'number' || !Number.isFinite(raw))) {
+    throw new Error('descubiertoCentavos debe ser un número en centavos o null')
+  }
+  if (raw != null && raw < 0) {
+    throw new Error('El descubierto se carga como monto positivo (el límite acordado)')
+  }
+  if (raw != null && raw > DESCUBIERTO_MAXIMO_CENTAVOS) {
+    throw new Error('El descubierto supera el máximo permitido')
+  }
+  const descubiertoCentavos = raw == null || Math.round(raw) === 0 ? null : Math.round(raw)
+  if (descubiertoCentavos == null) return { descubiertoCentavos: null, vigenteDesde: null }
+
+  const fecha = input.vigenteDesde
+  if (fecha == null || fecha === '') return { descubiertoCentavos, vigenteDesde: null }
+  if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    throw new Error('vigenteDesde debe tener formato AAAA-MM-DD')
+  }
+  const vigenteDesde = new Date(`${fecha}T00:00:00-03:00`)
+  if (Number.isNaN(vigenteDesde.getTime()) || vigenteDesde.toISOString().slice(0, 10) !== fecha) {
+    throw new Error('vigenteDesde no es una fecha válida')
+  }
+  if (vigenteDesde.getTime() > hoy.getTime()) {
+    throw new Error('La fecha del acuerdo no puede ser futura')
+  }
+  return { descubiertoCentavos, vigenteDesde }
+}

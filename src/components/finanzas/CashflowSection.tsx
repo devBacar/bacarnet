@@ -101,6 +101,12 @@ function DesgloseTabla({
                     />
                     {row.nombre}
                   </span>
+                  {row.categoriaId == null ? (
+                    <p className="text-body-muted mt-0.5 max-w-xs text-xs">
+                      Estos movimientos todavía no se identificaron automáticamente — podés
+                      categorizarlos en Movimientos.
+                    </p>
+                  ) : null}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums">
                   {formatMoneyCentavos(row.centavos, moneda)}
@@ -143,8 +149,9 @@ export function CashflowSection() {
           <h2 id="finanzas-cashflow-heading" className="text-heading text-lg font-semibold">
             Cashflow
           </h2>
-          <p className="text-body-muted mt-1 text-sm">
-            Entradas y salidas del día, por moneda. El saldo inicial es el último cierre anterior.
+          <p className="text-body-muted mt-1 max-w-xl text-sm">
+            Suma todas las cuentas de la empresa juntas. Pesos y dólares van por separado,
+            nunca mezclados. El saldo inicial es con qué plata arrancó el día.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -215,9 +222,9 @@ export function CashflowSection() {
               <p className="text-body-muted mt-1 text-xs">
                 {data.saldoInicial
                   ? saldoInicialOtroDia
-                    ? `Cierre del ${formatDay(data.saldoInicial.fechaId)}`
-                    : 'Cierre del día anterior'
-                  : 'Todavía no hay un cierre anterior a este día'}
+                    ? `Arranque tomado del cierre del ${formatDay(data.saldoInicial.fechaId)}.`
+                    : 'Arranque tomado del cierre de ayer.'
+                  : 'Todavía no hay un cierre anterior a este día.'}
               </p>
             </article>
             <article className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
@@ -225,12 +232,14 @@ export function CashflowSection() {
               <p className="mt-1 text-base font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
                 {formatMoneyCentavos(data.entradasCentavos, moneda)}
               </p>
+              <p className="text-body-muted mt-1 text-xs">Plata que entró en el día a todas las cuentas.</p>
             </article>
             <article className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
               <p className="text-body-muted text-xs">Salidas</p>
               <p className="mt-1 text-base font-semibold tabular-nums text-red-600 dark:text-red-400">
                 {formatMoneyCentavos(data.salidasCentavos, moneda)}
               </p>
+              <p className="text-body-muted mt-1 text-xs">Plata que salió en el día de todas las cuentas.</p>
             </article>
             <article className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
               <p className="text-body-muted text-xs">Saldo final</p>
@@ -241,8 +250,8 @@ export function CashflowSection() {
               </p>
               <p className="text-body-muted mt-1 text-xs">
                 {data.saldoFinal.estado === 'cerrado'
-                  ? 'Cierre de las 15:00'
-                  : 'En vivo, cierre pendiente'}
+                  ? 'Cierre de las 15hs. Esta foto ya quedó firme y no se mueve.'
+                  : 'En vivo, cierre pendiente. Este número va a seguir cambiando hasta las 15hs, cuando se cierra de manera definitiva.'}
               </p>
             </article>
           </div>

@@ -80,11 +80,20 @@ function integerOrNull(raw: unknown, options?: { zeroIsNull?: boolean }): number
 }
 
 /**
- * Descripción visible: el texto del banco, que viene siempre poblado.
- * La descripción corta de Interbanking es el respaldo.
+ * El banco a veces manda este texto en el día en curso (`movement-type=dia`)
+ * mientras el código identificable viaja en `code_description_ib`.
+ */
+const DESCRIPCION_BANCO_SIN_DATO = new Set(['NO INFORMADO', 'NO INFORMADA', 'S/D', 'N/A', '-', '.'])
+
+/**
+ * Descripción visible: el texto del banco. Si viene vacío o como "NO INFORMADO",
+ * se usa la descripción de Interbanking, que es la que matchean las reglas.
  */
 export function descripcionVisible(row: InterbankingMovementRow): string {
-  return optionalText(row.code_description_bank) ?? optionalText(row.code_description_ib) ?? 'Movimiento'
+  const bank = optionalText(row.code_description_bank)
+  const ib = optionalText(row.code_description_ib)
+  if (bank && !DESCRIPCION_BANCO_SIN_DATO.has(bank.toUpperCase())) return bank
+  return ib ?? bank ?? 'Movimiento'
 }
 
 export function mapInterbankingMovement(input: {

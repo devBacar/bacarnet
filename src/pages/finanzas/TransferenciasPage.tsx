@@ -4,6 +4,8 @@ import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
+import { AgendaDestinatariosPanel } from '../../components/finanzas/AgendaDestinatariosPanel'
+import { NuevaTransferenciaModal } from '../../components/finanzas/NuevaTransferenciaModal'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
@@ -63,6 +65,8 @@ export function FinanzasTransferenciasPage() {
   const [historialId, setHistorialId] = useState<string | null>(null)
   const [cancelarRow, setCancelarRow] = useState<TransferenciaListItem | null>(null)
   const [confirmando, setConfirmando] = useState<string | null>(null)
+  const [pestana, setPestana] = useState<'historial' | 'agenda'>('historial')
+  const [nuevaAbierta, setNuevaAbierta] = useState(false)
 
   const filters: TransferenciasListFilters = { estado, cuentaId, tipo, desde, hasta }
 
@@ -102,13 +106,48 @@ export function FinanzasTransferenciasPage() {
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="text-heading text-2xl font-semibold">Transferencias</h1>
-        <p className="text-body-muted mt-1 text-sm">
-          Historial de confecciones hechas desde BacarNet. Cancelar acá no cancela la operación en
-          Interbanking.
-        </p>
+      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-heading text-2xl font-semibold">Transferencias</h1>
+          <p className="text-body-muted mt-1 text-sm">
+            Historial de confecciones hechas desde BacarNet. Cancelar acá no cancela la operación en
+            Interbanking.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="w-full shrink-0 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white sm:w-auto"
+          onClick={() => setNuevaAbierta(true)}
+        >
+          Nueva transferencia
+        </button>
       </header>
+
+      <div className="mb-4 inline-flex w-full rounded-xl border border-neutral-200 p-1 dark:border-zinc-800 sm:w-auto">
+        <button
+          type="button"
+          onClick={() => setPestana('historial')}
+          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium sm:flex-none ${
+            pestana === 'historial' ? 'bg-brand-primary text-white' : 'text-body-muted'
+          }`}
+        >
+          Historial
+        </button>
+        <button
+          type="button"
+          onClick={() => setPestana('agenda')}
+          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium sm:flex-none ${
+            pestana === 'agenda' ? 'bg-brand-primary text-white' : 'text-body-muted'
+          }`}
+        >
+          Agenda de destinatarios
+        </button>
+      </div>
+
+      {pestana === 'agenda' ? <AgendaDestinatariosPanel /> : null}
+
+      {pestana === 'historial' ? (
+      <>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <label className="text-sm">
@@ -181,6 +220,8 @@ export function FinanzasTransferenciasPage() {
                   <td className="px-3 py-3">
                     <div className="font-medium">{row.direccion}</div>
                     {row.concepto ? <div className="text-body-muted text-xs">{row.concepto}</div> : null}
+                    {row.referencia ? <div className="text-body-muted text-xs">Ref. {row.referencia}</div> : null}
+                    {row.origen === 'directa' ? <div className="text-body-muted text-xs">Directa</div> : null}
                   </td>
                   <td className="px-3 py-3">{TIPO_LABEL[row.tipo] ?? row.tipo}</td>
                   <td className="px-3 py-3 tabular-nums">{formatMoneyCentavos(row.montoCentavos, 'ARS')}</td>
@@ -208,12 +249,14 @@ export function FinanzasTransferenciasPage() {
                           Cancelar
                         </button>
                       ) : null}
+                      {row.compromisoPagoId ? (
                       <Link
                         className="rounded border px-2 py-1 text-xs font-medium"
                         to={`/finanzas/agenda?compromiso=${encodeURIComponent(row.compromisoPagoId)}`}
                       >
                         Ver compromiso
                       </Link>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -264,6 +307,8 @@ export function FinanzasTransferenciasPage() {
           ) : null}
         </div>
       )}
+      </>
+      ) : null}
 
       {historialId ? (
         <HistorialModal
@@ -284,6 +329,7 @@ export function FinanzasTransferenciasPage() {
           }}
         />
       ) : null}
+      {nuevaAbierta ? <NuevaTransferenciaModal onClose={() => setNuevaAbierta(false)} /> : null}
     </>
   )
 }

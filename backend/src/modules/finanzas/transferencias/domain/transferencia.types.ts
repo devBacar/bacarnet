@@ -16,11 +16,19 @@ export type TransferenciaEstado =
 
 export type TransferenciaHistorialOrigen = 'api' | 'sync_automatico' | 'usuario'
 
+/** Ausente en confecciones viejas por compromiso. */
+export type TransferenciaOrigen = 'compromiso' | 'directa'
+
 export interface TransferenciaConfeccionadaDocument {
-  compromisoPagoId: string
+  compromisoPagoId: string | null
+  origen?: TransferenciaOrigen
   tipo: TransferenciaTipo
   cuentaDebitoId: string
   cuentaCreditoCbu: string
+  destinoNombre?: string | null
+  destinoCuit?: string | null
+  referencia?: string | null
+  idempotencyKey?: string | null
   montoCentavos: number
   concepto: string | null
   disclaimerAceptado: boolean | null

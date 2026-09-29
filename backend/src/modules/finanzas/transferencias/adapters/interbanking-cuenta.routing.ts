@@ -33,6 +33,11 @@ const CUENTA_ID_BY_CBU = new Map<string, string>(
     .map(([cuentaId, account]) => [account.account_cbu, cuentaId]),
 )
 
+export function cbuDeCuentaPropia(cuentaId: string): string | null {
+  const cbu = ROUTING_BY_CUENTA_ID[cuentaId]?.account_cbu?.replace(/\D/g, '') ?? ''
+  return cbu.length === 22 ? cbu : null
+}
+
 /** Cuenta propia conocida a partir del CBU, sin exponer el número. */
 export function findCuentaIdByCbu(cbuRaw: string): string | null {
   const cbu = cbuRaw.replace(/\D/g, '')

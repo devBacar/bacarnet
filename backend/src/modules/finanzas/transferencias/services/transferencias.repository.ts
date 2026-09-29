@@ -8,7 +8,36 @@ import type {
 } from '../domain/transferencia.types.js'
 
 export const TRANSFERENCIAS_COLLECTION = 'transferenciasConfeccionadas'
+export const IDEMPOTENCIA_COLLECTION = 'transferenciasIdempotencia'
 const HISTORIAL_SUB = 'historialEstados'
+
+function idempotenciaCollection() {
+  return adminDb().collection(IDEMPOTENCIA_COLLECTION)
+}
+
+export type IdempotenciaClaim =
+  | { kind: 'start' }
+  | { kind: 'replay'; transferenciaId: string }
+  | { kind: 'pending' }
+
+/** Reserva la clave antes de llamar al proveedor. El id se completa al guardar la transferencia. */
+export async function beginIdempotentConfeccion(key: string): Promise<IdempotenciaClaim> {
+  const ref = idempotenciaCollection().doc(key)
+  return adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (snap.exists) {
+      const id = snap.get('transferenciaId')
+      if (typeof id === 'string' && id.trim()) return { kind: 'replay', transferenciaId: id }
+      return { kind: 'pending' }
+    }
+    tx.set(ref, { transferenciaId: null, createdAt: FieldValue.serverTimestamp() })
+    return { kind: 'start' }
+  })
+}
+
+export async function abortIdempotentConfeccion(key: string): Promise<void> {
+  await idempotenciaCollection().doc(key).delete()
+}
 
 export function transferenciasCollection() {
   return adminDb().collection(TRANSFERENCIAS_COLLECTION)
@@ -34,10 +63,19 @@ export async function createTransferenciaWithHistorial(input: {
 }): Promise<void> {
   const ref = transferenciasCollection().doc(input.id)
   const now = FieldValue.serverTimestamp()
+  const idempotencyKey = input.doc.idempotencyKey?.trim() || ''
+  const claimRef = idempotencyKey ? idempotenciaCollection().doc(idempotencyKey) : null
 
   await adminDb().runTransaction(async (tx) => {
     const existing = await tx.get(ref)
+    const claimSnap = claimRef ? await tx.get(claimRef) : null
     if (existing.exists) throw new Error('Transferencia ya existe')
+    if (claimSnap?.exists) {
+      const currentId = claimSnap.get('transferenciaId')
+      if (typeof currentId === 'string' && currentId && currentId !== input.id) {
+        throw new Error('Esta transferencia ya fue confeccionada')
+      }
+    }
 
     tx.set(ref, {
       ...input.doc,
@@ -52,6 +90,10 @@ export async function createTransferenciaWithHistorial(input: {
       nota: input.historial.nota,
       fecha: now,
     })
+
+    if (claimRef) {
+      tx.set(claimRef, { transferenciaId: input.id, updatedAt: now }, { merge: true })
+    }
   })
 }
 
@@ -146,6 +188,33 @@ export async function cancelarTransferenciaYReabrirCompromiso(input: {
       estadoAnterior: input.estadoAnteriorCompromiso,
       estadoNuevo: 'pendiente',
       usuario: input.usuarioUid,
+      nota: input.nota,
+      fecha: now,
+    })
+  })
+}
+
+/** Cancelación local de una transferencia directa, sin compromiso que reabrir. */
+export async function marcarTransferenciaCancelada(input: {
+  transferenciaId: string
+  estadoAnterior: string
+  nota: string
+}): Promise<void> {
+  const transferenciaRef = transferenciasCollection().doc(input.transferenciaId)
+  const now = FieldValue.serverTimestamp()
+
+  await adminDb().runTransaction(async (tx) => {
+    const transferenciaSnap = await tx.get(transferenciaRef)
+    if (!transferenciaSnap.exists) throw new Error('Transferencia no encontrada')
+
+    tx.update(transferenciaRef, {
+      estado: 'cancelada',
+      updatedAt: now,
+    })
+    tx.set(transferenciaRef.collection(HISTORIAL_SUB).doc(), {
+      estadoAnterior: input.estadoAnterior,
+      estadoNuevo: 'cancelada',
+      origen: 'usuario' satisfies TransferenciaHistorialOrigen,
       nota: input.nota,
       fecha: now,
     })

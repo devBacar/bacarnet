@@ -33,6 +33,13 @@ export interface InterbankingConfeccionPostResult {
   parsed: ReturnType<typeof parseInterbankingConfeccionResponse>
 }
 
+/** Corte de seguridad: sin esta variable no sale ninguna confección real a Interbanking. */
+function assertTransferenciasRealesHabilitadas(): void {
+  if (process.env.INTERBANKING_TRANSFER_ALLOW_REAL !== 'true') {
+    throw new Error('Transferencias reales deshabilitadas: falta INTERBANKING_TRANSFER_ALLOW_REAL=true')
+  }
+}
+
 function requestDateArgentina(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 }
@@ -70,6 +77,7 @@ export class InterbankingTransferenciasProvider implements TransferenciasDataPro
     tipo: TransferenciaTipo,
     body: InterbankingConfeccionCommandOwnAccountV2 | Record<string, unknown>,
   ): Promise<InterbankingConfeccionPostResult> {
+    assertTransferenciasRealesHabilitadas()
     const path = INTERBANKING_CONFECTION_PATH_BY_TIPO[tipo]
     if (!path) {
       throw new Error(`Tipo de transferencia sin endpoint v2 de confección: ${tipo}`)
@@ -120,6 +128,7 @@ export class InterbankingTransferenciasProvider implements TransferenciasDataPro
   }
 
   async confeccionarLote(items: ConfeccionTransferenciaItem[]): Promise<ConfeccionTransferenciaResult> {
+    assertTransferenciasRealesHabilitadas()
     if (items.length !== 1) {
       throw new Error('Confección Interbanking v2: por ahora solo un ítem por lote.')
     }

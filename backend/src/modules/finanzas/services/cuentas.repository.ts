@@ -213,6 +213,21 @@ export async function getPosicionCierreDocument(
   return { id: snap.id, data: snap.data() as PosicionCierreDocument }
 }
 
+/** Último cierre estrictamente anterior a `fechaId` (el viernes, si el día previo es fin de semana). */
+export async function getPosicionCierreAnterior(
+  fechaId: string,
+): Promise<{ id: string; data: PosicionCierreDocument } | null> {
+  const snap = await adminDb()
+    .collection(POSICION_CIERRES_COLLECTION)
+    .where('fechaId', '<', fechaId)
+    .orderBy('fechaId', 'desc')
+    .limit(1)
+    .get()
+  const doc = snap.docs[0]
+  if (!doc) return null
+  return { id: doc.id, data: doc.data() as PosicionCierreDocument }
+}
+
 export async function listPosicionCierreDocuments(
   limit = 31,
 ): Promise<Array<{ id: string; data: PosicionCierreDocument }>> {

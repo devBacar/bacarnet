@@ -161,6 +161,12 @@ export async function replaceMovimientosRango(input: {
   rows: MovimientoBancarioMapped[]
   syncedBy: string
   primeraFechaCargada: string
+  /**
+   * El día en curso (`dia`) se reemplaza igual, pero no mueve la marca de agua:
+   * esa marca es el tope de `anteriores` (hasta ayer). Si avanzara a hoy, mañana
+   * el histórico no volvería a cerrar el día.
+   */
+  moverMarcaDeAgua?: boolean
 }): Promise<{ eliminados: number; insertados: number; autoCategorizados: number }> {
   const { eliminados, anotaciones } = await deleteRango({
     cuentaId: input.cuenta.cuentaId,
@@ -172,6 +178,10 @@ export async function replaceMovimientosRango(input: {
     syncedBy: input.syncedBy,
     anotaciones,
   })
+
+  if (input.moverMarcaDeAgua === false) {
+    return { eliminados, insertados, autoCategorizados }
+  }
 
   const ref = syncCollection().doc(input.cuenta.cuentaId)
   const now = FieldValue.serverTimestamp()
@@ -313,4 +323,36 @@ export async function scanMovimientosPorTexto(input: {
   }
 
   return { total, entradasCentavos, salidasCentavos, items }
+}
+
+export interface MovimientoCashflowRow {
+  moneda: 'ARS' | 'USD'
+  tipo: 'debito' | 'credito'
+  montoCentavos: number
+  categoriaId: string | null
+}
+
+/** Filas de un día (todas las cuentas) con los campos que usa el cashflow. */
+export async function listMovimientosCashflowDelDia(
+  fechaProceso: string,
+): Promise<MovimientoCashflowRow[]> {
+  const snap = await movimientosBancariosCollection()
+    .where('fechaProceso', '==', fechaProceso)
+    .select('moneda', 'tipo', 'montoCentavos', 'categoriaId')
+    .get()
+
+  const rows: MovimientoCashflowRow[] = []
+  for (const doc of snap.docs) {
+    const data = doc.data()
+    if (data.tipo !== 'credito' && data.tipo !== 'debito') continue
+    if (typeof data.montoCentavos !== 'number') continue
+    rows.push({
+      moneda: data.moneda === 'USD' ? 'USD' : 'ARS',
+      tipo: data.tipo,
+      montoCentavos: data.montoCentavos,
+      categoriaId:
+        typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null,
+    })
+  }
+  return rows
 }

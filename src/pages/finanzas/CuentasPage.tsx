@@ -11,6 +11,7 @@ import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailMod
 import { AccountsSummary } from '../../components/finanzas/AccountsSummary'
 
 import { BankPositionsSection } from '../../components/finanzas/BankPositionsSection'
+import { CashflowSection } from '../../components/finanzas/CashflowSection'
 import { PositionHistorySection } from '../../components/finanzas/PositionHistorySection'
 
 import {
@@ -152,6 +153,8 @@ export function FinanzasCuentasPage() {
             rows={posicionPorBanco}
             onSelectPosicion={(bancoNombre, moneda) => setDetalle({ moneda, bancoNombre })}
           />
+
+          <CashflowSection />
 
           <PositionHistorySection
             rows={historialQuery.data?.cierres ?? []}

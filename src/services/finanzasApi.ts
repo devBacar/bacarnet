@@ -98,6 +98,40 @@ export async function fetchFinanzasPosicionHistorial(): Promise<FinanzasPosicion
   return res.json() as Promise<FinanzasPosicionHistorialResponse>
 }
 
+export interface CashflowDesgloseItem {
+  categoriaId: string | null
+  nombre: string
+  color: string | null
+  centavos: number
+  porcentaje: number
+}
+
+export interface CashflowDiario {
+  fecha: string
+  moneda: FinanzasMoneda
+  saldoInicial: { fechaId: string; centavos: number } | null
+  entradasCentavos: number
+  salidasCentavos: number
+  saldoFinal:
+    | { estado: 'cerrado'; centavos: number }
+    | { estado: 'pendiente'; centavos: number | null }
+  entradas: CashflowDesgloseItem[]
+  salidas: CashflowDesgloseItem[]
+}
+
+export async function fetchCashflowDiario(
+  fecha: string,
+  moneda: FinanzasMoneda,
+): Promise<CashflowDiario> {
+  const params = new URLSearchParams({ fecha, moneda })
+  const res = await finanzasFetch(`/cashflow?${params.toString()}`)
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error ?? 'No se pudo calcular el cashflow')
+  }
+  return res.json() as Promise<CashflowDiario>
+}
+
 export async function patchFinanzasSaldoManual(
   cuentaId: string,
   saldoActualCentavos: number,

@@ -33,6 +33,7 @@ import {
   FinanzasAgendaPage,
   FinanzasTransferenciasPage,
   FinanzasMovimientosPage,
+  FinanzasExtractosPage,
   FinanzasCajasPage,
   FinanzasLayout,
   FinanzasIndexRedirect,
@@ -87,6 +88,7 @@ export function AppRoutes() {
                   <Route path="agenda" element={<FinanzasAgendaPage />} />
                   <Route path="transferencias" element={<FinanzasTransferenciasPage />} />
                   <Route path="movimientos" element={<FinanzasMovimientosPage />} />
+                  <Route path="extractos" element={<FinanzasExtractosPage />} />
                 </Route>
                 <Route path="cajas" element={<FinanzasCajasPage />} />
                 <Route path="cajachica" element={<Navigate to="/finanzas/cajas" replace />} />

@@ -3,13 +3,29 @@ import { resolveApiUrl } from './resolveApiUrl'
 
 export type MovimientoTipo = 'debito' | 'credito'
 
+export type ContraparteOrigen =
+  | 'manual'
+  | 'banco'
+  | 'transferencia'
+  | 'agenda'
+  | 'interbanking'
+  | 'directorio'
+  | 'categoria'
+
+export interface ContraparteMovimiento {
+  nombre: string | null
+  cuit: string | null
+  origen: ContraparteOrigen | null
+}
+
 export interface MovimientoListItem {
   id: string
   cuentaId: string
   bancoNombre: string
   fechaProceso: string
   descripcion: string
-  contraparte: string | null
+  /** Objeto nuevo. Un string es la respuesta vieja (el texto que mandaba el banco). */
+  contraparte: ContraparteMovimiento | string | null
   customerCuit: string | null
   tipo: MovimientoTipo
   montoCentavos: number
@@ -246,9 +262,28 @@ export async function aplicarReglasCategorizacion(): Promise<{
   }
 }
 
+export async function completarContrapartes(): Promise<{
+  revisados: number
+  actualizados: number
+}> {
+  const res = await movimientosFetch('/contrapartes/completar', { method: 'POST' })
+  const body = (await res.json().catch(() => null)) as {
+    error?: string
+    revisados?: number
+    actualizados?: number
+  } | null
+  if (!res.ok) throw new Error(body?.error ?? 'No se pudieron completar las contrapartes')
+  return { revisados: body?.revisados ?? 0, actualizados: body?.actualizados ?? 0 }
+}
+
 export async function actualizarMovimiento(
   movimientoId: string,
-  patch: { categoriaId?: string | null; nota?: string | null },
+  patch: {
+    categoriaId?: string | null
+    nota?: string | null
+    contraparteNombre?: string | null
+    contraparteCuit?: string | null
+  },
 ): Promise<MovimientoListItem> {
   const res = await movimientosFetch(`/${encodeURIComponent(movimientoId)}`, {
     method: 'PATCH',

@@ -4,6 +4,7 @@ import { useEffect, useId, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useSearchParams } from 'react-router-dom'
 import { CategoriasGestionModal } from '../../components/finanzas/CategoriasGestionModal'
+import { CeldaContraparte } from '../../components/finanzas/ContraparteMovimiento'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import { useAuth } from '../../context'
@@ -11,6 +12,7 @@ import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
   actualizarMovimiento,
   aplicarReglasCategorizacion,
+  completarContrapartes,
   crearCategoriaMovimiento,
   crearReglaCategorizacion,
   eliminarCategoriaMovimiento,
@@ -22,6 +24,7 @@ import {
   type MovimientoListItem,
   type MovimientoTipo,
 } from '../../services/finanzasMovimientosApi'
+import { isSuperAdmin } from '../../services/userService'
 import {
   CategoriaMovimientoChip,
   CategoriaMovimientoModal,
@@ -58,7 +61,9 @@ function formatFecha(iso: string): string {
 }
 
 export function FinanzasMovimientosPage() {
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
+  const puedeCompletar =
+    isSuperAdmin(userProfile) || userProfile?.permissions.manage_finanzas_caja === true
   const queryClient = useQueryClient()
   // El Cashflow manda acá con ?cuenta=&desde=&hasta=&q= para categorizar lo que falta.
   const [searchParams] = useSearchParams()
@@ -78,6 +83,7 @@ export function FinanzasMovimientosPage() {
   const [editando, setEditando] = useState<MovimientoListItem | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [gestionAbierta, setGestionAbierta] = useState(false)
+  const [completando, setCompletando] = useState(false)
   const categoriaFiltroId = useId()
 
   const { data: cuentasData } = useQuery({
@@ -131,7 +137,16 @@ export function FinanzasMovimientosPage() {
     if (!editando) return
     setGuardando(true)
     try {
-      await actualizarMovimiento(editando.id, { categoriaId: input.categoriaId, nota: input.nota })
+      await actualizarMovimiento(editando.id, {
+        categoriaId: input.categoriaId,
+        nota: input.nota,
+        ...(input.contraparte
+          ? {
+              contraparteNombre: input.contraparte.nombre,
+              contraparteCuit: input.contraparte.cuit,
+            }
+          : {}),
+      })
       if (input.aplicarATodos && input.categoriaId) {
         const regla = await crearReglaCategorizacion({
           descripcionExacta: editando.descripcion,
@@ -183,6 +198,23 @@ export function FinanzasMovimientosPage() {
     )
   }
 
+  async function completarAhora() {
+    setCompletando(true)
+    try {
+      const result = await completarContrapartes()
+      await invalidarTrasCambio()
+      toast.success(
+        result.actualizados > 0
+          ? `Se completaron ${result.actualizados.toLocaleString('es-AR')} movimientos`
+          : 'No había contrapartes nuevas para completar',
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudieron completar las contrapartes')
+    } finally {
+      setCompletando(false)
+    }
+  }
+
   async function eliminarCategoria(categoria: CategoriaMovimiento) {
     const result = await eliminarCategoriaMovimiento(categoria.id)
     if (categoriaId === categoria.id) setCategoriaId('')
@@ -219,6 +251,16 @@ export function FinanzasMovimientosPage() {
             <Tags className="h-4 w-4" aria-hidden />
             Ordenar categorías
           </button>
+          {puedeCompletar ? (
+            <button
+              type="button"
+              className="mt-2 inline-flex rounded-lg border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              disabled={completando}
+              onClick={() => void completarAhora()}
+            >
+              {completando ? 'Completando…' : 'Completar contrapartes'}
+            </button>
+          ) : null}
           <p className="text-body-muted mt-1.5 text-xs">
             Crear, agrupar o unir categorías y clasificar lo que quedó sin clasificar.
           </p>
@@ -339,7 +381,7 @@ export function FinanzasMovimientosPage() {
               <tr>
                 <th className="px-3 py-2">Fecha</th>
                 <th className="px-3 py-2">Descripción</th>
-                <th className="px-3 py-2">Contraparte</th>
+                <th className="px-3 py-2">De / Para</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2 text-right">Monto</th>
                 <th className="px-3 py-2">Categoría</th>
@@ -353,8 +395,7 @@ export function FinanzasMovimientosPage() {
                     <td className="whitespace-nowrap px-3 py-2">{formatFecha(row.fechaProceso)}</td>
                     <td className="px-3 py-2">{row.descripcion}</td>
                     <td className="px-3 py-2">
-                      {row.contraparte || '—'}
-                      {row.customerCuit ? <span className="text-body-muted block text-xs">{row.customerCuit}</span> : null}
+                      <CeldaContraparte contraparte={row.contraparte} onCompletar={() => setEditando(row)} />
                     </td>
                     <td className="px-3 py-2">
                       <span

@@ -96,7 +96,8 @@ function anotacionDeDocumento(data: DocumentData): AnotacionMovimiento | null {
   const categoriaId = typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null
   const nota = typeof data.nota === 'string' && data.nota.trim() ? data.nota.trim() : null
   const manual = data.contraparteOrigen === 'manual'
-  if (!categoriaId && !nota && !manual) return null
+  const detalleCaja = data.detalleCajaOrigen === 'manual' ? textoGuardado(data.detalleCaja) : null
+  if (!categoriaId && !nota && !manual && !detalleCaja) return null
   return {
     huella: huellaMovimiento(data),
     huellaSinDescripcion: huellaMovimientoSinDescripcion(data),
@@ -105,10 +106,12 @@ function anotacionDeDocumento(data: DocumentData): AnotacionMovimiento | null {
     contraparteNombre: manual ? textoGuardado(data.contraparteNombre) : null,
     contraparteCuit: manual ? textoGuardado(data.contraparteCuit) : null,
     contraparteOrigen: manual ? 'manual' : null,
+    detalleCaja,
+    detalleCajaOrigen: detalleCaja ? 'manual' : null,
   }
 }
 
-/** Borra el tramo y devuelve categoría/nota para reaplicarlas en las filas nuevas. */
+/** Borra el tramo y devuelve categoría, nota y detalle manual para reaplicarlos en las filas nuevas. */
 async function deleteRango(input: {
   cuentaId: string
   desde: string
@@ -484,4 +487,106 @@ export async function listMovimientosCashflowDelDia(
     })
   }
   return rows
+}
+
+export interface MovimientoCajaRow {
+  id: string
+  cuentaId: string
+  bancoNombre: string
+  tipo: 'debito' | 'credito'
+  montoCentavos: number
+  descripcion: string
+  categoriaId: string | null
+  detalleCaja: string | null
+  detalleCajaOrigen: 'manual' | 'sugerido' | null
+  contraparteNombre: string | null
+  depositorDescription: string | null
+}
+
+/** Movimientos de un día, con lo que hace falta para armar la planilla de caja. */
+export async function listMovimientosCajaDelDia(fechaProceso: string): Promise<MovimientoCajaRow[]> {
+  const snap = await movimientosBancariosCollection()
+    .where('fechaProceso', '==', fechaProceso)
+    .select(
+      'cuentaId',
+      'bancoNombre',
+      'tipo',
+      'montoCentavos',
+      'descripcion',
+      'categoriaId',
+      'detalleCaja',
+      'detalleCajaOrigen',
+      'contraparteNombre',
+      'depositorDescription',
+    )
+    .get()
+
+  const rows: MovimientoCajaRow[] = []
+  for (const doc of snap.docs) {
+    const data = doc.data()
+    if (data.tipo !== 'credito' && data.tipo !== 'debito') continue
+    if (typeof data.montoCentavos !== 'number') continue
+    const origen = data.detalleCajaOrigen
+    rows.push({
+      id: doc.id,
+      cuentaId: typeof data.cuentaId === 'string' ? data.cuentaId : '',
+      bancoNombre: typeof data.bancoNombre === 'string' ? data.bancoNombre : '',
+      tipo: data.tipo,
+      montoCentavos: data.montoCentavos,
+      descripcion: typeof data.descripcion === 'string' ? data.descripcion : '',
+      categoriaId: typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null,
+      detalleCaja: typeof data.detalleCaja === 'string' && data.detalleCaja.trim() ? data.detalleCaja.trim() : null,
+      detalleCajaOrigen: origen === 'manual' || origen === 'sugerido' ? origen : null,
+      contraparteNombre:
+        typeof data.contraparteNombre === 'string' && data.contraparteNombre.trim()
+          ? data.contraparteNombre.trim()
+          : null,
+      depositorDescription:
+        typeof data.depositorDescription === 'string' && data.depositorDescription.trim()
+          ? data.depositorDescription.trim()
+          : null,
+    })
+  }
+  return rows
+}
+
+/**
+ * Pone el mismo detalle de caja en los movimientos del día con el mismo texto del banco.
+ * Filtra la descripción en memoria para no pedir un índice nuevo.
+ */
+export async function actualizarDetalleCajaMismoTexto(input: {
+  cuentaId: string
+  fechaProceso: string
+  descripcion: string
+  detalleCaja: string | null
+  detalleCajaOrigen: 'manual' | null
+}): Promise<number> {
+  const descripcion = input.descripcion.trim()
+  const query = movimientosBancariosCollection()
+    .where('cuentaId', '==', input.cuentaId)
+    .where('fechaProceso', '==', input.fechaProceso)
+  const patch = {
+    detalleCaja: input.detalleCaja,
+    detalleCajaOrigen: input.detalleCajaOrigen,
+  }
+  let actualizados = 0
+  let cursor: QueryDocumentSnapshot | null = null
+  for (;;) {
+    let page = query.orderBy(FieldPath.documentId()).limit(WRITE_CHUNK)
+    if (cursor) page = page.startAfter(cursor)
+    const snap = await page.get()
+    if (snap.empty) return actualizados
+    const batch = adminDb().batch()
+    let enBatch = 0
+    for (const doc of snap.docs) {
+      const texto = typeof doc.get('descripcion') === 'string' ? String(doc.get('descripcion')).trim() : ''
+      if (texto !== descripcion) continue
+      batch.update(doc.ref, patch)
+      enBatch += 1
+    }
+    if (enBatch > 0) await batch.commit()
+    actualizados += enBatch
+    cursor = snap.docs[snap.docs.length - 1] ?? null
+    if (snap.size < WRITE_CHUNK) return actualizados
+  }
 }

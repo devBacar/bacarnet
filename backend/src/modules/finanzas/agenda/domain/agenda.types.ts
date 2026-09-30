@@ -3,6 +3,17 @@ import type { PrioridadUrgencia } from './agenda.prioridad.js'
 
 export type MedioPago = 'transferencia' | 'cheque' | 'efectivo'
 
+export type MonedaCompromiso = 'ARS' | 'USD'
+
+export interface PagoCompromisoRegistrado {
+  fecha: string
+  montoCentavos: number
+  medio: MedioPago
+  referenciaId: string | null
+  registradoPor: string
+  registradoAt: Timestamp
+}
+
 export type CompromisoEstado =
   | 'pendiente'
   | 'vencido'
@@ -28,6 +39,16 @@ export interface CompromisoPagoDocument {
   pagadoPor: string | null
   esViatico: boolean
   beneficiarioEmpleado: string | null
+  /** Docs viejos sin el campo: Otros egresos. */
+  grupo?: string
+  /** Docs viejos sin el campo: pesos. */
+  moneda?: MonedaCompromiso
+  deudaTotalCentavos?: number | null
+  cuotaNumero?: number | null
+  cuotaTotal?: number | null
+  observacion?: string | null
+  /** Docs viejos sin el campo: []. Un pagado sin pagos cuenta como pago completo. */
+  pagos?: PagoCompromisoRegistrado[]
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string

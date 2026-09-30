@@ -38,6 +38,14 @@ export interface CompromisoAgendaItem {
   alertaVencimiento: VencimientoAlerta
   esViatico?: boolean
   beneficiarioEmpleado?: string | null
+  grupo?: string
+  moneda?: 'ARS' | 'USD'
+  deudaTotalCentavos?: number | null
+  cuotaNumero?: number | null
+  cuotaTotal?: number | null
+  observacion?: string | null
+  acumuladoCentavos?: number
+  restanteCentavos?: number
 }
 
 export interface CobroAgendaItem {
@@ -110,6 +118,17 @@ export async function createCobroAgenda(body: Record<string, unknown>) {
     throw new Error(payload.error ?? 'No se pudo crear el cobro')
   }
   return res.json()
+}
+
+export async function patchCompromisoAgenda(id: string, body: Record<string, unknown>) {
+  const res = await agendaFetch(`/compromisos/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(payload.error ?? 'No se pudo editar el compromiso')
+  }
 }
 
 export async function patchCompromisoUrgencia(id: string, urgenciaManual: PrioridadUrgencia | null) {

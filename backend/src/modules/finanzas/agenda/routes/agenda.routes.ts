@@ -13,6 +13,7 @@ import {
   getCompromisoHistorialApi,
   listCompromisosAgenda,
   marcarCompromisoPagado,
+  patchCompromisoAgenda,
   patchCompromisoUrgencia,
 } from '../services/compromisos.service.js'
 
@@ -41,6 +42,21 @@ finanzasAgendaRouter.post('/compromisos', async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error al crear compromiso'
     res.status(400).json({ error: message })
+  }
+})
+
+finanzasAgendaRouter.patch('/compromisos/:id', async (req, res) => {
+  try {
+    const compromiso = await patchCompromisoAgenda(
+      req.params.id,
+      req.authedUser!.uid,
+      req.body as Record<string, unknown>,
+    )
+    res.json({ compromiso })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo editar el compromiso'
+    const status = /no encontr/i.test(message) ? 404 : 400
+    res.status(status).json({ error: message })
   }
 })
 

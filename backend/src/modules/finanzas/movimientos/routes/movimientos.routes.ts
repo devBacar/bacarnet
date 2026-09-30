@@ -57,6 +57,8 @@ finanzasMovimientosRouter.patch('/:id', async (req, res) => {
       nota?: unknown
       contraparteNombre?: unknown
       contraparteCuit?: unknown
+      detalleCaja?: unknown
+      aplicarAlMismoTexto?: unknown
     }
     const input: {
       movimientoId: string
@@ -64,8 +66,12 @@ finanzasMovimientosRouter.patch('/:id', async (req, res) => {
       nota?: string | null
       contraparteNombre?: string | null
       contraparteCuit?: string | null
+      detalleCaja?: string | null
+      aplicarAlMismoTexto?: boolean
+      actorUid?: string
     } = {
       movimientoId: id,
+      actorUid: req.authedUser?.uid ?? '',
     }
     if (Object.prototype.hasOwnProperty.call(body, 'categoriaId')) {
       if (body.categoriaId == null || body.categoriaId === '') input.categoriaId = null
@@ -98,6 +104,21 @@ finanzasMovimientosRouter.patch('/:id', async (req, res) => {
         res.status(400).json({ error: 'El CUIT tiene que ser texto' })
         return
       }
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'detalleCaja')) {
+      if (body.detalleCaja == null) input.detalleCaja = null
+      else if (typeof body.detalleCaja === 'string') input.detalleCaja = body.detalleCaja
+      else {
+        res.status(400).json({ error: 'El detalle tiene que ser texto' })
+        return
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'aplicarAlMismoTexto')) {
+      if (typeof body.aplicarAlMismoTexto !== 'boolean') {
+        res.status(400).json({ error: 'aplicarAlMismoTexto tiene que ser sí o no' })
+        return
+      }
+      input.aplicarAlMismoTexto = body.aplicarAlMismoTexto
     }
     const movimiento = await actualizarAnotacionMovimiento(input)
     res.json({ movimiento })

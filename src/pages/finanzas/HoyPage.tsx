@@ -3,6 +3,8 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
 import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
+import { CajaDelDia } from '../../components/finanzas/hoy/CajaDelDia'
+import { CompromisosMes } from '../../components/finanzas/hoy/CompromisosMes'
 import {
   ComoLoPagasModal,
   EfectivoModal,
@@ -81,6 +83,18 @@ export function FinanzasHoyPage() {
     await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cajas'] })
     await queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
     await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques'] })
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'compromisos-mes'] })
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'caja-dia'] })
+  }
+
+  /** "Pagar" desde la planilla del mes abre la misma ventana que los pagos de hoy. */
+  function pagarDesdePlanilla(compromisoId: string) {
+    const pago = data?.pagos.filas.find((fila) => fila.id === compromisoId)
+    if (pago) {
+      setPagoModo(pago)
+      return
+    }
+    toast('Ese compromiso no vence hoy. Pagalo desde su día o desde la Agenda.')
   }
 
   async function correr(tarea: () => Promise<string>, cerrar: () => void) {
@@ -145,6 +159,9 @@ export function FinanzasHoyPage() {
         <>
           {data.hayDatosDemo ? <FranjaDemo borrando={borrandoDemo} onBorrar={() => void borrarDemo()} /> : null}
           <EncabezadoHoy data={data} />
+          {/* Sus dos planillas de siempre, llenas solas: la caja del día y los compromisos del mes. */}
+          <CajaDelDia />
+          <CompromisosMes onPagar={pagarDesdePlanilla} />
           {data.vacio ? (
             <>
               <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">

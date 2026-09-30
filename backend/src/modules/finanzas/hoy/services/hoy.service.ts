@@ -1,4 +1,5 @@
 import { agendaTimestampToDate, agendaTimestampToIso } from '../../agenda/domain/agendaTimestamps.js'
+import { listarPagos, restanteAPagarCentavos } from '../../agenda/domain/pago-compromiso.js'
 import { parsePrioridadUrgencia } from '../../agenda/domain/agenda.prioridad.js'
 import type { CobroEsperadoDocument, CompromisoPagoDocument, MedioPago } from '../../agenda/domain/agenda.types.js'
 import { listAllCobros, listAllCompromisos } from '../../agenda/services/agenda.repository.js'
@@ -60,7 +61,11 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
     id,
     concepto: data.concepto,
     proveedorONombre: data.proveedorONombre,
-    montoCentavos: data.montoCentavos,
+    montoCentavos: restanteAPagarCentavos({
+      estado: data.estado,
+      montoCentavos: data.montoCentavos,
+      pagos: listarPagos(data.pagos),
+    }),
     fechaVencimiento,
     urgencia: parsePrioridadUrgencia(data.urgenciaManual),
     medioPago: medioDe(data.medioPago),

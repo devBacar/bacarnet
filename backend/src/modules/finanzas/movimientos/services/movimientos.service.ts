@@ -22,8 +22,11 @@ import {
   sumMovimientosCentavos,
   toListadoItem,
   tomarTurnoSyncMovimientos,
+  actualizarDetalleCajaMismoTexto,
   type MovimientoListadoItem,
 } from './movimientos.repository.js'
+import { normalizarDetalleCaja } from '../domain/detalle-caja.js'
+import { registrarUsoDetalleCaja } from './detalles-caja.repository.js'
 import { cuitOnceDigitos, nombreContraparteLimpio } from '../../contraparte/domain/normalizar.js'
 import {
   enriquecerContrapartes,
@@ -436,6 +439,9 @@ export async function actualizarAnotacionMovimiento(input: {
   nota?: string | null
   contraparteNombre?: string | null
   contraparteCuit?: string | null
+  detalleCaja?: string | null
+  aplicarAlMismoTexto?: boolean
+  actorUid?: string
 }): Promise<MovimientoListadoItem> {
   const id = input.movimientoId.trim()
   if (!id || id === 'sync' || id === 'contrapartes') {
@@ -445,8 +451,15 @@ export async function actualizarAnotacionMovimiento(input: {
   const tieneNota = Object.prototype.hasOwnProperty.call(input, 'nota')
   const tieneNombre = Object.prototype.hasOwnProperty.call(input, 'contraparteNombre')
   const tieneCuit = Object.prototype.hasOwnProperty.call(input, 'contraparteCuit')
-  if (!tieneCategoria && !tieneNota && !tieneNombre && !tieneCuit) {
-    throw new MovimientoAnotacionError('Indicá una categoría, una nota o de quién es el movimiento', 400)
+  const tieneDetalle = Object.prototype.hasOwnProperty.call(input, 'detalleCaja')
+  if (!tieneCategoria && !tieneNota && !tieneNombre && !tieneCuit && !tieneDetalle) {
+    throw new MovimientoAnotacionError(
+      'Indicá una categoría, una nota, de quién es el movimiento o el detalle de la caja',
+      400,
+    )
+  }
+  if (input.aplicarAlMismoTexto && !tieneDetalle) {
+    throw new MovimientoAnotacionError('Para aplicar a todos, indicá el detalle', 400)
   }
 
   const ref = movimientosBancariosCollection().doc(id)
@@ -460,6 +473,8 @@ export async function actualizarAnotacionMovimiento(input: {
     contraparteNombre?: string | null
     contraparteCuit?: string | null
     contraparteOrigen?: 'manual'
+    detalleCaja?: string | null
+    detalleCajaOrigen?: 'manual' | null
   } = {}
   if (tieneCategoria) {
     if (input.categoriaId == null || input.categoriaId === '') {
@@ -489,8 +504,38 @@ export async function actualizarAnotacionMovimiento(input: {
     patch.contraparteCuit = cuitOnceDigitos(cuitCrudo)
     patch.contraparteOrigen = 'manual'
   }
+  if (tieneDetalle) {
+    try {
+      patch.detalleCaja = normalizarDetalleCaja(input.detalleCaja)
+    } catch (err) {
+      throw new MovimientoAnotacionError(err instanceof Error ? err.message : 'Detalle inválido', 400)
+    }
+    patch.detalleCajaOrigen = patch.detalleCaja ? 'manual' : null
+  }
 
   await ref.update(patch)
+  let usosDetalle = 1
+  if (tieneDetalle && input.aplicarAlMismoTexto) {
+    const cuentaId = typeof previo.cuentaId === 'string' ? previo.cuentaId : ''
+    const fechaProceso = typeof previo.fechaProceso === 'string' ? previo.fechaProceso : ''
+    const descripcion = typeof previo.descripcion === 'string' ? previo.descripcion : ''
+    if (cuentaId && fechaProceso) {
+      usosDetalle = await actualizarDetalleCajaMismoTexto({
+        cuentaId,
+        fechaProceso,
+        descripcion,
+        detalleCaja: patch.detalleCaja ?? null,
+        detalleCajaOrigen: patch.detalleCajaOrigen ?? null,
+      })
+    }
+  }
+  if (patch.detalleCaja) {
+    await registrarUsoDetalleCaja({
+      texto: patch.detalleCaja,
+      creadoPor: input.actorUid?.trim() || 'sistema',
+      veces: Math.max(1, usosDetalle),
+    })
+  }
   if (patch.contraparteOrigen === 'manual' && patch.contraparteNombre && patch.contraparteCuit) {
     await propagarContraparteManual({
       exceptoMovimientoId: id,

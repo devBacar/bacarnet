@@ -1,4 +1,5 @@
 import type { AuthedUser } from '../../../auth/middleware.js'
+import { listarPagos, leerMontoSolicitado, resolverMontoPago, restanteAPagarCentavos } from '../../agenda/domain/pago-compromiso.js'
 import { getCobroDocument, getCompromisoDocument } from '../../agenda/services/agenda.repository.js'
 import { confirmarCobro, reprogramarCobro } from '../../agenda/services/cobros.service.js'
 import {
@@ -34,11 +35,25 @@ async function cajaEnPesos(user: AuthedUser, cajaId: string) {
   return caja
 }
 
+function montoQueSePaga(
+  compromiso: { estado: string; montoCentavos: number; pagos?: unknown },
+  montoCentavos: unknown,
+): number {
+  const restante = restanteAPagarCentavos({
+    estado: compromiso.estado,
+    montoCentavos: compromiso.montoCentavos,
+    pagos: listarPagos(compromiso.pagos),
+  })
+  if (restante <= 0) throw new Error('Ese pago ya está hecho')
+  return resolverMontoPago(restante, leerMontoSolicitado(montoCentavos))
+}
+
 export async function pagarCompromisoEnEfectivo(input: {
   user: AuthedUser
   compromisoId: string
   cajaId: string
   comprobante: Comprobante
+  montoCentavos?: unknown
 }) {
   const compromiso = await getCompromisoDocument(input.compromisoId)
   if (!compromiso) throw new Error('No encontré ese pago')
@@ -46,10 +61,11 @@ export async function pagarCompromisoEnEfectivo(input: {
   if (compromiso.estado === 'confeccionada_pendiente_autorizacion') {
     throw new Error('Esta transferencia ya está armada. No la pagues también en efectivo.')
   }
+  const monto = montoQueSePaga(compromiso, input.montoCentavos)
   const caja = await cajaEnPesos(input.user, input.cajaId)
-  if (caja.saldoActualCentavos < compromiso.montoCentavos) {
+  if (caja.saldoActualCentavos < monto) {
     throw new Error(
-      `En ${caja.nombre} hay ${formatoPesos(caja.saldoActualCentavos)} y este pago es ${formatoPesos(compromiso.montoCentavos)}. No alcanza.`,
+      `En ${caja.nombre} hay ${formatoPesos(caja.saldoActualCentavos)} y este pago es ${formatoPesos(monto)}. No alcanza.`,
     )
   }
   const hoy = fechaHoyArgentina(new Date())
@@ -59,7 +75,7 @@ export async function pagarCompromisoEnEfectivo(input: {
     body: {
       tipo: 'egreso',
       concepto: compromiso.concepto,
-      montoCentavos: compromiso.montoCentavos,
+      montoCentavos: monto,
       fecha: `${hoy}T12:00:00-03:00`,
     },
     comprobante: input.comprobante,
@@ -69,6 +85,7 @@ export async function pagarCompromisoEnEfectivo(input: {
     medioPago: 'efectivo',
     cuentaId: caja.id,
     fechaPago: `${hoy}T12:00:00-03:00`,
+    montoCentavos: monto,
     nota: `Pagado en efectivo desde ${caja.nombre}`,
   })
   return {
@@ -119,12 +136,13 @@ export async function yaPagueCompromiso(input: {
 }) {
   const compromiso = await getCompromisoDocument(input.compromisoId)
   if (!compromiso) throw new Error('No encontré ese pago')
+  const monto = montoQueSePaga(compromiso, input.body.montoCentavos)
   const movimientoId = typeof input.body.movimientoId === 'string' ? input.body.movimientoId.trim() : ''
   let cuentaId = typeof input.body.cuentaId === 'string' ? input.body.cuentaId.trim() : ''
   if (movimientoId && input.body.medioPago === 'transferencia') {
     const movimiento = await getMovimientoHoy(movimientoId)
     if (!movimiento) throw new Error('No encontré ese movimiento del banco')
-    const coincide = sugerirDebitos(compromiso.montoCentavos, [movimiento], fechaHoyArgentina(new Date()), compromiso.cuentaId)
+    const coincide = sugerirDebitos(monto, [movimiento], fechaHoyArgentina(new Date()), compromiso.cuentaId)
     if (coincide.length === 0) {
       throw new Error('Ese movimiento no coincide con el monto de los últimos 5 días')
     }
@@ -132,6 +150,7 @@ export async function yaPagueCompromiso(input: {
   }
   await marcarCompromisoYaPagado(input.compromisoId, input.user.uid, {
     ...input.body,
+    montoCentavos: monto,
     cuentaId: cuentaId || undefined,
     movimientoId: movimientoId || undefined,
   })

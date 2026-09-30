@@ -40,6 +40,9 @@ export interface ExtractoConsulta {
     faltanEnBacarnet: ItemControl[]
     sobranEnBacarnet: ItemControl[]
     porDia: ResultadoControl['porDia']
+    /** El período incluye hoy: el día en curso no se controla (el banco lo cierra a la noche). */
+    hoyEnCurso: boolean
+    hoy: string
   }
   archivo: string
 }
@@ -152,12 +155,20 @@ export async function consultarExtracto(input: {
   ])
 
   const armado = armarFilasExtracto(banco.dias)
+  // El día de hoy todavía no cerró: el banco lo suma al extracto recién a la noche, mientras
+  // BacarNet ya tiene los movimientos del día. Compararlo daría diferencias que no existen.
+  const hoyEnCurso = input.hasta >= hoy
+  const indicesControl = armado.filas.flatMap((fila, indice) => (fila.fechaProceso < hoy ? [indice] : []))
   const control = controlarExtracto({
-    filas: armado.filas,
-    movimientosBacarnet: nuestros,
-    dias: banco.dias,
+    filas: indicesControl.map((indice) => armado.filas[indice]!),
+    movimientosBacarnet: nuestros.filter((mov) => mov.fechaProceso < hoy),
+    dias: banco.dias.filter((dia) => dia.fecha < hoy),
   })
-  const categorias = aplicarCategorias(armado.filas, control.categoriaIdPorFila, reglas, nombres)
+  const categoriaIdPorFila: Array<string | null> = armado.filas.map(() => null)
+  indicesControl.forEach((indice, posicion) => {
+    categoriaIdPorFila[indice] = control.categoriaIdPorFila[posicion] ?? null
+  })
+  const categorias = aplicarCategorias(armado.filas, categoriaIdPorFila, reglas, nombres)
   const filas: FilaExtractoVista[] = armado.filas.map((fila, indice) => ({
     fecha: fila.fechaProceso,
     concepto: fila.descripcion,
@@ -186,6 +197,8 @@ export async function consultarExtracto(input: {
       faltanEnBacarnet: control.faltanEnBacarnet,
       sobranEnBacarnet: control.sobranEnBacarnet,
       porDia: control.porDia,
+      hoyEnCurso,
+      hoy,
     },
     archivo: nombreArchivoExtracto({
       bancoNombre: banco.bancoNombre,

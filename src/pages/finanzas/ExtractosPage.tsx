@@ -84,10 +84,20 @@ function ControlExtracto({ consulta, buscando }: { consulta: ExtractoConsulta | 
     )
   }
 
+  const avisoHoy = consulta.control.hoyEnCurso ? (
+    <p className="mt-2 text-sm">
+      El día de hoy ({formatFecha(consulta.control.hoy)}) todavía no cerró: el banco lo agrega al extracto
+      a la noche. Mañana podés volver a controlarlo.
+    </p>
+  ) : null
+
   if (consulta.control.coincide) {
     return (
       <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-100">
-        Está todo: BacarNet tiene los mismos movimientos que el extracto del banco.
+        {consulta.control.hoyEnCurso
+          ? 'Está todo hasta ayer: BacarNet tiene los mismos movimientos que el extracto del banco.'
+          : 'Está todo: BacarNet tiene los mismos movimientos que el extracto del banco.'}
+        {avisoHoy}
       </div>
     )
   }
@@ -114,6 +124,7 @@ function ControlExtracto({ consulta, buscando }: { consulta: ExtractoConsulta | 
           lineas={dias.map(textoDia)}
         />
       ) : null}
+      {avisoHoy}
     </div>
   )
 }

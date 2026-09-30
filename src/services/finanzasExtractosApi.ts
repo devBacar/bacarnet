@@ -52,6 +52,9 @@ export interface ExtractoConsulta {
     faltanEnBacarnet: ExtractoControlItem[]
     sobranEnBacarnet: ExtractoControlItem[]
     porDia: ExtractoControlDia[]
+    /** El período incluye hoy: el día en curso no se controla (el banco lo cierra a la noche). */
+    hoyEnCurso: boolean
+    hoy: string
   }
   archivo: string
 }

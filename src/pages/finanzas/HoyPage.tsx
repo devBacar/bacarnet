@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
+import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
+import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
 import {
   ComoLoPagasModal,
   EfectivoModal,
@@ -9,14 +11,20 @@ import {
   YaLoPagueModal,
 } from '../../components/finanzas/hoy/ModalesHoy'
 import {
+  FranjaDemo,
+  ResumenHoy,
+  TarjetaCheques,
   TarjetaDia,
   TarjetaIngresos,
   TarjetaPagos,
   TarjetaPrevision,
+  type AccionesBancoHoy,
 } from '../../components/finanzas/hoy/TarjetasHoy'
 import { NuevaTransferenciaModal, type PrecargaTransferenciaHoy } from '../../components/finanzas/NuevaTransferenciaModal'
 import { useAuth } from '../../context'
+import { fetchFinanzasCuentas, patchFinanzasDescubierto, type FinanzasCuenta } from '../../services/finanzasApi'
 import {
+  borrarDatosDemoHoy,
   cobrarHoyEnEfectivo,
   confirmarCobroHoy,
   fetchHoy,
@@ -29,27 +37,43 @@ import {
   type IngresoHoy,
   type PagoHoy,
 } from '../../services/finanzasHoyApi'
+import { isSuperAdmin } from '../../services/userService'
 
 type Reclamo = Pick<IngresoHoy, 'cliente' | 'textoReclamo' | 'email' | 'concepto'>
 
 export function FinanzasHoyPage() {
-  const { user } = useAuth()
+  const { user, userProfile } = useAuth()
   const queryClient = useQueryClient()
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['finanzas', 'hoy'],
     queryFn: fetchHoy,
     enabled: Boolean(user),
   })
+  const cuentasQuery = useQuery({
+    queryKey: ['finanzas', 'cuentas'],
+    queryFn: fetchFinanzasCuentas,
+    enabled: Boolean(user),
+  })
+  const cuentas = cuentasQuery.data?.cuentas ?? []
+  /** Líder de Finanzas (permiso manage_finanzas_caja) o super admin; el backend valida lo mismo. */
+  const canEditDescubierto =
+    isSuperAdmin(userProfile) || userProfile?.permissions.manage_finanzas_caja === true
+
   const [pagoModo, setPagoModo] = useState<PagoHoy | null>(null)
   const [pagoEfectivo, setPagoEfectivo] = useState<PagoHoy | null>(null)
   const [yaPague, setYaPague] = useState<PagoHoy | null>(null)
   const [reprogramarPago, setReprogramarPago] = useState<PagoHoy | null>(null)
   const [transferencia, setTransferencia] = useState<PrecargaTransferenciaHoy | null>(null)
+  const [transferirCuentaId, setTransferirCuentaId] = useState<string | null>(null)
   const [ingresoEfectivo, setIngresoEfectivo] = useState<IngresoHoy | null>(null)
   const [reprogramarIngreso, setReprogramarIngreso] = useState<IngresoHoy | null>(null)
   const [reclamo, setReclamo] = useState<Reclamo | null>(null)
+  const [detalleBanco, setDetalleBanco] = useState<string | null>(null)
+  const [descubiertoCuenta, setDescubiertoCuenta] = useState<FinanzasCuenta | null>(null)
+  const [savingDescubierto, setSavingDescubierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
+  const [borrandoDemo, setBorrandoDemo] = useState(false)
 
   async function recargar(mensaje: string) {
     toast.success(mensaje)
@@ -72,17 +96,60 @@ export function FinanzasHoyPage() {
     }
   }
 
+  async function borrarDemo() {
+    if (!window.confirm('¿Borramos los datos de ejemplo? Solo se borran los marcados como DEMO.')) return
+    setBorrandoDemo(true)
+    try {
+      const mensaje = await borrarDatosDemoHoy()
+      await recargar(mensaje)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudieron borrar los datos de ejemplo')
+    } finally {
+      setBorrandoDemo(false)
+    }
+  }
+
+  async function guardarDescubierto(body: { descubiertoCentavos: number | null; vigenteDesde: string | null }) {
+    if (!descubiertoCuenta) return
+    setSavingDescubierto(true)
+    try {
+      await patchFinanzasDescubierto(descubiertoCuenta.id, body)
+      setDescubiertoCuenta(null)
+      await recargar(body.descubiertoCentavos == null ? 'Descubierto quitado' : 'Descubierto guardado')
+      await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cuentas'] })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar el descubierto')
+    } finally {
+      setSavingDescubierto(false)
+    }
+  }
+
+  function cuentaCcDe(bancoNombre: string): FinanzasCuenta | undefined {
+    return cuentas.find(
+      (cuenta) => cuenta.bancoNombre === bancoNombre && cuenta.tipo === 'CC' && cuenta.moneda === 'ARS',
+    )
+  }
+
+  function accionesDe(bancoNombre: string): AccionesBancoHoy {
+    const cuentaCc = cuentaCcDe(bancoNombre)
+    return {
+      onAbrir: cuentas.length > 0 ? () => setDetalleBanco(bancoNombre) : undefined,
+      onTransferir: cuentaCc ? () => setTransferirCuentaId(cuentaCc.id) : undefined,
+      onCargarDescubierto: cuentaCc && canEditDescubierto ? () => setDescubiertoCuenta(cuentaCc) : undefined,
+    }
+  }
+
   return (
-    <div className="mx-auto grid max-w-5xl gap-6">
-      {isLoading ? <p className="text-lg">Estoy armando el día…</p> : null}
+    <div className="mx-auto grid max-w-5xl gap-6 sm:gap-8">
+      {isLoading ? <p className="text-heading text-2xl font-semibold">Estoy armando el día…</p> : null}
       {isError ? (
-        <div className="rounded-2xl border border-red-300 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950/40">
-          <p className="text-lg text-red-800 dark:text-red-100">
+        <div className="rounded-2xl border border-red-300 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950/40">
+          <p className="text-xl text-red-800 dark:text-red-100">
             {error instanceof Error ? error.message : 'No pude cargar el día.'}
           </p>
           <button
             type="button"
-            className="mt-3 min-h-12 rounded-xl bg-brand-primary px-4 font-semibold text-white"
+            className="mt-4 min-h-14 rounded-xl bg-brand-primary px-6 text-lg font-semibold text-white"
             onClick={() => void refetch()}
           >
             Probar de nuevo
@@ -91,9 +158,20 @@ export function FinanzasHoyPage() {
       ) : null}
       {data ? (
         <>
-          <p className="text-heading text-2xl font-semibold leading-snug sm:text-3xl">{data.saludo}</p>
+          {data.hayDatosDemo ? <FranjaDemo borrando={borrandoDemo} onBorrar={() => void borrarDemo()} /> : null}
+          <header>
+            <h1 className="text-heading text-3xl font-bold leading-tight sm:text-4xl">{data.saludo}</h1>
+            <div className="mt-5">
+              <ResumenHoy data={data} />
+            </div>
+          </header>
           {data.vacio ? (
-            <p className="text-heading text-2xl font-semibold">Hoy no hay nada pendiente. ¡Buen día!</p>
+            <>
+              <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-6 text-2xl font-semibold text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+                Hoy no hay nada pendiente. ¡Buen día! 👍
+              </p>
+              {data.dia.bancos.length > 0 ? <TarjetaDia dia={data.dia} accionesDe={accionesDe} /> : null}
+            </>
           ) : (
             <>
               <TarjetaPagos
@@ -119,7 +197,8 @@ export function FinanzasHoyPage() {
                 onReprogramar={setReprogramarIngreso}
                 onReclamar={setReclamo}
               />
-              <TarjetaDia dia={data.dia} />
+              <TarjetaDia dia={data.dia} accionesDe={accionesDe} />
+              <TarjetaCheques cheques={data.prevision.chequesADebitar} />
               <TarjetaPrevision
                 prevision={data.prevision}
                 onReclamar={(cobro: CobroAtrasadoHoy) => setReclamo(cobro)}
@@ -156,6 +235,12 @@ export function FinanzasHoyPage() {
       ) : null}
       {transferencia ? (
         <NuevaTransferenciaModal precarga={transferencia} onClose={() => setTransferencia(null)} />
+      ) : null}
+      {transferirCuentaId ? (
+        <NuevaTransferenciaModal
+          cuentaOrigenId={transferirCuentaId}
+          onClose={() => setTransferirCuentaId(null)}
+        />
       ) : null}
       {pagoEfectivo ? (
         <EfectivoModal
@@ -227,6 +312,28 @@ export function FinanzasHoyPage() {
         />
       ) : null}
       {reclamo ? <ReclamarModal ingreso={reclamo} onClose={() => setReclamo(null)} /> : null}
+
+      <AccountsDetailModal
+        open={detalleBanco != null}
+        cuentas={cuentas}
+        moneda="ARS"
+        bancoNombre={detalleBanco}
+        canEditManual={false}
+        canEditDescubierto={canEditDescubierto}
+        onClose={() => setDetalleBanco(null)}
+        onEditManual={() => undefined}
+        onEditDescubierto={(cuenta) => {
+          setDetalleBanco(null)
+          setDescubiertoCuenta(cuenta)
+        }}
+      />
+      <DescubiertoModal
+        cuenta={descubiertoCuenta}
+        open={descubiertoCuenta != null}
+        saving={savingDescubierto}
+        onClose={() => setDescubiertoCuenta(null)}
+        onSave={(body) => void guardarDescubierto(body)}
+      />
     </div>
   )
 }

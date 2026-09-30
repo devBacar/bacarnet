@@ -114,6 +114,8 @@ export interface HoyResponse {
     firmas: { cantidad: number; montoCentavos: number; texto: string } | null
     chequesADebitar: ChequesADebitarHoy
   }
+  /** Hay compromisos, cobros o cheques con `demo: true` (solo en el entorno de pruebas). */
+  hayDatosDemo: boolean
 }
 
 async function hoyFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -135,6 +137,14 @@ export async function fetchHoy(): Promise<HoyResponse> {
   const res = await hoyFetch('/')
   if (!res.ok) await leerError(res, 'No pude armar el día')
   return res.json() as Promise<HoyResponse>
+}
+
+/** Borra los datos de ejemplo. El backend responde 403 fuera del entorno de pruebas. */
+export async function borrarDatosDemoHoy(): Promise<string> {
+  const res = await hoyFetch('/demo', { method: 'DELETE' })
+  if (!res.ok) await leerError(res, 'No se pudieron borrar los datos de ejemplo')
+  const data = (await res.json()) as { mensaje: string }
+  return data.mensaje
 }
 
 export async function pagarHoyEnEfectivo(

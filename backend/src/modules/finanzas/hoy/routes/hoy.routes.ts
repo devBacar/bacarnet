@@ -10,6 +10,8 @@ import {
   pasarCompromisoDeDia,
   yaPagueCompromiso,
 } from '../services/hoy.acciones.js'
+import { esEntornoDePruebas, MENSAJE_SOLO_PRUEBAS, SoloEnPruebasError } from '../domain/hoy.demo.js'
+import { borrarDatosDemo } from '../services/hoy.demo.js'
 import { armarHoy, listarChequesEnCartera } from '../services/hoy.service.js'
 
 export const finanzasHoyRouter = Router()
@@ -27,6 +29,31 @@ finanzasHoyRouter.get('/', async (req, res) => {
   } catch (err) {
     console.error('[finanzas/hoy] armar', err)
     res.status(500).json({ error: 'No pude armar el día. Probá de nuevo en un rato.' })
+  }
+})
+
+/** Borra los datos de ejemplo (`demo: true`). Solo con el emulador; en producción responde 403. */
+finanzasHoyRouter.delete('/demo', async (_req, res) => {
+  if (!esEntornoDePruebas()) {
+    res.status(403).json({ error: MENSAJE_SOLO_PRUEBAS })
+    return
+  }
+  try {
+    const resultado = await borrarDatosDemo()
+    res.json({
+      ...resultado,
+      mensaje:
+        resultado.total === 0
+          ? 'No había datos de ejemplo para borrar.'
+          : `Listo. Borré ${resultado.total} ${resultado.total === 1 ? 'dato' : 'datos'} de ejemplo.`,
+    })
+  } catch (err) {
+    if (err instanceof SoloEnPruebasError) {
+      res.status(403).json({ error: err.message })
+      return
+    }
+    console.error('[finanzas/hoy] borrar demo', err)
+    res.status(500).json({ error: 'No pude borrar los datos de ejemplo.' })
   }
 })
 

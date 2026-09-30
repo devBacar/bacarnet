@@ -17,6 +17,7 @@ import type {
   CobroHoy,
   CompromisoHoy,
   CuentaHoy,
+  HoyVista,
   MovimientoHoy,
   TransferenciaHoy,
 } from '../domain/hoy.tipos.js'
@@ -27,6 +28,7 @@ import {
   type ChequeListadoItem,
 } from '../../cheques/services/cheques.repository.js'
 import { armarVistaHoy } from '../domain/hoy.vista.js'
+import { hayDatosDemo } from './hoy.demo.js'
 
 function diaDe(value: unknown): string | null {
   const date = agendaTimestampToDate(value)
@@ -178,12 +180,12 @@ export async function cerrarCompromisosConTransferenciaHecha(actorUid: string, n
   }
 }
 
-export async function armarHoy(input: { actorUid: string; now?: Date }) {
+export async function armarHoy(input: { actorUid: string; now?: Date }): Promise<HoyVista & { hayDatosDemo: boolean }> {
   const now = input.now ?? new Date()
   await cerrarCompromisosConTransferenciaHecha(input.actorUid, now)
   const hoy = fechaHoyArgentina(now)
   const hastaSemana = proximosDiasHabiles(hoy, 7).at(-1) ?? hoy
-  const [compromisos, cobros, cuentas, transferencias, movimientos, chequesEmitidos] = await Promise.all([
+  const [compromisos, cobros, cuentas, transferencias, movimientos, chequesEmitidos, datosDemo] = await Promise.all([
     listAllCompromisos(),
     listAllCobros(),
     listCuentaDocuments(),
@@ -194,6 +196,11 @@ export async function armarHoy(input: { actorUid: string; now?: Date }) {
       direccion: 'emitido',
       desde: hoy,
       hasta: hastaSemana,
+    }),
+    // Si la consulta falla, la franja DEMO no se muestra; el día se arma igual.
+    hayDatosDemo().catch((err: unknown) => {
+      console.error('[finanzas/hoy] hayDatosDemo', err)
+      return false
     }),
   ])
 
@@ -218,7 +225,7 @@ export async function armarHoy(input: { actorUid: string; now?: Date }) {
     fechaSolicitud: row.data.fechaSolicitudInterbanking ?? null,
   }))
 
-  return armarVistaHoy({
+  const vista = armarVistaHoy({
     now,
     compromisos: compromisos.flatMap((row) => {
       const mapped = mapCompromiso(row.id, row.data)
@@ -233,6 +240,7 @@ export async function armarHoy(input: { actorUid: string; now?: Date }) {
     transferencias: transferenciasHoy,
     cheques: chequesEmitidos.map(mapCheque),
   })
+  return { ...vista, hayDatosDemo: datosDemo }
 }
 
 /** Cheques recibidos que se pueden usar para pagar, del más parecido al monto al más lejano. */

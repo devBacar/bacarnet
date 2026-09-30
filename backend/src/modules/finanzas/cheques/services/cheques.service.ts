@@ -1,0 +1,569 @@
+import * as XLSX from 'xlsx'
+import type {
+  ChequeDireccion,
+  ChequeEstado,
+  ChequeImportRow,
+  ChequeOrigen,
+  ChequeTipo,
+} from '../domain/cheque.types.js'
+import {
+  countChequesFiltrados,
+  findExistingNumeros,
+  insertCheques,
+  pageCheques,
+  resumenDiario,
+  sumChequesCentavos,
+  sumChequesPorDireccion,
+  type ChequeListadoItem,
+  type ChequesFiltro,
+} from './cheques.repository.js'
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
+const PAGE_DEFAULT = 50
+const PAGE_MAX = 100
+
+// ── Listado API ──────────────────────────────────────────────────────
+
+export interface ChequesListadoQuery {
+  direccion?: string
+  origen?: string
+  estado?: string
+  tipo?: string
+  desde?: string
+  hasta?: string
+  page?: string
+  limit?: string
+}
+
+export interface ChequesListadoResponse {
+  direccion: ChequeDireccion | null
+  origen: ChequeOrigen | null
+  estado: ChequeEstado | null
+  tipo: ChequeTipo | null
+  desde: string | null
+  hasta: string | null
+  page: number
+  limit: number
+  total: number
+  totalCentavos: number
+  recibidosCentavos: number
+  emitidosCentavos: number
+  cheques: ChequeListadoItem[]
+}
+
+function parsePositiveInt(raw: string | undefined, fallback: number, max: number): number {
+  if (!raw) return fallback
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < 1) throw new Error('page y limit tienen que ser enteros mayores a 0')
+  return Math.min(n, max)
+}
+
+function validDireccion(raw: string | undefined): ChequeDireccion | null {
+  if (!raw) return null
+  if (raw !== 'recibido' && raw !== 'emitido') throw new Error(`direccion inválida: ${raw}`)
+  return raw
+}
+
+function validOrigen(raw: string | undefined): ChequeOrigen | null {
+  if (!raw) return null
+  const valid: ChequeOrigen[] = ['cliente', 'tercero', 'propio']
+  if (!valid.includes(raw as ChequeOrigen)) throw new Error(`origen inválido: ${raw}`)
+  return raw as ChequeOrigen
+}
+
+const VALID_ESTADOS: ChequeEstado[] = [
+  'en_cartera', 'depositado', 'vendido', 'rechazado',
+  'pendiente', 'debitado', 'anulado',
+]
+
+function validEstado(raw: string | undefined): ChequeEstado | null {
+  if (!raw) return null
+  if (!VALID_ESTADOS.includes(raw as ChequeEstado)) throw new Error(`estado inválido: ${raw}`)
+  return raw as ChequeEstado
+}
+
+function validTipo(raw: string | undefined): ChequeTipo | null {
+  if (!raw) return null
+  if (raw !== 'echeq' && raw !== 'fisico') throw new Error(`tipo inválido: ${raw}`)
+  return raw
+}
+
+export async function listChequesApi(query: ChequesListadoQuery): Promise<ChequesListadoResponse> {
+  const direccion = validDireccion(query.direccion?.trim())
+  const origen = validOrigen(query.origen?.trim())
+  const estado = validEstado(query.estado?.trim())
+  const tipo = validTipo(query.tipo?.trim())
+  const desde = query.desde?.trim() || null
+  const hasta = query.hasta?.trim() || null
+  if (desde && !ISO_DATE.test(desde)) throw new Error('desde debe tener formato AAAA-MM-DD')
+  if (hasta && !ISO_DATE.test(hasta)) throw new Error('hasta debe tener formato AAAA-MM-DD')
+  if (desde && hasta && desde > hasta) throw new Error('desde no puede ser posterior a hasta')
+
+  const page = parsePositiveInt(query.page, 1, 10_000)
+  const limit = parsePositiveInt(query.limit, PAGE_DEFAULT, PAGE_MAX)
+  const offset = (page - 1) * limit
+  const filtro: ChequesFiltro = { direccion, origen, estado, tipo, desde, hasta }
+  const baseFiltro = { origen, estado, tipo, desde, hasta }
+
+  const [total, totalCentavos, porDireccion, cheques] = await Promise.all([
+    countChequesFiltrados(filtro),
+    sumChequesCentavos(filtro),
+    sumChequesPorDireccion(baseFiltro),
+    pageCheques({ filtro, offset, limit }),
+  ])
+
+  return {
+    direccion, origen, estado, tipo, desde, hasta,
+    page, limit, total, totalCentavos,
+    recibidosCentavos: porDireccion.recibidosCentavos,
+    emitidosCentavos: porDireccion.emitidosCentavos,
+    cheques,
+  }
+}
+
+export function hoyArgentina(now = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}
+
+export async function getResumenDiario() {
+  const hoy = hoyArgentina()
+  return { fecha: hoy, ...(await resumenDiario(hoy)) }
+}
+
+// ── Shared helpers ──────────────────────────────────────────────────
+
+const FISICO_RE = /^\d{3}-\d{3}-\d{4}-\d{8}$/
+
+function detectTipo(numero: string): ChequeTipo {
+  if (numero.toUpperCase().startsWith('E-CHEQ')) return 'echeq'
+  return FISICO_RE.test(numero.trim()) ? 'fisico' : 'echeq'
+}
+
+function parseMontoCentavos(raw: string | number | null | undefined): number {
+  if (raw == null) return 0
+  if (typeof raw === 'number') return Math.round(raw * 100)
+  const s = String(raw).replace(/[$.]/g, '').replace(',', '.').trim()
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? Math.round(n * 100) : 0
+}
+
+const MESES_ES: Record<string, string> = {
+  ene: '01', feb: '02', mar: '03', abr: '04', may: '05', jun: '06',
+  jul: '07', ago: '08', set: '09', sep: '09', oct: '10', nov: '11', dic: '12',
+}
+
+function parseSpanishDate(raw: string): string {
+  if (!raw) return ''
+  const s = raw.trim()
+  if (ISO_DATE.test(s)) return s
+
+  if (s.includes('T')) {
+    const d = new Date(s)
+    if (!isNaN(d.getTime())) {
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+    }
+  }
+
+  const m = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/)
+  if (m) {
+    const mes = MESES_ES[m[2].toLowerCase()]
+    if (mes) return `${m[3]}-${mes}-${m[1].padStart(2, '0')}`
+  }
+
+  const parts = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/)
+  if (parts) {
+    const y = parts[3].length === 2 ? `20${parts[3]}` : parts[3]
+    return `${y}-${parts[2].padStart(2, '0')}-${parts[1].padStart(2, '0')}`
+  }
+
+  return ''
+}
+
+function formatExcelDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function inferEstadoRecibido(raw: string): ChequeEstado {
+  const norm = raw.toLowerCase().trim()
+  if (norm.includes('vendido')) return 'vendido'
+  if (norm.includes('depositado')) return 'depositado'
+  if (norm.includes('rechazado')) return 'rechazado'
+  return 'en_cartera'
+}
+
+export interface ImportResult {
+  insertados: number
+  ignorados: number
+  duplicados: number
+  errores: string[]
+}
+
+// ── Paste import (JSON rows) ────────────────────────────────────────
+
+export interface IngresarChequesRow {
+  numero: string
+  emisor: string
+  fechaEmision: string
+  fechaPago: string
+  montoPesos: string
+  cmc7: string
+  endosante: string
+  bancoEmisor: string
+  tipo: ChequeTipo
+  condicion: string
+}
+
+export async function ingresarChequesPegados(input: {
+  direccion: ChequeDireccion
+  origen: ChequeOrigen
+  rows: IngresarChequesRow[]
+  actorUid: string
+}): Promise<ImportResult> {
+  const importRows: ChequeImportRow[] = []
+  const errores: string[] = []
+  let ignorados = 0
+
+  for (let i = 0; i < input.rows.length; i++) {
+    const r = input.rows[i]
+    const numero = r.numero.trim()
+    const montoCentavos = parseMontoCentavos(r.montoPesos)
+
+    if (!numero && montoCentavos === 0) {
+      ignorados++
+      continue
+    }
+    if (!numero) {
+      errores.push(`Fila ${i + 1}: sin número de cheque`)
+      ignorados++
+      continue
+    }
+    if (montoCentavos <= 0) {
+      errores.push(`Fila ${i + 1}: importe inválido`)
+      ignorados++
+      continue
+    }
+
+    const endosanteRaw = r.endosante.trim() || null
+    const endosante = endosanteRaw && endosanteRaw.toUpperCase() !== 'AL PORTADOR' ? endosanteRaw : null
+
+    const emisorRaw = r.emisor.trim()
+    const cuitMatch = emisorRaw.match(/CUIT\s+([\d-]+)/)
+    const emisorCuit = cuitMatch ? cuitMatch[1] : ''
+    const emisorNombre = emisorRaw.replace(/\n?CUIT\s+[\d-]+/, '').trim()
+
+    importRows.push({
+      numero,
+      tipo: r.tipo,
+      direccion: input.direccion,
+      origen: input.origen,
+      emisor: emisorNombre || emisorRaw,
+      emisorCuit,
+      fechaEmision: parseSpanishDate(r.fechaEmision),
+      fechaPago: parseSpanishDate(r.fechaPago),
+      montoCentavos,
+      debeCentavos: null,
+      haberCentavos: null,
+      fechaRecibido: null,
+      fechaEntregado: null,
+      cliente: null,
+      destinatario: null,
+      estado: inferEstadoRecibido(r.condicion),
+      utilizado: null,
+      endosante,
+      bancoEmisor: r.bancoEmisor.trim() || null,
+      cmc7: r.cmc7.trim() || null,
+      observaciones: null,
+    })
+  }
+
+  if (importRows.length === 0) {
+    return { insertados: 0, ignorados, duplicados: 0, errores: [...errores, 'No se encontraron cheques válidos'] }
+  }
+
+  const existing = await findExistingNumeros(
+    input.direccion,
+    importRows.map((r) => r.numero),
+  )
+  const nuevos = importRows.filter((r) => !existing.has(r.numero))
+  const duplicados = importRows.length - nuevos.length
+
+  if (nuevos.length === 0) {
+    return { insertados: 0, ignorados, duplicados, errores }
+  }
+
+  const insertados = await insertCheques({ rows: nuevos, createdBy: input.actorUid })
+  return { insertados, ignorados, duplicados, errores }
+}
+
+// ── Excel import ────────────────────────────────────────────────────
+
+type RawRow = Record<string, unknown>
+
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 /]/g, '')
+    .trim()
+}
+
+function cellVal(row: unknown[], idx: number): unknown {
+  return idx >= 0 && idx < row.length ? row[idx] : null
+}
+
+function cellToStr(val: unknown): string {
+  if (val == null) return ''
+  if (val instanceof Date) return formatExcelDate(val)
+  return String(val).trim()
+}
+
+function cellToDate(val: unknown): string {
+  if (val == null) return ''
+  if (val instanceof Date) return formatExcelDate(val)
+  if (typeof val === 'string' && val.includes('T')) {
+    const d = new Date(val)
+    if (!isNaN(d.getTime())) {
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+    }
+  }
+  if (typeof val === 'number') {
+    const d = XLSX.SSF.parse_date_code(val)
+    if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
+  }
+  return parseSpanishDate(String(val))
+}
+
+// ── Detect format ────────────────────────────────────────────────────
+
+type ExcelFormato = 'recibidos' | 'emitidos-488' | 'desconocido'
+
+function detectarFormato(rows: unknown[][]): { formato: ExcelFormato; headerIdx: number } {
+  for (let i = 0; i < Math.min(20, rows.length); i++) {
+    const row = rows[i]
+    if (!row) continue
+    const cells = row.map((c) => normalize(cellToStr(c)))
+    if (cells.includes('cheque') && cells.includes('cliente')) {
+      return { formato: 'recibidos', headerIdx: i }
+    }
+    if (cells.includes('nro') && cells.includes('destinatario')) {
+      return { formato: 'emitidos-488', headerIdx: i }
+    }
+  }
+  return { formato: 'desconocido', headerIdx: -1 }
+}
+
+// ── Parser: recibidos ───────────────────────────────────────────────
+
+const CHEQUE_FIELD_RE = /CH\s*N°\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+)/i
+
+function parseRecibidosSheet(
+  rows: unknown[][],
+  headerIdx: number,
+): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+  const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
+  const col = (name: string) => header.indexOf(name)
+
+  const iCheque = col('cheque')
+  const iCliente = col('cliente')
+  const iRecibido = col('recibido')
+  const iEntregado = col('entregado')
+  const iImporte = col('importe')
+  const iVto = header.findIndex((h) => h.includes('fec') && h.includes('vto'))
+  const iDebe = col('debe')
+  const iHaber = col('haber')
+  const iEstado = col('estado')
+
+  const parsed: ChequeImportRow[] = []
+  const errores: string[] = []
+  let ignorados = 0
+
+  for (let ri = headerIdx + 1; ri < rows.length; ri++) {
+    const row = rows[ri]
+    if (!row) continue
+
+    const idVal = cellVal(row, 1)
+    if (typeof idVal !== 'number') continue
+
+    const importeRaw = cellVal(row, iImporte)
+    const montoCentavos = parseMontoCentavos(importeRaw as string | number | null)
+    if (montoCentavos <= 0) {
+      ignorados++
+      continue
+    }
+
+    const chequeStr = cellToStr(cellVal(row, iCheque))
+    const match = CHEQUE_FIELD_RE.exec(chequeStr)
+    if (!match) {
+      errores.push(`Fila ${ri + 1}: no se pudo parsear el campo Cheque`)
+      ignorados++
+      continue
+    }
+
+    const numero = match[1].trim()
+    const emisor = match[2].trim()
+    const bancoEmisor = match[3].trim()
+
+    const estadoRaw = cellToStr(cellVal(row, iEstado))
+    const debeRaw = cellVal(row, iDebe)
+    const haberRaw = cellVal(row, iHaber)
+
+    parsed.push({
+      numero,
+      tipo: detectTipo(numero),
+      direccion: 'recibido',
+      origen: 'tercero',
+      montoCentavos,
+      debeCentavos: parseMontoCentavos(debeRaw as string | number | null) || null,
+      haberCentavos: parseMontoCentavos(haberRaw as string | number | null) || null,
+      fechaEmision: '',
+      fechaPago: parseSpanishDate(cellToStr(cellVal(row, iVto))),
+      fechaRecibido: parseSpanishDate(cellToStr(cellVal(row, iRecibido))),
+      fechaEntregado: parseSpanishDate(cellToStr(cellVal(row, iEntregado))) || null,
+      emisor,
+      emisorCuit: '',
+      bancoEmisor: bancoEmisor || null,
+      cliente: cellToStr(cellVal(row, iCliente)) || null,
+      endosante: null,
+      destinatario: null,
+      estado: inferEstadoRecibido(estadoRaw),
+      utilizado: null,
+      cmc7: null,
+      observaciones: null,
+    })
+  }
+
+  return { parsed, errores, ignorados }
+}
+
+// ── Parser: emitidos (reporte 488) ──────────────────────────────────
+
+function parseEmitidos488Sheet(
+  rows: unknown[][],
+  headerIdx: number,
+): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+  const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
+  const col = (name: string) => header.indexOf(name)
+
+  const iNro = col('nro')
+  const iDmaEmision = col('dmafecemision')
+  const iDmaVto = col('dmafecvto')
+  const iDestinatario = col('destinatario')
+  const iImporte = col('importe')
+  const iUtilizado = col('utilizado')
+  const iRechazado = col('rechazado')
+
+  const parsed: ChequeImportRow[] = []
+  const errores: string[] = []
+  let ignorados = 0
+
+  for (let ri = headerIdx + 1; ri < rows.length; ri++) {
+    const row = rows[ri]
+    if (!row) continue
+
+    const nroRaw = cellToStr(cellVal(row, iNro))
+    if (!nroRaw) continue
+
+    const importeRaw = cellVal(row, iImporte)
+    const montoCentavos = parseMontoCentavos(importeRaw as string | number | null)
+    if (montoCentavos <= 0) {
+      errores.push(`Fila ${ri + 1}: importe inválido`)
+      ignorados++
+      continue
+    }
+
+    const rechazado = cellVal(row, iRechazado) === true
+    const utilizado = cellVal(row, iUtilizado) === true
+
+    let estado: ChequeEstado
+    if (rechazado) estado = 'rechazado'
+    else if (utilizado) estado = 'debitado'
+    else estado = 'pendiente'
+
+    parsed.push({
+      numero: nroRaw,
+      tipo: detectTipo(nroRaw),
+      direccion: 'emitido',
+      origen: 'propio',
+      montoCentavos,
+      debeCentavos: null,
+      haberCentavos: null,
+      fechaEmision: parseSpanishDate(cellToStr(cellVal(row, iDmaEmision))),
+      fechaPago: parseSpanishDate(cellToStr(cellVal(row, iDmaVto))),
+      fechaRecibido: null,
+      fechaEntregado: null,
+      emisor: '',
+      emisorCuit: '',
+      bancoEmisor: null,
+      cliente: null,
+      endosante: null,
+      destinatario: cellToStr(cellVal(row, iDestinatario)) || null,
+      estado,
+      utilizado,
+      cmc7: null,
+      observaciones: null,
+    })
+  }
+
+  return { parsed, errores, ignorados }
+}
+
+// ── Main Excel import ───────────────────────────────────────────────
+
+export async function importChequesExcel(input: {
+  buffer: Buffer
+  actorUid: string
+}): Promise<ImportResult> {
+  const workbook = XLSX.read(input.buffer, { type: 'buffer', cellDates: true })
+  const allRows: ChequeImportRow[] = []
+  const errores: string[] = []
+  let ignorados = 0
+
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName]
+    if (!sheet) continue
+    const rawRows = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: null })
+    if (rawRows.length === 0) continue
+
+    const { formato, headerIdx } = detectarFormato(rawRows)
+
+    if (formato === 'recibidos') {
+      const result = parseRecibidosSheet(rawRows, headerIdx)
+      allRows.push(...result.parsed)
+      errores.push(...result.errores)
+      ignorados += result.ignorados
+    } else if (formato === 'emitidos-488') {
+      const result = parseEmitidos488Sheet(rawRows, headerIdx)
+      allRows.push(...result.parsed)
+      errores.push(...result.errores)
+      ignorados += result.ignorados
+    } else {
+      errores.push(`Hoja "${sheetName}": formato no reconocido`)
+    }
+  }
+
+  if (allRows.length === 0) {
+    return { insertados: 0, ignorados, duplicados: 0, errores: [...errores, 'No se encontraron cheques válidos en el archivo'] }
+  }
+
+  const recibidos = allRows.filter((r) => r.direccion === 'recibido')
+  const emitidos = allRows.filter((r) => r.direccion === 'emitido')
+
+  const [existRec, existEm] = await Promise.all([
+    recibidos.length > 0 ? findExistingNumeros('recibido', recibidos.map((r) => r.numero)) : new Set<string>(),
+    emitidos.length > 0 ? findExistingNumeros('emitido', emitidos.map((r) => r.numero)) : new Set<string>(),
+  ])
+
+  const nuevos = allRows.filter((r) => {
+    const existing = r.direccion === 'recibido' ? existRec : existEm
+    return !existing.has(r.numero)
+  })
+  const duplicados = allRows.length - nuevos.length
+
+  if (nuevos.length === 0) {
+    return { insertados: 0, ignorados, duplicados, errores }
+  }
+
+  const insertados = await insertCheques({ rows: nuevos, createdBy: input.actorUid })
+  return { insertados, ignorados, duplicados, errores }
+}

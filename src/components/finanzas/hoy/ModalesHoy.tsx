@@ -16,13 +16,25 @@ import { formatMoneyCentavos } from '../formatMoney'
 import { finanzasInputClass } from '../FinanzasFormField'
 import { TEXTO_CHEQUE_PROPIO, textoDiferenciaCheque, type PagoConCheque } from './pagoConCheque'
 
+const botonPrimario =
+  'rounded-xl bg-brand-primary px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60'
+const botonTexto =
+  'rounded-xl px-4 py-2 text-sm font-medium text-neutral-700 transition hover:bg-neutral-100 dark:text-gray-200 dark:hover:bg-zinc-800'
+const botonSecundario =
+  'inline-flex items-center justify-center rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800'
+
+/** Ventana de tamaño normal: título, contenido y al pie Cancelar más el botón de confirmar (si hay). */
 function Ventana({
   titulo,
+  textoCerrar = 'Cancelar',
   onClose,
+  accion,
   children,
 }: {
   titulo: string
+  textoCerrar?: string
   onClose: () => void
+  accion?: ReactNode
   children: ReactNode
 }) {
   return (
@@ -31,31 +43,25 @@ function Ventana({
         role="dialog"
         aria-modal="true"
         aria-labelledby="hoy-dialogo-titulo"
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900 sm:p-6"
+        className="surface-card max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-neutral-200 p-5 shadow-xl dark:border-zinc-700 sm:p-6"
       >
-        <h2 id="hoy-dialogo-titulo" className="text-heading text-2xl font-bold leading-tight">
+        <h2 id="hoy-dialogo-titulo" className="text-heading text-lg font-semibold">
           {titulo}
         </h2>
-        <div className="mt-4">{children}</div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-4 min-h-12 w-full rounded-xl border border-neutral-300 text-base font-medium dark:border-zinc-600"
-        >
-          Volver
-        </button>
+        <div className="mt-3">{children}</div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className={botonTexto}>
+            {textoCerrar}
+          </button>
+          {accion}
+        </div>
       </div>
     </div>
   )
 }
 
-const botonGrande =
-  'min-h-16 w-full rounded-xl bg-brand-primary px-4 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50'
-const botonSecundario =
-  'min-h-14 w-full rounded-xl border border-neutral-300 px-4 text-base font-semibold dark:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-50'
-
-/** Una opción para elegir: ícono, título y una línea que explica. Grande para tocar sin errarle. */
-function OpcionTarjeta({
+/** Una opción para elegir: fila con ícono, título y una línea de explicación. */
+function Opcion({
   icono: Icono,
   titulo,
   explicacion,
@@ -76,22 +82,22 @@ function OpcionTarjeta({
       aria-pressed={activa}
       disabled={disabled}
       onClick={onClick}
-      className={`flex min-h-20 w-full items-center gap-4 rounded-2xl border-2 px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+      className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
         activa
           ? 'border-brand-primary bg-brand-primary/10'
-          : 'border-neutral-200 hover:border-neutral-400 dark:border-zinc-700 dark:hover:border-zinc-500'
+          : 'border-neutral-200 hover:bg-neutral-50 dark:border-zinc-700 dark:hover:bg-zinc-800'
       }`}
     >
       <span
-        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
           activa ? 'bg-brand-primary text-white' : 'bg-neutral-100 text-neutral-700 dark:bg-zinc-800 dark:text-gray-200'
         }`}
       >
-        <Icono className="h-6 w-6" aria-hidden />
+        <Icono className="h-4 w-4" aria-hidden />
       </span>
       <span className="min-w-0">
-        <span className="text-heading block text-lg font-semibold leading-tight">{titulo}</span>
-        <span className="text-body-muted block text-sm leading-snug">{explicacion}</span>
+        <span className="text-heading block text-sm font-medium leading-tight">{titulo}</span>
+        <span className="text-body-muted block text-xs leading-snug">{explicacion}</span>
       </span>
     </button>
   )
@@ -99,11 +105,17 @@ function OpcionTarjeta({
 
 function Encabezado({ detalle, montoCentavos }: { detalle: string; montoCentavos: number }) {
   return (
-    <>
-      <p className="text-body-muted text-base">{detalle}</p>
-      <p className="text-heading mt-1 text-3xl font-bold tabular-nums">{formatMoneyCentavos(montoCentavos, 'ARS')}</p>
-    </>
+    <p className="text-sm">
+      <span className="text-body-muted">{detalle}</span>
+      <span className="text-heading mt-0.5 block text-base font-semibold tabular-nums">
+        {formatMoneyCentavos(montoCentavos, 'ARS')}
+      </span>
+    </p>
   )
+}
+
+function Etiqueta({ children }: { children: ReactNode }) {
+  return <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200">{children}</label>
 }
 
 function hoyLocal(): string {
@@ -146,19 +158,35 @@ export function ComoLoPagasModal({
 
   if (paso === 'cheque') {
     return (
-      <Ventana titulo="Pagar con cheque" onClose={() => setPaso('elegir')}>
+      <Ventana
+        titulo="Pagar con cheque"
+        textoCerrar="Volver"
+        onClose={() => setPaso('elegir')}
+        accion={
+          <button
+            type="button"
+            className={botonPrimario}
+            disabled={guardando || elegido?.modo !== 'cartera' || !elegido.chequeId}
+            onClick={() => {
+              if (elegido?.modo === 'cartera' && elegido.chequeId) onCheque(elegido.chequeId)
+            }}
+          >
+            {guardando ? 'Endosando…' : diferencia ? 'Confirmar el endoso' : 'Endosar este cheque'}
+          </button>
+        }
+      >
         <Encabezado detalle={`${pago.aQuien} · ${pago.concepto}`} montoCentavos={pago.montoCentavos} />
 
-        <h3 className="text-heading mt-6 text-xl font-semibold">Con un cheque de la cartera</h3>
-        <p className="text-body-muted mt-1 text-base">Elegí uno de los cheques que nos dieron y se lo endosás.</p>
-        {cartera.isLoading ? <p className="mt-2 text-base">Estoy mirando los cheques de la cartera…</p> : null}
+        <h3 className="text-heading mt-4 text-sm font-semibold">Con un cheque de la cartera</h3>
+        <p className="text-body-muted text-xs">Elegí uno de los cheques que nos dieron y se lo endosás.</p>
+        {cartera.isLoading ? <p className="text-body-muted mt-2 text-sm">Buscando cheques en la cartera…</p> : null}
         {cartera.isError ? (
-          <p className="mt-2 text-base text-red-700 dark:text-red-300">
-            {cartera.error instanceof Error ? cartera.error.message : 'No pude mirar la cartera.'}
+          <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+            {cartera.error instanceof Error ? cartera.error.message : 'No se pudo leer la cartera.'}
           </p>
         ) : null}
         {!cartera.isLoading && cartera.data && cartera.data.length === 0 ? (
-          <p className="mt-2 text-base">No hay cheques en la cartera para usar.</p>
+          <p className="text-body-muted mt-2 text-sm">No hay cheques en la cartera para usar.</p>
         ) : null}
         <div className="mt-2 grid gap-2">
           {(cartera.data ?? []).map((cheque) => (
@@ -179,31 +207,16 @@ export function ComoLoPagasModal({
             />
           ))}
         </div>
-        {elegido?.modo === 'cartera' && chequeElegido ? (
-          <p className="mt-3 text-base">
-            Elegiste el cheque N.º {elegido.numero} de {chequeElegido.emisor}.
-          </p>
-        ) : null}
         {diferencia ? (
-          <p className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-base font-medium text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
             {diferencia}
           </p>
         ) : null}
-        <button
-          type="button"
-          className={`${botonGrande} mt-3`}
-          disabled={guardando || elegido?.modo !== 'cartera' || !elegido.chequeId}
-          onClick={() => {
-            if (elegido?.modo === 'cartera' && elegido.chequeId) onCheque(elegido.chequeId)
-          }}
-        >
-          {guardando ? 'Endosando…' : diferencia ? 'Confirmar el endoso' : 'Endosar este cheque'}
-        </button>
 
-        <h3 className="text-heading mt-8 text-xl font-semibold">Con un cheque propio</h3>
-        <p className="mt-2 text-base">{TEXTO_CHEQUE_PROPIO}</p>
-        <Link to="/finanzas/cheques" className={`${botonSecundario} mt-3 inline-flex items-center justify-center`}>
-          Cargalo en Cheques
+        <h3 className="text-heading mt-5 text-sm font-semibold">Con un cheque propio</h3>
+        <p className="text-body-muted mt-1 text-xs">{TEXTO_CHEQUE_PROPIO}</p>
+        <Link to="/finanzas/cheques" className={`${botonSecundario} mt-2`}>
+          Cargarlo en Cheques
         </Link>
       </Ventana>
     )
@@ -212,21 +225,20 @@ export function ComoLoPagasModal({
   return (
     <Ventana titulo="¿Cómo lo pagás?" onClose={onClose}>
       <Encabezado detalle={`${pago.aQuien} · ${pago.concepto}`} montoCentavos={pago.montoCentavos} />
-      <p className="mt-4 text-base">Elegí cómo lo vas a pagar:</p>
-      <div className="mt-3 grid gap-3">
-        <OpcionTarjeta
+      <div className="mt-4 grid gap-2">
+        <Opcion
           icono={Landmark}
           titulo="Por banco"
           explicacion="Armás la transferencia y queda esperando la firma."
           onClick={onBanco}
         />
-        <OpcionTarjeta
+        <Opcion
           icono={Banknote}
           titulo="En efectivo"
           explicacion="Sale de una caja. Podés adjuntar el ticket."
           onClick={onEfectivo}
         />
-        <OpcionTarjeta
+        <Opcion
           icono={FileText}
           titulo="Con cheque"
           explicacion="Endosás un cheque de la cartera o cargás uno propio en Cheques."
@@ -247,7 +259,7 @@ function ChequeCartera({
   onElegir: () => void
 }) {
   return (
-    <OpcionTarjeta
+    <Opcion
       icono={FileText}
       titulo={`N.º ${cheque.numero} · ${formatMoneyCentavos(cheque.montoCentavos, 'ARS')}`}
       explicacion={`${cheque.emisor} · ${cheque.banco} · se paga el ${fechaCorta(cheque.fechaPago)}`}
@@ -288,22 +300,37 @@ export function EfectivoModal({
   const noAlcanza = !esIngreso && elegida != null && elegida.saldoActualCentavos < montoCentavos
 
   return (
-    <Ventana titulo={titulo} onClose={onClose}>
+    <Ventana
+      titulo={titulo}
+      onClose={onClose}
+      accion={
+        <button
+          type="button"
+          className={botonPrimario}
+          disabled={!elegida || noAlcanza || guardando}
+          onClick={() => {
+            if (elegida) onConfirmar(elegida.id, archivo)
+          }}
+        >
+          {guardando ? 'Guardando…' : 'Confirmar'}
+        </button>
+      }
+    >
       <Encabezado detalle={detalle} montoCentavos={montoCentavos} />
-      <p className="mt-4 text-base">{esIngreso ? '¿En qué caja lo anotamos?' : '¿De qué caja sale?'}</p>
-      {isLoading ? <p className="mt-2 text-base">Estoy mirando las cajas…</p> : null}
+      <p className="mt-4 text-sm font-medium">{esIngreso ? '¿En qué caja lo anotamos?' : '¿De qué caja sale?'}</p>
+      {isLoading ? <p className="text-body-muted mt-2 text-sm">Buscando las cajas…</p> : null}
       {!isLoading && enPesos.length === 0 ? (
-        <p className="mt-2 text-base">No hay cajas en pesos para anotar esto.</p>
+        <p className="text-body-muted mt-2 text-sm">No hay cajas en pesos para anotar esto.</p>
       ) : null}
-      <div className="mt-3 grid gap-3">
+      <div className="mt-2 grid gap-2">
         {enPesos.map((caja) => {
           const corta = !esIngreso && caja.saldoActualCentavos < montoCentavos
           return (
-            <OpcionTarjeta
+            <Opcion
               key={caja.id}
               icono={Wallet}
               titulo={caja.nombre}
-              explicacion={`Efectivo disponible ${formatMoneyCentavos(caja.saldoActualCentavos, 'ARS')}${
+              explicacion={`Disponible ${formatMoneyCentavos(caja.saldoActualCentavos, 'ARS')}${
                 corta ? ' · No alcanza' : ''
               }${caja.bloqueadaPorCierre ? ' · Cerrada, esperando aprobación' : ''}`}
               activa={caja.id === cajaId}
@@ -314,33 +341,20 @@ export function EfectivoModal({
         })}
       </div>
       {noAlcanza ? (
-        <p className="mt-3 text-base font-medium text-red-700 dark:text-red-300">
-          En esa caja no alcanza para este pago.
-        </p>
+        <p className="mt-3 text-sm text-red-700 dark:text-red-300">En esa caja no alcanza para este pago.</p>
       ) : null}
-      <label className="mt-5 block text-base font-medium">
-        Si tenés el ticket, adjuntalo
+      <Etiqueta>
+        Comprobante (opcional)
         <input
           type="file"
           accept="image/*,.pdf"
-          className="mt-1 block w-full text-sm"
+          className="mt-1 block w-full text-sm font-normal"
           onChange={(event) => setArchivo(event.target.files?.[0] ?? null)}
         />
-      </label>
-      <p className="text-body-muted mt-2 text-sm">
+      </Etiqueta>
+      <p className="text-body-muted mt-1 text-xs">
         Si no lo adjuntás, queda sin comprobante, igual que cuando lo cargás en Cajas.
-        {esIngreso ? ' El cobro en efectivo se puede anotar en la caja chica o en la principal.' : ''}
       </p>
-      <button
-        type="button"
-        className={`${botonGrande} mt-4`}
-        disabled={!elegida || noAlcanza || guardando}
-        onClick={() => {
-          if (elegida) onConfirmar(elegida.id, archivo)
-        }}
-      >
-        {guardando ? 'Anotando…' : 'Confirmar'}
-      </button>
     </Ventana>
   )
 }
@@ -377,10 +391,38 @@ export function YaLoPagueModal({
   const sugerencia = pago.sugerenciasBanco.find((item) => item.id === movimientoId) ?? null
 
   return (
-    <Ventana titulo="Ya lo pagué" onClose={onClose}>
+    <Ventana
+      titulo="Ya lo pagué"
+      onClose={onClose}
+      accion={
+        <button
+          type="button"
+          className={botonPrimario}
+          disabled={
+            guardando ||
+            !fecha ||
+            (medio === 'transferencia' && !sugerencia && (!sinMovimiento || !cuentaId))
+          }
+          onClick={() =>
+            onConfirmar({
+              medioPago: medio,
+              fechaPago: fecha,
+              ...(medio === 'transferencia'
+                ? {
+                    cuentaId: sugerencia?.cuentaId ?? (cuentaId || undefined),
+                    movimientoId: sugerencia?.id,
+                  }
+                : {}),
+            })
+          }
+        >
+          {guardando ? 'Guardando…' : 'Marcar como pagado'}
+        </button>
+      }
+    >
       <Encabezado detalle={`${pago.aQuien} · ${pago.concepto}`} montoCentavos={pago.montoCentavos} />
-      <p className="mt-4 text-base">¿Cómo lo pagaste?</p>
-      <div className="mt-3 grid gap-3">
+      <p className="mt-4 text-sm font-medium">¿Cómo lo pagaste?</p>
+      <div className="mt-2 grid gap-2">
         {(
           [
             ['transferencia', Landmark, 'Por banco', 'Salió por transferencia desde una de nuestras cuentas.'],
@@ -388,7 +430,7 @@ export function YaLoPagueModal({
             ['cheque', FileText, 'Con cheque', 'Se entregó un cheque.'],
           ] as const
         ).map(([id, icono, titulo, explicacion]) => (
-          <OpcionTarjeta
+          <Opcion
             key={id}
             icono={icono}
             titulo={titulo}
@@ -398,7 +440,7 @@ export function YaLoPagueModal({
           />
         ))}
       </div>
-      <label className="mt-5 block text-base font-medium">
+      <Etiqueta>
         ¿Qué día lo pagaste?
         <input
           type="date"
@@ -406,13 +448,13 @@ export function YaLoPagueModal({
           value={fecha}
           onChange={(event) => setFecha(event.target.value)}
         />
-      </label>
+      </Etiqueta>
       {medio === 'transferencia' ? (
         <div className="mt-4">
-          <p className="text-sm font-medium">Si salió del banco, ¿es alguno de estos?</p>
+          <p className="text-sm font-medium">Si salió del banco, ¿es alguno de estos débitos?</p>
           {pago.sugerenciasBanco.length === 0 ? (
-            <p className="text-body-muted mt-2 text-sm">
-              No encontré un débito del mismo monto en los últimos 5 días.
+            <p className="text-body-muted mt-1 text-xs">
+              No hay un débito del mismo monto en los últimos 5 días.
             </p>
           ) : (
             <div className="mt-2 grid gap-2">
@@ -429,7 +471,8 @@ export function YaLoPagueModal({
               ))}
               <button
                 type="button"
-                className={sinMovimiento ? botonGrande : botonSecundario}
+                aria-pressed={sinMovimiento}
+                className={`${botonSecundario} ${sinMovimiento ? 'border-brand-primary bg-brand-primary/10' : ''}`}
                 onClick={() => {
                   setMovimientoId(null)
                   setSinMovimiento(true)
@@ -440,7 +483,7 @@ export function YaLoPagueModal({
             </div>
           )}
           {sinMovimiento ? (
-            <label className="mt-3 block text-sm font-medium">
+            <Etiqueta>
               ¿De qué banco salió?
               <select
                 className={`${finanzasInputClass} mt-1`}
@@ -454,33 +497,10 @@ export function YaLoPagueModal({
                   </option>
                 ))}
               </select>
-            </label>
+            </Etiqueta>
           ) : null}
         </div>
       ) : null}
-      <button
-        type="button"
-        className={`${botonGrande} mt-4`}
-        disabled={
-          guardando ||
-          !fecha ||
-          (medio === 'transferencia' && !sugerencia && (!sinMovimiento || !cuentaId))
-        }
-        onClick={() =>
-          onConfirmar({
-            medioPago: medio,
-            fechaPago: fecha,
-            ...(medio === 'transferencia'
-              ? {
-                  cuentaId: sugerencia?.cuentaId ?? (cuentaId || undefined),
-                  movimientoId: sugerencia?.id,
-                }
-              : {}),
-          })
-        }
-      >
-        {guardando ? 'Guardando…' : 'Marcar como pagado'}
-      </button>
     </Ventana>
   )
 }
@@ -495,7 +515,7 @@ function Sugerencia({
   onElegir: () => void
 }) {
   return (
-    <OpcionTarjeta
+    <Opcion
       icono={Landmark}
       titulo={`${item.bancoNombre} · ${formatMoneyCentavos(item.montoCentavos, 'ARS')}`}
       explicacion={`${fechaCorta(item.fecha)}${item.descripcion ? ` · ${item.descripcion}` : ''}`}
@@ -520,25 +540,30 @@ export function ReprogramarModal({
 }) {
   const [fecha, setFecha] = useState(hoyLocal)
   return (
-    <Ventana titulo={titulo} onClose={onClose}>
-      <p className="text-body-muted text-base">{detalle}</p>
-      <label className="mt-4 block text-base font-medium">
-        ¿Para qué día lo pasamos?
+    <Ventana
+      titulo={titulo}
+      onClose={onClose}
+      accion={
+        <button
+          type="button"
+          className={botonPrimario}
+          disabled={guardando || !fecha}
+          onClick={() => onConfirmar(fecha)}
+        >
+          {guardando ? 'Guardando…' : 'Cambiar fecha'}
+        </button>
+      }
+    >
+      <p className="text-body-muted text-sm">{detalle}</p>
+      <Etiqueta>
+        Nueva fecha
         <input
           type="date"
           className={`${finanzasInputClass} mt-1`}
           value={fecha}
           onChange={(event) => setFecha(event.target.value)}
         />
-      </label>
-      <button
-        type="button"
-        className={`${botonGrande} mt-4`}
-        disabled={guardando || !fecha}
-        onClick={() => onConfirmar(fecha)}
-      >
-        {guardando ? 'Guardando…' : 'Pasarlo para ese día'}
-      </button>
+      </Etiqueta>
     </Ventana>
   )
 }
@@ -556,15 +581,15 @@ export function ReclamarModal({
     : null
 
   return (
-    <Ventana titulo={`Reclamar a ${ingreso.cliente}`} onClose={onClose}>
-      <p className="text-base">Este es el mensaje armado. Copialo o abrí el mail y mandalo.</p>
+    <Ventana titulo={`Reclamar a ${ingreso.cliente}`} textoCerrar="Cerrar" onClose={onClose}>
+      <p className="text-body-muted text-sm">Este es el mensaje armado. Copialo o abrí el mail y mandalo.</p>
       <textarea
         readOnly
-        className={`${finanzasInputClass} mt-3 min-h-40 text-base`}
+        className={`${finanzasInputClass} mt-2 min-h-32 text-sm`}
         value={ingreso.textoReclamo}
       />
-      <div className="mt-4 grid gap-3">
-        <OpcionTarjeta
+      <div className="mt-3 grid gap-2">
+        <Opcion
           icono={Copy}
           titulo={copiado ? 'Copiado ✓' : 'Copiar el mensaje'}
           explicacion="Después lo pegás en WhatsApp o donde hablen con el cliente."
@@ -579,18 +604,22 @@ export function ReclamarModal({
         {mailto ? (
           <a
             href={mailto}
-            className="flex min-h-20 w-full items-center gap-4 rounded-2xl border-2 border-neutral-200 px-4 py-3 text-left transition hover:border-neutral-400 dark:border-zinc-700 dark:hover:border-zinc-500"
+            className="flex w-full items-center gap-3 rounded-xl border border-neutral-200 px-3 py-2.5 text-left transition hover:bg-neutral-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
           >
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-700 dark:bg-zinc-800 dark:text-gray-200">
-              <Mail className="h-6 w-6" aria-hidden />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700 dark:bg-zinc-800 dark:text-gray-200">
+              <Mail className="h-4 w-4" aria-hidden />
             </span>
             <span className="min-w-0">
-              <span className="text-heading block text-lg font-semibold leading-tight">Abrir el mail</span>
-              <span className="text-body-muted block text-sm leading-snug">Se abre tu correo con el mensaje ya escrito para {ingreso.email}.</span>
+              <span className="text-heading block text-sm font-medium leading-tight">Abrir el mail</span>
+              <span className="text-body-muted block text-xs leading-snug">
+                Se abre tu correo con el mensaje ya escrito para {ingreso.email}.
+              </span>
             </span>
           </a>
         ) : (
-          <p className="text-body-muted text-base">Este cobro no tiene mail cargado. Copiá el texto y mandalo por donde hablen.</p>
+          <p className="text-body-muted text-xs">
+            Este cobro no tiene mail cargado. Copiá el texto y mandalo por donde hablen.
+          </p>
         )}
       </div>
     </Ventana>

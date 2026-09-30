@@ -16,9 +16,6 @@ export interface PagoConCheque {
   destinatario: string
 }
 
-export const TEXTO_CHEQUE_PROXIMAMENTE =
-  'Próximamente: lo estamos terminando junto con el módulo de cheques.'
-
 export const TEXTO_CHEQUE_PROPIO =
   'Un cheque nuestro no se puede cargar desde acá. Cargalo en Cheques, con el número, el banco, la fecha de pago y a quién se lo das. El pago queda hecho cuando ese cheque figure debitado.'
 

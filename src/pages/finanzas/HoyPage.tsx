@@ -11,14 +11,15 @@ import {
   YaLoPagueModal,
 } from '../../components/finanzas/hoy/ModalesHoy'
 import {
+  EncabezadoHoy,
   FranjaDemo,
-  ResumenHoy,
+  TarjetaAtrasados,
   TarjetaCheques,
+  TarjetaCobros,
   TarjetaDia,
-  TarjetaIngresos,
+  TarjetaFirmas,
   TarjetaPagos,
-  TarjetaPrevision,
-  type AccionesBancoHoy,
+  TarjetaSemana,
 } from '../../components/finanzas/hoy/TarjetasHoy'
 import { NuevaTransferenciaModal, type PrecargaTransferenciaHoy } from '../../components/finanzas/NuevaTransferenciaModal'
 import { useAuth } from '../../context'
@@ -64,7 +65,6 @@ export function FinanzasHoyPage() {
   const [yaPague, setYaPague] = useState<PagoHoy | null>(null)
   const [reprogramarPago, setReprogramarPago] = useState<PagoHoy | null>(null)
   const [transferencia, setTransferencia] = useState<PrecargaTransferenciaHoy | null>(null)
-  const [transferirCuentaId, setTransferirCuentaId] = useState<string | null>(null)
   const [ingresoEfectivo, setIngresoEfectivo] = useState<IngresoHoy | null>(null)
   const [reprogramarIngreso, setReprogramarIngreso] = useState<IngresoHoy | null>(null)
   const [reclamo, setReclamo] = useState<Reclamo | null>(null)
@@ -124,32 +124,17 @@ export function FinanzasHoyPage() {
     }
   }
 
-  function cuentaCcDe(bancoNombre: string): FinanzasCuenta | undefined {
-    return cuentas.find(
-      (cuenta) => cuenta.bancoNombre === bancoNombre && cuenta.tipo === 'CC' && cuenta.moneda === 'ARS',
-    )
-  }
-
-  function accionesDe(bancoNombre: string): AccionesBancoHoy {
-    const cuentaCc = cuentaCcDe(bancoNombre)
-    return {
-      onAbrir: cuentas.length > 0 ? () => setDetalleBanco(bancoNombre) : undefined,
-      onTransferir: cuentaCc ? () => setTransferirCuentaId(cuentaCc.id) : undefined,
-      onCargarDescubierto: cuentaCc && canEditDescubierto ? () => setDescubiertoCuenta(cuentaCc) : undefined,
-    }
-  }
-
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 sm:gap-8">
-      {isLoading ? <p className="text-heading text-2xl font-semibold">Estoy armando el día…</p> : null}
+    <div className="mx-auto grid max-w-6xl gap-4">
+      {isLoading ? <p className="text-body-muted text-sm">Armando el día…</p> : null}
       {isError ? (
-        <div className="rounded-2xl border border-red-300 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950/40">
-          <p className="text-xl text-red-800 dark:text-red-100">
-            {error instanceof Error ? error.message : 'No pude cargar el día.'}
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">
+          <p className="text-sm font-medium text-red-800 dark:text-red-200">
+            {error instanceof Error ? error.message : 'No se pudo cargar el día.'}
           </p>
           <button
             type="button"
-            className="mt-4 min-h-14 rounded-xl bg-brand-primary px-6 text-lg font-semibold text-white"
+            className="mt-2 rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-800 transition hover:bg-red-100 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-900/40"
             onClick={() => void refetch()}
           >
             Probar de nuevo
@@ -159,18 +144,15 @@ export function FinanzasHoyPage() {
       {data ? (
         <>
           {data.hayDatosDemo ? <FranjaDemo borrando={borrandoDemo} onBorrar={() => void borrarDemo()} /> : null}
-          <header>
-            <h1 className="text-heading text-3xl font-bold leading-tight sm:text-4xl">{data.saludo}</h1>
-            <div className="mt-5">
-              <ResumenHoy data={data} />
-            </div>
-          </header>
+          <EncabezadoHoy data={data} />
           {data.vacio ? (
             <>
-              <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-6 text-2xl font-semibold text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
-                Hoy no hay nada pendiente. ¡Buen día! 👍
+              <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
+                Hoy no hay nada pendiente.
               </p>
-              {data.dia.bancos.length > 0 ? <TarjetaDia dia={data.dia} accionesDe={accionesDe} /> : null}
+              {data.dia.bancos.length > 0 ? (
+                <TarjetaDia dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
+              ) : null}
             </>
           ) : (
             <>
@@ -180,7 +162,7 @@ export function FinanzasHoyPage() {
                 onYaPague={setYaPague}
                 onReprogramar={setReprogramarPago}
               />
-              <TarjetaIngresos
+              <TarjetaCobros
                 ingresos={data.ingresos.filas}
                 confirmandoId={confirmandoId}
                 onConfirmar={(ingreso) => {
@@ -197,12 +179,16 @@ export function FinanzasHoyPage() {
                 onReprogramar={setReprogramarIngreso}
                 onReclamar={setReclamo}
               />
-              <TarjetaDia dia={data.dia} accionesDe={accionesDe} />
+              <TarjetaDia dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
               <TarjetaCheques cheques={data.prevision.chequesADebitar} />
-              <TarjetaPrevision
-                prevision={data.prevision}
-                onReclamar={(cobro: CobroAtrasadoHoy) => setReclamo(cobro)}
-              />
+              <TarjetaSemana prevision={data.prevision} />
+              <div className="grid items-start gap-4 lg:grid-cols-2">
+                <TarjetaAtrasados
+                  cobros={data.prevision.cobrosAtrasados}
+                  onReclamar={(cobro: CobroAtrasadoHoy) => setReclamo(cobro)}
+                />
+                <TarjetaFirmas firmas={data.prevision.firmas} />
+              </div>
             </>
           )}
         </>
@@ -236,12 +222,6 @@ export function FinanzasHoyPage() {
       {transferencia ? (
         <NuevaTransferenciaModal precarga={transferencia} onClose={() => setTransferencia(null)} />
       ) : null}
-      {transferirCuentaId ? (
-        <NuevaTransferenciaModal
-          cuentaOrigenId={transferirCuentaId}
-          onClose={() => setTransferirCuentaId(null)}
-        />
-      ) : null}
       {pagoEfectivo ? (
         <EfectivoModal
           titulo="Pagar en efectivo"
@@ -272,7 +252,7 @@ export function FinanzasHoyPage() {
       ) : null}
       {reprogramarPago ? (
         <ReprogramarModal
-          titulo="Pasarlo para otro día"
+          titulo="Cambiar la fecha del pago"
           detalle={`${reprogramarPago.aQuien} · ${reprogramarPago.concepto}`}
           guardando={guardando}
           onClose={() => setReprogramarPago(null)}
@@ -301,7 +281,7 @@ export function FinanzasHoyPage() {
       ) : null}
       {reprogramarIngreso ? (
         <ReprogramarModal
-          titulo="Cambiar la fecha"
+          titulo="Cambiar la fecha del cobro"
           detalle={`${reprogramarIngreso.cliente} · ${reprogramarIngreso.concepto}`}
           guardando={guardando}
           onClose={() => setReprogramarIngreso(null)}

@@ -1,76 +1,136 @@
+import { AlertTriangle, Info, Lightbulb } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { EstadoDescubiertoBanco } from '../EstadoDescubiertoBanco'
+import { Link } from 'react-router-dom'
+import { ETIQUETA_ESTADO_CLASES, estadoDescubierto, type TonoEstado } from '../estadoDescubierto'
 import { formatMoneyCentavos } from '../formatMoney'
-import { montoSimple, montoSimpleAbs } from '../montoSimple'
-import type { HoyResponse, IngresoHoy, PagoHoy } from '../../../services/finanzasHoyApi'
-import { hayBancoPasado, plural, sugerenciaDesdeDondePagar } from './hoyFrases'
-import { TEXTO_CHEQUE_PROXIMAMENTE } from './pagoConCheque'
+import type { CobroAtrasadoHoy, HoyResponse, IngresoHoy, PagoHoy } from '../../../services/finanzasHoyApi'
+import { fechaLarga, sugerenciaDesdeDondePagar } from './hoyFrases'
 
-type BordeSeccion = 'rojo' | 'verde' | 'azul' | 'violeta' | 'gris'
+/* ----------------------------------------------------------------------------
+ * Piezas comunes: tarjeta, tabla, montos, etiquetas y botones. Todo en letra normal.
+ * -------------------------------------------------------------------------- */
 
-const BORDE_SECCION: Record<BordeSeccion, string> = {
-  rojo: 'border-l-red-500',
-  verde: 'border-l-emerald-500',
-  azul: 'border-l-sky-500',
-  violeta: 'border-l-violet-500',
-  gris: 'border-l-neutral-400 dark:border-l-zinc-500',
-}
+const th = 'px-3 py-2 text-left text-xs font-medium whitespace-nowrap first:pl-4 last:pr-4'
+const td = 'px-3 py-2 align-middle first:pl-4 last:pr-4'
+const filaHover = 'border-b border-neutral-100 transition-colors last:border-b-0 hover:bg-neutral-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50'
+const filaTotal = 'border-t border-neutral-200 bg-neutral-50/60 font-semibold dark:border-zinc-700 dark:bg-zinc-800/40'
 
-/** Sección de la pantalla: título grande en frase, borde izquierdo con color propio y una línea que explica. */
-export function Seccion({
-  titulo,
-  explicacion,
-  borde,
-  children,
+const botonPrimario =
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg bg-brand-primary px-2.5 py-1 text-xs font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+const botonSecundario =
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-xs font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800'
+const linkChico =
+  'whitespace-nowrap text-xs text-neutral-600 underline-offset-2 transition hover:text-neutral-900 hover:underline dark:text-gray-400 dark:hover:text-gray-100'
+
+/** Monto completo con centavos, alineado a la derecha; en rojo si es negativo. */
+export function Monto({
+  centavos,
+  className = '',
+  negativoEnRojo = true,
 }: {
-  titulo: string
-  explicacion: string
-  borde: BordeSeccion
-  children: ReactNode
+  centavos: number
+  className?: string
+  negativoEnRojo?: boolean
 }) {
   return (
-    <section
-      className={`rounded-2xl border border-l-8 border-neutral-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 sm:p-8 ${BORDE_SECCION[borde]}`}
-    >
-      <h2 className="text-heading text-2xl font-bold leading-tight sm:text-3xl">{titulo}</h2>
-      <p className="text-body-muted mt-2 text-base sm:text-lg">{explicacion}</p>
-      <div className="mt-6">{children}</div>
-    </section>
-  )
-}
-
-export function EstadoVacio({ texto }: { texto: string }) {
-  return (
-    <p className="rounded-xl bg-neutral-50 px-4 py-5 text-xl font-medium dark:bg-zinc-800/60">{texto}</p>
-  )
-}
-
-function Monto({ centavos, grande = false }: { centavos: number; grande?: boolean }) {
-  const negativo = centavos < 0
-  return (
     <span
-      className={`font-semibold tabular-nums ${grande ? 'text-2xl sm:text-3xl' : 'text-lg'} ${
-        negativo ? 'text-red-700 dark:text-red-300' : 'text-heading'
-      }`}
+      className={`whitespace-nowrap tabular-nums ${
+        negativoEnRojo && centavos < 0 ? 'text-red-600 dark:text-red-400' : ''
+      } ${className}`}
     >
       {formatMoneyCentavos(centavos, 'ARS')}
     </span>
   )
 }
 
-const botonPrincipal =
-  'inline-flex min-h-14 items-center justify-center rounded-xl bg-brand-primary px-6 text-lg font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50'
-const botonChico =
-  'inline-flex min-h-11 items-center justify-center rounded-xl border border-neutral-300 px-3 text-sm font-medium dark:border-zinc-600 disabled:cursor-not-allowed disabled:opacity-50'
+function Etiqueta({ tono, children }: { tono: TonoEstado; children: ReactNode }) {
+  return (
+    <span
+      className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${ETIQUETA_ESTADO_CLASES[tono]}`}
+    >
+      {children}
+    </span>
+  )
+}
 
-/** Franja de arriba cuando hay datos de ejemplo en el entorno de pruebas. */
+function EtiquetaEstado({ saldoCentavos, descubiertoCentavos }: { saldoCentavos: number; descubiertoCentavos: number | null }) {
+  const estado = estadoDescubierto(saldoCentavos, descubiertoCentavos)
+  return <Etiqueta tono={estado.tono}>{estado.etiqueta}</Etiqueta>
+}
+
+/** Una sección de Hoy: tarjeta con título corto, una línea de explicación y el total a la derecha. */
+export function Tarjeta({
+  titulo,
+  explicacion,
+  total,
+  children,
+}: {
+  titulo: string
+  explicacion: string
+  total?: { etiqueta: string; centavos: number }
+  children: ReactNode
+}) {
+  return (
+    <section className="surface-card overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 border-b border-neutral-100 px-4 py-3 dark:border-zinc-800">
+        <div className="min-w-0">
+          <h2 className="text-heading text-base font-semibold">{titulo}</h2>
+          <p className="text-body-muted text-xs">{explicacion}</p>
+        </div>
+        {total ? (
+          <p className="text-sm">
+            <span className="text-body-muted text-xs">{total.etiqueta} </span>
+            <Monto centavos={total.centavos} className="text-heading font-semibold" />
+          </p>
+        ) : null}
+      </header>
+      {children}
+    </section>
+  )
+}
+
+/** Estado vacío: una sola línea gris adentro de la tarjeta. */
+export function Vacio({ texto }: { texto: string }) {
+  return <p className="text-body-muted px-4 py-3 text-sm">{texto}</p>
+}
+
+function Tabla({ children }: { children: ReactNode }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">{children}</table>
+    </div>
+  )
+}
+
+/** Mensaje de una línea con ícono, debajo de una tabla. */
+function Mensaje({ tono, children }: { tono: 'ok' | 'aviso' | 'info'; children: ReactNode }) {
+  const Icono = tono === 'aviso' ? AlertTriangle : tono === 'ok' ? Lightbulb : Info
+  const color =
+    tono === 'aviso'
+      ? 'text-red-700 dark:text-red-300'
+      : tono === 'ok'
+        ? 'text-emerald-800 dark:text-emerald-200'
+        : 'text-neutral-700 dark:text-gray-300'
+  return (
+    <p className={`flex items-start gap-2 border-t border-neutral-100 px-4 py-2.5 text-sm dark:border-zinc-800 ${color}`}>
+      <Icono className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+      <span>{children}</span>
+    </p>
+  )
+}
+
+/* ----------------------------------------------------------------------------
+ * Franja de datos de ejemplo y encabezado
+ * -------------------------------------------------------------------------- */
+
+/** Una línea discreta arriba cuando hay datos de ejemplo en el entorno de pruebas. */
 export function FranjaDemo({ borrando, onBorrar }: { borrando: boolean; onBorrar: () => void }) {
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-lg font-semibold">Estás viendo datos de ejemplo (DEMO).</p>
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+      <span>Estás viendo datos de ejemplo (DEMO).</span>
       <button
         type="button"
-        className="min-h-12 rounded-xl border border-amber-700 px-4 text-base font-semibold text-amber-950 disabled:opacity-50 dark:border-amber-300 dark:text-amber-100"
+        className="rounded-md border border-amber-300 px-2 py-0.5 font-medium transition hover:bg-amber-100 disabled:opacity-50 dark:border-amber-700 dark:hover:bg-amber-900/40"
         disabled={borrando}
         onClick={onBorrar}
       >
@@ -80,77 +140,38 @@ export function FranjaDemo({ borrando, onBorrar }: { borrando: boolean; onBorrar
   )
 }
 
-/** Los 3 cuadros grandes de arriba: qué pagás, qué cobrás y cómo terminás el día. */
-export function ResumenHoy({ data }: { data: HoyResponse }) {
-  const chequesHoy = data.prevision.chequesADebitar.filas.filter((fila) => fila.cuando === 'Hoy').length
-  const cantidadPagos = data.pagos.filas.length
+/** Título con la fecha y una línea de resumen: qué pagás, qué cobrás y cómo terminás el día. */
+export function EncabezadoHoy({ data }: { data: HoyResponse }) {
   const cobros = data.ingresos.filas
   const totalCobros = cobros.reduce((total, fila) => total + fila.montoCentavos, 0)
   const llegaron = cobros.filter((fila) => fila.llego).length
-  const terminaMal = hayBancoPasado(data.dia.bancos)
-
-  const detallePagos =
-    chequesHoy > 0
-      ? `${plural(cantidadPagos, 'pago', 'pagos')} y ${plural(chequesHoy, 'cheque', 'cheques')}`
-      : plural(cantidadPagos, 'pago', 'pagos')
-  const detalleCobros =
-    cobros.length === 0
-      ? 'ningún cobro esperado'
-      : `${plural(cobros.length, 'cobro', 'cobros')}, ${llegaron === 0 ? 'ninguno llegó todavía' : llegaron === cobros.length ? (cobros.length === 1 ? 'ya llegó' : 'ya llegaron todos') : `${llegaron} ya ${llegaron === 1 ? 'llegó' : 'llegaron'}`}`
-
+  const separador = <span aria-hidden className="text-body-muted hidden sm:inline">·</span>
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
-      <Cuadro tono="rojo" titulo="Hoy pagás" monto={data.dia.pagosCentavos} detalle={detallePagos} />
-      <Cuadro tono="verde" titulo="Hoy cobrás" monto={totalCobros} detalle={detalleCobros} />
-      <Cuadro
-        tono={terminaMal ? 'rojo' : 'azul'}
-        titulo="Terminás el día en"
-        monto={data.dia.saldoFinalCentavos}
-        conSigno
-        detalle={terminaMal ? 'Hay un banco pasado del descubierto.' : 'Si pagás lo de hoy y entra lo esperado.'}
-      />
-    </div>
-  )
-}
-
-const CUADRO: Record<'rojo' | 'verde' | 'azul', { caja: string; monto: string }> = {
-  rojo: {
-    caja: 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40',
-    monto: 'text-red-800 dark:text-red-200',
-  },
-  verde: {
-    caja: 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40',
-    monto: 'text-emerald-800 dark:text-emerald-200',
-  },
-  azul: {
-    caja: 'border-sky-200 bg-sky-50 dark:border-sky-900 dark:bg-sky-950/40',
-    monto: 'text-sky-900 dark:text-sky-100',
-  },
-}
-
-function Cuadro({
-  tono,
-  titulo,
-  monto,
-  detalle,
-  conSigno = false,
-}: {
-  tono: 'rojo' | 'verde' | 'azul'
-  titulo: string
-  monto: number
-  detalle: string
-  conSigno?: boolean
-}) {
-  return (
-    <div className={`rounded-2xl border p-5 ${CUADRO[tono].caja}`}>
-      <p className="text-heading text-lg font-medium">{titulo}</p>
-      <p className={`mt-1 text-3xl font-bold tabular-nums tracking-tight sm:text-4xl ${CUADRO[tono].monto}`}>
-        {conSigno ? montoSimple(monto) : montoSimpleAbs(monto)}
+    <header>
+      <h1 className="text-heading text-lg font-semibold">Hoy · {fechaLarga(data.fecha)}</h1>
+      <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+        <span className="basis-full sm:basis-auto">
+          Pagás <Monto centavos={data.dia.pagosCentavos} className="text-heading font-semibold" />
+        </span>
+        {separador}
+        <span className="basis-full sm:basis-auto">
+          Cobrás <Monto centavos={totalCobros} className="text-heading font-semibold" />
+          {llegaron > 0 ? (
+            <span className="text-body-muted"> ({llegaron === 1 ? '1 ya llegó' : `${llegaron} ya llegaron`})</span>
+          ) : null}
+        </span>
+        {separador}
+        <span className="basis-full sm:basis-auto">
+          Terminás el día en <Monto centavos={data.dia.saldoFinalCentavos} className="text-heading font-semibold" />
+        </span>
       </p>
-      <p className="text-body-muted mt-2 text-base">{detalle}</p>
-    </div>
+    </header>
   )
 }
+
+/* ----------------------------------------------------------------------------
+ * 1. Pagos de hoy
+ * -------------------------------------------------------------------------- */
 
 export function TarjetaPagos({
   pagos,
@@ -163,72 +184,85 @@ export function TarjetaPagos({
   onYaPague: (pago: PagoHoy) => void
   onReprogramar: (pago: PagoHoy) => void
 }) {
+  const filas = [...pagos.filas].sort((a, b) => Number(b.vencido) - Number(a.vencido))
   return (
-    <Seccion
-      titulo="Hoy tenés que pagar esto"
-      explicacion="Los vencidos van primero. Cada pago tiene su botón para pagarlo, marcarlo como pagado o pasarlo para otro día."
-      borde="rojo"
+    <Tarjeta
+      titulo="Pagos de hoy"
+      explicacion="Los vencidos van primero. Pagá, marcá como pagado o cambiá la fecha."
+      total={pagos.filas.length > 0 ? { etiqueta: 'Total', centavos: pagos.totalCentavos } : undefined}
     >
-      {pagos.filas.length === 0 ? (
-        <EstadoVacio texto="No tenés pagos para hoy. 👍" />
+      {filas.length === 0 ? (
+        <Vacio texto="No hay pagos para hoy." />
       ) : (
-        <>
-          <ul className="grid gap-3">
-            {pagos.filas.map((pago) => (
-              <li
-                key={pago.id}
-                className={`overflow-hidden rounded-2xl border ${
-                  pago.vencido
-                    ? 'border-red-300 dark:border-red-900'
-                    : 'border-neutral-200 dark:border-zinc-700'
-                }`}
-              >
-                {pago.vencidoTexto ? (
-                  <p className="bg-red-600 px-4 py-1.5 text-base font-semibold text-white">{pago.vencidoTexto}</p>
-                ) : null}
-                <div className="p-4 sm:p-5">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-                    <div className="min-w-0">
-                      <p className="text-heading text-2xl font-bold leading-tight">{pago.aQuien}</p>
-                      <p className="text-body-muted mt-1 text-base">{pago.concepto}</p>
-                    </div>
-                    <div className="shrink-0 sm:text-right">
-                      <Monto centavos={pago.montoCentavos} grande />
-                    </div>
-                  </div>
-                  <p className="mt-3 text-base">
-                    Estaba previsto pagarlo <span className="font-semibold">{pago.comoPagar.toLowerCase()}</span>
-                    {pago.urgencia !== 'Normal' ? (
-                      <span className="text-body-muted"> · urgencia {pago.urgencia.toLowerCase()}</span>
-                    ) : null}
-                    .
-                  </p>
-                  <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                    <button type="button" className={`${botonPrincipal} sm:min-w-44`} onClick={() => onPagar(pago)}>
+        <Tabla>
+          <thead>
+            <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
+              <th className={th}>A quién</th>
+              <th className={th}>Concepto</th>
+              <th className={th}>Vence</th>
+              <th className={th}>Cómo se paga</th>
+              <th className={`${th} text-right`}>Monto</th>
+              <th className={`${th} text-right`}>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map((pago) => (
+              <tr key={pago.id} className={filaHover}>
+                <td className={`${td} text-heading font-medium`}>{pago.aQuien}</td>
+                <td className={`${td} text-body-muted`}>{pago.concepto}</td>
+                <td className={td}>
+                  {pago.vencido && pago.vencidoTexto ? <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta> : 'Hoy'}
+                </td>
+                <td className={td}>
+                  {pago.comoPagar}
+                  {pago.urgencia !== 'Normal' ? (
+                    <span className="text-body-muted text-xs"> · urgencia {pago.urgencia.toLowerCase()}</span>
+                  ) : null}
+                </td>
+                <td className={`${td} text-right`}>
+                  <Monto centavos={pago.montoCentavos} className="text-heading font-medium" />
+                </td>
+                <td className={`${td} text-right`}>
+                  <div className="flex flex-col items-end gap-1">
+                    <button type="button" className={botonPrimario} onClick={() => onPagar(pago)}>
                       Pagar
                     </button>
-                    <button type="button" className={botonChico} onClick={() => onYaPague(pago)}>
-                      Ya lo pagué
-                    </button>
-                    <button type="button" className={botonChico} onClick={() => onReprogramar(pago)}>
-                      Pasarlo para otro día
-                    </button>
+                    <span className="flex items-center gap-1.5">
+                      <button type="button" className={linkChico} onClick={() => onYaPague(pago)}>
+                        Ya lo pagué
+                      </button>
+                      <span aria-hidden className="text-body-muted text-xs">·</span>
+                      <button type="button" className={linkChico} onClick={() => onReprogramar(pago)}>
+                        Cambiar fecha
+                      </button>
+                    </span>
                   </div>
-                </div>
-              </li>
+                </td>
+              </tr>
             ))}
-          </ul>
-          <p className="mt-5 flex items-baseline justify-between gap-3 border-t border-neutral-200 pt-4 text-xl dark:border-zinc-800">
-            <span className="font-medium">Total de hoy</span>
-            <Monto centavos={pagos.totalCentavos} grande />
-          </p>
-        </>
+          </tbody>
+          <tfoot>
+            <tr className={filaTotal}>
+              <td className={td} colSpan={4}>
+                Total
+              </td>
+              <td className={`${td} text-right`}>
+                <Monto centavos={pagos.totalCentavos} className="text-heading" />
+              </td>
+              <td className={td} />
+            </tr>
+          </tfoot>
+        </Tabla>
       )}
-    </Seccion>
+    </Tarjeta>
   )
 }
 
-export function TarjetaIngresos({
+/* ----------------------------------------------------------------------------
+ * 2. Cobros de hoy
+ * -------------------------------------------------------------------------- */
+
+export function TarjetaCobros({
   ingresos,
   confirmandoId,
   onConfirmar,
@@ -243,317 +277,392 @@ export function TarjetaIngresos({
   onReprogramar: (ingreso: IngresoHoy) => void
   onReclamar: (ingreso: IngresoHoy) => void
 }) {
+  const total = ingresos.reduce((suma, fila) => suma + fila.montoCentavos, 0)
+  const llegaron = ingresos.filter((fila) => fila.llego).length
+  const explicacion =
+    ingresos.length === 0
+      ? 'Lo que se esperaba cobrar hoy.'
+      : llegaron === 0
+        ? 'Ninguno llegó todavía: podés reclamar o cambiar la fecha.'
+        : `${llegaron} de ${ingresos.length} ya ${llegaron === 1 ? 'llegó' : 'llegaron'} al banco: confirmalo${llegaron === 1 ? '' : 's'}.`
   return (
-    <Seccion
-      titulo="Hoy se esperan estos ingresos"
-      explicacion="Los que ya entraron al banco aparecen en verde: confirmalos. Los que no, podés reclamarlos o cambiarles la fecha."
-      borde="verde"
+    <Tarjeta
+      titulo="Cobros de hoy"
+      explicacion={explicacion}
+      total={ingresos.length > 0 ? { etiqueta: 'Total', centavos: total } : undefined}
     >
       {ingresos.length === 0 ? (
-        <EstadoVacio texto="No hay cobros esperados para hoy." />
+        <Vacio texto="No hay cobros esperados para hoy." />
       ) : (
-        <ul className="grid gap-3">
-          {ingresos.map((ingreso) => (
-            <li
-              key={ingreso.id}
-              className={`rounded-2xl border p-4 sm:p-5 ${
-                ingreso.llego
-                  ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40'
-                  : 'border-neutral-200 dark:border-zinc-700'
-              }`}
-            >
-              {ingreso.atrasadoTexto ? (
-                <p className="mb-2 text-base font-semibold text-red-700 dark:text-red-300">
-                  {ingreso.atrasadoTexto}
-                </p>
-              ) : null}
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-                <div className="min-w-0">
-                  <p className="text-heading text-2xl font-bold leading-tight">{ingreso.cliente}</p>
-                  <p className="text-body-muted mt-1 text-base">{ingreso.concepto}</p>
-                </div>
-                <div className="shrink-0 sm:text-right">
-                  <Monto centavos={ingreso.montoCentavos} grande />
-                </div>
-              </div>
-              {ingreso.llego ? (
-                <p className="mt-3 text-xl font-semibold text-emerald-800 dark:text-emerald-200">
-                  Llegó ✓ a {ingreso.bancoNombre ?? 'un banco'}
-                </p>
-              ) : (
-                <p className="mt-3 text-lg font-medium text-amber-900 dark:text-amber-200">Todavía no llegó</p>
-              )}
-              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-                {ingreso.llego && ingreso.movimientoId ? (
-                  <button
-                    type="button"
-                    className={`${botonPrincipal} sm:min-w-44`}
-                    disabled={confirmandoId === ingreso.id}
-                    onClick={() => onConfirmar(ingreso)}
-                  >
-                    {confirmandoId === ingreso.id ? 'Confirmando…' : 'Confirmar'}
-                  </button>
-                ) : null}
-                {!ingreso.llego ? (
-                  <>
-                    <button type="button" className={`${botonPrincipal} sm:min-w-44`} onClick={() => onEfectivo(ingreso)}>
-                      Llegó en efectivo
-                    </button>
-                    <button type="button" className={botonChico} onClick={() => onReclamar(ingreso)}>
-                      Reclamar
-                    </button>
-                    <button type="button" className={botonChico} onClick={() => onReprogramar(ingreso)}>
-                      Cambiar la fecha
-                    </button>
-                    <button type="button" className={`${botonChico} text-left`} disabled>
-                      Llegó con cheque. {TEXTO_CHEQUE_PROXIMAMENTE}
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </li>
-          ))}
-        </ul>
+        <Tabla>
+          <thead>
+            <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
+              <th className={th}>De quién</th>
+              <th className={th}>Esperado</th>
+              <th className={`${th} text-right`}>Monto</th>
+              <th className={th}>Estado</th>
+              <th className={`${th} text-right`}>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ingresos.map((ingreso) => (
+              <tr key={ingreso.id} className={filaHover}>
+                <td className={td}>
+                  <span className="text-heading block font-medium">{ingreso.cliente}</span>
+                  <span className="text-body-muted block text-xs">{ingreso.concepto}</span>
+                </td>
+                <td className={td}>
+                  {ingreso.atrasado && ingreso.atrasadoTexto ? (
+                    <span className="whitespace-nowrap text-red-700 dark:text-red-300">{ingreso.atrasadoTexto}</span>
+                  ) : (
+                    'Hoy'
+                  )}
+                </td>
+                <td className={`${td} text-right`}>
+                  <Monto centavos={ingreso.montoCentavos} className="text-heading font-medium" />
+                </td>
+                <td className={td}>
+                  {ingreso.llego ? (
+                    <Etiqueta tono="verde">Llegó a {ingreso.bancoNombre ?? 'un banco'}</Etiqueta>
+                  ) : (
+                    <Etiqueta tono="ambar">Todavía no llegó</Etiqueta>
+                  )}
+                </td>
+                <td className={`${td} text-right`}>
+                  {ingreso.llego ? (
+                    ingreso.movimientoId ? (
+                      <button
+                        type="button"
+                        className={botonPrimario}
+                        disabled={confirmandoId === ingreso.id}
+                        onClick={() => onConfirmar(ingreso)}
+                      >
+                        {confirmandoId === ingreso.id ? 'Confirmando…' : 'Confirmar'}
+                      </button>
+                    ) : (
+                      <span className="text-body-muted">—</span>
+                    )
+                  ) : (
+                    <div className="flex flex-col items-end gap-1">
+                      <button type="button" className={botonSecundario} onClick={() => onReclamar(ingreso)}>
+                        Reclamar
+                      </button>
+                      <span className="flex items-center gap-1.5">
+                        <button type="button" className={linkChico} onClick={() => onEfectivo(ingreso)}>
+                          Llegó en efectivo
+                        </button>
+                        <span aria-hidden className="text-body-muted text-xs">·</span>
+                        <button type="button" className={linkChico} onClick={() => onReprogramar(ingreso)}>
+                          Cambiar fecha
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Tabla>
       )}
-    </Seccion>
+    </Tarjeta>
   )
 }
 
-export interface AccionesBancoHoy {
-  onAbrir?: () => void
-  onTransferir?: () => void
-  onCargarDescubierto?: () => void
-}
+/* ----------------------------------------------------------------------------
+ * 3. Cómo queda el día
+ * -------------------------------------------------------------------------- */
 
 export function TarjetaDia({
   dia,
-  accionesDe,
+  onAbrirBanco,
 }: {
   dia: HoyResponse['dia']
-  /** Qué se puede hacer con cada banco desde acá (abrir detalle, transferir, cargar descubierto). */
-  accionesDe?: (bancoNombre: string) => AccionesBancoHoy
+  /** Tocar el nombre del banco abre el detalle de cuentas (para cargar el descubierto). */
+  onAbrirBanco?: (bancoNombre: string) => void
 }) {
   const sugerencia = sugerenciaDesdeDondePagar(dia)
-  const esAviso = sugerencia?.startsWith('Ojo') ?? false
   return (
-    <Seccion
-      titulo="Así va a quedar el día"
-      explicacion="Cómo está cada banco ahora y cómo quedaría si pagás todo lo de hoy desde ahí."
-      borde="azul"
+    <Tarjeta
+      titulo="Cómo queda el día"
+      explicacion="Cómo quedaría cada banco si pagás todo lo de hoy desde ahí."
+      total={{ etiqueta: 'Terminás en', centavos: dia.saldoFinalCentavos }}
     >
-      <p className="text-heading text-xl font-semibold leading-snug sm:text-2xl">{dia.frase}</p>
-      {sugerencia ? (
-        <p
-          className={`mt-4 rounded-2xl border-2 px-4 py-4 text-lg font-semibold leading-snug ${
-            esAviso
-              ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100'
-              : 'border-sky-300 bg-sky-50 text-sky-950 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100'
-          }`}
-        >
-          {sugerencia}
-        </p>
-      ) : null}
       {dia.bancos.length === 0 ? (
-        <div className="mt-5">
-          <EstadoVacio texto="Todavía no hay cuentas en pesos cargadas. Traelas desde Saldos." />
-        </div>
+        <Vacio texto="Todavía no hay cuentas en pesos cargadas. Traelas desde Saldos." />
       ) : (
-        <div className="mt-5 grid gap-4">
-          {dia.bancos.map((banco) => {
-            const acciones = accionesDe?.(banco.bancoNombre) ?? {}
-            return (
-              <EstadoDescubiertoBanco
-                key={banco.bancoNombre}
-                banco={banco.bancoNombre}
-                saldoCentavos={banco.saldoAhoraCentavos}
-                descubiertoCentavos={banco.descubiertoCentavos}
-                saldoDespuesCentavos={dia.pagosCentavos > 0 ? banco.saldoAhoraCentavos - dia.pagosCentavos : null}
-                onAbrir={acciones.onAbrir}
-                onTransferir={acciones.onTransferir}
-                onCargarDescubierto={acciones.onCargarDescubierto}
-              />
-            )
-          })}
-        </div>
+        <>
+          <Tabla>
+            <thead>
+              <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
+                <th className={th}>Banco</th>
+                <th className={`${th} text-right`}>Saldo ahora</th>
+                <th className={`${th} text-right`}>Pagos de hoy</th>
+                <th className={`${th} text-right`}>Queda</th>
+                <th className={`${th} text-right`}>Descubierto</th>
+                <th className={th}>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dia.bancos.map((banco) => {
+                const queda = banco.saldoAhoraCentavos - dia.pagosCentavos
+                return (
+                  <tr key={banco.bancoNombre} className={filaHover}>
+                    <td className={`${td} text-heading font-medium`}>
+                      {onAbrirBanco ? (
+                        <button
+                          type="button"
+                          className="rounded underline-offset-2 hover:underline"
+                          onClick={() => onAbrirBanco(banco.bancoNombre)}
+                        >
+                          {banco.bancoNombre}
+                        </button>
+                      ) : (
+                        banco.bancoNombre
+                      )}
+                    </td>
+                    <td className={`${td} text-right`}>
+                      <Monto centavos={banco.saldoAhoraCentavos} />
+                    </td>
+                    <td className={`${td} text-right`}>
+                      {dia.pagosCentavos > 0 ? (
+                        <Monto centavos={-dia.pagosCentavos} negativoEnRojo={false} className="text-body-muted" />
+                      ) : (
+                        <span className="text-body-muted">—</span>
+                      )}
+                    </td>
+                    <td className={`${td} text-right`}>
+                      <Monto centavos={queda} className="text-heading font-medium" />
+                    </td>
+                    <td className={`${td} text-right`}>
+                      {banco.descubiertoCentavos != null && banco.descubiertoCentavos > 0 ? (
+                        <Monto centavos={banco.descubiertoCentavos} />
+                      ) : (
+                        <span className="text-body-muted" title="Sin descubierto cargado">
+                          —
+                        </span>
+                      )}
+                    </td>
+                    <td className={td}>
+                      <EtiquetaEstado saldoCentavos={queda} descubiertoCentavos={banco.descubiertoCentavos} />
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </Tabla>
+          {sugerencia ? <Mensaje tono={sugerencia.tono}>{sugerencia.texto}</Mensaje> : null}
+        </>
       )}
-    </Seccion>
+    </Tarjeta>
   )
 }
+
+/* ----------------------------------------------------------------------------
+ * 4. Cheques que se debitan mañana
+ * -------------------------------------------------------------------------- */
 
 export function TarjetaCheques({ cheques }: { cheques: HoyResponse['prevision']['chequesADebitar'] }) {
   return (
-    <Seccion
-      titulo="Mañana se debitan estos cheques"
-      explicacion="Los cheques nuestros que se debitan mañana, y los de hoy que todavía no figuran debitados."
-      borde="violeta"
+    <Tarjeta
+      titulo="Cheques que se debitan mañana"
+      explicacion="Cheques nuestros que se debitan mañana, y los de hoy que todavía no figuran debitados."
+      total={cheques.filas.length > 0 ? { etiqueta: 'Total', centavos: cheques.totalCentavos } : undefined}
     >
       {cheques.filas.length === 0 ? (
-        <EstadoVacio texto="Mañana no se debita ningún cheque. 👍" />
+        <Vacio texto="Mañana no se debita ningún cheque." />
       ) : (
         <>
-          <ul className="grid gap-3">
-            {cheques.filas.map((fila) => (
-              <li
-                key={fila.id}
-                className="flex flex-col gap-2 rounded-2xl border border-neutral-200 p-4 dark:border-zinc-700 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
-              >
-                <div className="min-w-0">
-                  <p className="text-heading text-xl font-bold leading-tight">{fila.destinatario}</p>
-                  <p className="text-body-muted mt-1 text-base">
-                    Cheque N.º {fila.numero} · {fila.banco} · se debita {fila.cuando.toLowerCase()}
-                  </p>
-                </div>
-                <div className="shrink-0 sm:text-right">
-                  <Monto centavos={fila.montoCentavos} grande />
-                </div>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-5 flex items-baseline justify-between gap-3 border-t border-neutral-200 pt-4 text-xl dark:border-zinc-800">
-            <span className="font-medium">Total en cheques</span>
-            <Monto centavos={cheques.totalCentavos} grande />
-          </p>
-          {cheques.impactos.length > 0 ? (
-            <div className="mt-4 grid gap-2">
-              {cheques.impactos.map((texto) => (
-                <p
-                  key={texto}
-                  className={`rounded-2xl border px-4 py-3 text-lg font-medium leading-snug ${
-                    texto.startsWith('Ojo')
-                      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100'
-                      : 'border-neutral-200 bg-neutral-50 dark:border-zinc-700 dark:bg-zinc-800/60'
-                  }`}
-                >
-                  {texto}
-                </p>
+          <Tabla>
+            <thead>
+              <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
+                <th className={th}>N.º</th>
+                <th className={th}>A quién</th>
+                <th className={th}>Banco</th>
+                <th className={`${th} text-right`}>Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cheques.filas.map((fila) => (
+                <tr key={fila.id} className={filaHover}>
+                  <td className={`${td} whitespace-nowrap tabular-nums`}>
+                    {fila.numero}
+                    {fila.cuando === 'Hoy' ? <span className="text-body-muted text-xs"> · hoy</span> : null}
+                  </td>
+                  <td className={`${td} text-heading font-medium`}>{fila.destinatario}</td>
+                  <td className={td}>{fila.banco}</td>
+                  <td className={`${td} text-right`}>
+                    <Monto centavos={fila.montoCentavos} className="text-heading font-medium" />
+                  </td>
+                </tr>
               ))}
-            </div>
-          ) : null}
+            </tbody>
+            <tfoot>
+              <tr className={filaTotal}>
+                <td className={td} colSpan={3}>
+                  Total
+                </td>
+                <td className={`${td} text-right`}>
+                  <Monto centavos={cheques.totalCentavos} className="text-heading" />
+                </td>
+              </tr>
+            </tfoot>
+          </Tabla>
+          {cheques.impactos.map((texto) => (
+            <Mensaje key={texto} tono={texto.startsWith('Ojo') ? 'aviso' : 'info'}>
+              {texto}
+            </Mensaje>
+          ))}
         </>
       )}
-    </Seccion>
+    </Tarjeta>
   )
 }
 
-export function TarjetaPrevision({
-  prevision,
+/* ----------------------------------------------------------------------------
+ * 5. Esta semana
+ * -------------------------------------------------------------------------- */
+
+export function TarjetaSemana({ prevision }: { prevision: HoyResponse['prevision'] }) {
+  const semana = prevision.semana ?? []
+  return (
+    <Tarjeta titulo="Esta semana" explicacion="Lo que hay que pagar y cobrar cada día, y cómo va quedando.">
+      {semana.length === 0 ? (
+        <Vacio texto="Esta semana no hay nada anotado todavía." />
+      ) : (
+        <>
+          {prevision.diaMasPesado ? (
+            <p className="flex items-start gap-2 border-b border-neutral-100 px-4 py-2.5 text-sm text-amber-900 dark:border-zinc-800 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <span>{prevision.diaMasPesado}</span>
+            </p>
+          ) : null}
+          <Tabla>
+            <thead>
+              <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
+                <th className={th}>Día</th>
+                <th className={`${th} text-right`}>A pagar</th>
+                <th className={`${th} text-right`}>A cobrar</th>
+                <th className={`${th} text-right`}>Queda</th>
+              </tr>
+            </thead>
+            <tbody>
+              {semana.map((fila) => (
+                <tr
+                  key={fila.fecha}
+                  className={`${filaHover} ${
+                    fila.esElMasPesado ? 'bg-amber-50 hover:bg-amber-100/70 dark:bg-amber-950/30 dark:hover:bg-amber-950/50' : ''
+                  }`}
+                >
+                  <td className={`${td} text-heading whitespace-nowrap font-medium`}>{fila.dia}</td>
+                  <td className={`${td} text-right`}>
+                    {fila.aPagarCentavos > 0 ? <Monto centavos={fila.aPagarCentavos} /> : <span className="text-body-muted">—</span>}
+                  </td>
+                  <td className={`${td} text-right`}>
+                    {fila.aCobrarCentavos > 0 ? <Monto centavos={fila.aCobrarCentavos} /> : <span className="text-body-muted">—</span>}
+                  </td>
+                  <td className={`${td} text-right`}>
+                    <Monto centavos={fila.quedaCentavos} className="text-heading font-medium" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Tabla>
+        </>
+      )}
+    </Tarjeta>
+  )
+}
+
+/* ----------------------------------------------------------------------------
+ * 6. Cobros atrasados y transferencias esperando firma
+ * -------------------------------------------------------------------------- */
+
+export function TarjetaAtrasados({
+  cobros,
   onReclamar,
 }: {
-  prevision: HoyResponse['prevision']
-  onReclamar: (cobro: HoyResponse['prevision']['cobrosAtrasados'][number]) => void
+  cobros: CobroAtrasadoHoy[]
+  onReclamar: (cobro: CobroAtrasadoHoy) => void
 }) {
-  const haySemana = prevision.semana != null && prevision.semana.length > 0
-  const hayAtrasados = prevision.cobrosAtrasados.length > 0
-  const hayFirmas = prevision.firmas != null
+  const total = cobros.reduce((suma, cobro) => suma + cobro.montoCentavos, 0)
   return (
-    <Seccion
-      titulo="Para organizarte"
-      explicacion="Lo que viene en la semana, los cobros que se atrasaron y las transferencias que esperan firma."
-      borde="gris"
+    <Tarjeta
+      titulo="Cobros atrasados"
+      explicacion="Cobros que se esperaban antes de hoy y todavía no entraron."
+      total={cobros.length > 0 ? { etiqueta: 'Total', centavos: total } : undefined}
     >
-      <div className="grid gap-8">
-        <div>
-          <h3 className="text-heading text-xl font-semibold">Esta semana</h3>
-          {!haySemana || !prevision.semana ? (
-            <div className="mt-3">
-              <EstadoVacio texto="Esta semana no hay nada anotado todavía." />
-            </div>
-          ) : (
-            <>
-              {prevision.diaMasPesado ? (
-                <p className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-lg font-semibold text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-                  {prevision.diaMasPesado}
-                </p>
-              ) : null}
-              <div className="mt-3 overflow-x-auto">
-                <table className="min-w-full border-collapse text-left text-base">
-                  <thead>
-                    <tr className="text-body-muted border-b-2 border-neutral-300 dark:border-zinc-700">
-                      <th className="py-2 pr-3 font-semibold">Día</th>
-                      <th className="py-2 pr-3 font-semibold">A pagar</th>
-                      <th className="py-2 pr-3 font-semibold">A cobrar</th>
-                      <th className="py-2 font-semibold">Cómo queda</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {prevision.semana.map((fila) => (
-                      <tr
-                        key={fila.fecha}
-                        className={`border-b border-neutral-200 dark:border-zinc-800 ${
-                          fila.esElMasPesado ? 'bg-amber-50 font-semibold dark:bg-amber-950/30' : ''
-                        }`}
-                      >
-                        <td className="py-3 pr-3 font-medium">
-                          {fila.dia}
-                          {fila.esElMasPesado ? (
-                            <span className="ml-2 rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-950 dark:bg-amber-800 dark:text-amber-50">
-                              el más pesado
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="py-3 pr-3">
-                          {fila.aPagarCentavos > 0 ? <Monto centavos={fila.aPagarCentavos} /> : <span className="text-body-muted">—</span>}
-                        </td>
-                        <td className="py-3 pr-3">
-                          {fila.aCobrarCentavos > 0 ? <Monto centavos={fila.aCobrarCentavos} /> : <span className="text-body-muted">—</span>}
-                        </td>
-                        <td className="py-3">
-                          <Monto centavos={fila.quedaCentavos} />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
-        </div>
+      {cobros.length === 0 ? (
+        <Vacio texto="No hay cobros atrasados." />
+      ) : (
+        <Tabla>
+          <thead>
+            <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
+              <th className={th}>De quién</th>
+              <th className={th}>Esperado</th>
+              <th className={`${th} text-right`}>Monto</th>
+              <th className={`${th} text-right`}>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cobros.map((cobro) => (
+              <tr key={cobro.id} className={filaHover}>
+                <td className={td}>
+                  <span className="text-heading block font-medium">{cobro.cliente}</span>
+                  <span className="text-body-muted block text-xs">{cobro.concepto}</span>
+                </td>
+                <td className={`${td} whitespace-nowrap text-red-700 dark:text-red-300`}>{cobro.haceTexto}</td>
+                <td className={`${td} text-right`}>
+                  <Monto centavos={cobro.montoCentavos} className="text-heading font-medium" />
+                </td>
+                <td className={`${td} text-right`}>
+                  <button type="button" className={botonSecundario} onClick={() => onReclamar(cobro)}>
+                    Reclamar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Tabla>
+      )}
+    </Tarjeta>
+  )
+}
 
-        <div>
-          <h3 className="text-heading text-xl font-semibold">Cobros atrasados</h3>
-          {!hayAtrasados ? (
-            <div className="mt-3">
-              <EstadoVacio texto="No hay cobros atrasados. 👍" />
-            </div>
-          ) : (
-            <ul className="mt-3 grid gap-3">
-              {prevision.cobrosAtrasados.map((cobro) => (
-                <li
-                  key={cobro.id}
-                  className="flex flex-col gap-3 rounded-2xl border border-neutral-200 p-4 dark:border-zinc-700 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="min-w-0">
-                    <p className="text-heading text-xl font-bold leading-tight">{cobro.cliente}</p>
-                    <p className="text-body-muted mt-1 text-base">{cobro.concepto}</p>
-                    <p className="mt-1 text-base font-semibold text-red-700 dark:text-red-300">
-                      Se esperaba {cobro.haceTexto.toLowerCase()}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-start gap-2 sm:items-end">
-                    <Monto centavos={cobro.montoCentavos} grande />
-                    <button type="button" className={botonChico} onClick={() => onReclamar(cobro)}>
-                      Reclamar
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div>
-          <h3 className="text-heading text-xl font-semibold">Transferencias esperando firma</h3>
-          {hayFirmas && prevision.firmas ? (
-            <p className="mt-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-lg font-semibold text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-              {prevision.firmas.texto}
-            </p>
-          ) : (
-            <div className="mt-3">
-              <EstadoVacio texto="No hay transferencias esperando firma." />
-            </div>
-          )}
-        </div>
-      </div>
-    </Seccion>
+export function TarjetaFirmas({ firmas }: { firmas: HoyResponse['prevision']['firmas'] }) {
+  return (
+    <Tarjeta
+      titulo="Transferencias esperando firma"
+      explicacion="Transferencias armadas que todavía no salieron porque falta la firma."
+      total={firmas ? { etiqueta: 'Total', centavos: firmas.montoCentavos } : undefined}
+    >
+      {!firmas ? (
+        <Vacio texto="No hay transferencias esperando firma." />
+      ) : (
+        <Tabla>
+          <thead>
+            <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
+              <th className={th}>Pendientes</th>
+              <th className={`${th} text-right`}>Monto</th>
+              <th className={`${th} text-right`}>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className={filaHover}>
+              <td className={`${td} text-heading font-medium`}>
+                {firmas.cantidad} {firmas.cantidad === 1 ? 'transferencia' : 'transferencias'}
+              </td>
+              <td className={`${td} text-right`}>
+                <Monto centavos={firmas.montoCentavos} className="text-heading font-medium" />
+              </td>
+              <td className={`${td} text-right`}>
+                <Link to="/finanzas/transferencias" className={botonSecundario}>
+                  Ver
+                </Link>
+              </td>
+            </tr>
+          </tbody>
+        </Tabla>
+      )}
+    </Tarjeta>
   )
 }

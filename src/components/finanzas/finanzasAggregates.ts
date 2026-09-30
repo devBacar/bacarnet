@@ -16,23 +16,6 @@ export interface PosicionPorBancoRow {
   disponibleCentavos: number | null
 }
 
-/** Total disponible en pesos con descubierto: saldo de todos los bancos + los acuerdos cargados. */
-export function computeDisponibleTotal(bancos: PosicionPorBancoRow[]): {
-  disponibleCentavos: number
-  descubiertoCentavos: number
-  bancosSinDescubierto: string[]
-} {
-  let disponibleCentavos = 0
-  let descubiertoCentavos = 0
-  const bancosSinDescubierto: string[] = []
-  for (const banco of bancos) {
-    disponibleCentavos += banco.arsCentavos + (banco.descubiertoCentavos ?? 0)
-    descubiertoCentavos += banco.descubiertoCentavos ?? 0
-    if (banco.descubiertoCentavos == null) bancosSinDescubierto.push(banco.bancoNombre)
-  }
-  return { disponibleCentavos, descubiertoCentavos, bancosSinDescubierto }
-}
-
 export function posicionTag(centavos: number): '(a cubrir)' | '(a favor)' {
   return centavos < 0 ? '(a cubrir)' : '(a favor)'
 }

@@ -1,6 +1,7 @@
-import type { BankDataProvider, CuentaDTO, SaldoDTO } from './bank-provider.types.js'
+import type { BankDataProvider, CuentaDTO, SaldoDTO, SaldosDiariosCuentaDTO } from './bank-provider.types.js'
 import {
   mapInterbankingBalancesResponse,
+  mapInterbankingSaldosDiarios,
   type InterbankingBalanceAccount,
 } from './interbanking.mapping.js'
 
@@ -99,6 +100,17 @@ export class InterbankingProvider implements BankDataProvider {
   async getBalances(): Promise<SaldoDTO[]> {
     const snap = await this.loadSnapshot()
     return snap.balances
+  }
+
+  async getSaldosDiarios(input: { desde: string; hasta: string }): Promise<SaldosDiariosCuentaDTO[]> {
+    const config = readInterbankingEnvConfig()
+    const client = await createInterbankingClient(config)
+    const data = await client.getBalances({
+      'date-since': input.desde,
+      'date-until': input.hasta,
+    })
+    const accounts = Array.isArray(data.accounts) ? data.accounts : []
+    return mapInterbankingSaldosDiarios(accounts)
   }
 }
 

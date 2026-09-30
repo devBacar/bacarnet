@@ -1,6 +1,7 @@
 const PALETA = ['#0f766e', '#1d4ed8', '#b45309', '#7c3aed', '#be123c', '#0369a1', '#3f6212', '#9a3412']
 
 const NOMBRE_MAX = 40
+const GRUPO_MAX = 40
 const NOTA_MAX = 500
 const COLOR_HEX = /^#[0-9a-fA-F]{6}$/
 
@@ -19,6 +20,18 @@ export function validarNombreCategoria(raw: string): string {
     throw new Error(`El nombre de la categoría puede tener hasta ${NOMBRE_MAX} caracteres`)
   }
   return nombre
+}
+
+/** Trim, espacios colapsados, máx 40. Vacío o ausente = null. */
+export function normalizarGrupoCategoria(raw: unknown): string | null {
+  if (raw == null || raw === '') return null
+  if (typeof raw !== 'string') throw new Error('El grupo tiene que ser texto')
+  const grupo = raw.trim().replace(/\s+/g, ' ')
+  if (!grupo) return null
+  if (grupo.length > GRUPO_MAX) {
+    throw new Error(`El grupo puede tener hasta ${GRUPO_MAX} caracteres`)
+  }
+  return grupo
 }
 
 export function colorDesdeNombre(nombre: string): string {

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import {
   ReglaCategorizacionError,
+  aplicarReglasAMovimientosSinCategoria,
   crearReglaCategorizacion,
   listReglasCategorizacionApi,
 } from '../services/reglas-categorizacion.service.js'
@@ -21,7 +22,7 @@ finanzasReglasCategorizacionRouter.get('/', async (_req, res) => {
   }
 })
 
-/** Crea la regla y categoriza retroactivamente todos los movimientos con esa descripción. */
+/** Crea la regla y categoriza los movimientos que todavía no tienen categoría y matchean. */
 finanzasReglasCategorizacionRouter.post('/', async (req, res) => {
   const actorUid = req.authedUser?.uid
   if (!actorUid) {
@@ -29,11 +30,9 @@ finanzasReglasCategorizacionRouter.post('/', async (req, res) => {
     return
   }
   try {
-    const body = (req.body ?? {}) as { descripcionExacta?: unknown; categoriaId?: unknown }
     const result = await crearReglaCategorizacion({
       actorUid,
-      descripcionExacta: body.descripcionExacta,
-      categoriaId: body.categoriaId,
+      body: (req.body ?? {}) as Record<string, unknown>,
     })
     res.status(result.creada ? 201 : 200).json(result)
   } catch (err) {
@@ -43,6 +42,17 @@ finanzasReglasCategorizacionRouter.post('/', async (req, res) => {
       return
     }
     const message = err instanceof Error ? err.message : 'No se pudo crear la regla'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasReglasCategorizacionRouter.post('/aplicar', async (_req, res) => {
+  try {
+    const { revisados, categorizados, porCategoria } = await aplicarReglasAMovimientosSinCategoria()
+    res.json({ revisados, categorizados, porCategoria })
+  } catch (err) {
+    console.error('[finanzas/reglas-categorizacion] aplicar', err)
+    const message = err instanceof Error ? err.message : 'No se pudieron aplicar las reglas'
     res.status(400).json({ error: message })
   }
 })

@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import {
   fetchMovimientosAnterioresCompleto,
+  fetchMovimientosDia,
   listCuentasCorrientesArs,
   openInterbankingInfoSession,
   type CuentaCorrienteObjetivo,
@@ -12,11 +14,13 @@ import {
   countMovimientosBancarios,
   countMovimientosFiltrados,
   getMovimientosSyncEstado,
+  liberarTurnoSyncMovimientos,
   movimientosBancariosCollection,
   pageMovimientos,
   replaceMovimientosRango,
   scanMovimientosPorTexto,
   sumMovimientosCentavos,
+  tomarTurnoSyncMovimientos,
   type MovimientoListadoItem,
 } from './movimientos.repository.js'
 import { reconciliarTransferenciasConMovimientos } from '../../transferencias/services/reconciliar-movimientos.js'
@@ -39,6 +43,10 @@ export interface MovimientosSyncCuentaResult {
   insertados: number
   /** Filas nuevas que entraron ya categorizadas por una regla. */
   autoCategorizados: number
+  /** Movimientos del día en curso (`movement-type=dia`), reemplazados aparte. */
+  diaTraidos: number
+  diaInsertados: number
+  diaAutoCategorizados: number
   enFirestore: number
   ultimaFechaSincronizada: string
 }
@@ -129,6 +137,9 @@ async function syncCuenta(input: {
       eliminados: 0,
       insertados: 0,
       autoCategorizados: 0,
+      diaTraidos: 0,
+      diaInsertados: 0,
+      diaAutoCategorizados: 0,
       enFirestore: await countMovimientosBancarios(input.cuenta.cuentaId),
       ultimaFechaSincronizada: estado?.ultimaFechaSincronizada ?? '',
     }
@@ -166,12 +177,85 @@ async function syncCuenta(input: {
     eliminados: write.eliminados,
     insertados: write.insertados,
     autoCategorizados: write.autoCategorizados,
+    diaTraidos: 0,
+    diaInsertados: 0,
+    diaAutoCategorizados: 0,
     enFirestore: await countMovimientosBancarios(input.cuenta.cuentaId),
     ultimaFechaSincronizada: plan.hasta,
   }
 }
 
+/** Reemplaza el día de hoy sin mover la marca de agua de `anteriores`. */
+async function syncDiaCuenta(input: {
+  session: InterbankingInfoSession
+  cuenta: CuentaCorrienteObjetivo
+  actorUid: string
+  fecha: string
+}): Promise<{ traidos: number; insertados: number; autoCategorizados: number; requests: number }> {
+  const fetched = await fetchMovimientosDia({
+    session: input.session,
+    cuenta: input.cuenta,
+    fecha: input.fecha,
+  })
+  const rows = fetched.rows.map((row) =>
+    mapInterbankingMovement({
+      row,
+      cuentaId: input.cuenta.cuentaId,
+      bancoNombre: input.cuenta.bancoNombre,
+      bancoNumero: input.cuenta.bancoNumero,
+      numeroCuenta: input.cuenta.numeroCuenta,
+    }),
+  )
+  const ajena = rows.find((row) => row.fechaProceso !== input.fecha)
+  if (ajena) {
+    throw new Error(
+      `movement-type=dia de ${input.cuenta.cuentaId} trajo fecha ${ajena.fechaProceso}, se esperaba ${input.fecha}`,
+    )
+  }
+  const write = await replaceMovimientosRango({
+    cuenta: input.cuenta,
+    desde: input.fecha,
+    hasta: input.fecha,
+    rows,
+    syncedBy: input.actorUid,
+    primeraFechaCargada: input.fecha,
+    moverMarcaDeAgua: false,
+  })
+  return {
+    traidos: rows.length,
+    insertados: write.insertados,
+    autoCategorizados: write.autoCategorizados,
+    requests: fetched.requests,
+  }
+}
+
+/** Ya hay otro sync de movimientos corriendo (botón o programado). */
+export class MovimientosSyncEnCursoError extends Error {
+  constructor() {
+    super('Ya se están trayendo los movimientos del banco. Probá de nuevo en un minuto.')
+    this.name = 'MovimientosSyncEnCursoError'
+  }
+}
+
+/** Tope del turno: si el proceso se cae, a los 10 minutos otro puede volver a sincronizar. */
+const SYNC_TURNO_MS = 10 * 60 * 1000
+
 export async function syncMovimientosBancarios(input: { actorUid: string }): Promise<MovimientosSyncResult> {
+  const token = randomUUID()
+  const tomado = await tomarTurnoSyncMovimientos({
+    token,
+    actorUid: input.actorUid,
+    duracionMs: SYNC_TURNO_MS,
+  })
+  if (!tomado) throw new MovimientosSyncEnCursoError()
+  try {
+    return await syncMovimientosConTurno(input)
+  } finally {
+    await liberarTurnoSyncMovimientos(token)
+  }
+}
+
+async function syncMovimientosConTurno(input: { actorUid: string }): Promise<MovimientosSyncResult> {
   const now = new Date()
   const session = await openInterbankingInfoSession()
   const cuentas = await listCuentasCorrientesArs(session)
@@ -179,20 +263,31 @@ export async function syncMovimientosBancarios(input: { actorUid: string }): Pro
     throw new Error('Interbanking no devolvió cuentas corrientes en ARS para Patagonia, Julio o Córdoba')
   }
 
+  const hoy = hoyArgentina(now)
   const porCuenta: MovimientosSyncCuentaResult[] = []
   for (const cuenta of cuentas) {
     if (porCuenta.length > 0) await new Promise((resolve) => setTimeout(resolve, 1000))
-    porCuenta.push(await syncCuenta({ session, cuenta, actorUid: input.actorUid, now }))
+    const historico = await syncCuenta({ session, cuenta, actorUid: input.actorUid, now })
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const dia = await syncDiaCuenta({ session, cuenta, actorUid: input.actorUid, fecha: hoy })
+    porCuenta.push({
+      ...historico,
+      requestsAlBanco: historico.requestsAlBanco + dia.requests,
+      diaTraidos: dia.traidos,
+      diaInsertados: dia.insertados,
+      diaAutoCategorizados: dia.autoCategorizados,
+      enFirestore: await countMovimientosBancarios(cuenta.cuentaId),
+    })
   }
 
   const reconciliacion = await reconciliarTransferenciasConMovimientos({ actorUid: input.actorUid })
 
   return {
     hoy: hoyArgentina(now),
-    traidos: porCuenta.reduce((acc, c) => acc + c.traidos, 0),
-    insertados: porCuenta.reduce((acc, c) => acc + c.insertados, 0),
+    traidos: porCuenta.reduce((acc, c) => acc + c.traidos + c.diaTraidos, 0),
+    insertados: porCuenta.reduce((acc, c) => acc + c.insertados + c.diaInsertados, 0),
     eliminados: porCuenta.reduce((acc, c) => acc + c.eliminados, 0),
-    autoCategorizados: porCuenta.reduce((acc, c) => acc + c.autoCategorizados, 0),
+    autoCategorizados: porCuenta.reduce((acc, c) => acc + c.autoCategorizados + c.diaAutoCategorizados, 0),
     enFirestore: await countMovimientosBancarios(),
     cuentas: porCuenta,
     reconciliacion,

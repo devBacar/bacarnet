@@ -12,8 +12,10 @@ interface AccountsDetailModalProps {
   moneda: FinanzasMoneda
   bancoNombre?: string | null
   canEditManual: boolean
+  canEditDescubierto: boolean
   onClose: () => void
   onEditManual: (cuenta: FinanzasCuenta) => void
+  onEditDescubierto: (cuenta: FinanzasCuenta) => void
 }
 
 export function AccountsDetailModal({
@@ -22,8 +24,10 @@ export function AccountsDetailModal({
   moneda,
   bancoNombre,
   canEditManual,
+  canEditDescubierto,
   onClose,
   onEditManual,
+  onEditDescubierto,
 }: AccountsDetailModalProps) {
   const filtradas = useMemo(
     () =>
@@ -129,6 +133,8 @@ export function AccountsDetailModal({
                           canEditManual && cuenta.origenSaldo === 'manual'
                         }
                         onEditManualSaldo={() => onEditManual(cuenta)}
+                        canEditDescubierto={canEditDescubierto}
+                        onEditDescubierto={() => onEditDescubierto(cuenta)}
                       />
                     ))}
                   </div>

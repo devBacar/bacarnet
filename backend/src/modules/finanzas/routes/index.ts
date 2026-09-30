@@ -5,12 +5,14 @@ import { finanzasCajasRouter } from '../cajachica/routes/cajas.routes.js'
 import { finanzasTransferenciasRouter } from '../transferencias/routes/transferencias.routes.js'
 import { finanzasCategoriasMovimientosRouter } from '../movimientos/routes/categorias-movimientos.routes.js'
 import { finanzasMovimientosRouter } from '../movimientos/routes/movimientos.routes.js'
+import { finanzasCashflowRouter } from '../cashflow/routes/cashflow.routes.js'
 import { finanzasReglasCategorizacionRouter } from '../movimientos/routes/reglas-categorizacion.routes.js'
 import { finanzasChequesRouter } from '../cheques/routes/cheques.routes.js'
 
 export const finanzasRouter = Router()
 
 finanzasRouter.use('/cuentas', finanzasCuentasRouter)
+finanzasRouter.use('/cashflow', finanzasCashflowRouter)
 finanzasRouter.use('/agenda', finanzasAgendaRouter)
 finanzasRouter.use('/cajas', finanzasCajasRouter)
 finanzasRouter.use('/transferencias', finanzasTransferenciasRouter)

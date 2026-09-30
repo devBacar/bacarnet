@@ -8,6 +8,7 @@ import { finanzasCategoriasMovimientosRouter } from '../movimientos/routes/categ
 import { finanzasMovimientosRouter } from '../movimientos/routes/movimientos.routes.js'
 import { finanzasCashflowRouter } from '../cashflow/routes/cashflow.routes.js'
 import { finanzasReglasCategorizacionRouter } from '../movimientos/routes/reglas-categorizacion.routes.js'
+import { finanzasChequesRouter } from '../cheques/routes/cheques.routes.js'
 
 export const finanzasRouter = Router()
 
@@ -20,3 +21,4 @@ finanzasRouter.use('/destinatarios', finanzasDestinatariosRouter)
 finanzasRouter.use('/categorias-movimientos', finanzasCategoriasMovimientosRouter)
 finanzasRouter.use('/reglas-categorizacion', finanzasReglasCategorizacionRouter)
 finanzasRouter.use('/movimientos', finanzasMovimientosRouter)
+finanzasRouter.use('/cheques', finanzasChequesRouter)

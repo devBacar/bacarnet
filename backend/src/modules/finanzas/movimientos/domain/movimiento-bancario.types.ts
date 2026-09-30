@@ -57,6 +57,18 @@ export interface MovimientoBancarioDocument {
   categoriaId?: string | null
   /** Texto libre del usuario. También se reaplica junto con la categoría. */
   nota?: string | null
+  /** A quién o de quién es el movimiento. `manual` no se pisa en un sync. */
+  contraparteNombre?: string | null
+  contraparteCuit?: string | null
+  contraparteOrigen?:
+    | 'manual'
+    | 'banco'
+    | 'transferencia'
+    | 'agenda'
+    | 'interbanking'
+    | 'directorio'
+    | 'categoria'
+    | null
   createdAt: Timestamp
   syncedBy: string
 }

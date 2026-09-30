@@ -15,6 +15,8 @@ import {
   huellaMovimientoSinDescripcion,
   type AnotacionMovimiento,
 } from '../domain/movimiento-huella.js'
+import type { ContraparteGuardada } from '../../contraparte/domain/contraparte.types.js'
+import { vistaContraparte } from '../../contraparte/domain/vista-contraparte.js'
 import type { MovimientoBancarioSyncDocument } from '../domain/movimiento-bancario.types.js'
 import {
   aplicarReglasAFilas,
@@ -84,15 +86,25 @@ export async function countMovimientosBancarios(cuentaId?: string): Promise<numb
   return snap.data().count
 }
 
+function textoGuardado(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const texto = value.trim()
+  return texto || null
+}
+
 function anotacionDeDocumento(data: DocumentData): AnotacionMovimiento | null {
   const categoriaId = typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null
   const nota = typeof data.nota === 'string' && data.nota.trim() ? data.nota.trim() : null
-  if (!categoriaId && !nota) return null
+  const manual = data.contraparteOrigen === 'manual'
+  if (!categoriaId && !nota && !manual) return null
   return {
     huella: huellaMovimiento(data),
     huellaSinDescripcion: huellaMovimientoSinDescripcion(data),
     categoriaId,
     nota,
+    contraparteNombre: manual ? textoGuardado(data.contraparteNombre) : null,
+    contraparteCuit: manual ? textoGuardado(data.contraparteCuit) : null,
+    contraparteOrigen: manual ? 'manual' : null,
   }
 }
 
@@ -316,7 +328,7 @@ export interface MovimientoListadoItem {
   bancoNombre: string
   fechaProceso: string
   descripcion: string
-  contraparte: string | null
+  contraparte: ContraparteGuardada | null
   customerCuit: string | null
   tipo: 'debito' | 'credito'
   montoCentavos: number
@@ -346,14 +358,14 @@ function ordenado(filtro: MovimientosListadoFiltro): Query {
     .orderBy(FieldPath.documentId(), 'desc')
 }
 
-function toListadoItem(id: string, data: DocumentData): MovimientoListadoItem {
+export function toListadoItem(id: string, data: DocumentData): MovimientoListadoItem {
   return {
     id,
     cuentaId: String(data.cuentaId ?? ''),
     bancoNombre: String(data.bancoNombre ?? ''),
     fechaProceso: String(data.fechaProceso ?? ''),
     descripcion: String(data.descripcion ?? ''),
-    contraparte: typeof data.depositorDescription === 'string' && data.depositorDescription ? data.depositorDescription : null,
+    contraparte: vistaContraparte(data),
     customerCuit: typeof data.customerCuit === 'string' && data.customerCuit ? data.customerCuit : null,
     tipo: data.tipo === 'credito' ? 'credito' : 'debito',
     montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
@@ -411,7 +423,14 @@ export async function scanMovimientosPorTexto(input: {
     for (const doc of snap.docs) {
       const data = doc.data()
       const item = toListadoItem(doc.id, data)
-      const haystack = [item.descripcion, item.contraparte, item.customerCuit]
+      const depositor = typeof data.depositorDescription === 'string' ? data.depositorDescription : null
+      const haystack = [
+        item.descripcion,
+        item.contraparte?.nombre,
+        item.contraparte?.cuit,
+        item.customerCuit,
+        depositor,
+      ]
         .filter((part): part is string => Boolean(part))
         .join(' ')
         .toLocaleLowerCase('es')

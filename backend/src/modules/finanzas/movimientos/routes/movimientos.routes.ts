@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { enriquecerContrapartes } from '../../contraparte/services/enriquecer-contrapartes.js'
 import {
   MovimientoAnotacionError,
   MovimientosSyncEnCursoError,
@@ -33,6 +34,17 @@ finanzasMovimientosRouter.get('/', async (req, res) => {
   }
 })
 
+finanzasMovimientosRouter.post('/contrapartes/completar', async (_req, res) => {
+  try {
+    const resultado = await enriquecerContrapartes()
+    res.json(resultado)
+  } catch (err) {
+    console.error('[finanzas/movimientos] completar contrapartes', err)
+    const message = err instanceof Error ? err.message : 'No se pudieron completar las contrapartes'
+    res.status(500).json({ error: message })
+  }
+})
+
 finanzasMovimientosRouter.patch('/:id', async (req, res) => {
   try {
     const id = req.params.id
@@ -40,8 +52,19 @@ finanzasMovimientosRouter.patch('/:id', async (req, res) => {
       res.status(400).json({ error: 'Id de movimiento inválido' })
       return
     }
-    const body = (req.body ?? {}) as { categoriaId?: unknown; nota?: unknown }
-    const input: { movimientoId: string; categoriaId?: string | null; nota?: string | null } = {
+    const body = (req.body ?? {}) as {
+      categoriaId?: unknown
+      nota?: unknown
+      contraparteNombre?: unknown
+      contraparteCuit?: unknown
+    }
+    const input: {
+      movimientoId: string
+      categoriaId?: string | null
+      nota?: string | null
+      contraparteNombre?: string | null
+      contraparteCuit?: string | null
+    } = {
       movimientoId: id,
     }
     if (Object.prototype.hasOwnProperty.call(body, 'categoriaId')) {
@@ -57,6 +80,22 @@ finanzasMovimientosRouter.patch('/:id', async (req, res) => {
       else if (typeof body.nota === 'string') input.nota = body.nota
       else {
         res.status(400).json({ error: 'La nota tiene que ser texto' })
+        return
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'contraparteNombre')) {
+      if (body.contraparteNombre == null) input.contraparteNombre = null
+      else if (typeof body.contraparteNombre === 'string') input.contraparteNombre = body.contraparteNombre
+      else {
+        res.status(400).json({ error: 'El nombre tiene que ser texto' })
+        return
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'contraparteCuit')) {
+      if (body.contraparteCuit == null) input.contraparteCuit = null
+      else if (typeof body.contraparteCuit === 'string') input.contraparteCuit = body.contraparteCuit
+      else {
+        res.status(400).json({ error: 'El CUIT tiene que ser texto' })
         return
       }
     }

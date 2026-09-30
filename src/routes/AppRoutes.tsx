@@ -33,6 +33,7 @@ import {
   FinanzasAgendaPage,
   FinanzasTransferenciasPage,
   FinanzasMovimientosPage,
+  FinanzasExtractosPage,
   FinanzasCajasPage,
   FinanzasChequesPage,
   FinanzasLayout,
@@ -88,6 +89,7 @@ export function AppRoutes() {
                   <Route path="agenda" element={<FinanzasAgendaPage />} />
                   <Route path="transferencias" element={<FinanzasTransferenciasPage />} />
                   <Route path="movimientos" element={<FinanzasMovimientosPage />} />
+                  <Route path="extractos" element={<FinanzasExtractosPage />} />
                   <Route path="cheques" element={<FinanzasChequesPage />} />
                 </Route>
                 <Route path="cajas" element={<FinanzasCajasPage />} />

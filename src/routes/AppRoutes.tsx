@@ -29,6 +29,7 @@ import {
   Resources,
   SistemasMesaAyuda,
   SoporteTi,
+  FinanzasHoyPage,
   FinanzasCuentasPage,
   FinanzasAgendaPage,
   FinanzasTransferenciasPage,
@@ -83,6 +84,7 @@ export function AppRoutes() {
               <Route path="finanzas" element={<FinanzasLayout />}>
                 <Route index element={<FinanzasIndexRedirect />} />
                 <Route element={<FinanzasFullSectionsGate />}>
+                  <Route path="hoy" element={<FinanzasHoyPage />} />
                   <Route path="cuentas" element={<FinanzasCuentasPage />} />
                   <Route path="agenda" element={<FinanzasAgendaPage />} />
                   <Route path="transferencias" element={<FinanzasTransferenciasPage />} />

@@ -170,6 +170,36 @@ export async function confirmarCobro(cobroId: string, actorUid: string, body: Re
   return serializeCobro(cobroId, updated)
 }
 
+function fechaDesdeDiaArgentina(ymd: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null
+  const fecha = new Date(`${ymd}T12:00:00-03:00`)
+  return Number.isNaN(fecha.getTime()) ? null : fecha
+}
+
+export async function reprogramarCobro(cobroId: string, actorUid: string, fechaYmd: string) {
+  const fecha = fechaDesdeDiaArgentina(fechaYmd)
+  if (!fecha) throw new Error('Elegí el día')
+  const current = await getCobroDocument(cobroId)
+  if (!current) throw new Error('No encontré ese cobro')
+  if (current.estado === 'confirmado') throw new Error('Ese cobro ya está confirmado')
+  if (current.estado === 'incobrable') throw new Error('Ese cobro está marcado como incobrable')
+
+  await appendCobroHistorial({
+    cobroId,
+    historial: buildAgendaHistorialEntry({
+      estadoAnterior: current.estado,
+      estadoNuevo: current.estado,
+      usuario: actorUid,
+      nota: `Pasado al ${fechaYmd}`,
+    }),
+    patch: { fechaEsperada: timestampFromDate(fecha) },
+  })
+
+  const updated = await getCobroDocument(cobroId)
+  if (!updated) throw new Error('No encontré ese cobro')
+  return serializeCobro(cobroId, updated)
+}
+
 export async function getCobroHistorialApi(cobroId: string) {
   const doc = await getCobroDocument(cobroId)
   if (!doc) return null

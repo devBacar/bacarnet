@@ -8,9 +8,11 @@ import { finanzasCategoriasMovimientosRouter } from '../movimientos/routes/categ
 import { finanzasMovimientosRouter } from '../movimientos/routes/movimientos.routes.js'
 import { finanzasCashflowRouter } from '../cashflow/routes/cashflow.routes.js'
 import { finanzasReglasCategorizacionRouter } from '../movimientos/routes/reglas-categorizacion.routes.js'
+import { finanzasHoyRouter } from '../hoy/routes/hoy.routes.js'
 
 export const finanzasRouter = Router()
 
+finanzasRouter.use('/hoy', finanzasHoyRouter)
 finanzasRouter.use('/cuentas', finanzasCuentasRouter)
 finanzasRouter.use('/cashflow', finanzasCashflowRouter)
 finanzasRouter.use('/agenda', finanzasAgendaRouter)

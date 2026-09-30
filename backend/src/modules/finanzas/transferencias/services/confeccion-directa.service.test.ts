@@ -12,6 +12,8 @@ const {
   resolveFinanzasTransferenciasProviderMode,
   registrarUsoDestinatario,
   confeccionarLote,
+  estadoCompromisoParaTransferencia,
+  vincularCompromisoATransferenciaDirecta,
 } = vi.hoisted(() => ({
   getCuentaDocument: vi.fn(),
   beginIdempotentConfeccion: vi.fn(),
@@ -23,6 +25,8 @@ const {
   resolveFinanzasTransferenciasProviderMode: vi.fn(),
   registrarUsoDestinatario: vi.fn(),
   confeccionarLote: vi.fn(),
+  estadoCompromisoParaTransferencia: vi.fn(),
+  vincularCompromisoATransferenciaDirecta: vi.fn(),
 }))
 
 vi.mock('../../services/cuentas.repository.js', () => ({ getCuentaDocument }))
@@ -38,6 +42,10 @@ vi.mock('../adapters/transferencias-provider.factory.js', () => ({
   resolveFinanzasTransferenciasProviderMode,
 }))
 vi.mock('./destinatarios.service.js', () => ({ registrarUsoDestinatario }))
+vi.mock('./vincular-compromiso-confeccion.js', () => ({
+  estadoCompromisoParaTransferencia,
+  vincularCompromisoATransferenciaDirecta,
+}))
 
 import { confeccionarTransferenciaDirecta } from './confeccion-directa.service.js'
 
@@ -115,6 +123,8 @@ describe('confeccionarTransferenciaDirecta', () => {
     })
     registrarUsoDestinatario.mockResolvedValue('alta')
     abortIdempotentConfeccion.mockResolvedValue(undefined)
+    estadoCompromisoParaTransferencia.mockResolvedValue('listo')
+    vincularCompromisoATransferenciaDirecta.mockResolvedValue(undefined)
   })
 
   it('no llama al proveedor si la misma clave ya confeccionó', async () => {
@@ -225,6 +235,23 @@ describe('confeccionarTransferenciaDirecta', () => {
     expect(abortIdempotentConfeccion).toHaveBeenCalledWith(KEY)
     expect(createTransferenciaWithHistorial).not.toHaveBeenCalled()
     expect(registrarUsoDestinatario).not.toHaveBeenCalled()
+  })
+
+  it('deja la transferencia atada al pago y lo pasa a preparada', async () => {
+    const result = await confeccionarTransferenciaDirecta({
+      actorUid: 'user-1',
+      body: bodyTerceros({ compromisoPagoId: 'comp-1', idempotencyKey: '33333333-2222-4333-8444-555555555555' }),
+    })
+    expect(result.ok).toBe(true)
+    expect(estadoCompromisoParaTransferencia).toHaveBeenCalledWith('comp-1')
+    expect(guardada?.doc.compromisoPagoId).toBe('comp-1')
+    expect(vincularCompromisoATransferenciaDirecta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        compromisoId: 'comp-1',
+        actorUid: 'user-1',
+        cuentaDebitoId: 'patagonia-cc',
+      }),
+    )
   })
 
   it('no llama al proveedor si el CBU no verifica', async () => {

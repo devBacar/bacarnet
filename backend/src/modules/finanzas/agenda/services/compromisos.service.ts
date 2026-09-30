@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { buildMarcarPagadoHistorial } from '../domain/agenda.historial.js'
+import { buildAgendaHistorialEntry, buildMarcarPagadoHistorial } from '../domain/agenda.historial.js'
 import { computeVencimientoAlerta } from '../domain/vencimiento.alert.js'
 import {
   compareAgendaByUrgenciaThenFecha,
@@ -228,6 +228,122 @@ export async function marcarCompromisoPagado(
 
   const updated = await getCompromisoDocument(compromisoId)
   if (!updated) throw new Error('Compromiso no encontrado')
+  return serializeCompromiso(compromisoId, updated)
+}
+
+function fechaDesdeDiaArgentina(ymd: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null
+  const fecha = new Date(`${ymd}T12:00:00-03:00`)
+  return Number.isNaN(fecha.getTime()) ? null : fecha
+}
+
+/** La transferencia ya figura hecha en el banco: el pago deja de estar pendiente. */
+export async function marcarCompromisoPagadoPorTransferenciaHecha(input: {
+  compromisoId: string
+  actorUid: string
+  cuentaId: string | null
+  nota: string
+}): Promise<void> {
+  const current = await getCompromisoDocument(input.compromisoId)
+  if (!current || current.estado === 'pagado') return
+  const usuario = input.actorUid.trim() || 'sistema'
+  await appendCompromisoHistorial({
+    compromisoId: input.compromisoId,
+    historial: buildMarcarPagadoHistorial({
+      estadoAnterior: current.estado,
+      usuario,
+      nota: input.nota,
+    }),
+    patch: {
+      estado: 'pagado',
+      medioPago: 'transferencia',
+      cuentaId: input.cuentaId ?? current.cuentaId,
+      fechaPago: timestampFromDate(new Date()),
+      pagadoPor: usuario,
+    },
+  })
+}
+
+/** "Ya lo pagué" desde Hoy: permite banco, efectivo o cheque, incluso si estaba previsto por banco. */
+export async function marcarCompromisoYaPagado(
+  compromisoId: string,
+  actorUid: string,
+  body: Record<string, unknown>,
+) {
+  const current = await getCompromisoDocument(compromisoId)
+  if (!current) throw new Error('No encontré ese pago')
+  if (current.estado === 'pagado') throw new Error('Ese pago ya está hecho')
+  if (current.estado === 'confeccionada_pendiente_autorizacion') {
+    throw new Error(
+      'Esta transferencia ya está armada y esperando firma. Cuando el banco la confirme, se marca sola.',
+    )
+  }
+
+  const medioRaw = body.medioPago
+  const medioPago: MedioPago =
+    medioRaw === 'transferencia' || medioRaw === 'efectivo' || medioRaw === 'cheque'
+      ? medioRaw
+      : current.medioPago
+  const cuentaId =
+    typeof body.cuentaId === 'string' && body.cuentaId.trim() ? body.cuentaId.trim() : null
+  const fechaTexto = typeof body.fechaPago === 'string' ? body.fechaPago.trim() : ''
+  const fechaPago =
+    fechaDesdeDiaArgentina(fechaTexto.slice(0, 10)) ?? parseDateInput(body.fechaPago) ?? new Date()
+  const movimientoId = typeof body.movimientoId === 'string' ? body.movimientoId.trim() : ''
+  if (medioPago === 'transferencia' && !cuentaId) {
+    throw new Error('Elegí el banco o el movimiento que coincide')
+  }
+
+  const notaBase =
+    typeof body.nota === 'string' && body.nota.trim()
+      ? body.nota.trim()
+      : `Marcado como pagado (${medioPago})`
+  const nota = movimientoId ? `${notaBase}. Movimiento del banco ${movimientoId}.` : notaBase
+
+  await appendCompromisoHistorial({
+    compromisoId,
+    historial: buildMarcarPagadoHistorial({
+      estadoAnterior: current.estado,
+      usuario: actorUid,
+      nota,
+    }),
+    patch: {
+      estado: 'pagado',
+      medioPago,
+      cuentaId: medioPago === 'cheque' ? current.cuentaId : cuentaId,
+      fechaPago: timestampFromDate(fechaPago),
+      pagadoPor: actorUid,
+    },
+  })
+
+  const updated = await getCompromisoDocument(compromisoId)
+  if (!updated) throw new Error('No encontré ese pago')
+  return serializeCompromiso(compromisoId, updated)
+}
+
+export async function reprogramarCompromiso(compromisoId: string, actorUid: string, fechaYmd: string) {
+  const fecha = fechaDesdeDiaArgentina(fechaYmd)
+  if (!fecha) throw new Error('Elegí el día')
+  const current = await getCompromisoDocument(compromisoId)
+  if (!current) throw new Error('No encontré ese pago')
+  if (current.estado === 'pagado') throw new Error('Ese pago ya está hecho')
+  if (current.estado === 'confeccionada_pendiente_autorizacion') {
+    throw new Error('Esa transferencia ya está armada. No se puede cambiar el día.')
+  }
+
+  await appendCompromisoHistorial({
+    compromisoId,
+    historial: buildAgendaHistorialEntry({
+      estadoAnterior: current.estado,
+      estadoNuevo: current.estado,
+      usuario: actorUid,
+      nota: `Pasado al ${fechaYmd}`,
+    }),
+    patch: { fechaVencimiento: timestampFromDate(fecha) },
+  })
+
+  const updated = await getCompromisoDocument(compromisoId)
+  if (!updated) throw new Error('No encontré ese pago')
   return serializeCompromiso(compromisoId, updated)
 }
 

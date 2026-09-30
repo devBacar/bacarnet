@@ -40,6 +40,8 @@ export interface ActualizarEstadosDeps {
   now: Date
   cbuDebito: (cuentaId: string) => string | null
   numeroDebito: (cuentaId: string) => string | null
+  /** Cuando el banco informa que la transferencia quedó hecha. */
+  alQuedarHecha: (input: { compromisoId: string; cuentaDebitoId: string; nota: string }) => Promise<void>
 }
 
 function diaDeTimestamp(value: unknown): string | null {
@@ -56,6 +58,22 @@ function numeroDebitoSeguro(cuentaId: string): string | null {
   }
 }
 
+async function marcarCompromisoHechoPorDefecto(input: {
+  compromisoId: string
+  cuentaDebitoId: string
+  nota: string
+}): Promise<void> {
+  const { marcarCompromisoPagadoPorTransferenciaHecha } = await import(
+    '../../agenda/services/compromisos.service.js'
+  )
+  await marcarCompromisoPagadoPorTransferenciaHecha({
+    compromisoId: input.compromisoId,
+    actorUid: 'sistema',
+    cuentaId: input.cuentaDebitoId,
+    nota: input.nota,
+  })
+}
+
 function depsPorDefecto(now: Date): ActualizarEstadosDeps {
   return {
     listar: listTransferenciasConfeccionadas,
@@ -65,6 +83,7 @@ function depsPorDefecto(now: Date): ActualizarEstadosDeps {
     now,
     cbuDebito: cbuDeCuentaPropia,
     numeroDebito: numeroDebitoSeguro,
+    alQuedarHecha: marcarCompromisoHechoPorDefecto,
   }
 }
 
@@ -169,6 +188,16 @@ export async function actualizarEstadosTransferencias(input?: {
       estadoInterbanking: nuevo,
       fechaSolicitudInterbanking: match.detalle.requestDate,
     })
+    if (rotuloNuevo?.tono === 'hecha') {
+      const compromisoId = row.data.compromisoPagoId?.trim() ?? ''
+      if (compromisoId) {
+        await deps.alQuedarHecha({
+          compromisoId,
+          cuentaDebitoId: row.data.cuentaDebitoId,
+          nota: 'La transferencia quedó hecha en el banco.',
+        })
+      }
+    }
     if (cambio) resultado.actualizadas += 1
     else resultado.sinCambio += 1
   }

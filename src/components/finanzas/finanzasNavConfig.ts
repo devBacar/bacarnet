@@ -11,6 +11,7 @@ export interface FinanzasNavItem {
 }
 
 export const FINANZAS_NAV_ITEMS: FinanzasNavItem[] = [
+  { to: '/finanzas/hoy', label: 'Hoy', enabled: true },
   { to: '/finanzas/cuentas', label: 'Saldos', enabled: true },
   { to: '/finanzas/agenda', label: 'Agenda', enabled: true },
   { to: '/finanzas/cajas', label: 'Cajas', enabled: true },
@@ -20,4 +21,4 @@ export const FINANZAS_NAV_ITEMS: FinanzasNavItem[] = [
   // { to: '/finanzas/creditos', label: 'Créditos', enabled: false },
 ]
 
-export const FINANZAS_DEFAULT_PATH = '/finanzas/cuentas'
+export const FINANZAS_DEFAULT_PATH = '/finanzas/hoy'

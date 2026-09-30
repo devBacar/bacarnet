@@ -1,4 +1,5 @@
 import { validarCbu, validarCuitOpcional } from './cbu-cuit.js'
+import { conceptoTercerosPorCodigo, CONCEPTO_TERCEROS_DEFAULT } from './conceptos-transferencia.js'
 
 /**
  * Interbanking: las observaciones soportan como máximo 60 caracteres
@@ -21,6 +22,8 @@ export interface ConfeccionDirectaParseada {
   destinoCuit: string | null
   montoCentavos: number
   concepto: string
+  codigoConcepto: string | null
+  disclaimerAceptado: boolean | null
   referencia: string | null
   idempotencyKey: string
   confirmarSinFondos: boolean
@@ -121,6 +124,10 @@ export function parseConfeccionDirectaBody(body: Record<string, unknown>): Confe
     throw new TransferenciaHttpError(400, { error: 'Falta una clave de idempotencia válida' })
   }
 
+  if (body.disclaimerAceptado != null && typeof body.disclaimerAceptado !== 'boolean') {
+    throw new TransferenciaHttpError(400, { error: 'La aceptación del aviso tiene que ser sí o no' })
+  }
+
   if (body.confirmarSinFondos != null && typeof body.confirmarSinFondos !== 'boolean') {
     throw new TransferenciaHttpError(400, { error: 'confirmarSinFondos tiene que ser sí o no' })
   }
@@ -157,6 +164,21 @@ export function parseConfeccionDirectaBody(body: Record<string, unknown>): Confe
     destinoCuit = cuit.valor || null
   }
 
+  let codigoConcepto: string | null = null
+  let disclaimerAceptado: boolean | null = null
+  if (tipoDirecto === 'terceros') {
+    const codigo = texto(body.codigoConcepto).toUpperCase() || CONCEPTO_TERCEROS_DEFAULT
+    const motivo = conceptoTercerosPorCodigo(codigo)
+    if (!motivo) {
+      throw new TransferenciaHttpError(400, { error: 'Elegí un motivo de la lista' })
+    }
+    if (motivo.requiereDisclaimer && body.disclaimerAceptado !== true) {
+      throw new TransferenciaHttpError(400, { error: 'Tenés que aceptar el aviso para este motivo' })
+    }
+    codigoConcepto = motivo.codigo
+    disclaimerAceptado = body.disclaimerAceptado === true
+  }
+
   return {
     cuentaDebitoId,
     tipo: tipoDirecto,
@@ -166,6 +188,8 @@ export function parseConfeccionDirectaBody(body: Record<string, unknown>): Confe
     destinoCuit,
     montoCentavos: monto,
     concepto,
+    codigoConcepto,
+    disclaimerAceptado,
     referencia: referenciaRaw || null,
     idempotencyKey,
     confirmarSinFondos: body.confirmarSinFondos === true,

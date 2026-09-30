@@ -64,6 +64,10 @@ export interface TransferenciaListItem {
   origen?: 'compromiso' | 'directa' | string
   tipo: TransferenciaTipoUi | string
   estado: TransferenciaEstadoUi | string
+  estadoInterbanking?: string | null
+  estadoInterbankingRotulo?: string | null
+  estadoInterbankingTono?: 'pendiente' | 'enviada' | 'hecha' | 'rechazada' | null
+  estadoInterbankingActualizadoAt?: string | null
   montoCentavos: number
   concepto: string | null
   referencia?: string | null
@@ -216,6 +220,8 @@ export interface ConfeccionDirectaBody {
   montoCentavos: number
   concepto: string
   referencia?: string
+  codigoConcepto?: string
+  disclaimerAceptado?: boolean
   idempotencyKey: string
   confirmarSinFondos?: boolean
 }
@@ -248,6 +254,24 @@ export async function confeccionarTransferenciaDirecta(
     throw new TransferenciaDirectaError('No se pudo confeccionar la transferencia', res.status)
   }
   return { transferencia: payload.transferencia, provider: '' }
+}
+
+export interface ActualizarEstadosResultado {
+  revisadas: number
+  actualizadas: number
+  sinCambio: number
+  sinCoincidencia: number
+  ambiguas: number
+}
+
+export async function actualizarEstadosTransferencias(): Promise<ActualizarEstadosResultado> {
+  const res = await transferenciasFetch('/actualizar-estados', {
+    method: 'POST',
+    body: '{}',
+  })
+  const payload = (await res.json().catch(() => ({}))) as ActualizarEstadosResultado & { error?: string }
+  if (!res.ok) throw new Error(payload.error ?? 'No se pudieron actualizar los estados')
+  return payload
 }
 
 export type DestinatarioTipo = 'terceros' | 'proveedores'

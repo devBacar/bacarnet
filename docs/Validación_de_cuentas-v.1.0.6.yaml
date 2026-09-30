@@ -1,0 +1,236 @@
+openapi: 3.0.0
+info:
+  title: Validación de cuentas
+  description: |
+    Validar cuentas antes de realizar una operación. <br>Requiere una contratación adicional. Por favor contactate con tu ejecutivo o vía mail a Consultasapi@interbanking.com.ar<br>
+
+    A continuación se detallan los errores relacionados con la lógica del negocio, los cuales están con status 200. Estos vendrán dentro del objeto del response en la clave <i>failed</i><br>
+    <table border>
+
+      <tr align=center BGCOLOR="lightgreen">
+          <td> <b>CODIGO</b></td>
+          <td><b>MENSAJE</b></td>
+          <td><b>DESCRIPCIÓN</b></td>
+      </tr>
+
+      <tr align=center>
+        <td>LIMIT_ACCOUNT_EXCEDED</td>
+        <td>No podés validar más de 1000 cuentas por consulta</td>
+        <td>Si un cliente excede el límite de 1000 cuentas por consulta, se considerarán solo las primeras 1000 cuentas, y las restantes no se procesarán, informándose como erróneas. 
+            <i>Nota: Se filtrarán las duplicadas primero</i></td>
+      </tr>
+
+      <tr align=center>
+          <td>DUPLICATE_ACCOUNT</td>
+          <td>La cuenta con CBU {cbu} y CUIT {cuit} ya está en la lista para ser validada</td>
+          <td>Si el cliente envía dos o más veces los datos de una misma cuenta (par CBU+CUIT) para validar, se considerará solo la primera cuenta, y las restantes no se procesarán, informándose como erróneas</td>
+      </tr>
+
+      <tr align=center>
+          <td>CBU_NO_VALIDO</td>
+          <td>El CBU ingresado no es válido</td>
+          <td>Si el CBU tiene 22 dígitos, es numérico, pero RUC determina que no cumple con el formato de un CBU, la cuenta se informará como errónea</td>
+      </tr>
+
+      <tr align=center>
+          <td>CBU_Y_CUIT_NO_CORRESPONDEN</td>
+          <td>El CBU y el CUIT ingresados no coinciden</td>
+          <td>Si el CBU se encuentra en RUC pero no pertenece a al CUIT informado, la cuenta se informará como errónea</td>
+      </tr>
+
+      <tr align=center>
+          <td>DATOS_ERRONEOS</td>
+          <td>El CBU ingresado no está registrado o no se encuentra habilitado</td>
+          <td>Si el CBU no se encuentra en RUC, la cuenta se informará como errónea o Si la cuenta (par CBU+CUIT) no se encuentra habilitada en RUC, la misma se informará como errónea</td>
+      </tr>
+
+
+    </table>
+  contact:
+    name: Interbanking
+    url: https://interbanking.com.ar/
+    email: consultasapi@interbanking.com.ar
+  version: v.1.0.6
+  x-ibm-name: administrativas
+tags:
+  - name: Administrativas
+paths:
+  /cbu/accounts/validate:
+    post:
+      tags:
+        - Validacion
+        - Cuentas
+      summary: Validación de cuentas bancarias
+      description: A través de este servicio se podrá validar un listado de cuentas bancarias antes de realizar una transacción
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CBUValidatorCommand'
+      responses:
+        '200':
+          description: Respuesta exitosa
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidatedCbuDto'
+        '400':
+          description: |-
+            Datos de entrada con mal formato, faltantes o incorrectos
+            ABONADO_INEXISTENTE: No encontramos al cliente, verificá los datos
+            ABONADO_NO_POSEE_OFF: El cliente no posee offerings contratados
+            ABONADO_NO_POSEE_OFF: No tenés activo el servicio de validación de
+            cuentas
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericErrorResponse'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GenericErrorResponse'
+components:
+  schemas:
+    AccountsSuccessful:
+      type: object
+      properties:
+        cbu:
+          description: CBU de la cuenta
+          type: string
+          example: 70144630004022190000
+        cuit:
+          description: CUIT del titular de la cuenta
+          type: string
+          example: 30500041222
+        accountHolder:
+          description: Nombre del titular de la cuenta
+          type: string
+          example: Juan Romero
+        currency:
+          description: Tipo moneda de la cuenta
+          type: string
+          example: $
+    AccountsFailed:
+      type: object
+      properties:
+        cbu:
+          description: CBU de la cuenta
+          type: string
+          example: 70144630004022190000
+        cuit:
+          description: CUIT del titular de la cuenta
+          type: string
+          example: 30500041222
+        responseCode:
+          description: Código de error
+          type: string
+          example: CBU_Y_CUIT_NO_CORRESPONDEN
+        responseMessage:
+          description: Descripción del error
+          type: string
+          example: El CBU y el CUIT ingresados no coinciden
+    ValidatedCbuDto:
+      type: object
+      properties:
+        successful:
+          description: Listado de cuentas corroboradas correctamente
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountsSuccessful'
+        failed:
+          description: Listado de cuentas con errores
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountsFailed'
+    GenericErrorResponse:
+      type: object
+      properties:
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenericError'
+        timestamp:
+          $ref: '#/components/schemas/LocalDateTime'
+    LocalDateTime:
+      format: date-time
+      type: string
+      example: '2022-03-10T12:15:50.000Z'
+    GenericError:
+      type: object
+      properties:
+        errorCode:
+          type: string
+          example: ABONADO_NO_POSEE_OFF
+        errorMessage:
+          type: string
+          example: El cliente no posee offerings contratados
+    CBUValidatorCommand:
+      required:
+        - customerId
+        - accounts
+      type: object
+      properties:
+        accounts:
+          description: Listado de cuentas a verificar
+          minItems: 1
+          type: array
+          items:
+            $ref: '#/components/schemas/CBUAndCUITCommand'
+    CBUAndCUITCommand:
+      required:
+        - cbu
+        - cuit
+      type: object
+      properties:
+        cbu:
+          description: CBU de la cuenta
+          maxLength: 22
+          minLength: 22
+          pattern: ^\d+$
+          type: string
+          example: 70144630004022190000
+        cuit:
+          description: CUIT de la cuenta
+          maxLength: 11
+          minLength: 11
+          pattern: ^\d+$
+          type: string
+          example: 30500041999
+  securitySchemes:
+    ClientID:
+      type: apiKey
+      name: client_id
+      x-key-type: client_id
+      in: header
+    CAS:
+      type: oauth2
+      x-ibm-oauth-provider: cas
+      flows:
+        password:
+          tokenUrl: https://auth.interbanking.com.ar/cas/oidc/accessToken
+          scopes:
+            administrativa: Administrativa
+x-ibm-configuration:
+  type: rest
+  phase: realized
+  enforced: true
+  testable: true
+  cors:
+    enabled: true
+  oauth-servers:
+    CAS:
+      password:
+        tokenUrls:
+          - https://auth.interbanking.com.ar/cas/oidc/accessToken
+        authorizationUrls: []
+        refreshUrls: []
+servers:
+  - url: https://api-gw.interbanking.com.ar/api/prod
+security:
+  - ClientID: []
+    CAS:
+      - administrativa
+x-ibm-endpoints:
+  - url: https://api-gw.interbanking.com.ar/api/prod

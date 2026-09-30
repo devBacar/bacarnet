@@ -31,7 +31,16 @@ export interface TransferenciaConfeccionadaDocument {
   idempotencyKey?: string | null
   montoCentavos: number
   concepto: string | null
+  /** Código de motivo del banco (VAR, ALQ, …). Solo pago a terceros. */
+  codigoConcepto?: string | null
   disclaimerAceptado: boolean | null
+  /** confection_id enviado a Interbanking, si la confección real llegó a armarlo. */
+  confectionId?: string | null
+  /** Estado crudo de GET /transfers/details. */
+  estadoInterbanking?: string | null
+  estadoInterbankingActualizadoAt?: Timestamp | null
+  /** Día de solicitud informado por el banco (AAAA-MM-DD), para la regla de las 19 hs. */
+  fechaSolicitudInterbanking?: string | null
   operationId: string
   processId: string | null
   estado: TransferenciaEstado

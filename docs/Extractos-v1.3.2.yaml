@@ -1,0 +1,402 @@
+openapi: 3.0.0
+info:
+  title: Extractos
+  description: |-
+    Obtener extractos de las cuentas bancarias. Podrá visualizar el detalle de los movimientos y saldos históricos de cualquiera de las cuentas que seleccione, según banco y moneda. Obteniendo la información reflejada en el extracto de las cuentas de bancos asociados a Interbanking.
+
+    **Ventana Histórica:** Es posible consultar extractos de hasta los últimos 180 días.
+
+    **Rangos por Consulta:** Las consultas individuales deben realizarse en rangos máximos de 60 días.
+  contact:
+    name: Interbanking
+    url: https://interbanking.com.ar/
+    email: consultasapi@interbanking.com.ar
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.htmlmp.openapi.extensions.smallrye.openapi=3.0.0
+  version: v1.3.2
+  x-ibm-name: extractos
+servers:
+  - url: https://api-gw.interbanking.com.ar/api/prod/v1
+tags:
+  - name: Extractos
+paths:
+  /accounts/{account-number}/statements:
+    get:
+      tags:
+        - Extractos
+      summary: Obtener Extracto de mis cuentas
+      description: Podrá visualizar el detalle de los movimientos y saldos históricos de cualquiera de las cuentas que seleccione, segun banco y moneda.  Obteniendo la información reflejada en el extracto de las cuentas de bancos asociados a Interbanking.
+      parameters:
+        - name: accept
+          in: header
+          required: false
+          schema:
+            type: string
+            default: application/json
+        - name: account-number
+          in: path
+          description: Número de cuenta bancaria sobre la cual se requiere obtener los extractos.
+          required: true
+          schema:
+            type: string
+            example: '6234400179203432'
+        - name: account-type
+          in: query
+          description: |
+            Tipo de cuenta.  
+            * CA -> Caja de Ahorro  
+            * CC -> Cuenta Corriente
+          schema:
+            type: string
+            enum:
+              - CC
+              - CA
+            default: CC
+        - name: bank-number
+          in: query
+          description: Número de banco de 3 dígitos asignados por el Banco Central de la Republica Argentina (BCRA)
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9]{3}$
+            example: '036'
+        - name: currency
+          in: query
+          description: |
+            Moneda de la cuenta.  
+            * ARS -> Pesos  
+            * USD -> Dolares
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+            default: ARS
+            example: ARS
+        - name: customer-id
+          in: query
+          description: Código de abonado asignado por Interbanking. Se obtiene desde Administración-> ABM | Configuración Datos -> Datos de Empresa.
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Z][0-9]{5}[A-Z]$
+            example: R72668Y
+        - name: date-since
+          in: query
+          description: 'Fecha inicial para la búsqueda de movimientos históricos. Se podrá consultar hasta 180 días en periódos de 60 días por consulta. Formato ISO 8601: yyyy-mm-dd.'
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2024-08-09'
+        - name: date-until
+          in: query
+          description: 'Fecha final para la búsqueda de movimientos históricos. Se podrá consultar hasta 180 días en periódos de 60 días por consulta. Formato ISO 8601: yyyy-mm-dd.'
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2024-09-18'
+        - name: limit
+          in: query
+          description: 'Cantidad de registros de extracto de cuenta a retornar. Default: 100'
+          schema:
+            type: string
+            default: 100
+            example: '100'
+        - name: page
+          in: query
+          description: 'Página sobre la cual retornar los “n” registros. Default: 0'
+          schema:
+            type: string
+            default: 0
+            example: '0'
+      responses:
+        '200':
+          description: Extractos encontrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaExtractoV2DTO'
+              example:
+                general_data:
+                  bank_number: string
+                  row_date: '2022-03-10T12:15:50'
+                  date_since: '2022-03-10'
+                  date_until: '2022-03-10'
+                  currency: ARS
+                  account_number: string
+                  control_code: string
+                  limit: 0
+                  account_type: CC
+                  total_rows: 0
+                  page: 0
+                  denomination: string
+                statements:
+                  - total_movements: 0
+                    operation_date: '2022-03-10'
+                    statement_number: string
+                    ending_balance: 0
+                    opening_balance: 0
+                    debits_total_amount: 0
+                    credits_total_amount: 0
+                    movement_detail:
+                      - operation_code_ib: string
+                        operation_code_bank: string
+                        code_description_ib: string
+                        customer_cuit: string
+                        depositor_description: string
+                        code_description_bank: string
+                        code_description_standard: string
+                        operation_code_bank_standard: string
+                        movement_date: '2022-03-10T12:15:50'
+                        real_date_activity: '2022-03-10T12:15:50'
+                        amount: 0
+                        voucher_number: 0
+                        grouping_code_ib: string
+                        branch_office_activity: string
+                        process_date: '2022-03-10T12:15:50'
+                        value_date: '2022-03-10T12:15:50'
+                        debit_credit_type: string
+                        correlative_number: 0
+                        statement_number: string
+        '400':
+          description: |-
+            Request inválido  
+            1041: No se admiten caracteres especiales  
+            0001: Dato obligatorio no informado  
+            1044: El campo account-type no es válido  
+            0002: El campo currency no es válida  
+            1040: La Fecha no es válida  
+            1006: El campo page/limit debe ser de tipo numérico  
+            1038: El campo page debe ser mayor o igual a cero  
+            1022: El campo limit debe ser mayor a cero  
+            1051: Request param no esperado  
+            0101: Cliente o cuit obligatorio, o datos no actualizados  
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+        '404':
+          description: |-
+            1042: Cliente no encontrado  
+            1043: Cuenta no encontrada  
+            1048: Fecha final no puede ser anterior a la fecha inicial  
+            1049: La fecha no puede ser más antigua que un limite de dias  
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+components:
+  schemas:
+    DatosGeneralesDTO:
+      type: object
+      properties:
+        bank_number:
+          description: Código de Banco según el BCRA
+          type: string
+        row_date:
+          description: Formato AAAA-MM-DDTHH:MM:SS
+          $ref: '#/components/schemas/LocalDateTime'
+        date_since:
+          description: Formato AAAA-MM-DD
+          $ref: '#/components/schemas/LocalDate'
+        date_until:
+          description: Formato AAAA-MM-DD
+          $ref: '#/components/schemas/LocalDate'
+        currency:
+          description: Valores posible "$" ó "USD"
+          $ref: '#/components/schemas/ETipoMoneda'
+        account_number:
+          description: Número de cuenta en SIB
+          type: string
+        control_code:
+          description: Código interno de la consulta
+          type: string
+        denomination:
+          description: Denominación
+          type: string
+        page:
+          format: int32
+          description: Número de página de la consulta
+          type: integer
+        limit:
+          format: int32
+          description: Cantidad de registros devuelto por página
+          type: integer
+        account_type:
+          description: |
+            Tipo de cuenta.
+             Valores posibles: "CC" o "CA"
+          $ref: '#/components/schemas/ETipoCuenta'
+        total_rows:
+          format: int64
+          description: Cantidad de total de registros de la consulta
+          type: integer
+    ETipoCuenta:
+      enum:
+        - CC
+        - CA
+      type: string
+    ETipoMoneda:
+      enum:
+        - USD
+        - ARS
+      type: string
+    ExtractoV2DTO:
+      type: object
+      properties:
+        statement_number:
+          description: Número de extracto
+          type: string
+        total_movements:
+          format: int32
+          description: Cantidad de movimientos del extracto
+          type: integer
+        operation_date:
+          description: Formato AAAA-MM-DD
+          $ref: '#/components/schemas/LocalDate'
+        movement_detail:
+          type: array
+          items:
+            $ref: '#/components/schemas/MovimientoExtractoV2DTO'
+        ending_balance:
+          description: Saldo al final del dia
+          type: number
+        opening_balance:
+          description: Saldo al inicio del dia
+          type: number
+        debits_total_amount:
+          description: Total de débitos
+          type: number
+        credits_total_amount:
+          description: Total de créditos
+          type: number
+    LocalDate:
+      format: date
+      type: string
+      example: '2022-03-10T00:00:00.000Z'
+    LocalDateTime:
+      format: date-time
+      type: string
+      example: '2022-03-10T12:15:50.000Z'
+    MensajeError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        status:
+          format: int32
+          type: integer
+        timestamp:
+          $ref: '#/components/schemas/LocalDateTime'
+    MovimientoExtractoV2DTO:
+      type: object
+      properties:
+        operation_code_ib:
+          description: Código de operación Interbanking
+          type: string
+        operation_code_bank:
+          description: Código de operación normalizado
+          type: string
+        depositor_description:
+          description: Descripción del depositante
+          type: string
+        grouping_code_ib:
+          description: Código de agrupamiento Interbanking
+          type: string
+        operation_code_bank_standard:
+          type: string
+        code_description_standard:
+          type: string
+        customer_cuit:
+          description: Clave Única de Identificación Tributaria
+          type: string
+        code_description_bank:
+          description: descripcion del movimiento
+          type: string
+        movement_date:
+          description: Formato AAAA-MM-DDTHH:MM:SS
+          $ref: '#/components/schemas/LocalDateTime'
+        real_date_activity:
+          description: Formato AAAA-MM-DDTHH:MM:SS
+          $ref: '#/components/schemas/LocalDateTime'
+        amount:
+          description: 'Con 2 decimales. Ej: 100000.50'
+          type: number
+        voucher_number:
+          format: int64
+          description: Comprobante asociado al movimiento
+          type: integer
+        branch_office_activity:
+          description: Sucursal de origen del movimiento
+          type: string
+        process_date:
+          description: Formato AAAA-MM-DDTHH:MM:SS
+          $ref: '#/components/schemas/LocalDateTime'
+        value_date:
+          description: Formato AAAA-MM-DDTHH:MM:SS
+          $ref: '#/components/schemas/LocalDateTime'
+        debit_credit_type:
+          description: Tipo de movimiento. Credito 'C' o Debito 'D'
+          type: string
+        correlative_number:
+          format: int64
+          description: Número correlativo
+          type: integer
+        statement_number:
+          description: Número de extracto
+          type: string
+          example: '023'
+    RespuestaExtractoV2DTO:
+      type: object
+      properties:
+        general_data:
+          $ref: '#/components/schemas/DatosGeneralesDTO'
+        statements:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExtractoV2DTO'
+  securitySchemes:
+    ClientID:
+      type: apiKey
+      name: client_id
+      x-key-type: client_id
+      in: header
+    Authorization:
+      type: oauth2
+      x-ibm-oauth-provider: cas
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.interbanking.com.ar/cas/oidc/accessToken
+          scopes:
+            info-financiera: Informacion Financiera
+x-ibm-configuration:
+  type: rest
+  phase: realized
+  enforced: true
+  testable: true
+  cors:
+    enabled: true
+  oauth-servers:
+    Authorization:
+      clientCredentials:
+        tokenUrls:
+          - https://auth.interbanking.com.ar/cas/oidc/accessToken
+        authorizationUrls: []
+        refreshUrls: []
+security:
+  - ClientID: []
+    Authorization:
+      - info-financiera
+x-ibm-endpoints:
+  - url: https://api-gw.interbanking.com.ar/api/prod/v1

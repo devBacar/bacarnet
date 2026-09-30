@@ -12,6 +12,7 @@ import {
   getFinanzasTransferenciasProvider,
   resolveFinanzasTransferenciasProviderMode,
 } from '../adapters/transferencias-provider.factory.js'
+import { presentarEstadoInterbanking } from '../domain/estado-interbanking.js'
 import { translateInterbankingErrors } from '../domain/transferencia.errors.js'
 import type { TransferenciaEstado, TransferenciaTipo } from '../domain/transferencia.types.js'
 import {
@@ -533,6 +534,10 @@ export async function listTransferenciasApi(filters: TransferenciasListFilters) 
           ? etiquetaCuenta(credito.bancoNombre, credito.tipo)
           : row.data.destinoNombre?.trim() || 'Cuenta propia'
       }
+      const presentado = presentarEstadoInterbanking({
+        estado: row.data.estadoInterbanking,
+        fechaSolicitud: row.data.fechaSolicitudInterbanking ?? diaArgentina(row.data.fechaConfeccion),
+      })
       return {
         id: row.id,
         compromisoPagoId: row.data.compromisoPagoId,
@@ -544,6 +549,10 @@ export async function listTransferenciasApi(filters: TransferenciasListFilters) 
         concepto: row.data.concepto,
         fechaConfeccion: agendaTimestampToIso(row.data.fechaConfeccion),
         operationId: row.data.operationId,
+        estadoInterbanking: row.data.estadoInterbanking ?? null,
+        estadoInterbankingRotulo: presentado?.rotulo ?? null,
+        estadoInterbankingTono: presentado?.tono ?? null,
+        estadoInterbankingActualizadoAt: agendaTimestampToIso(row.data.estadoInterbankingActualizadoAt),
         cuentaDebitoId: row.data.cuentaDebitoId,
         direccion: `${debitoLabel} → ${destinoLabel}`,
         erroresInterbanking: row.data.erroresInterbanking,

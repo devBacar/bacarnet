@@ -80,4 +80,15 @@ describe('parseConfeccionDirectaBody', () => {
     )
     expect(parsed.destinoCuit).toBeNull()
   })
+
+  it('en terceros el motivo por defecto es Varios y el aviso es obligatorio si el banco lo pide', () => {
+    expect(parseConfeccionDirectaBody(base()).codigoConcepto).toBe('VAR')
+    expect(parseConfeccionDirectaBody(base({ codigoConcepto: 'fac' })).codigoConcepto).toBe('FAC')
+    expect(() => parseConfeccionDirectaBody(base({ codigoConcepto: 'ZZZ' }))).toThrow(/motivo/)
+    expect(() => parseConfeccionDirectaBody(base({ codigoConcepto: 'OIN' }))).toThrow(/aviso/)
+    const conAviso = parseConfeccionDirectaBody(base({ codigoConcepto: 'OIN', disclaimerAceptado: true }))
+    expect(conAviso.codigoConcepto).toBe('OIN')
+    expect(conAviso.disclaimerAceptado).toBe(true)
+    expect(parseConfeccionDirectaBody(base({ tipo: 'proveedores' })).codigoConcepto).toBeNull()
+  })
 })

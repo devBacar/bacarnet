@@ -188,12 +188,20 @@ export const sincronizarFinanzasCada30Min = onSchedule(
       } catch (error) {
         if (error instanceof MovimientosSyncEnCursoError) {
           console.info('[finanzas/sync-30min] los movimientos ya se estaban actualizando')
-          return
+        } else {
+          throw error
         }
-        throw error
       }
     } catch (error) {
       console.error('[finanzas/sync-30min] falló la actualización de movimientos', error)
+    }
+    try {
+      const { actualizarEstadosTransferencias } = await import(
+        './modules/finanzas/transferencias/services/actualizar-estados.service.js'
+      )
+      await actualizarEstadosTransferencias({ origen: 'sync_automatico' })
+    } catch (error) {
+      console.error('[finanzas/sync-30min] falló la actualización de estados de transferencias', error)
     }
   },
 )

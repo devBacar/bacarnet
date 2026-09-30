@@ -195,6 +195,44 @@ export async function cancelarTransferenciaYReabrirCompromiso(input: {
 }
 
 /** Cancelación local de una transferencia directa, sin compromiso que reabrir. */
+export async function aplicarEstadoInterbanking(input: {
+  transferenciaId: string
+  registrarHistorial: boolean
+  historial: {
+    estadoAnterior: string | null
+    estadoNuevo: string
+    origen: TransferenciaHistorialOrigen
+    nota: string | null
+  }
+  estadoInterbanking: string
+  fechaSolicitudInterbanking: string | null
+}): Promise<void> {
+  const ref = transferenciasCollection().doc(input.transferenciaId)
+  const now = FieldValue.serverTimestamp()
+
+  await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) throw new Error('Transferencia no encontrada')
+
+    if (input.registrarHistorial) {
+      tx.set(ref.collection(HISTORIAL_SUB).doc(), {
+        estadoAnterior: input.historial.estadoAnterior,
+        estadoNuevo: input.historial.estadoNuevo,
+        origen: input.historial.origen,
+        nota: input.historial.nota,
+        fecha: now,
+      })
+    }
+
+    tx.update(ref, {
+      estadoInterbanking: input.estadoInterbanking,
+      estadoInterbankingActualizadoAt: now,
+      fechaSolicitudInterbanking: input.fechaSolicitudInterbanking,
+      updatedAt: now,
+    })
+  })
+}
+
 export async function marcarTransferenciaCancelada(input: {
   transferenciaId: string
   estadoAnterior: string

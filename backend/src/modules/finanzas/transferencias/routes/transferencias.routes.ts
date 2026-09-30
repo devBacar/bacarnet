@@ -13,6 +13,7 @@ import {
   listTransferenciasApi,
 } from '../services/transferencias.service.js'
 import { confeccionarTransferenciaDirecta } from '../services/confeccion-directa.service.js'
+import { actualizarEstadosTransferencias } from '../services/actualizar-estados.service.js'
 import {
   esErrorCandadoTransferencias,
   MENSAJE_TRANSFERENCIAS_REALES_DESHABILITADAS,
@@ -91,6 +92,17 @@ finanzasTransferenciasRouter.post('/confeccionar-directa', async (req, res) => {
     }
     const message = err instanceof Error ? err.message : 'No se pudo confeccionar la transferencia'
     res.status(400).json({ error: message })
+  }
+})
+
+finanzasTransferenciasRouter.post('/actualizar-estados', async (_req, res) => {
+  try {
+    const result = await actualizarEstadosTransferencias({ origen: 'usuario' })
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/transferencias] actualizar-estados', err)
+    const message = err instanceof Error ? err.message : 'No se pudieron actualizar los estados'
+    res.status(502).json({ error: message })
   }
 })
 

@@ -180,7 +180,9 @@ export async function confeccionarTransferenciaDirecta(input: {
     cuentaCreditoCbu: destino.cbu,
     montoCentavos: parsed.montoCentavos,
     concepto: parsed.concepto,
-    disclaimerAceptado: null,
+    disclaimerAceptado: parsed.disclaimerAceptado,
+    codigoConcepto: parsed.codigoConcepto,
+    destinoCuit: destino.cuit,
   }
 
   const provider = getFinanzasTransferenciasProvider()
@@ -211,7 +213,9 @@ export async function confeccionarTransferenciaDirecta(input: {
     idempotencyKey: parsed.idempotencyKey,
     montoCentavos: parsed.montoCentavos,
     concepto: parsed.concepto,
-    disclaimerAceptado: null,
+    codigoConcepto: parsed.codigoConcepto,
+    disclaimerAceptado: parsed.disclaimerAceptado,
+    confectionId: providerResult.confectionId ?? null,
     operationId: '',
     processId: providerResult.processId,
     estado: 'rechazada',

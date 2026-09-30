@@ -9,6 +9,7 @@ import { NuevaTransferenciaModal } from '../../components/finanzas/NuevaTransfer
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
+  actualizarEstadosTransferencias,
   cancelarTransferenciaConfeccionada,
   confirmarMovimientoTransferencia,
   fetchTransferenciaHistorial,
@@ -46,11 +47,31 @@ const ESTADO_BADGE: Record<string, string> = {
   efectivizada: 'border-emerald-300 bg-emerald-100 text-emerald-900',
 }
 
+const TONO_ESTADO: Record<string, string> = {
+  pendiente:
+    'border-zinc-300 bg-zinc-100 text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200',
+  enviada:
+    'border-blue-300 bg-blue-100 text-blue-900 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-100',
+  hecha:
+    'border-emerald-300 bg-emerald-100 text-emerald-900 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-100',
+  rechazada:
+    'border-red-300 bg-red-100 text-red-900 dark:border-red-800 dark:bg-red-950 dark:text-red-100',
+}
+
 function formatFecha(iso: string | null): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleString('es-AR', {
     dateStyle: 'short',
     timeStyle: 'short',
+  })
+}
+
+function horaArgentina(iso: string): string {
+  return new Date(iso).toLocaleTimeString('es-AR', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
   })
 }
 
@@ -67,6 +88,7 @@ export function FinanzasTransferenciasPage() {
   const [confirmando, setConfirmando] = useState<string | null>(null)
   const [pestana, setPestana] = useState<'historial' | 'agenda'>('historial')
   const [nuevaAbierta, setNuevaAbierta] = useState(false)
+  const [actualizandoEstados, setActualizandoEstados] = useState(false)
 
   const filters: TransferenciasListFilters = { estado, cuentaId, tipo, desde, hasta }
 
@@ -89,6 +111,23 @@ export function FinanzasTransferenciasPage() {
   })
 
   const cuentas = (cuentasData?.cuentas ?? []).filter((cuenta) => cuenta.tipo === 'CC')
+
+  async function actualizarEstados() {
+    setActualizandoEstados(true)
+    try {
+      const result = await actualizarEstadosTransferencias()
+      const partes = [`Revisadas: ${result.revisadas}.`, `Actualizadas: ${result.actualizadas}.`]
+      if (result.ambiguas > 0) {
+        partes.push(`${result.ambiguas} no se pudieron identificar con seguridad.`)
+      }
+      toast.success(partes.join(' '))
+      await queryClient.invalidateQueries({ queryKey: ['finanzas', 'transferencias'] })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudieron actualizar los estados')
+    } finally {
+      setActualizandoEstados(false)
+    }
+  }
 
   async function elegirCandidato(transferenciaId: string, movimientoId: string) {
     const clave = `${transferenciaId}:${movimientoId}`
@@ -114,13 +153,23 @@ export function FinanzasTransferenciasPage() {
             Interbanking.
           </p>
         </div>
-        <button
-          type="button"
-          className="w-full shrink-0 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white sm:w-auto"
-          onClick={() => setNuevaAbierta(true)}
-        >
-          Nueva transferencia
-        </button>
+        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+          <button
+            type="button"
+            className="w-full rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white sm:w-auto"
+            onClick={() => setNuevaAbierta(true)}
+          >
+            Nueva transferencia
+          </button>
+          <button
+            type="button"
+            className="w-full rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800 sm:w-auto"
+            disabled={actualizandoEstados}
+            onClick={() => void actualizarEstados()}
+          >
+            {actualizandoEstados ? 'Actualizando…' : 'Actualizar estados'}
+          </button>
+        </div>
       </header>
 
       <div className="mb-4 inline-flex w-full rounded-xl border border-neutral-200 p-1 dark:border-zinc-800 sm:w-auto">
@@ -226,7 +275,7 @@ export function FinanzasTransferenciasPage() {
                   <td className="px-3 py-3">{TIPO_LABEL[row.tipo] ?? row.tipo}</td>
                   <td className="px-3 py-3 tabular-nums">{formatMoneyCentavos(row.montoCentavos, 'ARS')}</td>
                   <td className="px-3 py-3">
-                    <EstadoBadge estado={row.estado} />
+                    <EstadoCelda row={row} />
                     {row.estado === 'rechazada' && row.erroresInterbanking?.length ? (
                       <p className="mt-1 max-w-xs text-xs text-red-800">{row.erroresInterbanking.join(' ')}</p>
                     ) : null}
@@ -332,6 +381,28 @@ export function FinanzasTransferenciasPage() {
       {nuevaAbierta ? <NuevaTransferenciaModal onClose={() => setNuevaAbierta(false)} /> : null}
     </>
   )
+}
+
+function EstadoCelda({ row }: { row: TransferenciaListItem }) {
+  if (row.estadoInterbankingRotulo && row.estadoInterbankingTono) {
+    return (
+      <div>
+        <span
+          className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${
+            TONO_ESTADO[row.estadoInterbankingTono] ?? TONO_ESTADO.pendiente
+          }`}
+        >
+          {row.estadoInterbankingRotulo}
+        </span>
+        {row.estadoInterbankingActualizadoAt ? (
+          <p className="text-body-muted mt-1 text-xs">
+            actualizado {horaArgentina(row.estadoInterbankingActualizadoAt)}
+          </p>
+        ) : null}
+      </div>
+    )
+  }
+  return <EstadoBadge estado={row.estado} />
 }
 
 function EstadoBadge({ estado }: { estado: TransferenciaEstadoUi | string }) {

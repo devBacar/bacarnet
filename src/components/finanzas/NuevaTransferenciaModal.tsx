@@ -11,6 +11,12 @@ import {
   type TransferenciaDirectaTipo,
 } from '../../services/finanzasTransferenciasApi'
 import { FinanzasFormField, finanzasInputClass } from './FinanzasFormField'
+import {
+  AVISO_MOTIVO_TRANSFERENCIA,
+  CONCEPTO_TERCEROS_DEFAULT,
+  CONCEPTOS_TRANSFERENCIA_TERCEROS,
+  conceptoTransferenciaPorCodigo,
+} from './conceptosTransferencia'
 import { MAX_OBSERVACION_INTERBANKING, soloDigitos, validarCbu, validarCuitOpcional } from './cbuCuit'
 import { formatMoneyCentavos } from './formatMoney'
 import { parseMontoEsArACentavos } from './montoEsAr'
@@ -63,6 +69,8 @@ export function NuevaTransferenciaModal({
   const [cuit, setCuit] = useState('')
   const [monto, setMonto] = useState('')
   const [concepto, setConcepto] = useState('')
+  const [codigoConcepto, setCodigoConcepto] = useState(CONCEPTO_TERCEROS_DEFAULT)
+  const [disclaimerAceptado, setDisclaimerAceptado] = useState(false)
   const [referencia, setReferencia] = useState('')
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -107,6 +115,8 @@ export function NuevaTransferenciaModal({
     setCbu('')
     setNombre('')
     setCuit('')
+    setCodigoConcepto(CONCEPTO_TERCEROS_DEFAULT)
+    setDisclaimerAceptado(false)
     setError('')
   }
 
@@ -167,6 +177,10 @@ export function NuevaTransferenciaModal({
         setError(`La referencia no puede pasar de ${MAX_OBSERVACION_INTERBANKING} caracteres`)
         return false
       }
+      if (tipo === 'terceros' && conceptoTransferenciaPorCodigo(codigoConcepto)?.requiereDisclaimer && !disclaimerAceptado) {
+        setError('Tenés que aceptar el aviso para este motivo')
+        return false
+      }
       return true
     }
     return true
@@ -193,6 +207,9 @@ export function NuevaTransferenciaModal({
         montoCentavos: centavos,
         concepto: concepto.trim(),
         referencia: referencia.trim() || undefined,
+        ...(tipo === 'terceros'
+          ? { codigoConcepto, disclaimerAceptado }
+          : {}),
         idempotencyKey,
         confirmarSinFondos,
       })
@@ -424,6 +441,47 @@ export function NuevaTransferenciaModal({
             {centavos != null ? (
               <p className="text-sm tabular-nums">{formatMoneyCentavos(centavos, 'ARS')}</p>
             ) : null}
+            {tipo === 'terceros' ? (
+              <div className="space-y-2">
+                <FinanzasFormField label="Motivo del pago">
+                  <select
+                    className={finanzasInputClass}
+                    value={codigoConcepto}
+                    onChange={(event) => {
+                      setCodigoConcepto(event.target.value)
+                      setDisclaimerAceptado(false)
+                      setError('')
+                    }}
+                  >
+                    {CONCEPTOS_TRANSFERENCIA_TERCEROS.map((opcion) => (
+                      <option key={opcion.codigo} value={opcion.codigo}>
+                        {opcion.rotulo}
+                      </option>
+                    ))}
+                  </select>
+                </FinanzasFormField>
+                <p className="text-body-muted text-xs">
+                  El banco pide un motivo de esta lista. Varios sirve si ninguno encaja.
+                </p>
+                {conceptoTransferenciaPorCodigo(codigoConcepto)?.requiereDisclaimer ? (
+                  <div className="space-y-2 rounded-xl border border-amber-600 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-500 dark:bg-amber-950/40 dark:text-amber-100">
+                    <p>{AVISO_MOTIVO_TRANSFERENCIA}</p>
+                    <label className="flex items-start gap-2 font-medium">
+                      <input
+                        type="checkbox"
+                        className="mt-1"
+                        checked={disclaimerAceptado}
+                        onChange={(event) => {
+                          setDisclaimerAceptado(event.target.checked)
+                          setError('')
+                        }}
+                      />
+                      <span>Acepto este aviso</span>
+                    </label>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <FinanzasFormField label="Concepto">
               <input
                 className={finanzasInputClass}
@@ -454,6 +512,9 @@ export function NuevaTransferenciaModal({
                 : `Vas a confeccionar ${formatMoneyCentavos(centavos, 'ARS')} desde ${etiqueta(origen)} a ${destinoNombre} (CBU …${ultimos4}). Queda pendiente de aprobación en Interbanking.`}
             </p>
             <ul className="text-body-muted space-y-1">
+              {tipo === 'terceros' ? (
+                <li>Motivo: {conceptoTransferenciaPorCodigo(codigoConcepto)?.rotulo ?? codigoConcepto}</li>
+              ) : null}
               <li>Concepto: {concepto.trim()}</li>
               {referencia.trim() ? <li>Referencia: {referencia.trim()}</li> : null}
               {tipo !== 'cuentas_propias' && destinoCbu ? (

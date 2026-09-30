@@ -1,6 +1,8 @@
 import type { FinanzasCuenta } from '../../services/finanzasApi'
 import { PosicionMonto } from './PosicionMonto'
 import { formatMoneyCentavos } from './formatMoney'
+import { ArrowRightLeft } from 'lucide-react'
+import { useTransferirDesdeCuenta } from './transferirDesdeCuenta'
 
 const SEMAFORO_LABEL = {
   verde: '🟢',
@@ -41,7 +43,9 @@ export function AccountCard({
   canEditDescubierto = false,
   onEditDescubierto,
 }: AccountCardProps) {
-  const esCCInterbanking = cuenta.tipo === 'CC' && cuenta.origenSaldo === 'interbanking'
+  const transferir = useTransferirDesdeCuenta()
+  const esCcPesos = cuenta.tipo === 'CC' && cuenta.moneda === 'ARS'
+  const esCCInterbanking = esCcPesos && cuenta.origenSaldo === 'interbanking'
   const esManual = cuenta.origenSaldo === 'manual'
   const semaforo = cuenta.descubierto?.semaforo
 
@@ -67,6 +71,18 @@ export function AccountCard({
           </div>
         ) : null}
       </div>
+
+      {esCcPesos && transferir ? (
+        <button
+          type="button"
+          aria-label={`Transferir desde ${cuenta.bancoNombre}`}
+          className="inline-flex w-fit items-center gap-1.5 self-start rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs font-medium text-neutral-800 hover:bg-neutral-50 dark:border-zinc-700 dark:text-gray-100 dark:hover:bg-zinc-800"
+          onClick={() => transferir(cuenta.id)}
+        >
+          <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          Transferir
+        </button>
+      ) : null}
 
       <div>
         <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Saldo actual</p>

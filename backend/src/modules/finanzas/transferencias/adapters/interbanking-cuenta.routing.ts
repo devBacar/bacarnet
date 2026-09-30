@@ -54,6 +54,27 @@ export function resolveInterbankingDebitAccount(cuentaId: string): InterbankingT
   return { ...row }
 }
 
+/**
+ * Cuenta crédito de un CBU que no es propio.
+ * El número de cuenta sale del bloque de 13 dígitos del CBU (posiciones 9 a 21).
+ * El tipo se manda como CC: el spec lo exige y con solo el CBU no sabemos si es caja de ahorro.
+ */
+export function resolveInterbankingCuentaPorCbu(cbuRaw: string): InterbankingTransferAccountV2 {
+  const cbu = cbuRaw.replace(/\D/g, '')
+  if (cbu.length !== 22) {
+    throw new Error('El CBU de la cuenta crédito debe tener 22 dígitos.')
+  }
+  const conocida = ROUTING_BY_CBU.get(cbu)
+  if (conocida) return { ...conocida }
+  return {
+    bank_number: cbu.slice(0, 3),
+    account_type: 'CC',
+    currency: 'ARS',
+    account_number: cbu.slice(8, 21),
+    account_cbu: cbu,
+  }
+}
+
 export function resolveInterbankingCreditAccountByCbu(cbuRaw: string): InterbankingTransferAccountV2 {
   const cbu = cbuRaw.replace(/\D/g, '')
   if (cbu.length !== 22) {

@@ -49,6 +49,18 @@ describe('InterbankingTransferenciasProvider.confeccionarLote', () => {
     },
   )
 
+  it('terceros y proveedores también chocan con el candado antes de cualquier request', async () => {
+    delete process.env.INTERBANKING_TRANSFER_ALLOW_REAL
+    const provider = new InterbankingTransferenciasProvider()
+    for (const tipo of ['terceros', 'proveedores'] as const) {
+      await expect(
+        provider.confeccionarLote([{ ...item, tipo, codigoConcepto: 'VAR', disclaimerAceptado: true }]),
+      ).rejects.toThrow('Transferencias reales deshabilitadas: falta INTERBANKING_TRANSFER_ALLOW_REAL=true')
+    }
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(getCuentaDocument).not.toHaveBeenCalled()
+  })
+
   it('los caminos directos al POST también rechazan sin la variable', async () => {
     delete process.env.INTERBANKING_TRANSFER_ALLOW_REAL
     vi.stubEnv('INTERBANKING_TRANSFER_OPERATOR_ID_NUMBER', '12345678')

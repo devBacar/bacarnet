@@ -20,9 +20,15 @@ import {
   replaceMovimientosRango,
   scanMovimientosPorTexto,
   sumMovimientosCentavos,
+  toListadoItem,
   tomarTurnoSyncMovimientos,
   type MovimientoListadoItem,
 } from './movimientos.repository.js'
+import { cuitOnceDigitos, nombreContraparteLimpio } from '../../contraparte/domain/normalizar.js'
+import {
+  enriquecerContrapartes,
+  propagarContraparteManual,
+} from '../../contraparte/services/enriquecer-contrapartes.js'
 import { reconciliarTransferenciasConMovimientos } from '../../transferencias/services/reconciliar-movimientos.js'
 
 const TZ = 'America/Argentina/Buenos_Aires'
@@ -282,6 +288,15 @@ async function syncMovimientosConTurno(input: { actorUid: string }): Promise<Mov
 
   const reconciliacion = await reconciliarTransferenciasConMovimientos({ actorUid: input.actorUid })
 
+  for (const cuenta of porCuenta) {
+    const desde = cuenta.modo === 'al_dia' || !cuenta.desde ? hoy : cuenta.desde
+    try {
+      await enriquecerContrapartes({ cuentaId: cuenta.cuentaId, desde, hasta: hoy, session })
+    } catch (err) {
+      console.error('[finanzas/movimientos] No se pudieron completar las contrapartes del sync', cuenta.cuentaId, err)
+    }
+  }
+
   return {
     hoy: hoyArgentina(now),
     traidos: porCuenta.reduce((acc, c) => acc + c.traidos + c.diaTraidos, 0),
@@ -419,22 +434,33 @@ export async function actualizarAnotacionMovimiento(input: {
   movimientoId: string
   categoriaId?: string | null
   nota?: string | null
+  contraparteNombre?: string | null
+  contraparteCuit?: string | null
 }): Promise<MovimientoListadoItem> {
   const id = input.movimientoId.trim()
-  if (!id || id === 'sync') {
+  if (!id || id === 'sync' || id === 'contrapartes') {
     throw new MovimientoAnotacionError('Id de movimiento inválido', 400)
   }
   const tieneCategoria = Object.prototype.hasOwnProperty.call(input, 'categoriaId')
   const tieneNota = Object.prototype.hasOwnProperty.call(input, 'nota')
-  if (!tieneCategoria && !tieneNota) {
-    throw new MovimientoAnotacionError('Indicá una categoría o una nota', 400)
+  const tieneNombre = Object.prototype.hasOwnProperty.call(input, 'contraparteNombre')
+  const tieneCuit = Object.prototype.hasOwnProperty.call(input, 'contraparteCuit')
+  if (!tieneCategoria && !tieneNota && !tieneNombre && !tieneCuit) {
+    throw new MovimientoAnotacionError('Indicá una categoría, una nota o de quién es el movimiento', 400)
   }
 
   const ref = movimientosBancariosCollection().doc(id)
   const snap = await ref.get()
   if (!snap.exists) throw new MovimientoAnotacionError('Movimiento no encontrado', 404)
+  const previo = snap.data() ?? {}
 
-  const patch: { categoriaId?: string | null; nota?: string | null } = {}
+  const patch: {
+    categoriaId?: string | null
+    nota?: string | null
+    contraparteNombre?: string | null
+    contraparteCuit?: string | null
+    contraparteOrigen?: 'manual'
+  } = {}
   if (tieneCategoria) {
     if (input.categoriaId == null || input.categoriaId === '') {
       patch.categoriaId = null
@@ -447,24 +473,31 @@ export async function actualizarAnotacionMovimiento(input: {
   if (tieneNota) {
     patch.nota = normalizarNotaMovimiento(input.nota)
   }
+  if (tieneNombre || tieneCuit) {
+    const nombreCrudo = tieneNombre ? input.contraparteNombre : previo.contraparteNombre
+    const cuitCrudo = tieneCuit ? input.contraparteCuit : previo.contraparteCuit
+    if (nombreCrudo != null && typeof nombreCrudo !== 'string') {
+      throw new MovimientoAnotacionError('El nombre tiene que ser texto', 400)
+    }
+    if (cuitCrudo != null && typeof cuitCrudo !== 'string') {
+      throw new MovimientoAnotacionError('El CUIT tiene que ser texto', 400)
+    }
+    if (typeof cuitCrudo === 'string' && cuitCrudo.trim() && !cuitOnceDigitos(cuitCrudo)) {
+      throw new MovimientoAnotacionError('El CUIT tiene que tener 11 dígitos', 400)
+    }
+    patch.contraparteNombre = nombreContraparteLimpio(nombreCrudo)
+    patch.contraparteCuit = cuitOnceDigitos(cuitCrudo)
+    patch.contraparteOrigen = 'manual'
+  }
 
   await ref.update(patch)
-  const updated = await ref.get()
-  const data = updated.data() ?? {}
-  return {
-    id,
-    cuentaId: String(data.cuentaId ?? ''),
-    bancoNombre: String(data.bancoNombre ?? ''),
-    fechaProceso: String(data.fechaProceso ?? ''),
-    descripcion: String(data.descripcion ?? ''),
-    contraparte:
-      typeof data.depositorDescription === 'string' && data.depositorDescription
-        ? data.depositorDescription
-        : null,
-    customerCuit: typeof data.customerCuit === 'string' && data.customerCuit ? data.customerCuit : null,
-    tipo: data.tipo === 'credito' ? 'credito' : 'debito',
-    montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
-    categoriaId: typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null,
-    nota: typeof data.nota === 'string' && data.nota.trim() ? data.nota.trim() : null,
+  if (patch.contraparteOrigen === 'manual' && patch.contraparteNombre && patch.contraparteCuit) {
+    await propagarContraparteManual({
+      exceptoMovimientoId: id,
+      nombre: patch.contraparteNombre,
+      cuit: patch.contraparteCuit,
+    })
   }
+  const updated = await ref.get()
+  return toListadoItem(id, updated.data() ?? {})
 }

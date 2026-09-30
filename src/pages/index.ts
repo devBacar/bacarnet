@@ -32,8 +32,10 @@ export { FinanzasCuentasPage } from './finanzas/CuentasPage'
 export { FinanzasAgendaPage } from './finanzas/AgendaPage'
 export { FinanzasTransferenciasPage } from './finanzas/TransferenciasPage'
 export { FinanzasMovimientosPage } from './finanzas/MovimientosPage'
+export { FinanzasExtractosPage } from './finanzas/ExtractosPage'
 export {
   CajasWorkspace as FinanzasCajasPage,
   CajasWorkspace as FinanzasCajaChicaPage,
 } from './finanzas/CajasWorkspace'
+export { FinanzasChequesPage } from './finanzas/ChequesPage'
 export { FinanzasIndexRedirect } from './finanzas/FinanzasIndexRedirect'

@@ -18,6 +18,10 @@ export interface AnotacionMovimiento {
   huellaSinDescripcion?: string
   categoriaId: string | null
   nota: string | null
+  /** Solo se conserva si la cargó una persona. El resto se vuelve a calcular. */
+  contraparteNombre?: string | null
+  contraparteCuit?: string | null
+  contraparteOrigen?: 'manual' | null
 }
 
 function parte(value: unknown): string {
@@ -58,7 +62,15 @@ function huellaCon(row: HuellaMovimientoInput, descripcion: string): string {
 export function emparejarAnotaciones<T extends HuellaMovimientoInput>(
   filas: T[],
   anotaciones: AnotacionMovimiento[],
-): Array<T & { categoriaId: string | null; nota: string | null }> {
+): Array<
+  T & {
+    categoriaId: string | null
+    nota: string | null
+    contraparteNombre: string | null
+    contraparteCuit: string | null
+    contraparteOrigen: 'manual' | null
+  }
+> {
   const colas = new Map<string, AnotacionMovimiento[]>()
   for (const anotacion of anotaciones) {
     const cola = colas.get(anotacion.huella) ?? []
@@ -82,10 +94,14 @@ export function emparejarAnotaciones<T extends HuellaMovimientoInput>(
 
   return filas.map((fila, i) => {
     const anotacion = asignadas[i] ?? sobrantes.get(huellaMovimientoSinDescripcion(fila))?.shift()
+    const manual = anotacion?.contraparteOrigen === 'manual'
     return {
       ...fila,
       categoriaId: anotacion?.categoriaId ?? null,
       nota: anotacion?.nota ?? null,
+      contraparteNombre: manual ? (anotacion?.contraparteNombre ?? null) : null,
+      contraparteCuit: manual ? (anotacion?.contraparteCuit ?? null) : null,
+      contraparteOrigen: manual ? 'manual' : null,
     }
   })
 }

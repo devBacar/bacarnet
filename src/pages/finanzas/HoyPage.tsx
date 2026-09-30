@@ -20,6 +20,7 @@ import {
   cobrarHoyEnEfectivo,
   confirmarCobroHoy,
   fetchHoy,
+  pagarHoyConCheque,
   pagarHoyEnEfectivo,
   reprogramarCobroHoy,
   reprogramarPagoHoy,
@@ -55,6 +56,7 @@ export function FinanzasHoyPage() {
     await queryClient.invalidateQueries({ queryKey: ['finanzas', 'hoy'] })
     await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cajas'] })
     await queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques'] })
   }
 
   async function correr(tarea: () => Promise<string>, cerrar: () => void) {
@@ -130,7 +132,12 @@ export function FinanzasHoyPage() {
       {pagoModo ? (
         <ComoLoPagasModal
           pago={pagoModo}
+          guardando={guardando}
           onClose={() => setPagoModo(null)}
+          onCheque={(chequeId) => {
+            const pago = pagoModo
+            void correr(() => pagarHoyConCheque(pago.id, chequeId), () => setPagoModo(null))
+          }}
           onBanco={() => {
             setTransferencia({
               compromisoPagoId: pagoModo.id,

@@ -4,12 +4,13 @@ import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import {
   cobrarEnEfectivo,
   confirmarCobroLlegado,
+  pagarCompromisoConChequeDeCartera,
   pagarCompromisoEnEfectivo,
   pasarCobroDeDia,
   pasarCompromisoDeDia,
   yaPagueCompromiso,
 } from '../services/hoy.acciones.js'
-import { armarHoy } from '../services/hoy.service.js'
+import { armarHoy, listarChequesEnCartera } from '../services/hoy.service.js'
 
 export const finanzasHoyRouter = Router()
 
@@ -47,6 +48,40 @@ async function leerCuerpo(req: import('express').Request): Promise<{
   }
   return { body: (req.body ?? {}) as Record<string, unknown>, comprobante: null }
 }
+
+finanzasHoyRouter.get('/cartera', async (req, res) => {
+  try {
+    const raw = typeof req.query.montoCentavos === 'string' ? req.query.montoCentavos : ''
+    const montoCentavos = Number(raw)
+    if (!Number.isInteger(montoCentavos) || montoCentavos < 0) {
+      res.status(400).json({ error: 'Falta el monto del pago' })
+      return
+    }
+    const cheques = await listarChequesEnCartera(montoCentavos)
+    res.json({ cheques })
+  } catch (err) {
+    console.error('[finanzas/hoy] cartera', err)
+    res.status(500).json({ error: 'No pude mirar los cheques de la cartera.' })
+  }
+})
+
+finanzasHoyRouter.post('/compromisos/:id/cheque', async (req, res) => {
+  try {
+    const chequeId = typeof req.body?.chequeId === 'string' ? req.body.chequeId.trim() : ''
+    if (!chequeId) {
+      res.status(400).json({ error: 'Elegí el cheque' })
+      return
+    }
+    const resultado = await pagarCompromisoConChequeDeCartera({
+      user: req.authedUser!,
+      compromisoId: req.params.id,
+      chequeId,
+    })
+    res.json(resultado)
+  } catch (err) {
+    res.status(400).json({ error: mensajeDe(err, 'No se pudo endosar el cheque') })
+  }
+})
 
 finanzasHoyRouter.post('/compromisos/:id/efectivo', async (req, res) => {
   try {

@@ -290,6 +290,8 @@ export async function marcarCompromisoYaPagado(
   const fechaPago =
     fechaDesdeDiaArgentina(fechaTexto.slice(0, 10)) ?? parseDateInput(body.fechaPago) ?? new Date()
   const movimientoId = typeof body.movimientoId === 'string' ? body.movimientoId.trim() : ''
+  const chequeId =
+    typeof body.chequeId === 'string' && body.chequeId.trim() ? body.chequeId.trim() : null
   if (medioPago === 'transferencia' && !cuentaId) {
     throw new Error('Elegí el banco o el movimiento que coincide')
   }
@@ -313,6 +315,7 @@ export async function marcarCompromisoYaPagado(
       cuentaId: medioPago === 'cheque' ? current.cuentaId : cuentaId,
       fechaPago: timestampFromDate(fechaPago),
       pagadoPor: actorUid,
+      ...(chequeId ? { chequeId } : {}),
     },
   })
 

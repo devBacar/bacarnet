@@ -4,6 +4,7 @@ export type ContraparteOrigen =
   | 'banco'
   | 'transferencia'
   | 'agenda'
+  | 'cheque'
   | 'interbanking'
   | 'directorio'
   | 'categoria'
@@ -26,6 +27,7 @@ export function esOrigenContraparte(value: unknown): value is ContraparteOrigen 
     value === 'banco' ||
     value === 'transferencia' ||
     value === 'agenda' ||
+    value === 'cheque' ||
     value === 'interbanking' ||
     value === 'directorio' ||
     value === 'categoria'

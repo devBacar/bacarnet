@@ -13,6 +13,7 @@ describe('prioridad de contraparte', () => {
     fuente('banco', 'Banco'),
     fuente('transferencia', 'Transferencia'),
     fuente('agenda', 'Agenda'),
+    fuente('cheque', 'Cheque'),
     fuente('interbanking', 'Interbanking'),
     fuente('directorio', 'Directorio'),
     fuente('categoria', 'Categoria'),
@@ -36,6 +37,15 @@ describe('prioridad de contraparte', () => {
         candidatos: orden,
       }).origen,
     ).toBe('manual')
+  })
+
+  it('el cheque gana sobre Interbanking y pierde contra la agenda', () => {
+    expect(
+      elegirContraparte({ actual: vacio, candidatos: [null, null, null, orden[3] ?? null, orden[4] ?? null] }).origen,
+    ).toBe('cheque')
+    expect(
+      elegirContraparte({ actual: vacio, candidatos: [null, null, orden[2] ?? null, orden[3] ?? null] }).origen,
+    ).toBe('agenda')
   })
 
   it('si nadie resuelve, queda vacío', () => {

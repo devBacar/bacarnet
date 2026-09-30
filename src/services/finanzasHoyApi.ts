@@ -68,6 +68,30 @@ export interface CobroAtrasadoHoy {
   textoReclamo: string
 }
 
+export interface ChequeADebitarHoy {
+  id: string
+  numero: string
+  destinatario: string
+  banco: string
+  montoCentavos: number
+  cuando: 'Hoy' | 'Mañana'
+}
+
+export interface ChequesADebitarHoy {
+  filas: ChequeADebitarHoy[]
+  totalCentavos: number
+  impactos: string[]
+}
+
+export interface ChequeCarteraHoy {
+  id: string
+  numero: string
+  emisor: string
+  banco: string
+  fechaPago: string
+  montoCentavos: number
+}
+
 export interface HoyResponse {
   saludo: string
   fecha: string
@@ -88,7 +112,7 @@ export interface HoyResponse {
     diaMasPesado: string | null
     cobrosAtrasados: CobroAtrasadoHoy[]
     firmas: { cantidad: number; montoCentavos: number; texto: string } | null
-    chequesTexto: string
+    chequesADebitar: ChequesADebitarHoy
   }
 }
 
@@ -143,6 +167,23 @@ export async function yaPagueHoy(
     body: JSON.stringify(body),
   })
   if (!res.ok) await leerError(res, 'No se pudo marcar como pagado')
+  const data = (await res.json()) as { mensaje: string }
+  return data.mensaje
+}
+
+export async function fetchCarteraHoy(montoCentavos: number): Promise<ChequeCarteraHoy[]> {
+  const res = await hoyFetch(`/cartera?montoCentavos=${montoCentavos}`)
+  if (!res.ok) await leerError(res, 'No pude mirar los cheques de la cartera')
+  const data = (await res.json()) as { cheques: ChequeCarteraHoy[] }
+  return data.cheques
+}
+
+export async function pagarHoyConCheque(compromisoId: string, chequeId: string): Promise<string> {
+  const res = await hoyFetch(`/compromisos/${encodeURIComponent(compromisoId)}/cheque`, {
+    method: 'POST',
+    body: JSON.stringify({ chequeId }),
+  })
+  if (!res.ok) await leerError(res, 'No se pudo endosar el cheque')
   const data = (await res.json()) as { mensaje: string }
   return data.mensaje
 }

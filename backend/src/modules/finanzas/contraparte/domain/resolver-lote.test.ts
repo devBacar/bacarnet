@@ -10,6 +10,7 @@ function ctx(partial: Partial<ContextoContraparte> = {}): ContextoContraparte {
     destinatariosPorCbu: new Map(),
     proveedoresPorCompromiso: new Map(),
     agenda: [],
+    cheques: [],
     transferenciasIb: [],
     directorio: new Map(),
     categorias: new Map(),
@@ -29,6 +30,7 @@ function mov(partial: Partial<MovimientoParaContraparte> = {}): MovimientoParaCo
     fechaProceso: '2026-09-28',
     descripcion: 'TF.DB.PAG.PROV.',
     codeDescriptionIb: null,
+    voucherNumber: null,
     depositorDescription: null,
     customerCuit: null,
     categoriaId: null,
@@ -194,5 +196,62 @@ describe('resolver el lote', () => {
     expect(resultados.find((fila) => fila.id === 'impuesto')?.contraparte.nombre).toBe(
       'AFIP (cobrado por Banco Córdoba)',
     )
+  })
+
+  it('un débito de cheque propio queda después de la agenda y antes de Interbanking', () => {
+    const cheque = {
+      id: 'ch-1',
+      numero: '55',
+      direccion: 'emitido' as const,
+      montoCentavos: 150000,
+      fechaPago: '2026-09-28',
+      emisor: null,
+      cliente: null,
+      destinatario: 'Flete Sur',
+    }
+    const transferenciaIb: TransferenciaIbRecibida = {
+      id: 'ib-1',
+      fecha: '2026-09-28',
+      montoCentavos: 150000,
+      cuentaCreditoNumero: '',
+      bancoCreditoNumero: '',
+      nombrePagador: null,
+      cuitPagador: null,
+      estado: 'Ejecutada',
+      cuentaDebitoNumero: '123456789',
+      bancoDebitoNumero: '020',
+      nombreBeneficiario: 'Según Interbanking',
+      cuitBeneficiario: null,
+      bancoCreditoNombre: null,
+      cuentasPropias: false,
+    }
+    const debito = mov({ descripcion: 'ECHEQ CAMARA', voucherNumber: '55' })
+    const soloCheque = resolverLote([debito], ctx({ cheques: [cheque], transferenciasIb: [transferenciaIb] }))
+    expect(soloCheque[0]?.contraparte).toEqual({
+      nombre: 'Cheque N.º 55 a Flete Sur',
+      cuit: null,
+      origen: 'cheque',
+    })
+
+    const conAgenda = resolverLote(
+      [debito],
+      ctx({
+        cheques: [cheque],
+        transferenciasIb: [transferenciaIb],
+        agenda: [
+          {
+            id: 'compromiso:1',
+            tipo: 'compromiso',
+            nombre: 'Taller Díaz',
+            cuit: null,
+            montoCentavos: 150000,
+            fecha: '2026-09-28',
+            cuentaId: 'cordoba-cc',
+            estado: 'pagado',
+          },
+        ],
+      }),
+    )
+    expect(conAgenda[0]?.contraparte.origen).toBe('agenda')
   })
 })

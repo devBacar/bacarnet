@@ -67,6 +67,7 @@ function base(overrides: Partial<ArmarHoyInput> = {}): ArmarHoyInput {
     movimientos: [],
     cuentas: [],
     transferencias: [],
+    cheques: [],
     ...overrides,
   }
 }

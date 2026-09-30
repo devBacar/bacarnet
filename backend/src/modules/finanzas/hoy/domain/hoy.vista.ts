@@ -1,4 +1,5 @@
 import { presentarEstadoInterbanking } from '../../transferencias/domain/estado-interbanking.js'
+import { armarChequesADebitar, chequesParaLaSemana, chequesQueVencenHoy } from './cheques-hoy.js'
 import {
   diasEntre,
   etiquetaDia,
@@ -14,6 +15,7 @@ import {
 import type {
   ArmarHoyInput,
   BancoFilaHoy,
+  ChequeEnHoy,
   CobroAtrasadoHoy,
   CobroHoy,
   CompromisoHoy,
@@ -30,8 +32,6 @@ import type {
 const ORDEN_BANCOS = ['Julio', 'Patagonia', 'Córdoba']
 const HORAS_SIN_FIRMA = 2
 const DIAS_ATRASO_RECLAMO = 3
-const CHEQUES_TEXTO =
-  'Cuando esté listo el módulo de cheques, acá vas a ver los cheques que se debitan mañana.'
 
 const URGENCIA_LABEL: Record<Exclude<UrgenciaHoy, null>, string> = {
   alta: 'Alta',
@@ -283,6 +283,7 @@ export function armarSemana(input: {
   compromisos: CompromisoHoy[]
   cobros: CobroHoy[]
   cobrosYaLlegados: Set<string>
+  cheques: ChequeEnHoy[]
 }): { filas: SemanaFilaHoy[] | null; diaMasPesado: string | null } {
   const dias = proximosDiasHabiles(input.hoy, 7)
   const pagar = new Map(dias.map((dia) => [dia, 0]))
@@ -293,6 +294,11 @@ export function armarSemana(input: {
     const destino = diaDestino(row.fechaVencimiento, dias)
     if (!destino) continue
     pagar.set(destino, (pagar.get(destino) ?? 0) + row.montoCentavos)
+  }
+  for (const cheque of chequesParaLaSemana(input.cheques, input.hoy)) {
+    const destino = diaDestino(cheque.fechaPago, dias)
+    if (!destino) continue
+    pagar.set(destino, (pagar.get(destino) ?? 0) + cheque.montoCentavos)
   }
   for (const row of input.cobros) {
     if (row.estado !== 'esperado' || input.cobrosYaLlegados.has(row.id)) continue
@@ -389,7 +395,12 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const ingresos = seleccionarIngresos(input.cobros, input.movimientos, hoy)
   const bancos = agruparBancos(input.cuentas)
   const saldoInicialCentavos = bancos.reduce((total, banco) => total + banco.saldoAhoraCentavos, 0)
-  const pagosCentavos = pagos.reduce((total, fila) => total + fila.montoCentavos, 0)
+  const pagosDeCompromisos = pagos.reduce((total, fila) => total + fila.montoCentavos, 0)
+  const chequesDelDia = chequesQueVencenHoy(input.cheques, hoy).reduce(
+    (total, cheque) => total + cheque.montoCentavos,
+    0,
+  )
+  const pagosCentavos = pagosDeCompromisos + chequesDelDia
   const cobrosCentavos = ingresos.filas
     .filter((fila) => !fila.llego)
     .reduce((total, fila) => total + fila.montoCentavos, 0)
@@ -400,21 +411,24 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
     compromisos: input.compromisos,
     cobros: input.cobros,
     cobrosYaLlegados: ingresos.llegados,
+    cheques: input.cheques,
   })
   const cobrosAtrasados = listarCobrosAtrasados(input.cobros, hoy, ingresos.llegados)
   const firmas = transferenciasSinFirmar(input.transferencias, input.now)
+  const chequesADebitar = armarChequesADebitar({ cheques: input.cheques, hoy, bancos })
   const vacio =
     pagos.length === 0 &&
     ingresos.filas.length === 0 &&
     semana.filas == null &&
     cobrosAtrasados.length === 0 &&
-    firmas == null
+    firmas == null &&
+    chequesADebitar.filas.length === 0
 
   return {
     saludo: saludoDelDia(input.now),
     fecha: hoy,
     vacio,
-    pagos: { totalCentavos: pagosCentavos, filas: pagos },
+    pagos: { totalCentavos: pagosDeCompromisos, filas: pagos },
     ingresos: { filas: ingresos.filas },
     dia: {
       saldoInicialCentavos,
@@ -430,7 +444,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
       diaMasPesado: semana.diaMasPesado,
       cobrosAtrasados,
       firmas,
-      chequesTexto: CHEQUES_TEXTO,
+      chequesADebitar,
     },
   }
 }

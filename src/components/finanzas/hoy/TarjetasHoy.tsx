@@ -219,6 +219,93 @@ export function TarjetaDia({ dia }: { dia: HoyResponse['dia'] }) {
   )
 }
 
+function ChequesADebitar({ cheques }: { cheques: HoyResponse['prevision']['chequesADebitar'] }) {
+  return (
+    <div>
+      <h3 className="text-lg font-semibold">Mañana se debitan estos cheques</h3>
+      <p className="text-body-muted mt-2 text-base">
+        Los cheques nuestros que se debitan mañana, y los de hoy que todavía no figuran debitados.
+      </p>
+      {cheques.filas.length === 0 ? (
+        <p className="mt-3 text-lg">Mañana no se debita ningún cheque.</p>
+      ) : (
+        <>
+          <ul className="mt-3 divide-y divide-neutral-200 sm:hidden dark:divide-zinc-800">
+            {cheques.filas.map((fila) => (
+              <li key={fila.id} className="py-3">
+                <p className="text-lg font-semibold">N.º {fila.numero}</p>
+                <p className="text-sm">{fila.cuando}</p>
+                <p className="mt-1">A quién: {fila.destinatario}</p>
+                <p>Banco: {fila.banco}</p>
+                <p className="mt-1">
+                  Monto: <Monto centavos={fila.montoCentavos} />
+                </p>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 hidden overflow-x-auto sm:block">
+            <table className="min-w-full text-left text-sm sm:text-base">
+              <thead>
+                <tr className="text-body-muted border-b border-neutral-200 dark:border-zinc-800">
+                  <th className="py-2 pr-3 font-medium">N.º</th>
+                  <th className="py-2 pr-3 font-medium">A quién</th>
+                  <th className="py-2 pr-3 font-medium">Banco</th>
+                  <th className="py-2 font-medium">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cheques.filas.map((fila) => (
+                  <tr key={fila.id} className="border-b border-neutral-100 dark:border-zinc-800">
+                    <td className="py-3 pr-3 font-semibold">
+                      {fila.numero}
+                      <span className="text-body-muted block text-sm font-normal">{fila.cuando}</span>
+                    </td>
+                    <td className="py-3 pr-3">{fila.destinatario}</td>
+                    <td className="py-3 pr-3">{fila.banco}</td>
+                    <td className="py-3">
+                      <Monto centavos={fila.montoCentavos} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td className="py-3 pr-3 font-semibold" colSpan={3}>
+                    Total
+                  </td>
+                  <td className="py-3">
+                    <Monto centavos={cheques.totalCentavos} />
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="mt-3 flex items-baseline justify-between gap-3 border-t border-neutral-200 pt-3 text-lg sm:hidden dark:border-zinc-800">
+            <span className="font-medium">Total</span>
+            <Monto centavos={cheques.totalCentavos} grande />
+          </p>
+          {cheques.impactos.length > 0 ? (
+            <div className="mt-3 grid gap-2">
+              {cheques.impactos.map((texto) => (
+                <p
+                  key={texto}
+                  className={
+                    texto.startsWith('Ojo')
+                      ? 'rounded-xl border border-red-300 bg-red-50 px-3 py-3 text-base font-medium text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100'
+                      : 'rounded-xl border border-amber-300 bg-amber-50 px-3 py-3 text-base font-medium text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100'
+                  }
+                >
+                  {texto}
+                </p>
+              ))}
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  )
+}
+
 export function TarjetaPrevision({
   prevision,
   onReclamar,
@@ -232,7 +319,7 @@ export function TarjetaPrevision({
   if (!haySemana && !hayAtrasados && !hayFirmas) {
     return (
       <Tarjeta titulo="Para organizarte">
-        <p className="text-lg">{prevision.chequesTexto}</p>
+        <ChequesADebitar cheques={prevision.chequesADebitar} />
       </Tarjeta>
     )
   }
@@ -309,10 +396,7 @@ export function TarjetaPrevision({
             {prevision.firmas.texto}
           </p>
         ) : null}
-        <div>
-          <h3 className="text-lg font-semibold">Mañana se debitan estos cheques</h3>
-          <p className="text-body-muted mt-2">{prevision.chequesTexto}</p>
-        </div>
+        <ChequesADebitar cheques={prevision.chequesADebitar} />
       </div>
     </Tarjeta>
   )

@@ -133,6 +133,46 @@ export interface FirmasHoy {
   texto: string
 }
 
+/** Cheque tal como lo necesita Hoy. `fechaEntregado` no se usa. */
+export interface ChequeEnHoy {
+  id: string
+  numero: string
+  direccion: 'recibido' | 'emitido'
+  estado: string
+  utilizado: boolean | null
+  montoCentavos: number
+  fechaPago: string
+  bancoEmisor: string | null
+  destinatario: string | null
+  emisor: string
+  cliente: string | null
+}
+
+export interface ChequeADebitarFila {
+  id: string
+  numero: string
+  destinatario: string
+  banco: string
+  montoCentavos: number
+  /** Hoy o Mañana, para no mezclarlos en la misma fila sin decirlo. */
+  cuando: 'Hoy' | 'Mañana'
+}
+
+export interface ChequesADebitarHoy {
+  filas: ChequeADebitarFila[]
+  totalCentavos: number
+  impactos: string[]
+}
+
+export interface ChequeCarteraHoy {
+  id: string
+  numero: string
+  emisor: string
+  banco: string
+  fechaPago: string
+  montoCentavos: number
+}
+
 export interface HoyVista {
   saludo: string
   fecha: string
@@ -153,7 +193,7 @@ export interface HoyVista {
     diaMasPesado: string | null
     cobrosAtrasados: CobroAtrasadoHoy[]
     firmas: FirmasHoy | null
-    chequesTexto: string
+    chequesADebitar: ChequesADebitarHoy
   }
 }
 
@@ -164,4 +204,5 @@ export interface ArmarHoyInput {
   movimientos: MovimientoHoy[]
   cuentas: CuentaHoy[]
   transferencias: TransferenciaHoy[]
+  cheques: ChequeEnHoy[]
 }

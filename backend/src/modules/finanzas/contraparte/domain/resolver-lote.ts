@@ -2,6 +2,7 @@ import type { ContraparteGuardada, ContraparteOrigen } from './contraparte.types
 import { emparejarUnico } from './emparejar-unico.js'
 import { agendaCandidatos, identidadDeAgenda, type ItemAgenda } from './fuente-agenda.js'
 import { contraparteDesdeBanco } from './fuente-banco.js'
+import { chequesCandidatos, contraparteDeCheque, type ChequeParaContraparte } from './fuente-cheque.js'
 import { contraparteDesdeCategoria, type CategoriaConocida } from './fuente-categoria.js'
 import { contraparteDesdeDirectorio, type EntradaDirectorio } from './fuente-directorio.js'
 import {
@@ -30,6 +31,7 @@ export interface MovimientoParaContraparte {
   fechaProceso: string
   descripcion: string
   codeDescriptionIb: string | null
+  voucherNumber: string | null
   depositorDescription: string | null
   customerCuit: string | null
   categoriaId: string | null
@@ -43,6 +45,7 @@ export interface ContextoContraparte {
   destinatariosPorCbu: ReadonlyMap<string, IdentidadDestino>
   proveedoresPorCompromiso: ReadonlyMap<string, IdentidadDestino>
   agenda: readonly ItemAgenda[]
+  cheques: readonly ChequeParaContraparte[]
   transferenciasIb: readonly TransferenciaIbRecibida[]
   directorio: ReadonlyMap<string, EntradaDirectorio>
   categorias: ReadonlyMap<string, CategoriaConocida>
@@ -111,8 +114,29 @@ export function resolverLote(
     ),
   )
 
-  const elegiblesIb = elegiblesAgenda.filter(
-    (mov) => !agendaMap.has(mov.id) && movimientoPuedeVenirDeInterbanking(mov),
+  const elegiblesCheque = elegiblesAgenda.filter((mov) => !agendaMap.has(mov.id))
+  const chequeMap = emparejarUnico(elegiblesCheque, (mov) =>
+    conNombre(
+      chequesCandidatos(
+        {
+          tipo: mov.tipo,
+          montoCentavos: mov.montoCentavos,
+          fechaProceso: mov.fechaProceso,
+          descripcion: mov.descripcion,
+          codeDescriptionIb: mov.codeDescriptionIb,
+          voucherNumber: mov.voucherNumber,
+          categoriaNombre: mov.categoriaId ? (ctx.categorias.get(mov.categoriaId)?.nombre ?? null) : null,
+        },
+        ctx.cheques,
+      ).map((cheque) => ({
+        id: cheque.id,
+        contraparte: contraparteDeCheque(cheque),
+      })),
+    ),
+  )
+
+  const elegiblesIb = elegiblesCheque.filter(
+    (mov) => !chequeMap.has(mov.id) && movimientoPuedeVenirDeInterbanking(mov),
   )
   const ibMap = emparejarUnico(elegiblesIb, (mov) =>
     conNombre(
@@ -134,6 +158,7 @@ export function resolverLote(
         contraparteDesdeBanco(mov),
         transferMap.get(mov.id)?.contraparte ?? null,
         agendaMap.get(mov.id)?.contraparte ?? null,
+        chequeMap.get(mov.id)?.contraparte ?? null,
         ibMap.get(mov.id)?.contraparte ?? null,
       ],
     })

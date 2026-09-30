@@ -8,6 +8,7 @@ export type ContraparteOrigen =
   | 'banco'
   | 'transferencia'
   | 'agenda'
+  | 'cheque'
   | 'interbanking'
   | 'directorio'
   | 'categoria'

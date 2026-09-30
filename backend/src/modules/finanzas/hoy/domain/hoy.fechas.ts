@@ -37,6 +37,11 @@ export function proximosDiasHabiles(hoy: string, cantidad: number): string[] {
   return dias
 }
 
+/** El día hábil que sigue. Sábado y domingo no cuentan; no resta feriados, igual que la semana. */
+export function mananaHabil(hoy: string): string {
+  return proximosDiasHabiles(sumarDias(hoy, 1), 1)[0] ?? sumarDias(hoy, 1)
+}
+
 function parteFecha(now: Date, type: 'weekday' | 'day' | 'month'): string {
   const partes = new Intl.DateTimeFormat('es-AR', {
     timeZone: ZONA,

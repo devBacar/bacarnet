@@ -5,7 +5,9 @@ import {
   marcarCompromisoYaPagado,
   reprogramarCompromiso,
 } from '../../agenda/services/compromisos.service.js'
+import { getChequeById, marcarChequeEndosado } from '../../cheques/services/cheques.repository.js'
 import { listCajasForUser, registerMovimiento } from '../../cajachica/services/caja.service.js'
+import { camposEndoso, esChequeEnCartera } from '../domain/cheques-hoy.js'
 import { fechaHoyArgentina, formatoPesos } from '../domain/hoy.fechas.js'
 import type { CobroHoy } from '../domain/hoy.tipos.js'
 import { creditoConfirmaCobro, sugerirDebitos } from '../domain/hoy.vista.js'
@@ -75,6 +77,38 @@ export async function pagarCompromisoEnEfectivo(input: {
       sinComprobante: !input.comprobante || input.comprobante.buffer.length === 0,
       esIngreso: false,
     }),
+  }
+}
+
+/** Endosa un cheque de la cartera y deja el compromiso pagado con ese cheque. */
+export async function pagarCompromisoConChequeDeCartera(input: {
+  user: AuthedUser
+  compromisoId: string
+  chequeId: string
+}) {
+  const compromiso = await getCompromisoDocument(input.compromisoId)
+  if (!compromiso) throw new Error('No encontré ese pago')
+  if (compromiso.estado === 'pagado') throw new Error('Ese pago ya está hecho')
+  if (compromiso.estado === 'confeccionada_pendiente_autorizacion') {
+    throw new Error('Esta transferencia ya está armada. No la pagues también con un cheque.')
+  }
+  const cheque = await getChequeById(input.chequeId)
+  if (!cheque) throw new Error('No encontré ese cheque')
+  if (!esChequeEnCartera(cheque)) {
+    throw new Error('Ese cheque no está en la cartera. Elegí otro.')
+  }
+  const parche = camposEndoso(compromiso.proveedorONombre)
+  if (!parche.destinatario) throw new Error('Este pago no tiene a quién se lo endosamos')
+  await marcarChequeEndosado({ id: cheque.id, destinatario: parche.destinatario })
+  const hoy = fechaHoyArgentina(new Date())
+  await marcarCompromisoYaPagado(input.compromisoId, input.user.uid, {
+    medioPago: 'cheque',
+    chequeId: cheque.id,
+    fechaPago: hoy,
+    nota: `Endosado el cheque N.º ${cheque.numero} a ${parche.destinatario}.`,
+  })
+  return {
+    mensaje: `Listo. Endosé el cheque N.º ${cheque.numero} a ${parche.destinatario} y marqué el pago.`,
   }
 }
 

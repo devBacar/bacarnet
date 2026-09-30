@@ -78,6 +78,15 @@ export interface FinanzasPosicionCierre {
     arsCentavos: number
     usdCentavos: number
   }>
+  /** Foto de cada cuenta en el cierre (incluye el descubierto acordado de ese día). */
+  cuentas?: Array<{
+    cuentaId: string
+    bancoNombre: string
+    tipo: FinanzasTipoCuenta
+    moneda: FinanzasMoneda
+    saldoCentavos: number
+    descubiertoCentavos: number | null
+  }>
   syncProveedor: {
     intentado: boolean
     ok: boolean

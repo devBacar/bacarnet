@@ -125,7 +125,7 @@ export function FinanzasHoyPage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-4">
+    <div className="mx-auto grid max-w-7xl gap-4">
       {isLoading ? <p className="text-body-muted text-sm">Armando el día…</p> : null}
       {isError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">
@@ -155,7 +155,8 @@ export function FinanzasHoyPage() {
               ) : null}
             </>
           ) : (
-            <>
+            /* Dos columnas desde lg: cada tarjeta ocupa media pantalla y las vacías muestran su línea chica de "No hay…". */
+            <div className="grid items-start gap-4 lg:grid-cols-2">
               <TarjetaPagos
                 pagos={data.pagos}
                 onPagar={setPagoModo}
@@ -182,14 +183,14 @@ export function FinanzasHoyPage() {
               <TarjetaDia dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
               <TarjetaCheques cheques={data.prevision.chequesADebitar} />
               <TarjetaSemana prevision={data.prevision} />
-              <div className="grid items-start gap-4 lg:grid-cols-2">
+              <div className="grid gap-4">
                 <TarjetaAtrasados
                   cobros={data.prevision.cobrosAtrasados}
                   onReclamar={(cobro: CobroAtrasadoHoy) => setReclamo(cobro)}
                 />
                 <TarjetaFirmas firmas={data.prevision.firmas} />
               </div>
-            </>
+            </div>
           )}
         </>
       ) : null}

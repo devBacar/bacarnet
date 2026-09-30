@@ -10,8 +10,8 @@ import { fechaLarga, sugerenciaDesdeDondePagar } from './hoyFrases'
  * Piezas comunes: tarjeta, tabla, montos, etiquetas y botones. Todo en letra normal.
  * -------------------------------------------------------------------------- */
 
-const th = 'px-3 py-2 text-left text-xs font-medium whitespace-nowrap first:pl-4 last:pr-4'
-const td = 'px-3 py-2 align-middle first:pl-4 last:pr-4'
+const th = 'px-3 py-2 text-left text-xs font-medium first:pl-4 last:pr-4'
+const td = 'px-3 py-2 align-middle break-words first:pl-4 last:pr-4'
 const filaHover = 'border-b border-neutral-100 transition-colors last:border-b-0 hover:bg-neutral-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50'
 const filaTotal = 'border-t border-neutral-200 bg-neutral-50/60 font-semibold dark:border-zinc-700 dark:bg-zinc-800/40'
 
@@ -89,15 +89,22 @@ export function Tarjeta({
   )
 }
 
-/** Estado vacío: una sola línea gris adentro de la tarjeta. */
+/** Estado vacío: una sola línea gris y chica adentro de la tarjeta, para que las filas de la grilla queden parejas. */
 export function Vacio({ texto }: { texto: string }) {
-  return <p className="text-body-muted px-4 py-3 text-sm">{texto}</p>
+  return <p className="text-body-muted px-4 py-3 text-xs">{texto}</p>
 }
 
+/** Tabla que se acomoda al ancho de la tarjeta: nunca genera scroll horizontal. */
 function Tabla({ children }: { children: ReactNode }) {
+  return <table className="w-full text-sm">{children}</table>
+}
+
+/** Botones de acción de una fila: el principal arriba y los links chicos debajo, que cortan línea si hace falta. */
+function Acciones({ principal, secundarias }: { principal: ReactNode; secundarias?: ReactNode }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">{children}</table>
+    <div className="flex flex-col items-end gap-1">
+      {principal}
+      {secundarias ? <span className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5">{secundarias}</span> : null}
     </div>
   )
 }
@@ -198,9 +205,6 @@ export function TarjetaPagos({
           <thead>
             <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
               <th className={th}>A quién</th>
-              <th className={th}>Concepto</th>
-              <th className={th}>Vence</th>
-              <th className={th}>Cómo se paga</th>
               <th className={`${th} text-right`}>Monto</th>
               <th className={`${th} text-right`}>Acción</th>
             </tr>
@@ -208,44 +212,50 @@ export function TarjetaPagos({
           <tbody>
             {filas.map((pago) => (
               <tr key={pago.id} className={filaHover}>
-                <td className={`${td} text-heading font-medium`}>{pago.aQuien}</td>
-                <td className={`${td} text-body-muted`}>{pago.concepto}</td>
                 <td className={td}>
-                  {pago.vencido && pago.vencidoTexto ? <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta> : 'Hoy'}
-                </td>
-                <td className={td}>
-                  {pago.comoPagar}
-                  {pago.urgencia !== 'Normal' ? (
-                    <span className="text-body-muted text-xs"> · urgencia {pago.urgencia.toLowerCase()}</span>
-                  ) : null}
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="text-heading font-medium">{pago.aQuien}</span>
+                    {pago.vencido && pago.vencidoTexto ? (
+                      <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta>
+                    ) : (
+                      <Etiqueta tono="gris">Hoy</Etiqueta>
+                    )}
+                  </span>
+                  <span className="text-body-muted block text-xs">{pago.concepto}</span>
                 </td>
                 <td className={`${td} text-right`}>
-                  <Monto centavos={pago.montoCentavos} className="text-heading font-medium" />
+                  <Monto centavos={pago.montoCentavos} className="text-heading block font-medium" />
+                  <span className="text-body-muted block text-xs">
+                    {pago.comoPagar}
+                    {pago.urgencia !== 'Normal' ? ` · urgencia ${pago.urgencia.toLowerCase()}` : null}
+                  </span>
                 </td>
                 <td className={`${td} text-right`}>
-                  <div className="flex flex-col items-end gap-1">
-                    <button type="button" className={botonPrimario} onClick={() => onPagar(pago)}>
-                      Pagar
-                    </button>
-                    <span className="flex items-center gap-1.5">
-                      <button type="button" className={linkChico} onClick={() => onYaPague(pago)}>
-                        Ya lo pagué
+                  <Acciones
+                    principal={
+                      <button type="button" className={botonPrimario} onClick={() => onPagar(pago)}>
+                        Pagar
                       </button>
-                      <span aria-hidden className="text-body-muted text-xs">·</span>
-                      <button type="button" className={linkChico} onClick={() => onReprogramar(pago)}>
-                        Cambiar fecha
-                      </button>
-                    </span>
-                  </div>
+                    }
+                    secundarias={
+                      <>
+                        <button type="button" className={linkChico} onClick={() => onYaPague(pago)}>
+                          Ya lo pagué
+                        </button>
+                        <span aria-hidden className="text-body-muted text-xs">·</span>
+                        <button type="button" className={linkChico} onClick={() => onReprogramar(pago)}>
+                          Cambiar fecha
+                        </button>
+                      </>
+                    }
+                  />
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className={filaTotal}>
-              <td className={td} colSpan={4}>
-                Total
-              </td>
+              <td className={td}>Total</td>
               <td className={`${td} text-right`}>
                 <Monto centavos={pagos.totalCentavos} className="text-heading" />
               </td>
@@ -298,7 +308,6 @@ export function TarjetaCobros({
           <thead>
             <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
               <th className={th}>De quién</th>
-              <th className={th}>Esperado</th>
               <th className={`${th} text-right`}>Monto</th>
               <th className={th}>Estado</th>
               <th className={`${th} text-right`}>Acción</th>
@@ -309,14 +318,14 @@ export function TarjetaCobros({
               <tr key={ingreso.id} className={filaHover}>
                 <td className={td}>
                   <span className="text-heading block font-medium">{ingreso.cliente}</span>
-                  <span className="text-body-muted block text-xs">{ingreso.concepto}</span>
-                </td>
-                <td className={td}>
-                  {ingreso.atrasado && ingreso.atrasadoTexto ? (
-                    <span className="whitespace-nowrap text-red-700 dark:text-red-300">{ingreso.atrasadoTexto}</span>
-                  ) : (
-                    'Hoy'
-                  )}
+                  <span className="text-body-muted block text-xs">
+                    {ingreso.concepto} ·{' '}
+                    {ingreso.atrasado && ingreso.atrasadoTexto ? (
+                      <span className="text-red-700 dark:text-red-300">{ingreso.atrasadoTexto}</span>
+                    ) : (
+                      'esperado hoy'
+                    )}
+                  </span>
                 </td>
                 <td className={`${td} text-right`}>
                   <Monto centavos={ingreso.montoCentavos} className="text-heading font-medium" />
@@ -343,20 +352,24 @@ export function TarjetaCobros({
                       <span className="text-body-muted">—</span>
                     )
                   ) : (
-                    <div className="flex flex-col items-end gap-1">
-                      <button type="button" className={botonSecundario} onClick={() => onReclamar(ingreso)}>
-                        Reclamar
-                      </button>
-                      <span className="flex items-center gap-1.5">
-                        <button type="button" className={linkChico} onClick={() => onEfectivo(ingreso)}>
-                          Llegó en efectivo
+                    <Acciones
+                      principal={
+                        <button type="button" className={botonSecundario} onClick={() => onReclamar(ingreso)}>
+                          Reclamar
                         </button>
-                        <span aria-hidden className="text-body-muted text-xs">·</span>
-                        <button type="button" className={linkChico} onClick={() => onReprogramar(ingreso)}>
-                          Cambiar fecha
-                        </button>
-                      </span>
-                    </div>
+                      }
+                      secundarias={
+                        <>
+                          <button type="button" className={linkChico} onClick={() => onEfectivo(ingreso)}>
+                            Llegó en efectivo
+                          </button>
+                          <span aria-hidden className="text-body-muted text-xs">·</span>
+                          <button type="button" className={linkChico} onClick={() => onReprogramar(ingreso)}>
+                            Cambiar fecha
+                          </button>
+                        </>
+                      }
+                    />
                   )}
                 </td>
               </tr>
@@ -398,7 +411,6 @@ export function TarjetaDia({
                 <th className={`${th} text-right`}>Saldo ahora</th>
                 <th className={`${th} text-right`}>Pagos de hoy</th>
                 <th className={`${th} text-right`}>Queda</th>
-                <th className={`${th} text-right`}>Descubierto</th>
                 <th className={th}>Estado</th>
               </tr>
             </thead>
@@ -431,16 +443,12 @@ export function TarjetaDia({
                       )}
                     </td>
                     <td className={`${td} text-right`}>
-                      <Monto centavos={queda} className="text-heading font-medium" />
-                    </td>
-                    <td className={`${td} text-right`}>
+                      <Monto centavos={queda} className="text-heading block font-medium" />
                       {banco.descubiertoCentavos != null && banco.descubiertoCentavos > 0 ? (
-                        <Monto centavos={banco.descubiertoCentavos} />
-                      ) : (
-                        <span className="text-body-muted" title="Sin descubierto cargado">
-                          —
+                        <span className="text-body-muted block text-xs">
+                          de <Monto centavos={banco.descubiertoCentavos} /> de descubierto
                         </span>
-                      )}
+                      ) : null}
                     </td>
                     <td className={td}>
                       <EtiquetaEstado saldoCentavos={queda} descubiertoCentavos={banco.descubiertoCentavos} />
@@ -475,8 +483,7 @@ export function TarjetaCheques({ cheques }: { cheques: HoyResponse['prevision'][
           <Tabla>
             <thead>
               <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
-                <th className={th}>N.º</th>
-                <th className={th}>A quién</th>
+                <th className={th}>Cheque</th>
                 <th className={th}>Banco</th>
                 <th className={`${th} text-right`}>Monto</th>
               </tr>
@@ -484,11 +491,13 @@ export function TarjetaCheques({ cheques }: { cheques: HoyResponse['prevision'][
             <tbody>
               {cheques.filas.map((fila) => (
                 <tr key={fila.id} className={filaHover}>
-                  <td className={`${td} whitespace-nowrap tabular-nums`}>
-                    {fila.numero}
-                    {fila.cuando === 'Hoy' ? <span className="text-body-muted text-xs"> · hoy</span> : null}
+                  <td className={td}>
+                    <span className="text-heading block font-medium">{fila.destinatario}</span>
+                    <span className="text-body-muted block text-xs tabular-nums">
+                      N.º {fila.numero}
+                      {fila.cuando === 'Hoy' ? ' · hoy' : null}
+                    </span>
                   </td>
-                  <td className={`${td} text-heading font-medium`}>{fila.destinatario}</td>
                   <td className={td}>{fila.banco}</td>
                   <td className={`${td} text-right`}>
                     <Monto centavos={fila.montoCentavos} className="text-heading font-medium" />
@@ -498,7 +507,7 @@ export function TarjetaCheques({ cheques }: { cheques: HoyResponse['prevision'][
             </tbody>
             <tfoot>
               <tr className={filaTotal}>
-                <td className={td} colSpan={3}>
+                <td className={td} colSpan={2}>
                   Total
                 </td>
                 <td className={`${td} text-right`}>
@@ -598,7 +607,6 @@ export function TarjetaAtrasados({
           <thead>
             <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
               <th className={th}>De quién</th>
-              <th className={th}>Esperado</th>
               <th className={`${th} text-right`}>Monto</th>
               <th className={`${th} text-right`}>Acción</th>
             </tr>
@@ -608,9 +616,10 @@ export function TarjetaAtrasados({
               <tr key={cobro.id} className={filaHover}>
                 <td className={td}>
                   <span className="text-heading block font-medium">{cobro.cliente}</span>
-                  <span className="text-body-muted block text-xs">{cobro.concepto}</span>
+                  <span className="text-body-muted block text-xs">
+                    {cobro.concepto} · <span className="text-red-700 dark:text-red-300">{cobro.haceTexto}</span>
+                  </span>
                 </td>
-                <td className={`${td} whitespace-nowrap text-red-700 dark:text-red-300`}>{cobro.haceTexto}</td>
                 <td className={`${td} text-right`}>
                   <Monto centavos={cobro.montoCentavos} className="text-heading font-medium" />
                 </td>

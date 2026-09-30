@@ -77,4 +77,25 @@ describe('huella de movimiento', () => {
     const filas = emparejarAnotaciones([base, base], [{ huella, categoriaId: 'cat-1', nota: null }])
     expect(filas.map((fila) => fila.categoriaId)).toEqual(['cat-1', null])
   })
+
+  it('conserva la contraparte cargada a mano y no la de otra fila', () => {
+    const huella = huellaMovimiento(base)
+    const [conNombre, libre] = emparejarAnotaciones(
+      [base, { ...base, descripcion: 'Otra' }],
+      [
+        {
+          huella,
+          categoriaId: null,
+          nota: null,
+          contraparteNombre: 'Flete Sur',
+          contraparteCuit: '30700000001',
+          contraparteOrigen: 'manual',
+        },
+      ],
+    )
+    expect(conNombre.contraparteNombre).toBe('Flete Sur')
+    expect(conNombre.contraparteOrigen).toBe('manual')
+    expect(libre.contraparteNombre).toBeNull()
+    expect(libre.contraparteOrigen).toBeNull()
+  })
 })

@@ -129,8 +129,8 @@ export function FinanzasAgendaPage() {
       <header className="mb-6">
         <h1 className="text-heading text-2xl font-bold tracking-tight sm:text-3xl">Agenda</h1>
         <p className="text-body-muted mt-2 max-w-2xl text-sm">
-          Compromisos y cobros ordenados por vencimiento; podés marcar urgencia Alta, Media o Baja para
-          priorizar. Los saldos de cuenta solo reflejan sync con Interbanking.
+          Lo que hay que pagar y cobrar, ordenado por fecha de vencimiento. Marcá la urgencia (Alta,
+          Media o Baja) para saber qué pagar primero.
         </p>
       </header>
 
@@ -198,8 +198,8 @@ export function FinanzasAgendaPage() {
                 const op = res.transferencia?.operationId
                 toast.success(
                   op
-                    ? `Transferencia confeccionada (operation_id ${op}).`
-                    : 'Transferencia confeccionada por API.',
+                    ? `Transferencia preparada en Interbanking (n.º ${op}). Falta que la firmen.`
+                    : 'Transferencia preparada en Interbanking. Falta que la firmen.',
                 )
                 invalidate()
               }}
@@ -460,7 +460,7 @@ function CompromisosTable({
                         className="rounded bg-brand-primary px-2 py-1 text-xs font-medium text-white"
                         onClick={() => setConfeccionarRow(row)}
                       >
-                        Confeccionar por API
+                        Preparar transferencia
                       </button>
                     ) : null}
                     {vista === 'pendientes' && row.estado === COMPROMISO_ESTADO_CONFECCIONADA ? (
@@ -558,10 +558,10 @@ function ConfeccionarTransferenciaModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="surface-card w-full max-w-lg rounded-2xl border border-neutral-200 p-6 dark:border-zinc-700">
-        <h2 className="text-heading text-lg font-semibold">Confeccionar transferencia por API</h2>
+        <h2 className="text-heading text-lg font-semibold">Preparar transferencia</h2>
         <p className="text-body-muted mt-2 text-sm">
-          Se enviará a Interbanking para confección. La autorización y el envío del dinero ocurren solo en
-          la plataforma del banco.
+          Queda cargada en Interbanking, lista para firmar. La plata no sale hasta que los firmantes la
+          aprueben en Interbanking.
         </p>
         <p className="text-body-muted mt-2 text-sm">
           <span className="text-heading font-medium">{row.concepto}</span> —{' '}
@@ -605,12 +605,12 @@ function ConfeccionarTransferenciaModal({
               setSaving(true)
               void onSubmit({ cuentaCreditoCbu: cbu, cuentaDebitoId, tipo: 'cuentas_propias' })
                 .catch((err: unknown) => {
-                  toast.error(err instanceof Error ? err.message : 'Error al confeccionar')
+                  toast.error(err instanceof Error ? err.message : 'No se pudo preparar la transferencia')
                 })
                 .finally(() => setSaving(false))
             }}
           >
-            {saving ? 'Confeccionando…' : 'Confeccionar'}
+            {saving ? 'Preparando…' : 'Preparar transferencia'}
           </button>
         </div>
       </div>

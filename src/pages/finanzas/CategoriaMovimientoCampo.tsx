@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
+import { datosContraparte } from '../../components/finanzas/contraparteTexto'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import type { CategoriaMovimiento, MovimientoListItem } from '../../services/finanzasMovimientosApi'
 
@@ -221,6 +222,12 @@ export interface GuardarMovimientoInput {
   nota: string | null
   /** Crear regla "misma descripción → esta categoría" y aplicarla a todos los existentes. */
   aplicarATodos: boolean
+  /** Solo si la persona cambió el nombre o el CUIT. Queda cargado a mano. */
+  contraparte?: { nombre: string | null; cuit: string | null }
+}
+
+function digitosCuit(value: string | null | undefined): string {
+  return (value ?? '').replace(/\D/g, '')
 }
 
 function ModalShell(props: {
@@ -281,15 +288,22 @@ function CategoriaMovimientoForm(props: {
 }) {
   const { movimiento } = props
   const tituloId = useId()
+  const inicial = datosContraparte(movimiento.contraparte)
+  const cuitInicial = inicial.cuit || digitosCuit(movimiento.customerCuit)
   const [categoriaId, setCategoriaId] = useState<string | null>(movimiento.categoriaId)
   const [nota, setNota] = useState(movimiento.nota ?? '')
+  const [contraparteNombre, setContraparteNombre] = useState(inicial.nombre ?? '')
+  const [contraparteCuit, setContraparteCuit] = useState(cuitInicial)
   const [aplicarATodos, setAplicarATodos] = useState(false)
 
   const entrada = movimiento.tipo === 'credito'
   const notaLimpia = nota.trim()
+  const nombreLimpio = contraparteNombre.trim().replace(/\s+/g, ' ')
+  const cuitDigitos = digitosCuit(contraparteCuit)
   const cambio = categoriaId !== movimiento.categoriaId || (notaLimpia || null) !== (movimiento.nota ?? null)
+  const contraparteCambio = nombreLimpio !== (inicial.nombre ?? '') || cuitDigitos !== cuitInicial
   const puedeAplicarATodos = Boolean(categoriaId)
-  const puedeGuardar = cambio || (aplicarATodos && puedeAplicarATodos)
+  const puedeGuardar = cambio || contraparteCambio || (aplicarATodos && puedeAplicarATodos)
 
   return (
     <ModalShell tituloId={tituloId} saving={props.saving} onClose={props.onClose}>
@@ -297,10 +311,17 @@ function CategoriaMovimientoForm(props: {
         className="surface-card w-full max-w-md rounded-2xl border border-neutral-200 p-5 shadow-xl dark:border-zinc-700"
         onSubmit={(event) => {
           event.preventDefault()
+          if (contraparteCambio && cuitDigitos && cuitDigitos.length !== 11) {
+            toast.error('El CUIT tiene que tener 11 dígitos')
+            return
+          }
           void props.onGuardar({
             categoriaId,
             nota: notaLimpia || null,
             aplicarATodos: aplicarATodos && puedeAplicarATodos,
+            ...(contraparteCambio
+              ? { contraparte: { nombre: nombreLimpio || null, cuit: cuitDigitos || null } }
+              : {}),
           })
         }}
       >
@@ -318,10 +339,32 @@ function CategoriaMovimientoForm(props: {
             </span>
           </div>
           <p className="text-heading mt-0.5 break-words font-medium">{movimiento.descripcion}</p>
-          {movimiento.contraparte ? (
-            <p className="text-body-muted mt-0.5 text-xs">{movimiento.contraparte}</p>
-          ) : null}
         </div>
+
+        <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200">
+          ¿De quién / a quién?
+          <input
+            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+            maxLength={120}
+            placeholder="Nombre de la empresa o la persona"
+            autoFocus={!inicial.nombre}
+            value={contraparteNombre}
+            disabled={props.saving}
+            onChange={(event) => setContraparteNombre(event.target.value)}
+          />
+        </label>
+        <label className="mt-3 block text-sm font-medium text-neutral-800 dark:text-gray-200">
+          CUIT <span className="text-body-muted font-normal">(opcional)</span>
+          <input
+            className="mt-1.5 w-full rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+            inputMode="numeric"
+            maxLength={13}
+            placeholder="11 dígitos, si lo tenés"
+            value={contraparteCuit}
+            disabled={props.saving}
+            onChange={(event) => setContraparteCuit(event.target.value)}
+          />
+        </label>
 
         <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200">
           Categoría
@@ -330,7 +373,7 @@ function CategoriaMovimientoForm(props: {
               categorias={props.categorias}
               value={categoriaId}
               disabled={props.saving}
-              autoFocus
+              autoFocus={Boolean(inicial.nombre)}
               onChange={setCategoriaId}
               onCrear={props.onCrear}
             />

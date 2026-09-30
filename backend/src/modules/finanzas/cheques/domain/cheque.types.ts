@@ -13,7 +13,6 @@ export type ChequeEstado =
   | 'rechazado'
   | 'pendiente'
   | 'debitado'
-  | 'anulado'
 
 export const CHEQUE_ESTADO_LABELS: Record<ChequeEstado, string> = {
   en_cartera: 'En cartera',
@@ -22,7 +21,6 @@ export const CHEQUE_ESTADO_LABELS: Record<ChequeEstado, string> = {
   rechazado: 'Rechazado',
   pendiente: 'Pendiente',
   debitado: 'Debitado',
-  anulado: 'Anulado',
 }
 
 export const CHEQUE_DIRECCION_LABELS: Record<ChequeDireccion, string> = {
@@ -37,8 +35,6 @@ export interface ChequeDocument {
   origen: ChequeOrigen
 
   montoCentavos: number
-  debeCentavos: number | null
-  haberCentavos: number | null
 
   fechaEmision: string
   fechaPago: string
@@ -69,8 +65,6 @@ export interface ChequeImportRow {
   origen: ChequeOrigen
 
   montoCentavos: number
-  debeCentavos: number | null
-  haberCentavos: number | null
 
   fechaEmision: string
   fechaPago: string

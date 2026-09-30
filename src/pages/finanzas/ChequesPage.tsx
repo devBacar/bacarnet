@@ -118,10 +118,10 @@ export function FinanzasChequesPage() {
   const TIPO_TABS: [ChequeTipo | '', string][] = [['', 'Todos'], ['echeq', 'eCheq'], ['fisico', 'Físicos']]
 
   const estadosVisibles: ChequeEstado[] = direccion === 'emitido'
-    ? ['pendiente', 'debitado', 'rechazado', 'anulado']
+    ? ['pendiente', 'debitado', 'rechazado']
     : direccion === 'recibido'
       ? ['en_cartera', 'depositado', 'vendido', 'rechazado']
-      : ['en_cartera', 'depositado', 'vendido', 'rechazado', 'pendiente', 'debitado', 'anulado']
+      : ['en_cartera', 'depositado', 'vendido', 'rechazado', 'pendiente', 'debitado']
 
   return (
     <>
@@ -325,8 +325,6 @@ export function FinanzasChequesPage() {
                 <th className="px-3 py-2">Emisión</th>
                 <th className="px-3 py-2">Vencimiento</th>
                 <th className="px-3 py-2 text-right">Importe</th>
-                {direccion === 'recibido' || !direccion ? <th className="px-3 py-2 text-right">Debe</th> : null}
-                {direccion === 'recibido' || !direccion ? <th className="px-3 py-2 text-right">Haber</th> : null}
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Estado</th>
                 <th className="px-3 py-2">Obs.</th>
@@ -355,16 +353,6 @@ export function FinanzasChequesPage() {
                   <td className="text-brand-primary whitespace-nowrap px-3 py-2 text-right font-medium">
                     {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
                   </td>
-                  {direccion === 'recibido' || !direccion ? (
-                    <td className="whitespace-nowrap px-3 py-2 text-right text-xs">
-                      {ch.debeCentavos != null ? formatMoneyCentavos(ch.debeCentavos, 'ARS') : '—'}
-                    </td>
-                  ) : null}
-                  {direccion === 'recibido' || !direccion ? (
-                    <td className="whitespace-nowrap px-3 py-2 text-right text-xs">
-                      {ch.haberCentavos != null ? formatMoneyCentavos(ch.haberCentavos, 'ARS') : '—'}
-                    </td>
-                  ) : null}
                   <td className="px-3 py-2"><TipoBadge tipo={ch.tipo} /></td>
                   <td className="px-3 py-2"><CondicionBadge estado={ch.estado} /></td>
                   <td className="max-w-[200px] truncate px-3 py-2 text-xs" title={ch.observaciones ?? ''}>
@@ -443,7 +431,6 @@ function CondicionBadge({ estado }: { estado: ChequeEstado }) {
     rechazado: 'bg-[var(--color-danger-bg)] text-[var(--color-danger-text)] border-[var(--color-danger-border)]',
     pendiente: 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200',
     debitado: 'border-sky-300 bg-sky-100 text-sky-900 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-200',
-    anulado: 'border-neutral-300 bg-neutral-100 text-neutral-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400',
   }
   return (
     <span className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${styles[estado]}`}>

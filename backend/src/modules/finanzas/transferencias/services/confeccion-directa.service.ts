@@ -183,6 +183,7 @@ export async function confeccionarTransferenciaDirecta(input: {
     disclaimerAceptado: parsed.disclaimerAceptado,
     codigoConcepto: parsed.codigoConcepto,
     destinoCuit: destino.cuit,
+    tipoCuenta: parsed.destinoTipoCuenta,
   }
 
   const provider = getFinanzasTransferenciasProvider()
@@ -287,13 +288,14 @@ export async function confeccionarTransferenciaDirecta(input: {
     providerMode === 'interbanking' ? 'Confección directa' : 'Confección directa (mock)',
   )
 
-  if (parsed.tipo === 'terceros' || parsed.tipo === 'proveedores') {
+  if ((parsed.tipo === 'terceros' || parsed.tipo === 'proveedores') && parsed.destinoTipoCuenta) {
     try {
       await registrarUsoDestinatario({
         nombre: destino.nombre,
         cbu: destino.cbu,
         cuit: destino.cuit,
         tipo: parsed.tipo,
+        tipoCuenta: parsed.destinoTipoCuenta,
         actorUid: input.actorUid,
       })
     } catch (err) {

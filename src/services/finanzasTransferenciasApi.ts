@@ -216,6 +216,7 @@ export interface ConfeccionDirectaBody {
     nombre?: string
     cuit?: string | null
     cuentaId?: string
+    tipoCuenta?: TipoCuentaDestinatario
   }
   montoCentavos: number
   concepto: string
@@ -276,6 +277,8 @@ export async function actualizarEstadosTransferencias(): Promise<ActualizarEstad
 
 export type DestinatarioTipo = 'terceros' | 'proveedores'
 
+export type TipoCuentaDestinatario = 'CC' | 'CA'
+
 export interface DestinatarioItem {
   id: string
   nombre: string
@@ -284,9 +287,18 @@ export interface DestinatarioItem {
   alias: string | null
   bancoNombre: string | null
   tipo: DestinatarioTipo
+  tipoCuenta: TipoCuentaDestinatario | null
   usos: number
   ultimoUsoAt: string | null
   sugerido: boolean
+}
+
+function normalizarDestinatario(item: DestinatarioItem): DestinatarioItem {
+  const tipo = item.tipoCuenta
+  return {
+    ...item,
+    tipoCuenta: tipo === 'CC' || tipo === 'CA' ? tipo : null,
+  }
 }
 
 async function destinatariosFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -314,7 +326,7 @@ export async function fetchDestinatarios(query: { q?: string; tipo?: Destinatari
     destinatarios?: DestinatarioItem[]
   }
   if (!res.ok) throw new Error(payload.error ?? 'No se pudo cargar la agenda de destinatarios')
-  return payload.destinatarios ?? []
+  return (payload.destinatarios ?? []).map(normalizarDestinatario)
 }
 
 export async function crearDestinatario(body: {
@@ -323,16 +335,23 @@ export async function crearDestinatario(body: {
   cuit?: string | null
   alias?: string | null
   tipo: DestinatarioTipo
+  tipoCuenta?: TipoCuentaDestinatario | null
 }): Promise<DestinatarioItem> {
   const res = await destinatariosFetch('/', { method: 'POST', body: JSON.stringify(body) })
   const payload = (await res.json().catch(() => ({}))) as { error?: string; destinatario?: DestinatarioItem }
   if (!res.ok || !payload.destinatario) throw new Error(payload.error ?? 'No se pudo guardar el destinatario')
-  return payload.destinatario
+  return normalizarDestinatario(payload.destinatario)
 }
 
 export async function actualizarDestinatario(
   id: string,
-  body: { nombre?: string; alias?: string | null; cuit?: string | null; tipo?: DestinatarioTipo },
+  body: {
+    nombre?: string
+    alias?: string | null
+    cuit?: string | null
+    tipo?: DestinatarioTipo
+    tipoCuenta?: TipoCuentaDestinatario | null
+  },
 ): Promise<DestinatarioItem> {
   const res = await destinatariosFetch(`/${encodeURIComponent(id)}`, {
     method: 'PATCH',
@@ -340,7 +359,7 @@ export async function actualizarDestinatario(
   })
   const payload = (await res.json().catch(() => ({}))) as { error?: string; destinatario?: DestinatarioItem }
   if (!res.ok || !payload.destinatario) throw new Error(payload.error ?? 'No se pudo editar el destinatario')
-  return payload.destinatario
+  return normalizarDestinatario(payload.destinatario)
 }
 
 export async function eliminarDestinatario(id: string): Promise<void> {

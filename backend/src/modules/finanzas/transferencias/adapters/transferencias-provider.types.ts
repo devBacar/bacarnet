@@ -11,6 +11,11 @@ export interface ConfeccionTransferenciaItem {
   codigoConcepto?: string | null
   /** 11 dígitos si vino. El body v2 no lo envía: el spec no tiene el campo. */
   destinoCuit?: string | null
+  /**
+   * CC o CA de la cuenta crédito en terceros y proveedores.
+   * En cuentas propias el tipo sale del ruteo conocido.
+   */
+  tipoCuenta?: 'CC' | 'CA' | null
 }
 
 export interface ConfeccionTransferenciaResult {

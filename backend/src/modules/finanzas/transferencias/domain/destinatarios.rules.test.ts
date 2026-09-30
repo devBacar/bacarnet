@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   agruparSugerencias,
   filtrarDestinatarios,
+  parseTipoCuentaAgenda,
   siguienteUsoDestinatario,
+  tipoCuentaDesdeDocumento,
   type DestinatarioVista,
 } from './destinatarios.rules.js'
 
@@ -15,6 +17,7 @@ function vista(partial: Partial<DestinatarioVista> & Pick<DestinatarioVista, 'id
     alias: null,
     bancoNombre: null,
     tipo: 'terceros',
+    tipoCuenta: null,
     usos: 0,
     ultimoUsoAt: null,
     sugerido: false,
@@ -95,7 +98,25 @@ describe('agruparSugerencias', () => {
       tipo: 'proveedores',
       usos: 2,
       bancoNombre: 'Patagonia',
+      tipoCuenta: null,
       sugerido: true,
     })
+  })
+})
+
+describe('tipo de cuenta en la agenda', () => {
+  it('un documento viejo sin el campo queda en null y la entrada solo acepta CC o CA', () => {
+    expect(tipoCuentaDesdeDocumento(undefined)).toBeNull()
+    expect(tipoCuentaDesdeDocumento(null)).toBeNull()
+    expect(tipoCuentaDesdeDocumento('CC')).toBe('CC')
+    expect(tipoCuentaDesdeDocumento('otro')).toBeNull()
+    expect(parseTipoCuentaAgenda(undefined)).toEqual({ ok: true, valor: null })
+    expect(parseTipoCuentaAgenda(null)).toEqual({ ok: true, valor: null })
+    expect(parseTipoCuentaAgenda('')).toEqual({ ok: true, valor: null })
+    expect(parseTipoCuentaAgenda('ca')).toEqual({ ok: true, valor: 'CA' })
+    expect(parseTipoCuentaAgenda('CC')).toEqual({ ok: true, valor: 'CC' })
+    const invalido = parseTipoCuentaAgenda('caja')
+    expect(invalido.ok).toBe(false)
+    if (!invalido.ok) expect(invalido.error).toMatch(/cuenta corriente o caja de ahorro/)
   })
 })

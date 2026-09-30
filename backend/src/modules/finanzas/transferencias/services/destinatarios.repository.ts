@@ -1,7 +1,7 @@
 import { FieldValue, type Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { bancoNombreDesdeCbu } from '../domain/banco-por-cbu.js'
-import type { DestinatarioTipo } from '../domain/destinatarios.rules.js'
+import type { DestinatarioTipo, TipoCuentaDestinatario } from '../domain/destinatarios.rules.js'
 import { siguienteUsoDestinatario } from '../domain/destinatarios.rules.js'
 
 export const DESTINATARIOS_COLLECTION = 'finanzasDestinatarios'
@@ -13,6 +13,8 @@ export interface DestinatarioDocument {
   alias: string | null
   bancoNombre: string | null
   tipo: DestinatarioTipo
+  /** Ausente en documentos viejos. Al leer, eso es null. */
+  tipoCuenta?: TipoCuentaDestinatario | null
   usos: number
   ultimoUsoAt: Timestamp
   createdAt: Timestamp
@@ -52,6 +54,7 @@ export async function createDestinatarioDocument(input: {
   alias: string | null
   bancoNombre: string | null
   tipo: DestinatarioTipo
+  tipoCuenta: TipoCuentaDestinatario | null
   actorUid: string
 }): Promise<void> {
   const ref = destinatariosCollection().doc(input.cbu)
@@ -66,6 +69,7 @@ export async function createDestinatarioDocument(input: {
       alias: input.alias,
       bancoNombre: input.bancoNombre,
       tipo: input.tipo,
+      tipoCuenta: input.tipoCuenta,
       usos: 0,
       ultimoUsoAt: now,
       createdAt: now,
@@ -76,7 +80,7 @@ export async function createDestinatarioDocument(input: {
 
 export async function updateDestinatarioDocument(
   id: string,
-  patch: Partial<Pick<DestinatarioDocument, 'nombre' | 'alias' | 'cuit' | 'tipo'>>,
+  patch: Partial<Pick<DestinatarioDocument, 'nombre' | 'alias' | 'cuit' | 'tipo' | 'tipoCuenta'>>,
 ): Promise<void> {
   const ref = destinatariosCollection().doc(id)
   await adminDb().runTransaction(async (tx) => {
@@ -98,6 +102,7 @@ export async function registrarUsoDestinatarioDocument(input: {
   cbu: string
   cuit: string | null
   tipo: DestinatarioTipo
+  tipoCuenta: TipoCuentaDestinatario
   actorUid: string
 }): Promise<'alta' | 'suma'> {
   const ref = destinatariosCollection().doc(input.cbu)
@@ -114,6 +119,7 @@ export async function registrarUsoDestinatarioDocument(input: {
         alias: null,
         bancoNombre: bancoNombreDesdeCbu(input.cbu),
         tipo: input.tipo,
+        tipoCuenta: input.tipoCuenta,
         usos: siguiente.usos,
         ultimoUsoAt: now,
         createdAt: now,
@@ -124,6 +130,7 @@ export async function registrarUsoDestinatarioDocument(input: {
     tx.update(ref, {
       usos: siguiente.usos,
       ultimoUsoAt: now,
+      tipoCuenta: input.tipoCuenta,
     })
     return 'suma' as const
   })

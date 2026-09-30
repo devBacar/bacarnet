@@ -4,6 +4,12 @@ export const DESTINATARIOS_LIMITE = 50
 
 export type DestinatarioTipo = 'terceros' | 'proveedores'
 
+/** CC cuenta corriente, CA caja de ahorro. Los documentos viejos no tienen el campo. */
+export type TipoCuentaDestinatario = 'CC' | 'CA'
+
+export const MENSAJE_TIPO_CUENTA_INVALIDO =
+  'El tipo de cuenta tiene que ser cuenta corriente o caja de ahorro'
+
 export interface DestinatarioVista {
   id: string
   nombre: string
@@ -12,9 +18,27 @@ export interface DestinatarioVista {
   alias: string | null
   bancoNombre: string | null
   tipo: DestinatarioTipo
+  tipoCuenta: TipoCuentaDestinatario | null
   usos: number
   ultimoUsoAt: string | null
   sugerido: boolean
+}
+
+/** Lo que hay en Firestore: sin campo, null o cualquier otra cosa queda en null. */
+export function tipoCuentaDesdeDocumento(value: unknown): TipoCuentaDestinatario | null {
+  return value === 'CC' || value === 'CA' ? value : null
+}
+
+/** Alta y edición. Vacío o null se guarda como null. */
+export function parseTipoCuentaAgenda(
+  value: unknown,
+): { ok: true; valor: TipoCuentaDestinatario | null } | { ok: false; error: string } {
+  if (value == null) return { ok: true, valor: null }
+  if (typeof value !== 'string') return { ok: false, error: MENSAJE_TIPO_CUENTA_INVALIDO }
+  const codigo = value.trim().toUpperCase()
+  if (!codigo) return { ok: true, valor: null }
+  if (codigo === 'CC' || codigo === 'CA') return { ok: true, valor: codigo }
+  return { ok: false, error: MENSAJE_TIPO_CUENTA_INVALIDO }
 }
 
 export interface TransferenciaParaSugerencia {
@@ -113,6 +137,7 @@ export function agruparSugerencias(rows: TransferenciaParaSugerencia[]): Destina
     alias: null,
     bancoNombre: bancoNombreDesdeCbu(cbu),
     tipo: row.tipo,
+    tipoCuenta: null,
     usos: row.usos,
     ultimoUsoAt: row.fechaMs > 0 ? new Date(row.fechaMs).toISOString() : null,
     sugerido: true,

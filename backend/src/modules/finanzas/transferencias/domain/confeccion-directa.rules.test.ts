@@ -11,7 +11,7 @@ function base(overrides: Record<string, unknown> = {}) {
   return {
     cuentaDebitoId: 'patagonia-cc',
     tipo: 'terceros',
-    destino: { cbu: CBU_JULIO, nombre: 'Acme SA', cuit: '20-12345678-6' },
+    destino: { cbu: CBU_JULIO, nombre: 'Acme SA', cuit: '20-12345678-6', tipoCuenta: 'CC' },
     montoCentavos: 150_000,
     concepto: 'Pago de factura',
     idempotencyKey: '11111111-2222-4333-8444-555555555555',
@@ -34,6 +34,7 @@ describe('parseConfeccionDirectaBody', () => {
     expect(parsed.destinoCbu).toBe(CBU_JULIO)
     expect(parsed.destinoCuit).toBe('20123456786')
     expect(parsed.destinoNombre).toBe('Acme SA')
+    expect(parsed.destinoTipoCuenta).toBe('CC')
     expect(parsed.referencia).toBe('FC 100')
     expect(parsed.confirmarSinFondos).toBe(false)
   })
@@ -76,9 +77,41 @@ describe('parseConfeccionDirectaBody', () => {
 
   it('el CUIT puede omitirse', () => {
     const parsed = parseConfeccionDirectaBody(
-      base({ destino: { cbu: CBU_JULIO, nombre: 'Sin cuit' } }),
+      base({ destino: { cbu: CBU_JULIO, nombre: 'Sin cuit', tipoCuenta: 'CC' } }),
     )
     expect(parsed.destinoCuit).toBeNull()
+  })
+
+  it('en terceros y proveedores exige cuenta corriente o caja de ahorro', () => {
+    const mensaje = /cuenta corriente o caja de ahorro/
+    expect(() =>
+      parseConfeccionDirectaBody(base({ destino: { cbu: CBU_JULIO, nombre: 'Ana' } })),
+    ).toThrow(mensaje)
+    expect(() =>
+      parseConfeccionDirectaBody(
+        base({
+          tipo: 'proveedores',
+          destino: { cbu: CBU_JULIO, nombre: 'Ana', tipoCuenta: 'caja' },
+        }),
+      ),
+    ).toThrow(mensaje)
+
+    try {
+      parseConfeccionDirectaBody(base({ destino: { cbu: CBU_JULIO, nombre: 'Ana' } }))
+      throw new Error('tenía que fallar')
+    } catch (err) {
+      expect(err).toBeInstanceOf(TransferenciaHttpError)
+      if (err instanceof TransferenciaHttpError) expect(err.status).toBe(400)
+    }
+
+    const caja = parseConfeccionDirectaBody(
+      base({ destino: { cbu: CBU_JULIO, nombre: 'Ana', tipoCuenta: 'ca' } }),
+    )
+    expect(caja.destinoTipoCuenta).toBe('CA')
+    const propia = parseConfeccionDirectaBody(
+      base({ tipo: 'cuentas_propias', destino: { cuentaId: 'julio-cc' } }),
+    )
+    expect(propia.destinoTipoCuenta).toBeNull()
   })
 
   it('en terceros el motivo por defecto es Varios y el aviso es obligatorio si el banco lo pide', () => {

@@ -95,6 +95,11 @@ export function PosicionResumen({
                 Disponible
               </th>
               <th className="py-1.5 font-medium">Dólares</th>
+              {onTransferir ? (
+                <th className="py-1.5">
+                  <span className="sr-only">Transferir</span>
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -116,17 +121,6 @@ export function PosicionResumen({
                     />
                     {banco.bancoNombre}
                   </span>
-                  {cuentaCc && onTransferir ? (
-                    <button
-                      type="button"
-                      aria-label={`Transferir desde ${banco.bancoNombre}`}
-                      className="mt-1 inline-flex items-center gap-1 rounded-md border border-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-800 hover:bg-neutral-50 dark:border-zinc-700 dark:text-gray-100 dark:hover:bg-zinc-800"
-                      onClick={() => onTransferir(cuentaCc.id)}
-                    >
-                      <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                      <span className="hidden sm:inline">Transferir</span>
-                    </button>
-                  ) : null}
                 </td>
                 <td className="py-1.5 pr-2">
                   <button
@@ -164,6 +158,21 @@ export function PosicionResumen({
                     <PosicionMonto centavos={banco.usdCentavos} moneda="USD" size="sm" />
                   </button>
                 </td>
+                {onTransferir ? (
+                  <td className="py-1.5 pl-2 text-right align-middle">
+                    {cuentaCc ? (
+                      <button
+                        type="button"
+                        aria-label={`Transferir desde ${banco.bancoNombre}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#c5d4e4] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1e3a5f] transition hover:bg-[#e8eef5] dark:border-[#5b8fd4]/40 dark:bg-zinc-900 dark:text-[#9dbde8] dark:hover:bg-zinc-800"
+                        onClick={() => onTransferir(cuentaCc.id)}
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <span className="hidden sm:inline">Transferir</span>
+                      </button>
+                    ) : null}
+                  </td>
+                ) : null}
               </tr>
               )
             })}

@@ -13,6 +13,8 @@ export const MENSAJE_TRANSFERENCIAS_REALES_DESHABILITADAS =
 
 export type TransferenciaDirectaTipo = 'cuentas_propias' | 'terceros' | 'proveedores'
 
+export type TipoCuentaDestino = 'CC' | 'CA'
+
 export interface ConfeccionDirectaParseada {
   cuentaDebitoId: string
   tipo: TransferenciaDirectaTipo
@@ -20,6 +22,7 @@ export interface ConfeccionDirectaParseada {
   destinoCbu: string | null
   destinoNombre: string | null
   destinoCuit: string | null
+  destinoTipoCuenta: TipoCuentaDestino | null
   montoCentavos: number
   concepto: string
   codigoConcepto: string | null
@@ -137,6 +140,7 @@ export function parseConfeccionDirectaBody(body: Record<string, unknown>): Confe
   let destinoCbu: string | null = null
   let destinoNombre: string | null = null
   let destinoCuit: string | null = null
+  let destinoTipoCuenta: TipoCuentaDestino | null = null
 
   if (tipoDirecto === 'cuentas_propias') {
     destinoCuentaId = texto(destino.cuentaId)
@@ -162,6 +166,13 @@ export function parseConfeccionDirectaBody(body: Record<string, unknown>): Confe
     const cuit = validarCuitOpcional(texto(destino.cuit))
     if (!cuit.ok) throw new TransferenciaHttpError(400, { error: cuit.error })
     destinoCuit = cuit.valor || null
+    const tipoCuentaRaw = typeof destino.tipoCuenta === 'string' ? destino.tipoCuenta.trim().toUpperCase() : ''
+    if (tipoCuentaRaw !== 'CC' && tipoCuentaRaw !== 'CA') {
+      throw new TransferenciaHttpError(400, {
+        error: 'Elegí si la cuenta del destinatario es cuenta corriente o caja de ahorro',
+      })
+    }
+    destinoTipoCuenta = tipoCuentaRaw
   }
 
   let codigoConcepto: string | null = null
@@ -186,6 +197,7 @@ export function parseConfeccionDirectaBody(body: Record<string, unknown>): Confe
     destinoCbu,
     destinoNombre,
     destinoCuit,
+    destinoTipoCuenta,
     montoCentavos: monto,
     concepto,
     codigoConcepto,

@@ -65,7 +65,7 @@ function bodyTerceros(overrides: Record<string, unknown> = {}) {
   return {
     cuentaDebitoId: 'patagonia-cc',
     tipo: 'terceros',
-    destino: { cbu: CBU_JULIO, nombre: 'Acme SA', cuit: '20123456786' },
+    destino: { cbu: CBU_JULIO, nombre: 'Acme SA', cuit: '20123456786', tipoCuenta: 'CA' },
     montoCentavos: 10_000,
     concepto: 'Factura 10',
     idempotencyKey: KEY,
@@ -140,8 +140,12 @@ describe('confeccionarTransferenciaDirecta', () => {
       cbu: CBU_JULIO,
       cuit: '20123456786',
       tipo: 'terceros',
+      tipoCuenta: 'CA',
       actorUid: 'user-1',
     })
+    expect(confeccionarLote).toHaveBeenCalledWith([
+      expect.objectContaining({ tipo: 'terceros', tipoCuenta: 'CA', cuentaCreditoCbu: CBU_JULIO }),
+    ])
   })
 
   it('responde 409 sin confeccionar cuando el monto supera el disponible', async () => {

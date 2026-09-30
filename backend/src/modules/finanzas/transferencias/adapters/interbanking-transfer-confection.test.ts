@@ -98,4 +98,19 @@ describe('body v2 de terceros y proveedores', () => {
     expect(JSON.stringify(body)).not.toMatch(/cuit/i)
     expect(() => buildSupplierConfeccionBodyV2({ ...base, cuit: '20-1' })).toThrow(/11 dígitos/)
   })
+
+  it('el body v2 lleva el tipo de cuenta elegido y una cuenta propia sigue con su ruteo', () => {
+    const caja = resolveInterbankingCuentaPorCbu(CBU_EXTERNO, 'CA')
+    const terceros = buildThirdPartyConfeccionBodyV2({ ...base, credit: caja, concept: 'VAR' })
+    expect(terceros.found_transfers[0]?.credit_account.account_type).toBe('CA')
+    expect(terceros.found_transfers[0]?.debit_account.account_type).toBe('CC')
+
+    const corriente = resolveInterbankingCuentaPorCbu(CBU_EXTERNO, 'CC')
+    const proveedores = buildSupplierConfeccionBodyV2({ ...base, credit: corriente })
+    expect(proveedores.found_transfers[0]?.credit_account.account_type).toBe('CC')
+
+    const propia = resolveInterbankingCuentaPorCbu('0340070800700370037009', 'CA')
+    expect(propia.account_type).toBe('CC')
+    expect(propia.account_cbu).toBe('0340070800700370037009')
+  })
 })

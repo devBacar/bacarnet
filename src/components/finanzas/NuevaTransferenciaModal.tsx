@@ -8,6 +8,7 @@ import {
   fetchDestinatarios,
   type DestinatarioItem,
   type DestinatarioTipo,
+  type TipoCuentaDestinatario,
   type TransferenciaDirectaTipo,
 } from '../../services/finanzasTransferenciasApi'
 import { FinanzasFormField, finanzasInputClass } from './FinanzasFormField'
@@ -26,6 +27,54 @@ const TIPOS: Array<{ id: TransferenciaDirectaTipo; label: string }> = [
   { id: 'terceros', label: 'A terceros' },
   { id: 'proveedores', label: 'A proveedores' },
 ]
+
+const TIPOS_CUENTA: Array<{ id: TipoCuentaDestinatario; label: string }> = [
+  { id: 'CC', label: 'Cuenta corriente' },
+  { id: 'CA', label: 'Caja de ahorro' },
+]
+
+const MENSAJE_TIPO_CUENTA = 'Elegí si la cuenta del destinatario es cuenta corriente o caja de ahorro'
+
+function etiquetaTipoCuenta(tipo: TipoCuentaDestinatario | null): string {
+  return TIPOS_CUENTA.find((opcion) => opcion.id === tipo)?.label ?? ''
+}
+
+function SelectorTipoCuenta({
+  value,
+  onChange,
+}: {
+  value: TipoCuentaDestinatario | null
+  onChange: (next: TipoCuentaDestinatario) => void
+}) {
+  return (
+    <div>
+      <p className="text-body-muted mb-1 text-sm font-medium">Tipo de cuenta</p>
+      <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo de cuenta">
+        {TIPOS_CUENTA.map((opcion) => {
+          const activo = value === opcion.id
+          return (
+            <button
+              key={opcion.id}
+              type="button"
+              aria-pressed={activo}
+              className={`min-h-14 rounded-xl border px-2 py-3 text-sm font-semibold ${
+                activo
+                  ? 'border-brand-primary bg-brand-primary/10 text-brand-primary'
+                  : 'border-neutral-200 hover:border-neutral-300 dark:border-zinc-700 dark:hover:border-zinc-500'
+              }`}
+              onClick={() => onChange(opcion.id)}
+            >
+              {opcion.label}
+            </button>
+          )
+        })}
+      </div>
+      <p className="text-body-muted mt-2 text-xs">
+        Figura en la factura o en los datos bancarios del proveedor.
+      </p>
+    </div>
+  )
+}
 
 function cuentasEnPesos(cuentas: FinanzasCuenta[]): FinanzasCuenta[] {
   return cuentas.filter((cuenta) => cuenta.tipo === 'CC' && cuenta.moneda === 'ARS')
@@ -67,6 +116,7 @@ export function NuevaTransferenciaModal({
   const [cbu, setCbu] = useState('')
   const [nombre, setNombre] = useState('')
   const [cuit, setCuit] = useState('')
+  const [tipoCuenta, setTipoCuenta] = useState<TipoCuentaDestinatario | null>(null)
   const [monto, setMonto] = useState('')
   const [concepto, setConcepto] = useState('')
   const [codigoConcepto, setCodigoConcepto] = useState(CONCEPTO_TERCEROS_DEFAULT)
@@ -115,6 +165,7 @@ export function NuevaTransferenciaModal({
     setCbu('')
     setNombre('')
     setCuit('')
+    setTipoCuenta(null)
     setCodigoConcepto(CONCEPTO_TERCEROS_DEFAULT)
     setDisclaimerAceptado(false)
     setError('')
@@ -140,21 +191,26 @@ export function NuevaTransferenciaModal({
         }
         return true
       }
-      if (elegido) return true
-      if (!modoNuevo) {
-        setError('Elegí un destinatario o cargá uno nuevo')
-        return false
+      if (!elegido) {
+        if (!modoNuevo) {
+          setError('Elegí un destinatario o cargá uno nuevo')
+          return false
+        }
+        if (!cbuNuevo.ok) {
+          setError(cbuNuevo.error)
+          return false
+        }
+        if (!nombre.trim()) {
+          setError('El nombre del destinatario es obligatorio')
+          return false
+        }
+        if (!cuitNuevo.ok) {
+          setError(cuitNuevo.error)
+          return false
+        }
       }
-      if (!cbuNuevo.ok) {
-        setError(cbuNuevo.error)
-        return false
-      }
-      if (!nombre.trim()) {
-        setError('El nombre del destinatario es obligatorio')
-        return false
-      }
-      if (!cuitNuevo.ok) {
-        setError(cuitNuevo.error)
+      if (tipoCuenta !== 'CC' && tipoCuenta !== 'CA') {
+        setError(MENSAJE_TIPO_CUENTA)
         return false
       }
       return true
@@ -192,6 +248,10 @@ export function NuevaTransferenciaModal({
     setEnviando(true)
     setError('')
     try {
+      if (tipo !== 'cuentas_propias' && tipoCuenta !== 'CC' && tipoCuenta !== 'CA') {
+        setError(MENSAJE_TIPO_CUENTA)
+        return
+      }
       const destino =
         tipo === 'cuentas_propias'
           ? { cuentaId: cuentaDestinoId }
@@ -199,6 +259,7 @@ export function NuevaTransferenciaModal({
               cbu: elegido?.cbu ?? (cbuNuevo.ok ? cbuNuevo.valor : ''),
               nombre: elegido?.nombre ?? nombre.trim(),
               cuit: elegido ? elegido.cuit : cuitNuevo.ok ? cuitNuevo.valor || null : null,
+              tipoCuenta: tipoCuenta === 'CC' || tipoCuenta === 'CA' ? tipoCuenta : undefined,
             }
       await confeccionarTransferenciaDirecta({
         cuentaDebitoId: origen.id,
@@ -325,7 +386,10 @@ export function NuevaTransferenciaModal({
                 <button
                   type="button"
                   className="mt-2 text-sm underline"
-                  onClick={() => setElegido(null)}
+                  onClick={() => {
+                    setElegido(null)
+                    setTipoCuenta(null)
+                  }}
                 >
                   Elegir otro
                 </button>
@@ -354,6 +418,7 @@ export function NuevaTransferenciaModal({
                         onClick={() => {
                           setElegido(item)
                           setModoNuevo(false)
+                          setTipoCuenta(item.tipoCuenta ?? null)
                           setError('')
                         }}
                       >
@@ -364,6 +429,7 @@ export function NuevaTransferenciaModal({
                         <span className="text-body-muted block break-all text-xs">
                           {item.alias ? `${item.alias} · ` : ''}
                           {item.cbu}
+                          {etiquetaTipoCuenta(item.tipoCuenta) ? ` · ${etiquetaTipoCuenta(item.tipoCuenta)}` : ''}
                           {item.cuit ? ` · ${item.cuit}` : ''}
                         </span>
                       </button>
@@ -376,6 +442,7 @@ export function NuevaTransferenciaModal({
                   onClick={() => {
                     setModoNuevo(true)
                     setElegido(null)
+                    setTipoCuenta(null)
                     setError('')
                   }}
                 >
@@ -420,6 +487,13 @@ export function NuevaTransferenciaModal({
                 ) : null}
               </>
             )}
+            <SelectorTipoCuenta
+              value={tipoCuenta}
+              onChange={(next) => {
+                setTipoCuenta(next)
+                setError('')
+              }}
+            />
           </div>
         ) : null}
 
@@ -509,7 +583,7 @@ export function NuevaTransferenciaModal({
             <p>
               {tipo === 'cuentas_propias'
                 ? `Vas a confeccionar ${formatMoneyCentavos(centavos, 'ARS')} desde ${etiqueta(origen)} a ${destinoNombre}. Queda pendiente de aprobación en Interbanking.`
-                : `Vas a confeccionar ${formatMoneyCentavos(centavos, 'ARS')} desde ${etiqueta(origen)} a ${destinoNombre} (CBU …${ultimos4}). Queda pendiente de aprobación en Interbanking.`}
+                : `Vas a confeccionar ${formatMoneyCentavos(centavos, 'ARS')} desde ${etiqueta(origen)} a ${destinoNombre} · ${etiquetaTipoCuenta(tipoCuenta)} · CBU …${ultimos4}. Queda pendiente de aprobación en Interbanking.`}
             </p>
             <ul className="text-body-muted space-y-1">
               {tipo === 'terceros' ? (

@@ -160,7 +160,7 @@ export class InterbankingTransferenciasProvider implements TransferenciasDataPro
         credit,
       })
     } else {
-      const credit = resolveInterbankingCuentaPorCbu(item.cuentaCreditoCbu)
+      const credit = resolveInterbankingCuentaPorCbu(item.cuentaCreditoCbu, item.tipoCuenta)
       const comun = {
         confectionId,
         requestDate,

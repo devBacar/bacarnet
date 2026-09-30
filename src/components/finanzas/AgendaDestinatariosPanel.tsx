@@ -8,6 +8,7 @@ import {
   fetchDestinatarios,
   type DestinatarioItem,
   type DestinatarioTipo,
+  type TipoCuentaDestinatario,
 } from '../../services/finanzasTransferenciasApi'
 import { FinanzasFormField, finanzasInputClass } from './FinanzasFormField'
 import { soloDigitos, validarCbu, validarCuitOpcional } from './cbuCuit'
@@ -15,6 +16,49 @@ import { soloDigitos, validarCbu, validarCuitOpcional } from './cbuCuit'
 const TIPO_LABEL: Record<DestinatarioTipo, string> = {
   terceros: 'Terceros',
   proveedores: 'Proveedores',
+}
+
+const TIPOS_CUENTA: Array<{ id: TipoCuentaDestinatario; label: string }> = [
+  { id: 'CC', label: 'Cuenta corriente' },
+  { id: 'CA', label: 'Caja de ahorro' },
+]
+
+function etiquetaTipoCuenta(tipo: TipoCuentaDestinatario | null | undefined): string {
+  return TIPOS_CUENTA.find((opcion) => opcion.id === tipo)?.label ?? ''
+}
+
+function SelectorTipoCuenta({
+  value,
+  onChange,
+}: {
+  value: TipoCuentaDestinatario | null
+  onChange: (next: TipoCuentaDestinatario) => void
+}) {
+  return (
+    <div>
+      <p className="text-body-muted mb-1 text-sm font-medium">Tipo de cuenta</p>
+      <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo de cuenta">
+        {TIPOS_CUENTA.map((opcion) => {
+          const activo = value === opcion.id
+          return (
+            <button
+              key={opcion.id}
+              type="button"
+              aria-pressed={activo}
+              className={`min-h-14 rounded-xl border px-2 py-3 text-sm font-semibold ${
+                activo
+                  ? 'border-brand-primary bg-brand-primary/10 text-brand-primary'
+                  : 'border-neutral-200 hover:border-neutral-300 dark:border-zinc-700 dark:hover:border-zinc-500'
+              }`}
+              onClick={() => onChange(opcion.id)}
+            >
+              {opcion.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 function useDebounced(value: string, ms = 250): string {
@@ -101,6 +145,7 @@ export function AgendaDestinatariosPanel() {
                   <p className="text-body-muted break-all text-xs">{row.cbu}</p>
                   <p className="text-body-muted text-xs">
                     {TIPO_LABEL[row.tipo] ?? row.tipo}
+                    {etiquetaTipoCuenta(row.tipoCuenta) ? ` · ${etiquetaTipoCuenta(row.tipoCuenta)}` : ''}
                     {row.cuit ? ` · CUIT ${row.cuit}` : ''}
                     {row.bancoNombre ? ` · ${row.bancoNombre}` : ''}
                     {row.sugerido ? ' · Sugerido del historial' : ` · ${row.usos} usos`}
@@ -173,6 +218,7 @@ function AltaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => P
   const [cuit, setCuit] = useState('')
   const [alias, setAlias] = useState('')
   const [tipo, setTipo] = useState<DestinatarioTipo>('terceros')
+  const [tipoCuenta, setTipoCuenta] = useState<TipoCuentaDestinatario | null>(null)
   const [saving, setSaving] = useState(false)
   const cbuCheck = validarCbu(cbu)
   const cuitCheck = validarCuitOpcional(cuit)
@@ -193,6 +239,7 @@ function AltaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => P
             cuit: cuitCheck.valor || null,
             alias: alias.trim() || null,
             tipo,
+            tipoCuenta,
           })
             .then(() => onSaved())
             .catch((err: unknown) => {
@@ -235,6 +282,7 @@ function AltaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => P
               <option value="proveedores">Proveedores</option>
             </select>
           </FinanzasFormField>
+          <SelectorTipoCuenta value={tipoCuenta} onChange={setTipoCuenta} />
         </div>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button type="button" className="rounded-lg px-4 py-2 text-sm" onClick={onClose} disabled={saving}>
@@ -266,6 +314,7 @@ function EditarModal({
   const [alias, setAlias] = useState(destinatario.alias ?? '')
   const [cuit, setCuit] = useState(destinatario.cuit ?? '')
   const [tipo, setTipo] = useState<DestinatarioTipo>(destinatario.tipo)
+  const [tipoCuenta, setTipoCuenta] = useState<TipoCuentaDestinatario | null>(destinatario.tipoCuenta ?? null)
   const [saving, setSaving] = useState(false)
 
   return (
@@ -283,6 +332,7 @@ function EditarModal({
             alias: alias.trim() || null,
             cuit: cuitCheck.valor || null,
             tipo,
+            tipoCuenta,
           })
             .then(() => onSaved())
             .catch((err: unknown) => {
@@ -313,6 +363,7 @@ function EditarModal({
               <option value="proveedores">Proveedores</option>
             </select>
           </FinanzasFormField>
+          <SelectorTipoCuenta value={tipoCuenta} onChange={setTipoCuenta} />
         </div>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button type="button" className="rounded-lg px-4 py-2 text-sm" onClick={onClose} disabled={saving}>

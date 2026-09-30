@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Tags } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useSearchParams } from 'react-router-dom'
@@ -202,11 +203,26 @@ export function FinanzasMovimientosPage() {
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="text-heading text-2xl font-semibold">Movimientos</h1>
-        <p className="text-body-muted mt-1 text-sm">
-          Extracto de las cuentas corrientes, traído de Interbanking. La lista se pide de a una página.
-        </p>
+      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-heading text-2xl font-semibold">Movimientos</h1>
+          <p className="text-body-muted mt-1 text-sm">
+            Todo lo que entró y salió de las cuentas corrientes, tal como lo informa el banco.
+          </p>
+        </div>
+        <div className="sm:max-w-xs sm:text-right">
+          <button
+            type="button"
+            onClick={() => setGestionAbierta(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800"
+          >
+            <Tags className="h-4 w-4" aria-hidden />
+            Ordenar categorías
+          </button>
+          <p className="text-body-muted mt-1.5 text-xs">
+            Crear, agrupar o unir categorías y clasificar lo que quedó sin clasificar.
+          </p>
+        </div>
       </header>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -256,15 +272,8 @@ export function FinanzasMovimientosPage() {
           </select>
         </label>
         <div className="text-sm">
-          <div className="text-body-muted mb-1 flex items-center justify-between">
+          <div className="text-body-muted mb-1">
             <label htmlFor={categoriaFiltroId}>Categoría</label>
-            <button
-              type="button"
-              className="text-xs text-brand-primary hover:underline"
-              onClick={() => setGestionAbierta(true)}
-            >
-              Gestionar
-            </button>
           </div>
           <select
             id={categoriaFiltroId}

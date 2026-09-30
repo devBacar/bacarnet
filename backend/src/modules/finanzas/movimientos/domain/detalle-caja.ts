@@ -86,30 +86,24 @@ export function normalizarDetalleCaja(raw: unknown): string | null {
   return texto
 }
 
-/** Texto del banco, corto, para cuando no hay categoría. */
+/**
+ * Para cuando no hay categoría: el texto del banco tal cual (el mismo que se ve en Movimientos),
+ * solo sin espacios de más y recortado. Pasarlo a minúsculas sin signos lo volvía ilegible
+ * ("TF.DB.P/I-PL.M/T O/B" → "tf db p i pl m t o b").
+ */
 export function textoBancoCorto(descripcion: string): string {
-  let texto = descripcion
-    .toLocaleLowerCase('es')
-    .replace(/[./]+/g, ' ')
-    .replace(/[^0-9a-záéíóúüñ\s]/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  let texto = descripcion.replace(/\s+/g, ' ').trim()
+  const minuscula = texto.toLocaleLowerCase('es')
   for (const prefijo of PREFIJOS_BANCO) {
-    if (texto === prefijo) {
-      texto = ''
-      break
-    }
-    if (texto.startsWith(`${prefijo} `)) {
-      texto = texto.slice(prefijo.length).trim()
+    if (minuscula === prefijo) return 'movimiento'
+    // Saca prefijos genéricos del banco ("TRANSFERENCIA INMEDIATA JUAN PEREZ" → "juan perez").
+    if (minuscula.startsWith(`${prefijo} `)) {
+      texto = minuscula.slice(prefijo.length).trim()
       break
     }
   }
-  if (texto.length > 24) {
-    const corte = texto.slice(0, 24)
-    const espacio = corte.lastIndexOf(' ')
-    texto = (espacio > 8 ? corte.slice(0, espacio) : corte).trim()
-  }
-  return texto || 'movimiento'
+  if (!texto) return 'movimiento'
+  return texto.length > 28 ? `${texto.slice(0, 27).trim()}…` : texto
 }
 
 export function bancoPropioPalabra(bancoNombre: string): 'julio' | 'patagonia' | 'bancor' | null {
@@ -148,7 +142,8 @@ export function sugerirDetalleCaja(input: {
     return otroBancoEnTexto(texto, propio) ?? 'entre cuentas'
   }
   if (categoria) {
-    return DETALLE_POR_CLAVE.get(claveCategoria(categoria)) ?? textoBancoCorto(categoria)
+    // Una categoría sin palabra propia se muestra en minúsculas, como escribe el encargado.
+    return DETALLE_POR_CLAVE.get(claveCategoria(categoria)) ?? textoBancoCorto(categoria).toLocaleLowerCase('es')
   }
   return textoBancoCorto(input.descripcion)
 }

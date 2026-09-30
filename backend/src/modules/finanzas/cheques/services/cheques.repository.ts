@@ -27,8 +27,6 @@ export interface ChequeListadoItem {
   fechaEmision: string
   fechaPago: string
   montoCentavos: number
-  debeCentavos: number | null
-  haberCentavos: number | null
   estado: ChequeEstado
   endosante: string | null
   bancoEmisor: string | null
@@ -53,8 +51,6 @@ function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
     fechaEmision: String(data.fechaEmision ?? ''),
     fechaPago: String(data.fechaPago ?? ''),
     montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
-    debeCentavos: typeof data.debeCentavos === 'number' ? data.debeCentavos : null,
-    haberCentavos: typeof data.haberCentavos === 'number' ? data.haberCentavos : null,
     estado: data.estado ?? 'en_cartera',
     endosante: typeof data.endosante === 'string' ? data.endosante : null,
     bancoEmisor: typeof data.bancoEmisor === 'string' ? data.bancoEmisor : null,

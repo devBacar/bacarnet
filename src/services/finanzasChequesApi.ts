@@ -8,7 +8,6 @@ export type ChequeEstado =
   | 'rechazado'
   | 'pendiente'
   | 'debitado'
-  | 'anulado'
 
 export type ChequeTipo = 'echeq' | 'fisico'
 export type ChequeOrigen = 'cliente' | 'tercero' | 'propio'
@@ -21,7 +20,6 @@ export const CHEQUE_ESTADO_LABELS: Record<ChequeEstado, string> = {
   rechazado: 'Rechazado',
   pendiente: 'Pendiente',
   debitado: 'Debitado',
-  anulado: 'Anulado',
 }
 
 export const CHEQUE_DIRECCION_LABELS: Record<ChequeDireccion, string> = {
@@ -40,8 +38,6 @@ export interface ChequeListItem {
   fechaEmision: string
   fechaPago: string
   montoCentavos: number
-  debeCentavos: number | null
-  haberCentavos: number | null
   estado: ChequeEstado
   endosante: string | null
   bancoEmisor: string | null

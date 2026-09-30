@@ -73,7 +73,7 @@ function validOrigen(raw: string | undefined): ChequeOrigen | null {
 
 const VALID_ESTADOS: ChequeEstado[] = [
   'en_cartera', 'depositado', 'vendido', 'rechazado',
-  'pendiente', 'debitado', 'anulado',
+  'pendiente', 'debitado',
 ]
 
 function validEstado(raw: string | undefined): ChequeEstado | null {
@@ -261,8 +261,6 @@ export async function ingresarChequesPegados(input: {
       fechaEmision: parseSpanishDate(r.fechaEmision),
       fechaPago: parseSpanishDate(r.fechaPago),
       montoCentavos,
-      debeCentavos: null,
-      haberCentavos: null,
       fechaRecibido: null,
       fechaEntregado: null,
       cliente: null,
@@ -356,6 +354,16 @@ function detectarFormato(rows: unknown[][]): { formato: ExcelFormato; headerIdx:
 // ── Parser: recibidos ───────────────────────────────────────────────
 
 const CHEQUE_FIELD_RE = /CH\s*N°\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+)/i
+const CHEQUE_PREFIX_RE = /^(UTILIZADO|DEPOSITADO|VENDIDO|RECHAZADO)\s+(\d{1,2}\/\d{1,2}\/\d{2,4})/i
+
+function parseChequePrefix(blob: string): { prefixEstado: string | null; prefixFechaVto: string } {
+  const m = CHEQUE_PREFIX_RE.exec(blob)
+  if (!m) return { prefixEstado: null, prefixFechaVto: '' }
+  return {
+    prefixEstado: m[1].toLowerCase(),
+    prefixFechaVto: parseSpanishDate(m[2]),
+  }
+}
 
 function parseRecibidosSheet(
   rows: unknown[][],
@@ -370,11 +378,9 @@ function parseRecibidosSheet(
   const iEntregado = col('entregado')
   const iImporte = col('importe')
   const iVto = header.findIndex((h) => h.includes('fec') && h.includes('vto'))
-  const iDebe = col('debe')
-  const iHaber = col('haber')
   const iEstado = col('estado')
 
-  const parsed: ChequeImportRow[] = []
+  const byNumero = new Map<string, ChequeImportRow>()
   const errores: string[] = []
   let ignorados = 0
 
@@ -404,20 +410,32 @@ function parseRecibidosSheet(
     const emisor = match[2].trim()
     const bancoEmisor = match[3].trim()
 
-    const estadoRaw = cellToStr(cellVal(row, iEstado))
-    const debeRaw = cellVal(row, iDebe)
-    const haberRaw = cellVal(row, iHaber)
+    const { prefixEstado, prefixFechaVto } = parseChequePrefix(chequeStr)
 
-    parsed.push({
+    const estadoRaw = cellToStr(cellVal(row, iEstado))
+
+    const fechaVtoCol = parseSpanishDate(cellToStr(cellVal(row, iVto)))
+    const fechaPago = fechaVtoCol || prefixFechaVto
+
+    const detalle = prefixEstado
+      ? `${prefixEstado === 'utilizado' ? 'Utilizado' : 'En cartera'}${prefixFechaVto ? ` ${prefixFechaVto}` : ''}`
+      : null
+
+    const existing = byNumero.get(numero)
+    if (existing) {
+      if (detalle && !existing.observaciones) existing.observaciones = detalle
+      if (prefixEstado === 'utilizado') existing.utilizado = true
+      continue
+    }
+
+    byNumero.set(numero, {
       numero,
       tipo: detectTipo(numero),
       direccion: 'recibido',
       origen: 'tercero',
       montoCentavos,
-      debeCentavos: parseMontoCentavos(debeRaw as string | number | null) || null,
-      haberCentavos: parseMontoCentavos(haberRaw as string | number | null) || null,
       fechaEmision: '',
-      fechaPago: parseSpanishDate(cellToStr(cellVal(row, iVto))),
+      fechaPago,
       fechaRecibido: parseSpanishDate(cellToStr(cellVal(row, iRecibido))),
       fechaEntregado: parseSpanishDate(cellToStr(cellVal(row, iEntregado))) || null,
       emisor,
@@ -427,13 +445,13 @@ function parseRecibidosSheet(
       endosante: null,
       destinatario: null,
       estado: inferEstadoRecibido(estadoRaw),
-      utilizado: null,
+      utilizado: prefixEstado === 'utilizado',
       cmc7: null,
-      observaciones: null,
+      observaciones: detalle,
     })
   }
 
-  return { parsed, errores, ignorados }
+  return { parsed: [...byNumero.values()], errores, ignorados }
 }
 
 // ── Parser: emitidos (reporte 488) ──────────────────────────────────
@@ -486,8 +504,6 @@ function parseEmitidos488Sheet(
       direccion: 'emitido',
       origen: 'propio',
       montoCentavos,
-      debeCentavos: null,
-      haberCentavos: null,
       fechaEmision: parseSpanishDate(cellToStr(cellVal(row, iDmaEmision))),
       fechaPago: parseSpanishDate(cellToStr(cellVal(row, iDmaVto))),
       fechaRecibido: null,

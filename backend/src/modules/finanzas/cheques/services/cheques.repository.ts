@@ -132,23 +132,23 @@ export async function sumChequesPorDireccion(filtro: Omit<ChequesFiltro, 'direcc
   }
 }
 
-const FIRESTORE_IN_LIMIT = 30
+export function chequeDocId(direccion: ChequeDireccion, numero: string): string {
+  return `${direccion}_${numero}`
+}
+
+const GETALL_LIMIT = 500
 
 export async function findExistingNumeros(
   direccion: ChequeDireccion,
   numeros: string[],
 ): Promise<Set<string>> {
   const existing = new Set<string>()
-  for (let i = 0; i < numeros.length; i += FIRESTORE_IN_LIMIT) {
-    const batch = numeros.slice(i, i + FIRESTORE_IN_LIMIT)
-    const snap = await collection()
-      .where('direccion', '==', direccion)
-      .where('numero', 'in', batch)
-      .select()
-      .get()
-    for (const doc of snap.docs) {
-      const num = doc.data().numero
-      if (num) existing.add(String(num))
+  const refs = numeros.map((n) => collection().doc(chequeDocId(direccion, n)))
+  for (let i = 0; i < refs.length; i += GETALL_LIMIT) {
+    const batch = refs.slice(i, i + GETALL_LIMIT)
+    const snaps = await adminDb().getAll(...batch)
+    for (let j = 0; j < snaps.length; j++) {
+      if (snaps[j].exists) existing.add(numeros[i + j])
     }
   }
   return existing
@@ -174,7 +174,7 @@ export async function insertCheques(input: {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       }
-      batch.set(col.doc(), doc)
+      batch.set(col.doc(chequeDocId(row.direccion, row.numero)), doc)
     }
     await batch.commit()
     insertados += slice.length

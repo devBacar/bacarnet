@@ -32,6 +32,22 @@ function claveRespaldo(row: HuellaMovimientoInput): string {
   ].join('\u001f')
 }
 
+/**
+ * El extracto y el sync de movimientos no siempre traen iguales el comprobante, el correlativo o
+ * los códigos de operación (verificado con Julio y Córdoba, sep/2026: mismos movimientos, distinto
+ * voucher/correlativo). Estas claves emparejan por lo que sí coincide, siempre de a uno.
+ */
+function claveConceptoMonto(row: HuellaMovimientoInput): string {
+  const parte = (value: unknown) => (value == null ? '' : String(value))
+  const concepto = parte(row.descripcion).trim().replace(/\s+/g, ' ').toUpperCase()
+  return [parte(row.fechaProceso), parte(row.tipo), parte(row.montoCentavos), concepto].join('\u001f')
+}
+
+function claveMonto(row: HuellaMovimientoInput): string {
+  const parte = (value: unknown) => (value == null ? '' : String(value))
+  return [parte(row.fechaProceso), parte(row.tipo), parte(row.montoCentavos)].join('\u001f')
+}
+
 function aItem(fila: MovimientoControlable): ItemControl {
   return {
     fecha: fila.fechaProceso,
@@ -87,8 +103,9 @@ function sumarPorFecha(filas: readonly MovimientoControlable[], tipo: 'debito' |
 
 /**
  * Compara el extracto con los movimientos de BacarNet de la misma cuenta y período.
- * Primero por la huella que ya usa el sync, después sin la descripción, y si no
- * por fecha + monto + tipo + comprobante/correlativo.
+ * Primero por la huella que ya usa el sync, después sin la descripción, después por
+ * fecha + monto + tipo + comprobante/correlativo, y por último por fecha + tipo + monto
+ * (con y sin el concepto), siempre de a uno contra uno.
  * Los totales del día son los que declara el banco, contra la suma de BacarNet.
  */
 export function controlarExtracto(input: {
@@ -102,6 +119,8 @@ export function controlarExtracto(input: {
   emparejar(extracto, bacarnet, huellaMovimiento)
   emparejar(extracto, bacarnet, huellaMovimientoSinDescripcion)
   emparejar(extracto, bacarnet, claveRespaldo)
+  emparejar(extracto, bacarnet, claveConceptoMonto)
+  emparejar(extracto, bacarnet, claveMonto)
 
   const faltanEnBacarnet = ordenarItems(extracto.filter((slot) => !slot.usado).map((slot) => aItem(slot.fila)))
   const sobranEnBacarnet = ordenarItems(bacarnet.filter((slot) => !slot.usado).map((slot) => aItem(slot.fila)))

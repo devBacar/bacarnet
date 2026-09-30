@@ -10,8 +10,12 @@ import type { DiaExtracto } from '../domain/extracto.types.js'
 import { partirPeriodoEnTramos } from '../domain/periodo.js'
 
 const API_ORIGIN = 'https://api-gw.interbanking.com.ar/api/prod'
-const LIMITE_PAGINA = 100
-const MAX_PAGINAS = 50
+/**
+ * `limit`, `page` y `total_rows` cuentan MOVIMIENTOS (no días): un mismo día puede venir partido
+ * entre dos páginas y `unirDias` lo junta. El banco acepta 1000 por página (Córdoba ~9000/mes).
+ */
+const LIMITE_PAGINA = 1000
+const MAX_PAGINAS = 100
 const MAX_INTENTOS = 3
 
 export interface ExtractoFetchDeps {
@@ -33,6 +37,17 @@ function mensajeBanco(status: number, code: string | null): string {
   if (code === '1040') return 'El banco no aceptó las fechas.'
   if (status === 404) return 'El banco no encontró el extracto para ese período.'
   return 'No se pudo bajar el extracto del banco. Probá de nuevo en un rato.'
+}
+
+function contarMovimientos(statements: unknown[]): number {
+  let total = 0
+  for (const statement of statements) {
+    const detalle = statement && typeof statement === 'object'
+      ? (statement as Record<string, unknown>).movement_detail
+      : null
+    if (Array.isArray(detalle)) total += detalle.length
+  }
+  return total
 }
 
 function totalRowsDe(body: Record<string, unknown>): number | null {
@@ -126,8 +141,9 @@ async function bajarTramo(input: {
     paginasVistas.add(firma)
 
     dias.push(...normalizarStatements(respuesta.statements, cuenta))
-    juntados += respuesta.statements.length
-    const paginaCorta = respuesta.statements.length < input.limit
+    const movimientosEnPagina = contarMovimientos(respuesta.statements)
+    juntados += movimientosEnPagina
+    const paginaCorta = movimientosEnPagina < input.limit
     const yaEstanTodos = totalRows != null && juntados >= totalRows
     if (paginaCorta || yaEstanTodos) break
     if (page + 1 >= MAX_PAGINAS) {

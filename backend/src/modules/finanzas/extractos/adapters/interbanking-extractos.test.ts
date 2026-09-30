@@ -147,6 +147,68 @@ describe('adaptador de extractos', () => {
     expect(extracto.dias[0]?.movimientos[0]?.montoCentavos).toBe(1000)
   })
 
+  it('pagina por movimientos (no por días) y une un día partido entre páginas', async () => {
+    // Como el banco: la página trae 2 días pero 2 movimientos = limit, y el 02/09 sigue en la página 1
+    // con sus propios totales y un saldo final que solo cuenta ese pedazo.
+    const pages: string[] = []
+    const dia = (fecha: string, apertura: number, debito: number, credito: number) => ({
+      operation_date: fecha,
+      opening_balance: apertura,
+      ending_balance: apertura + credito - debito,
+      debits_total_amount: debito,
+      credits_total_amount: credito,
+      total_movements: 1,
+      movement_detail: [
+        {
+          ...statement(fecha, debito || credito, debito ? 'D' : 'C').movement_detail[0],
+          correlative_number: debito ? 2 : 1,
+        },
+      ],
+    })
+    const fetchImpl: typeof fetch = async (input) => {
+      const page = new URL(String(input)).searchParams.get('page') ?? '0'
+      pages.push(page)
+      const statements =
+        page === '0'
+          ? [dia('2026-09-01', 100, 0, 50), dia('2026-09-02', 150, 0, 30)]
+          : [dia('2026-09-02', 150, 20, 0)]
+      return new Response(JSON.stringify({ general_data: { total_rows: 3 }, statements }), { status: 200 })
+    }
+
+    const extracto = await fetchExtracto({
+      cuentaId: 'julio-cc',
+      desde: '2026-09-01',
+      hasta: '2026-09-02',
+      deps: { session: session(), cuentas: [cuenta], fetchImpl, limit: 2 },
+    })
+
+    expect(pages).toEqual(['0', '1'])
+    expect(extracto.dias).toHaveLength(2)
+    const segundo = extracto.dias[1]!
+    expect(segundo.movimientos).toHaveLength(2)
+    expect(segundo.creditosCentavos).toBe(3000)
+    expect(segundo.debitosCentavos).toBe(2000)
+    expect(segundo.saldoAperturaCentavos).toBe(15000)
+    expect(segundo.saldoCierreCentavos).toBe(16000)
+  })
+
+  it('encadena saldos cuando el banco manda una apertura que no sigue al cierre anterior', async () => {
+    const fetchImpl: typeof fetch = async () => {
+      const dia1 = { ...statement('2026-09-22', 10, 'C'), opening_balance: 100, ending_balance: 110 }
+      // El banco informa apertura 5000 el 23/09, pero el 22/09 cerró en 110.
+      const dia2 = { ...statement('2026-09-23', 5, 'D'), opening_balance: 5000, ending_balance: 4995 }
+      return new Response(JSON.stringify({ general_data: { total_rows: 2 }, statements: [dia1, dia2] }), { status: 200 })
+    }
+    const extracto = await fetchExtracto({
+      cuentaId: 'julio-cc',
+      desde: '2026-09-22',
+      hasta: '2026-09-23',
+      deps: { session: session(), cuentas: [cuenta], fetchImpl },
+    })
+    expect(extracto.dias[1]?.saldoAperturaCentavos).toBe(11000)
+    expect(extracto.dias[1]?.saldoCierreCentavos).toBe(10500)
+  })
+
   it('no acepta un día que dice tener más movimientos de los que mandó', async () => {
     const fetchImpl: typeof fetch = async () =>
       new Response(

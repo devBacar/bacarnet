@@ -103,6 +103,20 @@ describe('control del extracto', () => {
     expect(porComprobante.categoriaIdPorFila).toEqual(['cat-respaldo'])
   })
 
+  it('empareja el mismo movimiento aunque el extracto traiga otro comprobante y otros códigos', () => {
+    // Caso real (Julio, 22/09/2026): CHEQUE CAMARA LOCAL con igual fecha, tipo y monto en los dos lados.
+    const enExtracto = mov({ voucherNumber: 900001, correlativeNumber: 81, operationCodeBank: '1', operationCodeIb: 'X' })
+    const enBacarnet = mov({ voucherNumber: 12, correlativeNumber: 4, operationCodeBank: '2', operationCodeIb: 'Y' })
+    const resultado = controlarExtracto({
+      filas: [enExtracto],
+      movimientosBacarnet: [enBacarnet],
+      dias: diasDe(10_000),
+    })
+    expect(resultado.faltanEnBacarnet).toEqual([])
+    expect(resultado.sobranEnBacarnet).toEqual([])
+    expect(resultado.coincide).toBe(true)
+  })
+
   it('no junta dos filas iguales con un solo movimiento de BacarNet', () => {
     const fila = mov()
     const resultado = controlarExtracto({

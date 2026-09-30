@@ -129,8 +129,10 @@ export function normalizarStatements(statements: unknown, cuenta: CuentaParaNorm
 }
 
 /**
- * Si el mismo día llega en dos páginas, se quedan los saldos de la primera
- * y se suman los movimientos. Los tramos de fecha no se pisan entre sí.
+ * Si el mismo día llega partido en dos páginas, cada pedazo trae el saldo de apertura del día pero
+ * sus propios totales y un saldo final calculado solo con sus movimientos (verificado con Julio,
+ * 02/09/2026). Se suman débitos, créditos y movimientos, y el cierre se recalcula:
+ * apertura + créditos − débitos. Los tramos de fecha no se pisan entre sí.
  */
 export function unirDias(dias: readonly DiaExtracto[]): DiaExtracto[] {
   const porFecha = new Map<string, DiaExtracto>()
@@ -141,6 +143,25 @@ export function unirDias(dias: readonly DiaExtracto[]): DiaExtracto[] {
       continue
     }
     previo.movimientos.push(...dia.movimientos)
+    previo.debitosCentavos += dia.debitosCentavos
+    previo.creditosCentavos += dia.creditosCentavos
+    previo.saldoCierreCentavos =
+      previo.saldoAperturaCentavos + previo.creditosCentavos - previo.debitosCentavos
   }
-  return [...porFecha.values()].sort((a, b) => a.fecha.localeCompare(b.fecha))
+  return encadenarSaldos([...porFecha.values()].sort((a, b) => a.fecha.localeCompare(b.fecha)))
+}
+
+/**
+ * Cada día arranca con el cierre del anterior. El banco a veces informa un `opening_balance` que no
+ * coincide con el cierre del día previo (Córdoba 23/09 y 28/09/2026: saltos de ~100 M), aunque los
+ * movimientos y totales del día están bien; encadenando, los cierres dan igual al saldo oficial de
+ * GET /accounts/balances. Solo el primer día usa la apertura que manda el banco.
+ */
+export function encadenarSaldos(dias: DiaExtracto[]): DiaExtracto[] {
+  for (let i = 1; i < dias.length; i += 1) {
+    const dia = dias[i]!
+    dia.saldoAperturaCentavos = dias[i - 1]!.saldoCierreCentavos
+    dia.saldoCierreCentavos = dia.saldoAperturaCentavos + dia.creditosCentavos - dia.debitosCentavos
+  }
+  return dias
 }

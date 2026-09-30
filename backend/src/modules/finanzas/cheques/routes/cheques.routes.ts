@@ -117,8 +117,9 @@ finanzasChequesRouter.post('/ingresar', async (req, res) => {
 
 const VALID_ESTADOS: ChequeEstado[] = [
   'en_cartera', 'depositado', 'vendido', 'rechazado',
-  'pendiente', 'debitado', 'anulado',
+  'pendiente', 'debitado',
 ]
+
 
 finanzasChequesRouter.patch('/:id/estado', async (req, res) => {
   try {

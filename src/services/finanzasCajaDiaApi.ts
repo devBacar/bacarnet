@@ -42,8 +42,8 @@ export interface CajaDiaResponse {
     saldoCentavos: number
     lineas: LineaValorCaja[]
   }
-  cheques: { saldoCentavos: number; lineas: LineaValorCaja[] }
-  echeq: { saldoCentavos: number; lineas: LineaValorCaja[] }
+  cheques: { saldoCentavos: number; cantidadEnCartera?: number; lineas: LineaValorCaja[] }
+  echeq: { saldoCentavos: number; cantidadEnCartera?: number; lineas: LineaValorCaja[] }
   dolares: Array<{ bancoNombre: string; cuentaId: string; saldoCentavos: number }>
   fondos: Array<{ nombre: string; saldoCentavos: number }>
 }

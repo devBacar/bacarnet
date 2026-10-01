@@ -1,133 +1,159 @@
-import { AlertTriangle, Info, Lightbulb } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Info, MoreHorizontal } from 'lucide-react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ETIQUETA_ESTADO_CLASES, estadoDescubierto, type TonoEstado } from '../estadoDescubierto'
 import { formatMoneyCentavos } from '../formatMoney'
-import type { CobroAtrasadoHoy, HoyResponse, IngresoHoy, PagoHoy } from '../../../services/finanzasHoyApi'
-import { fechaLarga, sugerenciaDesdeDondePagar } from './hoyFrases'
+import type { HoyResponse } from '../../../services/finanzasHoyApi'
+import { diaCorto, fechaLarga, nombreDia, sugerenciaDesdeDondePagar } from './hoyFrases'
+import { montoCorto } from './montoCorto'
 
 /* ----------------------------------------------------------------------------
- * Piezas comunes: tarjeta, tabla, montos, etiquetas y botones. Todo en letra normal.
+ * Piezas comunes: tarjeta compacta, ayuda, montos, etiquetas, botones y menú ⋯.
  * -------------------------------------------------------------------------- */
 
-const th = 'px-3 py-2 text-left text-xs font-medium first:pl-4 last:pr-4'
-const td = 'px-3 py-2 align-middle break-words first:pl-4 last:pr-4'
-const filaHover = 'border-b border-neutral-100 transition-colors last:border-b-0 hover:bg-neutral-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50'
-const filaTotal = 'border-t border-neutral-200 bg-neutral-50/60 font-semibold dark:border-zinc-700 dark:bg-zinc-800/40'
+export const botonChico =
+  'inline-flex shrink-0 items-center justify-center rounded-md bg-brand-primary px-2 py-1 text-xs font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+export const botonChicoSecundario =
+  'inline-flex shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800'
+export const linkChico =
+  'text-xs text-neutral-600 underline-offset-2 transition hover:text-neutral-900 hover:underline dark:text-gray-400 dark:hover:text-gray-100'
 
-const botonPrimario =
-  'inline-flex items-center justify-center whitespace-nowrap rounded-lg bg-brand-primary px-2.5 py-1 text-xs font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
-const botonSecundario =
-  'inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-xs font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800'
-const linkChico =
-  'whitespace-nowrap text-xs text-neutral-600 underline-offset-2 transition hover:text-neutral-900 hover:underline dark:text-gray-400 dark:hover:text-gray-100'
-
-/** Monto completo con centavos, alineado a la derecha; en rojo si es negativo. */
+/** Monto completo con centavos; en rojo si es negativo. */
 export function Monto({
   centavos,
   className = '',
   negativoEnRojo = true,
+  moneda = 'ARS',
 }: {
   centavos: number
   className?: string
   negativoEnRojo?: boolean
+  moneda?: 'ARS' | 'USD'
 }) {
   return (
-    <span
-      className={`whitespace-nowrap tabular-nums ${
-        negativoEnRojo && centavos < 0 ? 'text-red-600 dark:text-red-400' : ''
-      } ${className}`}
-    >
-      {formatMoneyCentavos(centavos, 'ARS')}
+    <span className={`tabular-nums ${negativoEnRojo && centavos < 0 ? 'text-red-600 dark:text-red-400' : ''} ${className}`}>
+      {formatMoneyCentavos(centavos, moneda)}
     </span>
   )
 }
 
-function Etiqueta({ tono, children }: { tono: TonoEstado; children: ReactNode }) {
+export function Etiqueta({ tono, children }: { tono: TonoEstado; children: ReactNode }) {
   return (
-    <span
-      className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${ETIQUETA_ESTADO_CLASES[tono]}`}
-    >
+    <span className={`inline-flex shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${ETIQUETA_ESTADO_CLASES[tono]}`}>
       {children}
     </span>
   )
 }
 
-function EtiquetaEstado({ saldoCentavos, descubiertoCentavos }: { saldoCentavos: number; descubiertoCentavos: number | null }) {
+export function EtiquetaEstado({
+  saldoCentavos,
+  descubiertoCentavos,
+}: {
+  saldoCentavos: number
+  descubiertoCentavos: number | null
+}) {
   const estado = estadoDescubierto(saldoCentavos, descubiertoCentavos)
   return <Etiqueta tono={estado.tono}>{estado.etiqueta}</Etiqueta>
 }
 
-/** Una sección de Hoy: tarjeta con título corto, una línea de explicación y el total a la derecha. */
-export function Tarjeta({
-  titulo,
-  explicacion,
-  total,
-  children,
-}: {
-  titulo: string
-  explicacion: string
-  total?: { etiqueta: string; centavos: number }
-  children: ReactNode
-}) {
+/** Línea de ayuda gris con ícono, al pie de una tarjeta. */
+export function Ayuda({ children }: { children: ReactNode }) {
   return (
-    <section className="surface-card overflow-hidden rounded-2xl border border-neutral-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 border-b border-neutral-100 px-4 py-3 dark:border-zinc-800">
-        <div className="min-w-0">
-          <h2 className="text-heading text-base font-semibold">{titulo}</h2>
-          <p className="text-body-muted text-xs">{explicacion}</p>
-        </div>
-        {total ? (
-          <p className="text-sm">
-            <span className="text-body-muted text-xs">{total.etiqueta} </span>
-            <Monto centavos={total.centavos} className="text-heading font-semibold" />
-          </p>
-        ) : null}
-      </header>
-      {children}
-    </section>
-  )
-}
-
-/** Estado vacío: una sola línea gris y chica adentro de la tarjeta, para que las filas de la grilla queden parejas. */
-export function Vacio({ texto }: { texto: string }) {
-  return <p className="text-body-muted px-4 py-3 text-xs">{texto}</p>
-}
-
-/** Tabla que se acomoda al ancho de la tarjeta: nunca genera scroll horizontal. */
-function Tabla({ children }: { children: ReactNode }) {
-  return <table className="w-full text-sm">{children}</table>
-}
-
-/** Botones de acción de una fila: el principal arriba y los links chicos debajo, que cortan línea si hace falta. */
-function Acciones({ principal, secundarias }: { principal: ReactNode; secundarias?: ReactNode }) {
-  return (
-    <div className="flex flex-col items-end gap-1">
-      {principal}
-      {secundarias ? <span className="flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5">{secundarias}</span> : null}
-    </div>
-  )
-}
-
-/** Mensaje de una línea con ícono, debajo de una tabla. */
-function Mensaje({ tono, children }: { tono: 'ok' | 'aviso' | 'info'; children: ReactNode }) {
-  const Icono = tono === 'aviso' ? AlertTriangle : tono === 'ok' ? Lightbulb : Info
-  const color =
-    tono === 'aviso'
-      ? 'text-red-700 dark:text-red-300'
-      : tono === 'ok'
-        ? 'text-emerald-800 dark:text-emerald-200'
-        : 'text-neutral-700 dark:text-gray-300'
-  return (
-    <p className={`flex items-start gap-2 border-t border-neutral-100 px-4 py-2.5 text-sm dark:border-zinc-800 ${color}`}>
-      <Icono className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+    <p className="text-body-muted mt-2 flex items-start gap-1.5 border-t border-neutral-100 pt-2 text-xs dark:border-zinc-800">
+      <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>{children}</span>
     </p>
   )
 }
 
+/** Tarjeta compacta: título chico, algo a la derecha (total, botones), contenido y ayuda al pie. */
+export function Tarjeta({
+  titulo,
+  subtitulo,
+  derecha,
+  ayuda,
+  children,
+}: {
+  titulo: ReactNode
+  subtitulo?: ReactNode
+  derecha?: ReactNode
+  ayuda?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <section className="min-w-0 rounded-xl border border-neutral-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+      <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0">
+          <h2 className="text-heading text-sm font-medium">{titulo}</h2>
+          {subtitulo ? <p className="text-body-muted text-xs">{subtitulo}</p> : null}
+        </div>
+        {derecha ? <div className="flex min-w-0 flex-wrap items-center gap-2">{derecha}</div> : null}
+      </header>
+      <div className="mt-2 min-w-0">{children}</div>
+      {ayuda ? <Ayuda>{ayuda}</Ayuda> : null}
+    </section>
+  )
+}
+
+/** Una sola línea gris para cuando no hay nada. */
+export function Vacio({ texto }: { texto: string }) {
+  return <p className="text-body-muted py-1 text-xs">{texto}</p>
+}
+
+/** Menú ⋯ chico con las acciones secundarias de una fila. */
+export function MenuAcciones({ opciones, etiqueta = 'Más acciones' }: { opciones: Array<{ texto: string; onClick: () => void }>; etiqueta?: string }) {
+  const [abierto, setAbierto] = useState(false)
+  const caja = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!abierto) return
+    const cerrar = (event: PointerEvent) => {
+      if (!caja.current?.contains(event.target as Node)) setAbierto(false)
+    }
+    document.addEventListener('pointerdown', cerrar)
+    return () => document.removeEventListener('pointerdown', cerrar)
+  }, [abierto])
+
+  if (opciones.length === 0) return null
+  return (
+    <div ref={caja} className="relative shrink-0">
+      <button
+        type="button"
+        aria-label={etiqueta}
+        aria-haspopup="menu"
+        aria-expanded={abierto}
+        onClick={() => setAbierto((actual) => !actual)}
+        className="rounded-md p-1 text-neutral-600 transition hover:bg-neutral-100 dark:text-gray-300 dark:hover:bg-zinc-800"
+      >
+        <MoreHorizontal className="h-4 w-4" aria-hidden />
+      </button>
+      {abierto ? (
+        <div
+          role="menu"
+          className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-neutral-200 bg-white p-1 shadow-md dark:border-zinc-700 dark:bg-zinc-900"
+        >
+          {opciones.map((opcion) => (
+            <button
+              key={opcion.texto}
+              type="button"
+              role="menuitem"
+              className="block w-full rounded px-2 py-1.5 text-left text-xs text-neutral-800 hover:bg-neutral-100 dark:text-gray-100 dark:hover:bg-zinc-800"
+              onClick={() => {
+                setAbierto(false)
+                opcion.onClick()
+              }}
+            >
+              {opcion.texto}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 /* ----------------------------------------------------------------------------
- * Franja de datos de ejemplo y encabezado
+ * Franja de datos de ejemplo, título y los cuatro números del día
  * -------------------------------------------------------------------------- */
 
 /** Una línea discreta arriba cuando hay datos de ejemplo en el entorno de pruebas. */
@@ -147,245 +173,42 @@ export function FranjaDemo({ borrando, onBorrar }: { borrando: boolean; onBorrar
   )
 }
 
-/** Título con la fecha y una línea de resumen: qué pagás, qué cobrás y cómo terminás el día. */
-export function EncabezadoHoy({ data }: { data: HoyResponse }) {
+export function EncabezadoHoy({ fecha }: { fecha: string }) {
+  return <h1 className="text-heading text-lg font-semibold">Hoy · {fechaLarga(fecha)}</h1>
+}
+
+function Numero({ titulo, centavos, tono = 'normal' }: { titulo: string; centavos: number; tono?: 'normal' | 'verde' }) {
+  const color =
+    centavos < 0 ? 'text-red-600 dark:text-red-400' : tono === 'verde' ? 'text-emerald-700 dark:text-emerald-300' : 'text-heading'
+  return (
+    <div className="min-w-0 rounded-lg bg-neutral-50 px-2.5 py-2 dark:bg-zinc-800/60">
+      <p className="text-body-muted text-xs">{titulo}</p>
+      <p className={`break-words text-base font-medium tabular-nums ${color}`}>{formatMoneyCentavos(centavos, 'ARS')}</p>
+    </div>
+  )
+}
+
+/** Arrancaste · Hoy pagás · Hoy cobrás · Terminás: cuatro cuadritos con los montos completos. */
+export function CuatroNumeros({ data }: { data: HoyResponse }) {
   const cobros = data.ingresos.filas
   const totalCobros = cobros.reduce((total, fila) => total + fila.montoCentavos, 0)
   const llegaron = cobros.filter((fila) => fila.llego).length
-  const separador = <span aria-hidden className="text-body-muted hidden sm:inline">·</span>
+  const detalleCobros = cobros.length === 0 ? '' : ` (${cobros.length}${llegaron > 0 ? ` · ${llegaron} ${llegaron === 1 ? 'llegó' : 'llegaron'}` : ''})`
   return (
-    <header>
-      <h1 className="text-heading text-lg font-semibold">Hoy · {fechaLarga(data.fecha)}</h1>
-      <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900/60">
-        <span className="basis-full sm:basis-auto">
-          Pagás <Monto centavos={data.dia.pagosCentavos} className="text-heading font-semibold" />
-        </span>
-        {separador}
-        <span className="basis-full sm:basis-auto">
-          Cobrás <Monto centavos={totalCobros} className="text-heading font-semibold" />
-          {llegaron > 0 ? (
-            <span className="text-body-muted"> ({llegaron === 1 ? '1 ya llegó' : `${llegaron} ya llegaron`})</span>
-          ) : null}
-        </span>
-        {separador}
-        <span className="basis-full sm:basis-auto">
-          Terminás el día en <Monto centavos={data.dia.saldoFinalCentavos} className="text-heading font-semibold" />
-        </span>
-      </p>
-    </header>
+    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+      <Numero titulo="Arrancaste el día con" centavos={data.dia.saldoInicialCentavos} />
+      <Numero titulo={`Hoy pagás${data.pagos.filas.length > 0 ? ` (${data.pagos.filas.length})` : ''}`} centavos={data.dia.pagosCentavos} />
+      <Numero titulo={`Hoy cobrás${detalleCobros}`} centavos={totalCobros} tono="verde" />
+      <Numero titulo="Terminás el día en" centavos={data.dia.saldoFinalCentavos} />
+    </div>
   )
 }
 
 /* ----------------------------------------------------------------------------
- * 1. Pagos de hoy
+ * Tres tarjetas chicas al pie: cómo queda cada banco, la semana y los avisos
  * -------------------------------------------------------------------------- */
 
-export function TarjetaPagos({
-  pagos,
-  onPagar,
-  onYaPague,
-  onReprogramar,
-}: {
-  pagos: HoyResponse['pagos']
-  onPagar: (pago: PagoHoy) => void
-  onYaPague: (pago: PagoHoy) => void
-  onReprogramar: (pago: PagoHoy) => void
-}) {
-  const filas = [...pagos.filas].sort((a, b) => Number(b.vencido) - Number(a.vencido))
-  return (
-    <Tarjeta
-      titulo="Pagos de hoy"
-      explicacion="Los vencidos van primero. Pagá, marcá como pagado o cambiá la fecha."
-      total={pagos.filas.length > 0 ? { etiqueta: 'Total', centavos: pagos.totalCentavos } : undefined}
-    >
-      {filas.length === 0 ? (
-        <Vacio texto="No hay pagos para hoy." />
-      ) : (
-        <Tabla>
-          <thead>
-            <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
-              <th className={th}>A quién</th>
-              <th className={`${th} text-right`}>Monto</th>
-              <th className={`${th} text-right`}>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filas.map((pago) => (
-              <tr key={pago.id} className={filaHover}>
-                <td className={td}>
-                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                    <span className="text-heading font-medium">{pago.aQuien}</span>
-                    {pago.vencido && pago.vencidoTexto ? (
-                      <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta>
-                    ) : (
-                      <Etiqueta tono="gris">Hoy</Etiqueta>
-                    )}
-                  </span>
-                  <span className="text-body-muted block text-xs">{pago.concepto}</span>
-                </td>
-                <td className={`${td} text-right`}>
-                  <Monto centavos={pago.montoCentavos} className="text-heading block font-medium" />
-                  <span className="text-body-muted block text-xs">
-                    {pago.comoPagar}
-                    {pago.urgencia !== 'Normal' ? ` · urgencia ${pago.urgencia.toLowerCase()}` : null}
-                  </span>
-                </td>
-                <td className={`${td} text-right`}>
-                  <Acciones
-                    principal={
-                      <button type="button" className={botonPrimario} onClick={() => onPagar(pago)}>
-                        Pagar
-                      </button>
-                    }
-                    secundarias={
-                      <>
-                        <button type="button" className={linkChico} onClick={() => onYaPague(pago)}>
-                          Ya lo pagué
-                        </button>
-                        <span aria-hidden className="text-body-muted text-xs">·</span>
-                        <button type="button" className={linkChico} onClick={() => onReprogramar(pago)}>
-                          Cambiar fecha
-                        </button>
-                      </>
-                    }
-                  />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className={filaTotal}>
-              <td className={td}>Total</td>
-              <td className={`${td} text-right`}>
-                <Monto centavos={pagos.totalCentavos} className="text-heading" />
-              </td>
-              <td className={td} />
-            </tr>
-          </tfoot>
-        </Tabla>
-      )}
-    </Tarjeta>
-  )
-}
-
-/* ----------------------------------------------------------------------------
- * 2. Cobros de hoy
- * -------------------------------------------------------------------------- */
-
-export function TarjetaCobros({
-  ingresos,
-  confirmandoId,
-  onConfirmar,
-  onEfectivo,
-  onReprogramar,
-  onReclamar,
-}: {
-  ingresos: IngresoHoy[]
-  confirmandoId: string | null
-  onConfirmar: (ingreso: IngresoHoy) => void
-  onEfectivo: (ingreso: IngresoHoy) => void
-  onReprogramar: (ingreso: IngresoHoy) => void
-  onReclamar: (ingreso: IngresoHoy) => void
-}) {
-  const total = ingresos.reduce((suma, fila) => suma + fila.montoCentavos, 0)
-  const llegaron = ingresos.filter((fila) => fila.llego).length
-  const explicacion =
-    ingresos.length === 0
-      ? 'Lo que se esperaba cobrar hoy.'
-      : llegaron === 0
-        ? 'Ninguno llegó todavía: podés reclamar o cambiar la fecha.'
-        : `${llegaron} de ${ingresos.length} ya ${llegaron === 1 ? 'llegó' : 'llegaron'} al banco: confirmalo${llegaron === 1 ? '' : 's'}.`
-  return (
-    <Tarjeta
-      titulo="Cobros de hoy"
-      explicacion={explicacion}
-      total={ingresos.length > 0 ? { etiqueta: 'Total', centavos: total } : undefined}
-    >
-      {ingresos.length === 0 ? (
-        <Vacio texto="No hay cobros esperados para hoy." />
-      ) : (
-        <Tabla>
-          <thead>
-            <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
-              <th className={th}>De quién</th>
-              <th className={`${th} text-right`}>Monto</th>
-              <th className={th}>Estado</th>
-              <th className={`${th} text-right`}>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ingresos.map((ingreso) => (
-              <tr key={ingreso.id} className={filaHover}>
-                <td className={td}>
-                  <span className="text-heading block font-medium">{ingreso.cliente}</span>
-                  <span className="text-body-muted block text-xs">
-                    {ingreso.concepto} ·{' '}
-                    {ingreso.atrasado && ingreso.atrasadoTexto ? (
-                      <span className="text-red-700 dark:text-red-300">{ingreso.atrasadoTexto}</span>
-                    ) : (
-                      'esperado hoy'
-                    )}
-                  </span>
-                </td>
-                <td className={`${td} text-right`}>
-                  <Monto centavos={ingreso.montoCentavos} className="text-heading font-medium" />
-                </td>
-                <td className={td}>
-                  {ingreso.llego ? (
-                    <Etiqueta tono="verde">Llegó a {ingreso.bancoNombre ?? 'un banco'}</Etiqueta>
-                  ) : (
-                    <Etiqueta tono="ambar">Todavía no llegó</Etiqueta>
-                  )}
-                </td>
-                <td className={`${td} text-right`}>
-                  {ingreso.llego ? (
-                    ingreso.movimientoId ? (
-                      <button
-                        type="button"
-                        className={botonPrimario}
-                        disabled={confirmandoId === ingreso.id}
-                        onClick={() => onConfirmar(ingreso)}
-                      >
-                        {confirmandoId === ingreso.id ? 'Confirmando…' : 'Confirmar'}
-                      </button>
-                    ) : (
-                      <span className="text-body-muted">—</span>
-                    )
-                  ) : (
-                    <Acciones
-                      principal={
-                        <button type="button" className={botonSecundario} onClick={() => onReclamar(ingreso)}>
-                          Reclamar
-                        </button>
-                      }
-                      secundarias={
-                        <>
-                          <button type="button" className={linkChico} onClick={() => onEfectivo(ingreso)}>
-                            Llegó en efectivo
-                          </button>
-                          <span aria-hidden className="text-body-muted text-xs">·</span>
-                          <button type="button" className={linkChico} onClick={() => onReprogramar(ingreso)}>
-                            Cambiar fecha
-                          </button>
-                        </>
-                      }
-                    />
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Tabla>
-      )}
-    </Tarjeta>
-  )
-}
-
-/* ----------------------------------------------------------------------------
- * 3. Cómo queda el día
- * -------------------------------------------------------------------------- */
-
-export function TarjetaDia({
+export function TarjetaBancos({
   dia,
   onAbrirBanco,
 }: {
@@ -395,282 +218,162 @@ export function TarjetaDia({
 }) {
   const sugerencia = sugerenciaDesdeDondePagar(dia)
   return (
-    <Tarjeta
-      titulo="Cómo queda el día"
-      explicacion="Cómo quedaría cada banco si pagás todo lo de hoy desde ahí."
-      total={{ etiqueta: 'Terminás en', centavos: dia.saldoFinalCentavos }}
-    >
+    <Tarjeta titulo="Cómo queda cada banco" ayuda="Saldo de cada banco si pagás todo lo de hoy desde ahí.">
       {dia.bancos.length === 0 ? (
-        <Vacio texto="Todavía no hay cuentas en pesos cargadas. Traelas desde Saldos." />
+        <Vacio texto="Todavía no hay cuentas en pesos. Traelas desde Saldos." />
       ) : (
-        <>
-          <Tabla>
-            <thead>
-              <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
-                <th className={th}>Banco</th>
-                <th className={`${th} text-right`}>Saldo ahora</th>
-                <th className={`${th} text-right`}>Pagos de hoy</th>
-                <th className={`${th} text-right`}>Queda</th>
-                <th className={th}>Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dia.bancos.map((banco) => {
-                const queda = banco.saldoAhoraCentavos - dia.pagosCentavos
-                return (
-                  <tr key={banco.bancoNombre} className={filaHover}>
-                    <td className={`${td} text-heading font-medium`}>
-                      {onAbrirBanco ? (
-                        <button
-                          type="button"
-                          className="rounded underline-offset-2 hover:underline"
-                          onClick={() => onAbrirBanco(banco.bancoNombre)}
-                        >
-                          {banco.bancoNombre}
-                        </button>
-                      ) : (
-                        banco.bancoNombre
-                      )}
-                    </td>
-                    <td className={`${td} text-right`}>
-                      <Monto centavos={banco.saldoAhoraCentavos} />
-                    </td>
-                    <td className={`${td} text-right`}>
-                      {dia.pagosCentavos > 0 ? (
-                        <Monto centavos={-dia.pagosCentavos} negativoEnRojo={false} className="text-body-muted" />
-                      ) : (
-                        <span className="text-body-muted">—</span>
-                      )}
-                    </td>
-                    <td className={`${td} text-right`}>
-                      <Monto centavos={queda} className="text-heading block font-medium" />
-                      {banco.descubiertoCentavos != null && banco.descubiertoCentavos > 0 ? (
-                        <span className="text-body-muted block text-xs">
-                          de <Monto centavos={banco.descubiertoCentavos} /> de descubierto
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className={td}>
-                      <EtiquetaEstado saldoCentavos={queda} descubiertoCentavos={banco.descubiertoCentavos} />
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </Tabla>
-          {sugerencia ? <Mensaje tono={sugerencia.tono}>{sugerencia.texto}</Mensaje> : null}
-        </>
+        <ul className="divide-y divide-neutral-100 dark:divide-zinc-800">
+          {dia.bancos.map((banco) => {
+            const queda = banco.saldoAhoraCentavos - dia.pagosCentavos
+            return (
+              <li key={banco.bancoNombre} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+                {onAbrirBanco ? (
+                  <button
+                    type="button"
+                    className="text-heading min-w-0 truncate rounded text-left font-medium underline-offset-2 hover:underline"
+                    onClick={() => onAbrirBanco(banco.bancoNombre)}
+                  >
+                    {banco.bancoNombre}
+                  </button>
+                ) : (
+                  <span className="text-heading min-w-0 truncate font-medium">{banco.bancoNombre}</span>
+                )}
+                <span className="flex shrink-0 items-center gap-2">
+                  <span className={`tabular-nums ${queda < 0 ? 'text-red-600 dark:text-red-400' : 'text-heading'}`}>{montoCorto(queda)}</span>
+                  <EtiquetaEstado saldoCentavos={queda} descubiertoCentavos={banco.descubiertoCentavos} />
+                </span>
+              </li>
+            )
+          })}
+        </ul>
       )}
+      {sugerencia ? (
+        <p className={`mt-1 text-xs ${sugerencia.tono === 'ok' ? 'text-emerald-800 dark:text-emerald-200' : 'text-amber-900 dark:text-amber-200'}`}>
+          {sugerencia.texto}
+        </p>
+      ) : null}
     </Tarjeta>
   )
 }
 
-/* ----------------------------------------------------------------------------
- * 4. Cheques que se debitan mañana
- * -------------------------------------------------------------------------- */
-
-export function TarjetaCheques({ cheques }: { cheques: HoyResponse['prevision']['chequesADebitar'] }) {
+export function TarjetaSemanaGrafico({ prevision }: { prevision: HoyResponse['prevision'] }) {
+  const dias = (prevision.semana ?? []).slice(0, 5)
+  const maximo = Math.max(1, ...dias.flatMap((fila) => [fila.aPagarCentavos, fila.aCobrarCentavos]))
+  const pesado = dias.find((fila) => fila.esElMasPesado)
+  const altura = (centavos: number) => `${Math.round((centavos / maximo) * 100)}%`
   return (
-    <Tarjeta
-      titulo="Cheques que se debitan mañana"
-      explicacion="Cheques nuestros que se debitan mañana, y los de hoy que todavía no figuran debitados."
-      total={cheques.filas.length > 0 ? { etiqueta: 'Total', centavos: cheques.totalCentavos } : undefined}
-    >
-      {cheques.filas.length === 0 ? (
-        <Vacio texto="Mañana no se debita ningún cheque." />
-      ) : (
-        <>
-          <Tabla>
-            <thead>
-              <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
-                <th className={th}>Cheque</th>
-                <th className={th}>Banco</th>
-                <th className={`${th} text-right`}>Monto</th>
-              </tr>
-            </thead>
-            <tbody>
-              {cheques.filas.map((fila) => (
-                <tr key={fila.id} className={filaHover}>
-                  <td className={td}>
-                    <span className="text-heading block font-medium">{fila.destinatario}</span>
-                    <span className="text-body-muted block text-xs tabular-nums">
-                      N.º {fila.numero}
-                      {fila.cuando === 'Hoy' ? ' · hoy' : null}
-                    </span>
-                  </td>
-                  <td className={td}>{fila.banco}</td>
-                  <td className={`${td} text-right`}>
-                    <Monto centavos={fila.montoCentavos} className="text-heading font-medium" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className={filaTotal}>
-                <td className={td} colSpan={2}>
-                  Total
-                </td>
-                <td className={`${td} text-right`}>
-                  <Monto centavos={cheques.totalCentavos} className="text-heading" />
-                </td>
-              </tr>
-            </tfoot>
-          </Tabla>
-          {cheques.impactos.map((texto) => (
-            <Mensaje key={texto} tono={texto.startsWith('Ojo') ? 'aviso' : 'info'}>
-              {texto}
-            </Mensaje>
-          ))}
-        </>
-      )}
-    </Tarjeta>
-  )
-}
-
-/* ----------------------------------------------------------------------------
- * 5. Esta semana
- * -------------------------------------------------------------------------- */
-
-export function TarjetaSemana({ prevision }: { prevision: HoyResponse['prevision'] }) {
-  const semana = prevision.semana ?? []
-  return (
-    <Tarjeta titulo="Esta semana" explicacion="Lo que hay que pagar y cobrar cada día, y cómo va quedando.">
-      {semana.length === 0 ? (
+    <Tarjeta titulo="Esta semana" subtitulo="Rojo: a pagar · Verde: a cobrar" ayuda="Los próximos cinco días hábiles. Cuanto más alta la barra, más plata se mueve ese día.">
+      {dias.length === 0 ? (
         <Vacio texto="Esta semana no hay nada anotado todavía." />
       ) : (
         <>
-          {prevision.diaMasPesado ? (
-            <p className="flex items-start gap-2 border-b border-neutral-100 px-4 py-2.5 text-sm text-amber-900 dark:border-zinc-800 dark:text-amber-200">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              <span>{prevision.diaMasPesado}</span>
+          <div className="flex items-end gap-1">
+            {dias.map((fila) => (
+              <div key={fila.fecha} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                <div className="flex h-16 w-full items-end justify-center gap-0.5">
+                  <div
+                    className="w-2.5 rounded-t bg-red-500 dark:bg-red-400"
+                    style={{ height: altura(fila.aPagarCentavos) }}
+                    title={`A pagar: ${formatMoneyCentavos(fila.aPagarCentavos, 'ARS')}`}
+                  />
+                  <div
+                    className="w-2.5 rounded-t bg-emerald-500 dark:bg-emerald-400"
+                    style={{ height: altura(fila.aCobrarCentavos) }}
+                    title={`A cobrar: ${formatMoneyCentavos(fila.aCobrarCentavos, 'ARS')}`}
+                  />
+                </div>
+                <span className={`text-xs ${fila.esElMasPesado ? 'text-heading font-medium' : 'text-body-muted'}`}>{diaCorto(fila.fecha)}</span>
+              </div>
+            ))}
+          </div>
+          {pesado ? (
+            <p className="mt-1 text-xs text-amber-900 dark:text-amber-200">
+              El {nombreDia(pesado.fecha)} es el día más pesado: pagás {montoCorto(pesado.aPagarCentavos)}.
             </p>
           ) : null}
-          <Tabla>
-            <thead>
-              <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
-                <th className={th}>Día</th>
-                <th className={`${th} text-right`}>A pagar</th>
-                <th className={`${th} text-right`}>A cobrar</th>
-                <th className={`${th} text-right`}>Queda</th>
-              </tr>
-            </thead>
-            <tbody>
-              {semana.map((fila) => (
-                <tr
-                  key={fila.fecha}
-                  className={`${filaHover} ${
-                    fila.esElMasPesado ? 'bg-amber-50 hover:bg-amber-100/70 dark:bg-amber-950/30 dark:hover:bg-amber-950/50' : ''
-                  }`}
-                >
-                  <td className={`${td} text-heading whitespace-nowrap font-medium`}>{fila.dia}</td>
-                  <td className={`${td} text-right`}>
-                    {fila.aPagarCentavos > 0 ? <Monto centavos={fila.aPagarCentavos} /> : <span className="text-body-muted">—</span>}
-                  </td>
-                  <td className={`${td} text-right`}>
-                    {fila.aCobrarCentavos > 0 ? <Monto centavos={fila.aCobrarCentavos} /> : <span className="text-body-muted">—</span>}
-                  </td>
-                  <td className={`${td} text-right`}>
-                    <Monto centavos={fila.quedaCentavos} className="text-heading font-medium" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </Tabla>
         </>
       )}
     </Tarjeta>
   )
 }
 
-/* ----------------------------------------------------------------------------
- * 6. Cobros atrasados y transferencias esperando firma
- * -------------------------------------------------------------------------- */
-
-export function TarjetaAtrasados({
-  cobros,
-  onReclamar,
-}: {
-  cobros: CobroAtrasadoHoy[]
-  onReclamar: (cobro: CobroAtrasadoHoy) => void
-}) {
-  const total = cobros.reduce((suma, cobro) => suma + cobro.montoCentavos, 0)
-  return (
-    <Tarjeta
-      titulo="Cobros atrasados"
-      explicacion="Cobros que se esperaban antes de hoy y todavía no entraron."
-      total={cobros.length > 0 ? { etiqueta: 'Total', centavos: total } : undefined}
-    >
-      {cobros.length === 0 ? (
-        <Vacio texto="No hay cobros atrasados." />
-      ) : (
-        <Tabla>
-          <thead>
-            <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
-              <th className={th}>De quién</th>
-              <th className={`${th} text-right`}>Monto</th>
-              <th className={`${th} text-right`}>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cobros.map((cobro) => (
-              <tr key={cobro.id} className={filaHover}>
-                <td className={td}>
-                  <span className="text-heading block font-medium">{cobro.cliente}</span>
-                  <span className="text-body-muted block text-xs">
-                    {cobro.concepto} · <span className="text-red-700 dark:text-red-300">{cobro.haceTexto}</span>
-                  </span>
-                </td>
-                <td className={`${td} text-right`}>
-                  <Monto centavos={cobro.montoCentavos} className="text-heading font-medium" />
-                </td>
-                <td className={`${td} text-right`}>
-                  <button type="button" className={botonSecundario} onClick={() => onReclamar(cobro)}>
-                    Reclamar
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </Tabla>
-      )}
-    </Tarjeta>
-  )
+interface Aviso {
+  clave: string
+  texto: string
+  centavos: number | null
+  href?: string
+  tono: 'rojo' | 'ambar'
 }
 
-export function TarjetaFirmas({ firmas }: { firmas: HoyResponse['prevision']['firmas'] }) {
+function armarAvisos(prevision: HoyResponse['prevision']): Aviso[] {
+  const avisos: Aviso[] = []
+  const porBanco = new Map<string, { cuando: 'Hoy' | 'Mañana'; banco: string; cantidad: number; centavos: number }>()
+  for (const fila of prevision.chequesADebitar.filas) {
+    const clave = `${fila.cuando}|${fila.banco}`
+    const actual = porBanco.get(clave) ?? { cuando: fila.cuando, banco: fila.banco, cantidad: 0, centavos: 0 }
+    actual.cantidad += 1
+    actual.centavos += fila.montoCentavos
+    porBanco.set(clave, actual)
+  }
+  for (const [clave, grupo] of porBanco) {
+    const cheques = grupo.cantidad === 1 ? '1 cheque' : `${grupo.cantidad} cheques`
+    avisos.push({
+      clave: `cheque:${clave}`,
+      texto:
+        grupo.cuando === 'Mañana'
+          ? `Mañana se debita${grupo.cantidad === 1 ? '' : 'n'} ${cheques} en ${grupo.banco}`
+          : `Hoy: ${cheques} en ${grupo.banco} todavía sin debitar`,
+      centavos: grupo.centavos,
+      href: '/finanzas/cheques',
+      tono: 'ambar',
+    })
+  }
+  if (prevision.firmas) {
+    avisos.push({
+      clave: 'firmas',
+      texto: `${prevision.firmas.cantidad} ${prevision.firmas.cantidad === 1 ? 'transferencia esperando' : 'transferencias esperando'} firma`,
+      centavos: prevision.firmas.montoCentavos,
+      href: '/finanzas/transferencias',
+      tono: 'ambar',
+    })
+  }
+  for (const cobro of prevision.cobrosAtrasados) {
+    avisos.push({
+      clave: `atrasado:${cobro.id}`,
+      texto: `Cobro atrasado: ${cobro.cliente} · ${cobro.haceTexto.toLowerCase()}`,
+      centavos: cobro.montoCentavos,
+      tono: 'rojo',
+    })
+  }
+  for (const texto of prevision.chequesADebitar.impactos) {
+    avisos.push({ clave: `impacto:${texto}`, texto, centavos: null, tono: texto.startsWith('Ojo') ? 'rojo' : 'ambar' })
+  }
+  return avisos
+}
+
+export function TarjetaOjo({ prevision }: { prevision: HoyResponse['prevision'] }) {
+  const avisos = armarAvisos(prevision)
   return (
-    <Tarjeta
-      titulo="Transferencias esperando firma"
-      explicacion="Transferencias armadas que todavía no salieron porque falta la firma."
-      total={firmas ? { etiqueta: 'Total', centavos: firmas.montoCentavos } : undefined}
-    >
-      {!firmas ? (
-        <Vacio texto="No hay transferencias esperando firma." />
+    <Tarjeta titulo="Ojo con esto" ayuda="Cosas que conviene mirar hoy: cheques que se debitan, firmas pendientes y cobros atrasados.">
+      {avisos.length === 0 ? (
+        <Vacio texto="Nada para revisar." />
       ) : (
-        <Tabla>
-          <thead>
-            <tr className="text-body-muted border-b border-neutral-100 dark:border-zinc-800">
-              <th className={th}>Pendientes</th>
-              <th className={`${th} text-right`}>Monto</th>
-              <th className={`${th} text-right`}>Acción</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className={filaHover}>
-              <td className={`${td} text-heading font-medium`}>
-                {firmas.cantidad} {firmas.cantidad === 1 ? 'transferencia' : 'transferencias'}
-              </td>
-              <td className={`${td} text-right`}>
-                <Monto centavos={firmas.montoCentavos} className="text-heading font-medium" />
-              </td>
-              <td className={`${td} text-right`}>
-                <Link to="/finanzas/transferencias" className={botonSecundario}>
-                  Ver
-                </Link>
-              </td>
-            </tr>
-          </tbody>
-        </Tabla>
+        <ul className="divide-y divide-neutral-100 dark:divide-zinc-800">
+          {avisos.map((aviso) => (
+            <li key={aviso.clave} className="flex items-start justify-between gap-2 py-1.5 text-xs">
+              <span className={`min-w-0 ${aviso.tono === 'rojo' ? 'text-red-700 dark:text-red-300' : 'text-amber-900 dark:text-amber-200'}`}>
+                {aviso.href ? (
+                  <Link to={aviso.href} className="underline-offset-2 hover:underline">
+                    {aviso.texto}
+                  </Link>
+                ) : (
+                  aviso.texto
+                )}
+              </span>
+              {aviso.centavos != null ? <span className="text-heading shrink-0 tabular-nums">{montoCorto(aviso.centavos)}</span> : null}
+            </li>
+          ))}
+        </ul>
       )}
     </Tarjeta>
   )

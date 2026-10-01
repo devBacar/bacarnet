@@ -9,6 +9,7 @@ import {
 } from '../../components/finanzas/VencimientoAlert'
 import { FinanzasFormField, finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
+import { CompromisosMes } from '../../components/finanzas/hoy/CompromisosMes'
 import { parseMontoEsArACentavos } from '../../components/finanzas/montoEsAr'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas, type FinanzasCuenta } from '../../services/finanzasApi'
@@ -31,13 +32,17 @@ import {
   type MedioPago,
   type PrioridadUrgencia,
 } from '../../services/finanzasAgendaApi'
-import { GRUPOS_COMPROMISO } from '../../services/finanzasCompromisosMesApi'
+import { COMPROMISOS_MES_QUERY_KEY, GRUPOS_COMPROMISO } from '../../services/finanzasCompromisosMesApi'
 import {
   cancelarTransferenciaConfeccionada,
   confeccionarTransferencia,
 } from '../../services/finanzasTransferenciasApi'
 
-type Tab = 'pagos' | 'cobros'
+type Tab = 'pagos' | 'cobros' | 'planilla'
+
+function tabInicial(valor: string | null): Tab {
+  return valor === 'cobros' || valor === 'planilla' ? valor : 'pagos'
+}
 
 const URGENCIA_LABEL: Record<PrioridadUrgencia, string> = {
   alta: 'Alta',
@@ -84,14 +89,22 @@ const MEDIO_LABEL: Record<MedioPago, string> = {
 
 export function FinanzasAgendaPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<Tab>('pagos')
+  const [searchParams] = useSearchParams()
+  const [tab, setTab] = useState<Tab>(() => tabInicial(searchParams.get('tab')))
   const [vistaPagos, setVistaPagos] = useState<CompromisosAgendaVista>('pendientes')
   const [vistaCobros, setVistaCobros] = useState<CobrosAgendaVista>('esperados')
   const [showAlta, setShowAlta] = useState(false)
   const [editando, setEditando] = useState<CompromisoAgendaItem | null>(null)
-  const [searchParams] = useSearchParams()
+  const [pagarDesdePlanilla, setPagarDesdePlanilla] = useState<CompromisoAgendaItem | null>(null)
   const compromisoDestacado = searchParams.get('compromiso')
   const queryClient = useQueryClient()
+
+  /** Pendientes para que "Pagar" en la planilla del mes abra la misma ventana que la lista de pagos. */
+  const { data: pendientesPlanilla = [] } = useQuery({
+    queryKey: ['finanzas', 'agenda', 'compromisos', 'pendientes'],
+    queryFn: () => fetchCompromisosAgenda('pendientes'),
+    enabled: Boolean(user) && tab === 'planilla',
+  })
 
   const { data: compromisosRaw = [], isLoading: loadingPagos } = useQuery({
     queryKey: ['finanzas', 'agenda', 'compromisos', vistaPagos],
@@ -126,7 +139,19 @@ export function FinanzasAgendaPage() {
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
+    void queryClient.invalidateQueries({ queryKey: COMPROMISOS_MES_QUERY_KEY })
+    void queryClient.invalidateQueries({ queryKey: ['finanzas', 'hoy'] })
   }
+
+  const botonTab = (id: Tab, texto: string) => (
+    <button
+      type="button"
+      onClick={() => setTab(id)}
+      className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === id ? 'bg-brand-primary text-white' : 'text-body-muted'}`}
+    >
+      {texto}
+    </button>
+  )
 
   return (
     <>
@@ -139,25 +164,10 @@ export function FinanzasAgendaPage() {
       </header>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
-          <button
-            type="button"
-            onClick={() => setTab('pagos')}
-            className={`rounded-lg px-4 py-2 text-sm font-medium ${
-              tab === 'pagos' ? 'bg-brand-primary text-white' : 'text-body-muted'
-            }`}
-          >
-            Compromisos de pago
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('cobros')}
-            className={`rounded-lg px-4 py-2 text-sm font-medium ${
-              tab === 'cobros' ? 'bg-brand-primary text-white' : 'text-body-muted'
-            }`}
-          >
-            Cobros esperados
-          </button>
+        <div className="inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
+          {botonTab('pagos', 'Compromisos de pago')}
+          {botonTab('cobros', 'Cobros esperados')}
+          {botonTab('planilla', 'Planilla del mes')}
         </div>
         {puedeAlta ? (
           <button
@@ -171,7 +181,15 @@ export function FinanzasAgendaPage() {
         ) : null}
       </div>
 
-      {tab === 'pagos' ? (
+      {tab === 'planilla' ? (
+        <CompromisosMes
+          onPagar={(compromisoId) => {
+            const row = pendientesPlanilla.find((item) => item.id === compromisoId)
+            if (row) setPagarDesdePlanilla(row)
+            else toast('Ese compromiso no está pendiente. Buscalo en Compromisos de pago.')
+          }}
+        />
+      ) : tab === 'pagos' ? (
         <>
           <SubVistaTabs
             options={[
@@ -248,9 +266,23 @@ export function FinanzasAgendaPage() {
         </>
       )}
 
+      {pagarDesdePlanilla ? (
+        <MarcarPagadoModal
+          row={pagarDesdePlanilla}
+          cuentas={cuentas}
+          onClose={() => setPagarDesdePlanilla(null)}
+          onSubmit={async (body) => {
+            await marcarCompromisoPagado(pagarDesdePlanilla.id, body)
+            toast.success('Marcado como pagado')
+            setPagarDesdePlanilla(null)
+            invalidate()
+          }}
+        />
+      ) : null}
+
       {showAlta || editando ? (
         <AltaAgendaModal
-          tab={editando ? 'pagos' : tab}
+          tab={editando || tab === 'planilla' ? 'pagos' : tab}
           compromiso={editando}
           onClose={() => {
             setShowAlta(false)

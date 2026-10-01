@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
 import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
 import { CajaDelDia } from '../../components/finanzas/hoy/CajaDelDia'
-import { CompromisosMes } from '../../components/finanzas/hoy/CompromisosMes'
+import { CompromisosSemana } from '../../components/finanzas/hoy/CompromisosSemana'
 import {
   ComoLoPagasModal,
   EfectivoModal,
@@ -12,16 +12,14 @@ import {
   ReprogramarModal,
   YaLoPagueModal,
 } from '../../components/finanzas/hoy/ModalesHoy'
+import { CobrosHoy, PagosHoy } from '../../components/finanzas/hoy/PagosCobrosHoy'
 import {
+  CuatroNumeros,
   EncabezadoHoy,
   FranjaDemo,
-  TarjetaAtrasados,
-  TarjetaCheques,
-  TarjetaCobros,
-  TarjetaDia,
-  TarjetaFirmas,
-  TarjetaPagos,
-  TarjetaSemana,
+  TarjetaBancos,
+  TarjetaOjo,
+  TarjetaSemanaGrafico,
 } from '../../components/finanzas/hoy/TarjetasHoy'
 import { NuevaTransferenciaModal, type PrecargaTransferenciaHoy } from '../../components/finanzas/NuevaTransferenciaModal'
 import { useAuth } from '../../context'
@@ -36,7 +34,6 @@ import {
   reprogramarCobroHoy,
   reprogramarPagoHoy,
   yaPagueHoy,
-  type CobroAtrasadoHoy,
   type IngresoHoy,
   type PagoHoy,
 } from '../../services/finanzasHoyApi'
@@ -87,7 +84,7 @@ export function FinanzasHoyPage() {
     await queryClient.invalidateQueries({ queryKey: ['finanzas', 'caja-dia'] })
   }
 
-  /** "Pagar" desde la planilla del mes abre la misma ventana que los pagos de hoy. */
+  /** "Pagar" desde la planilla de la semana abre la misma ventana que los pagos de hoy. */
   function pagarDesdePlanilla(compromisoId: string) {
     const pago = data?.pagos.filas.find((fila) => fila.id === compromisoId)
     if (pago) {
@@ -139,7 +136,7 @@ export function FinanzasHoyPage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-4">
+    <div className="mx-auto grid min-w-0 max-w-7xl gap-3">
       {isLoading ? <p className="text-body-muted text-sm">Armando el día…</p> : null}
       {isError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">
@@ -158,57 +155,40 @@ export function FinanzasHoyPage() {
       {data ? (
         <>
           {data.hayDatosDemo ? <FranjaDemo borrando={borrandoDemo} onBorrar={() => void borrarDemo()} /> : null}
-          <EncabezadoHoy data={data} />
-          {/* Sus dos planillas de siempre, llenas solas: la caja del día y los compromisos del mes. */}
-          <CajaDelDia />
-          <CompromisosMes onPagar={pagarDesdePlanilla} />
+          <EncabezadoHoy fecha={data.fecha} />
+          <CuatroNumeros data={data} />
           {data.vacio ? (
-            <>
-              <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100">
-                Hoy no hay nada pendiente.
-              </p>
-              {data.dia.bancos.length > 0 ? (
-                <TarjetaDia dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
-              ) : null}
-            </>
-          ) : (
-            /* Dos columnas desde lg: cada tarjeta ocupa media pantalla y las vacías muestran su línea chica de "No hay…". */
-            <div className="grid items-start gap-4 lg:grid-cols-2">
-              <TarjetaPagos
-                pagos={data.pagos}
-                onPagar={setPagoModo}
-                onYaPague={setYaPague}
-                onReprogramar={setReprogramarPago}
-              />
-              <TarjetaCobros
-                ingresos={data.ingresos.filas}
-                confirmandoId={confirmandoId}
-                onConfirmar={(ingreso) => {
-                  if (!ingreso.movimientoId) return
-                  setConfirmandoId(ingreso.id)
-                  void confirmarCobroHoy(ingreso.id, ingreso.movimientoId)
-                    .then((mensaje) => recargar(mensaje))
-                    .catch((err: unknown) => {
-                      toast.error(err instanceof Error ? err.message : 'No se pudo confirmar')
-                    })
-                    .finally(() => setConfirmandoId(null))
-                }}
-                onEfectivo={setIngresoEfectivo}
-                onReprogramar={setReprogramarIngreso}
-                onReclamar={setReclamo}
-              />
-              <TarjetaDia dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
-              <TarjetaCheques cheques={data.prevision.chequesADebitar} />
-              <TarjetaSemana prevision={data.prevision} />
-              <div className="grid gap-4">
-                <TarjetaAtrasados
-                  cobros={data.prevision.cobrosAtrasados}
-                  onReclamar={(cobro: CobroAtrasadoHoy) => setReclamo(cobro)}
-                />
-                <TarjetaFirmas firmas={data.prevision.firmas} />
-              </div>
-            </div>
-          )}
+            <p className="text-xs text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>
+          ) : null}
+          <CajaDelDia />
+          <div className="grid min-w-0 items-start gap-3 lg:grid-cols-2">
+            <PagosHoy pagos={data.pagos} onPagar={setPagoModo} onYaPague={setYaPague} onReprogramar={setReprogramarPago} />
+            <CobrosHoy
+              ingresos={data.ingresos.filas}
+              atrasados={data.prevision.cobrosAtrasados}
+              confirmandoId={confirmandoId}
+              onConfirmar={(ingreso) => {
+                if (!ingreso.movimientoId) return
+                setConfirmandoId(ingreso.id)
+                void confirmarCobroHoy(ingreso.id, ingreso.movimientoId)
+                  .then((mensaje) => recargar(mensaje))
+                  .catch((err: unknown) => {
+                    toast.error(err instanceof Error ? err.message : 'No se pudo confirmar')
+                  })
+                  .finally(() => setConfirmandoId(null))
+              }}
+              onEfectivo={setIngresoEfectivo}
+              onReprogramar={setReprogramarIngreso}
+              onReclamar={setReclamo}
+              onReclamarAtrasado={setReclamo}
+            />
+          </div>
+          <CompromisosSemana onPagar={pagarDesdePlanilla} />
+          <div className="grid min-w-0 items-start gap-3 lg:grid-cols-3">
+            <TarjetaBancos dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
+            <TarjetaSemanaGrafico prevision={data.prevision} />
+            <TarjetaOjo prevision={data.prevision} />
+          </div>
         </>
       ) : null}
 

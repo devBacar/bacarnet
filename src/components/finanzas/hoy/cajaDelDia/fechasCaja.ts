@@ -47,6 +47,13 @@ export function tituloDia(fechaId: string): string {
   return `${dia} ${numero}`
 }
 
+/** "miércoles 30/09", para el título compacto. */
+export function tituloDiaCorto(fechaId: string): string {
+  const [year, month, day] = fechaId.split('-').map(Number)
+  const dia = new Intl.DateTimeFormat('es-AR', { weekday: 'long' }).format(new Date(year, month - 1, day))
+  return `${dia} ${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`
+}
+
 export function limitesCaja(hoy: string): { minimo: string; maximo: string } {
   return { minimo: sumarDias(hoy, -VENTANA_DIAS), maximo: ultimoDiaHabil(hoy) }
 }

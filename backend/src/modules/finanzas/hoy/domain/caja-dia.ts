@@ -190,6 +190,8 @@ export interface ChequeParaCaja {
 
 export interface ColumnaValoresCaja {
   saldoCentavos: number
+  /** Cuántos cheques suman el saldo en cartera. */
+  cantidadEnCartera: number
   lineas: Array<{ detalle: string; centavos: number; cantidad: number }>
 }
 
@@ -239,6 +241,7 @@ export function armarColumnaCheques(
 ): ColumnaValoresCaja {
   const delTipo = cheques.filter((cheque) => (tipo === 'echeq' ? cheque.tipo === 'echeq' : cheque.tipo !== 'echeq'))
   let saldoCentavos = 0
+  let cantidadEnCartera = 0
   const aportes: MovimientoParaLinea[] = []
 
   for (const cheque of delTipo) {
@@ -251,6 +254,7 @@ export function armarColumnaCheques(
       })
     ) {
       saldoCentavos += cheque.montoCentavos
+      cantidadEnCartera += 1
     }
     if (cheque.direccion === 'recibido' && cheque.fechaRecibido === fecha) {
       aportes.push({
@@ -274,6 +278,7 @@ export function armarColumnaCheques(
 
   return {
     saldoCentavos,
+    cantidadEnCartera,
     lineas: agruparLineasCaja(aportes).map((linea) => ({
       detalle: linea.detalle,
       centavos: linea.centavos,

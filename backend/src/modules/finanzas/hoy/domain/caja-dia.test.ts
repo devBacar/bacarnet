@@ -193,6 +193,7 @@ describe('cheques y efectivo', () => {
       'fisico',
     )
     expect(columna.saldoCentavos).toBe(100)
+    expect(columna.cantidadEnCartera).toBe(1)
     expect(columna.lineas).toEqual([])
   })
 

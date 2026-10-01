@@ -13,6 +13,7 @@ import {
   type CompromisoMesInput,
   type FilaCompromisoMes,
 } from '../../../services/finanzasCompromisosMesApi'
+import { COMPROMISO_VACIO } from './compromisosMes/compromisoVacio'
 import { FormularioCompromiso } from './compromisosMes/FormularioCompromiso'
 import { PlanillaCompromisos } from './compromisosMes/PlanillaCompromisos'
 
@@ -52,20 +53,6 @@ function textoTipoCambio(valor: number): string {
   return valor.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-const VACIO: CompromisoMesInput = {
-  concepto: '',
-  proveedorONombre: '',
-  grupo: 'Otros egresos',
-  moneda: 'ARS',
-  montoCentavos: 0,
-  fechaVencimiento: '',
-  deudaTotalCentavos: null,
-  cuotaNumero: null,
-  cuotaTotal: null,
-  observacion: null,
-  medioPago: 'transferencia',
-}
-
 export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) => void }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -91,7 +78,7 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
   const abrirAlta = (grupo: string) => {
     setFormulario({
       modo: 'alta',
-      inicial: { ...VACIO, grupo, fechaVencimiento: `${mes}-01` },
+      inicial: { ...COMPROMISO_VACIO, grupo, fechaVencimiento: `${mes}-01` },
     })
   }
 

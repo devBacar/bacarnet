@@ -9,7 +9,9 @@ import toast from 'react-hot-toast'
 import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
 import { CashflowSection } from '../../components/finanzas/CashflowSection'
 import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
+import { NuevaTransferenciaModal } from '../../components/finanzas/NuevaTransferenciaModal'
 import { PosicionResumen } from '../../components/finanzas/PosicionResumen'
+import { TransferirDesdeCuentaContext } from '../../components/finanzas/transferirDesdeCuenta'
 import { PositionHistorySection } from '../../components/finanzas/PositionHistorySection'
 
 import { computePosicionPorBanco } from '../../components/finanzas/finanzasAggregates'
@@ -44,6 +46,7 @@ export function FinanzasCuentasPage() {
     moneda: FinanzasMoneda
     bancoNombre: string | null
   } | null>(null)
+  const [transferirCuentaId, setTransferirCuentaId] = useState<string | null>(null)
 
   const canEditManual = hasFinanzasAccess(userProfile)
   /** Líder de Finanzas (permiso manage_finanzas_caja) o super admin; el backend valida lo mismo. */
@@ -123,6 +126,7 @@ export function FinanzasCuentasPage() {
   }
 
   return (
+    <TransferirDesdeCuentaContext.Provider value={setTransferirCuentaId}>
     <>
       <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -169,7 +173,9 @@ export function FinanzasCuentasPage() {
                 arsCentavos={data.totales.arsCentavos}
                 usdCentavos={data.totales.usdCentavos}
                 bancos={posicionPorBanco}
+                cuentas={data.cuentas}
                 onSelect={(moneda, bancoNombre) => setDetalle({ moneda, bancoNombre })}
+                onTransferir={setTransferirCuentaId}
               />
             )}
             <PositionHistorySection
@@ -208,6 +214,13 @@ export function FinanzasCuentasPage() {
         onClose={() => setManualCuenta(null)}
         onSave={(input) => void handleSaveManualSaldo(input)}
       />
+      {transferirCuentaId ? (
+        <NuevaTransferenciaModal
+          cuentaOrigenId={transferirCuentaId}
+          onClose={() => setTransferirCuentaId(null)}
+        />
+      ) : null}
     </>
+    </TransferirDesdeCuentaContext.Provider>
   )
 }

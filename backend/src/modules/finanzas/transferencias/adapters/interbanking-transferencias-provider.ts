@@ -8,11 +8,14 @@ import type {
 import {
   assertCuentaDebitoCompatible,
   resolveInterbankingCreditAccountByCbu,
+  resolveInterbankingCuentaPorCbu,
   resolveInterbankingDebitAccount,
 } from './interbanking-cuenta.routing.js'
 import {
   buildConfeccionRequestUrl,
   buildOwnAccountConfeccionBodyV2,
+  buildSupplierConfeccionBodyV2,
+  buildThirdPartyConfeccionBodyV2,
   type BuildOwnAccountConfeccionInput,
   type InterbankingConfeccionCommandOwnAccountV2,
   formatInterbankingAmountFromCentavos,
@@ -31,6 +34,13 @@ export interface InterbankingConfeccionPostResult {
   responseBody: unknown
   responseText: string
   parsed: ReturnType<typeof parseInterbankingConfeccionResponse>
+}
+
+/** Corte de seguridad: sin esta variable no sale ninguna confección real a Interbanking. */
+function assertTransferenciasRealesHabilitadas(): void {
+  if (process.env.INTERBANKING_TRANSFER_ALLOW_REAL !== 'true') {
+    throw new Error('Transferencias reales deshabilitadas: falta INTERBANKING_TRANSFER_ALLOW_REAL=true')
+  }
 }
 
 function requestDateArgentina(): string {
@@ -70,6 +80,7 @@ export class InterbankingTransferenciasProvider implements TransferenciasDataPro
     tipo: TransferenciaTipo,
     body: InterbankingConfeccionCommandOwnAccountV2 | Record<string, unknown>,
   ): Promise<InterbankingConfeccionPostResult> {
+    assertTransferenciasRealesHabilitadas()
     const path = INTERBANKING_CONFECTION_PATH_BY_TIPO[tipo]
     if (!path) {
       throw new Error(`Tipo de transferencia sin endpoint v2 de confección: ${tipo}`)
@@ -120,11 +131,12 @@ export class InterbankingTransferenciasProvider implements TransferenciasDataPro
   }
 
   async confeccionarLote(items: ConfeccionTransferenciaItem[]): Promise<ConfeccionTransferenciaResult> {
+    assertTransferenciasRealesHabilitadas()
     if (items.length !== 1) {
       throw new Error('Confección Interbanking v2: por ahora solo un ítem por lote.')
     }
     const item = items[0]!
-    if (item.tipo !== 'cuentas_propias') {
+    if (item.tipo !== 'cuentas_propias' && item.tipo !== 'terceros' && item.tipo !== 'proveedores') {
       throw new Error(`Confección Interbanking v2 no implementada para tipo ${item.tipo}`)
     }
 
@@ -133,26 +145,57 @@ export class InterbankingTransferenciasProvider implements TransferenciasDataPro
     assertCuentaDebitoCompatible(cuenta.data)
 
     const debit = resolveInterbankingDebitAccount(cuenta.id)
-    const credit = resolveInterbankingCreditAccountByCbu(item.cuentaCreditoCbu)
+    const confectionId = generateInterbankingConfeccionId()
+    const requestDate = requestDateArgentina()
+    const amountPesosString = formatInterbankingAmountFromCentavos(item.montoCentavos)
 
-    const post = await this.confeccionarCuentasPropiasV2({
-      confectionId: generateInterbankingConfeccionId(),
-      requestDate: requestDateArgentina(),
-      amountPesosString: formatInterbankingAmountFromCentavos(item.montoCentavos),
-      debit,
-      credit,
+    let post: InterbankingConfeccionPostResult
+    if (item.tipo === 'cuentas_propias') {
+      const credit = resolveInterbankingCreditAccountByCbu(item.cuentaCreditoCbu)
+      post = await this.confeccionarCuentasPropiasV2({
+        confectionId,
+        requestDate,
+        amountPesosString,
+        debit,
+        credit,
+      })
+    } else {
+      const credit = resolveInterbankingCuentaPorCbu(item.cuentaCreditoCbu, item.tipoCuenta)
+      const comun = {
+        confectionId,
+        requestDate,
+        amountPesosString,
+        debit,
+        credit,
+        comments: item.concepto,
+        cuit: item.destinoCuit,
+      }
+      const body =
+        item.tipo === 'terceros'
+          ? buildThirdPartyConfeccionBodyV2({
+              ...comun,
+              concept: item.codigoConcepto,
+              disclaimerAccepted: item.disclaimerAceptado === true,
+            })
+          : buildSupplierConfeccionBodyV2(comun)
+      post = await this.postConfeccionV2(item.tipo, body)
+    }
+
+    const conId = (result: ConfeccionTransferenciaResult): ConfeccionTransferenciaResult => ({
+      ...result,
+      confectionId,
     })
 
     if (post.httpStatus >= 400 && post.parsed.failedCodes.length === 0) {
-      return {
+      return conId({
         operationId: '',
         processId: null,
         estadoInmediato: 'confeccionada',
         erroresCodigos: [`interbanking.http.${post.httpStatus}`],
-      }
+      })
     }
 
-    return mapPostToProviderResult(post)
+    return conId(mapPostToProviderResult(post))
   }
 
   async consultarProceso(_processId: string): Promise<ConsultaProcesoResult> {

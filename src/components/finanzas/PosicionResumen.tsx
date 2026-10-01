@@ -1,7 +1,8 @@
-import type { FinanzasMoneda, FinanzasSemaforo } from '../../services/finanzasApi'
+import type { FinanzasCuenta, FinanzasMoneda, FinanzasSemaforo } from '../../services/finanzasApi'
 import { computeDisponibleTotal, type PosicionPorBancoRow } from './finanzasAggregates'
 import { formatMoneyCentavos } from './formatMoney'
 import { PosicionMonto } from './PosicionMonto'
+import { ArrowRightLeft } from 'lucide-react'
 
 const SEMAFORO_COLOR: Record<FinanzasSemaforo, string> = {
   verde: 'bg-emerald-500',
@@ -19,11 +20,26 @@ interface PosicionResumenProps {
   arsCentavos: number
   usdCentavos: number
   bancos: PosicionPorBancoRow[]
+  cuentas?: FinanzasCuenta[]
   onSelect: (moneda: FinanzasMoneda, bancoNombre: string | null) => void
+  onTransferir?: (cuentaOrigenId: string) => void
+}
+
+function cuentaCcEnPesos(cuentas: FinanzasCuenta[], bancoNombre: string): FinanzasCuenta | undefined {
+  return cuentas.find(
+    (cuenta) => cuenta.bancoNombre === bancoNombre && cuenta.tipo === 'CC' && cuenta.moneda === 'ARS',
+  )
 }
 
 /** Posición consolidada y por banco en una sola tarjeta. Cada monto abre el detalle de cuentas. */
-export function PosicionResumen({ arsCentavos, usdCentavos, bancos, onSelect }: PosicionResumenProps) {
+export function PosicionResumen({
+  arsCentavos,
+  usdCentavos,
+  bancos,
+  cuentas = [],
+  onSelect,
+  onTransferir,
+}: PosicionResumenProps) {
   const celda =
     '-mx-1.5 rounded-lg px-1.5 py-1 text-left transition hover:bg-neutral-100 dark:hover:bg-zinc-800'
   const disponible = computeDisponibleTotal(bancos)
@@ -79,10 +95,17 @@ export function PosicionResumen({ arsCentavos, usdCentavos, bancos, onSelect }: 
                 Disponible
               </th>
               <th className="py-1.5 font-medium">Dólares</th>
+              {onTransferir ? (
+                <th className="py-1.5">
+                  <span className="sr-only">Transferir</span>
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
-            {bancos.map((banco) => (
+            {bancos.map((banco) => {
+              const cuentaCc = onTransferir ? cuentaCcEnPesos(cuentas, banco.bancoNombre) : undefined
+              return (
               <tr
                 key={banco.bancoNombre}
                 className="border-b border-neutral-100 last:border-b-0 dark:border-zinc-800"
@@ -135,8 +158,24 @@ export function PosicionResumen({ arsCentavos, usdCentavos, bancos, onSelect }: 
                     <PosicionMonto centavos={banco.usdCentavos} moneda="USD" size="sm" />
                   </button>
                 </td>
+                {onTransferir ? (
+                  <td className="py-1.5 pl-2 text-right align-middle">
+                    {cuentaCc ? (
+                      <button
+                        type="button"
+                        aria-label={`Transferir desde ${banco.bancoNombre}`}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#c5d4e4] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1e3a5f] transition hover:bg-[#e8eef5] dark:border-[#5b8fd4]/40 dark:bg-zinc-900 dark:text-[#9dbde8] dark:hover:bg-zinc-800"
+                        onClick={() => onTransferir(cuentaCc.id)}
+                      >
+                        <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                        <span className="hidden sm:inline">Transferir</span>
+                      </button>
+                    ) : null}
+                  </td>
+                ) : null}
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       ) : null}

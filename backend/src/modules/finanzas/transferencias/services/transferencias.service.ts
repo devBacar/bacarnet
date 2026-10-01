@@ -12,12 +12,14 @@ import {
   getFinanzasTransferenciasProvider,
   resolveFinanzasTransferenciasProviderMode,
 } from '../adapters/transferencias-provider.factory.js'
+import { presentarEstadoInterbanking } from '../domain/estado-interbanking.js'
 import { translateInterbankingErrors } from '../domain/transferencia.errors.js'
 import type { TransferenciaEstado, TransferenciaTipo } from '../domain/transferencia.types.js'
 import {
   appendTransferenciaHistorial,
   cancelarTransferenciaYReabrirCompromiso,
   createTransferenciaWithHistorial,
+  marcarTransferenciaCancelada,
   getTransferenciaDocument,
   listTransferenciaHistorial,
   listTransferenciasConfeccionadas,
@@ -147,6 +149,7 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
       id: transferenciaId,
       doc: {
         compromisoPagoId,
+        origen: 'compromiso',
         tipo: transferenciaTipo,
         cuentaDebitoId,
         cuentaCreditoCbu,
@@ -189,6 +192,7 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
         id: transferenciaId,
         doc: {
           compromisoPagoId,
+          origen: 'compromiso',
           tipo: transferenciaTipo,
           cuentaDebitoId,
           cuentaCreditoCbu,
@@ -226,6 +230,7 @@ export async function confeccionarTransferenciaDesdeCompromiso(input: {
     id: transferenciaId,
     doc: {
       compromisoPagoId,
+      origen: 'compromiso',
       tipo: transferenciaTipo,
       cuentaDebitoId,
       cuentaCreditoCbu,
@@ -299,7 +304,23 @@ export async function cancelarTransferenciaConfeccionada(input: {
     )
   }
 
-  const compromiso = await getCompromisoDocument(row.data.compromisoPagoId)
+  const compromisoPagoId = row.data.compromisoPagoId?.trim() ?? ''
+  if (!compromisoPagoId) {
+    await marcarTransferenciaCancelada({
+      transferenciaId,
+      estadoAnterior: row.data.estado,
+      nota: NOTA_CANCELACION_MANUAL_BACARNET,
+    })
+    const updatedDirecta = await getTransferenciaDocument(transferenciaId)
+    if (!updatedDirecta) throw new TransferenciaCancelacionError('Transferencia no encontrada', 404)
+    return {
+      transferencia: serializeTransferencia(transferenciaId, updatedDirecta.data),
+      compromiso: null,
+      nota: NOTA_CANCELACION_MANUAL_BACARNET,
+    }
+  }
+
+  const compromiso = await getCompromisoDocument(compromisoPagoId)
   if (!compromiso) throw new TransferenciaCancelacionError('Compromiso no encontrado', 404)
   if (compromiso.transferenciaConfeccionadaId !== transferenciaId) {
     throw new TransferenciaCancelacionError(
@@ -322,7 +343,7 @@ export async function cancelarTransferenciaConfeccionada(input: {
 
   await cancelarTransferenciaYReabrirCompromiso({
     transferenciaId,
-    compromisoId: row.data.compromisoPagoId,
+    compromisoId: compromisoPagoId,
     estadoAnteriorTransferencia: row.data.estado,
     estadoAnteriorCompromiso: compromiso.estado,
     nota: NOTA_CANCELACION_MANUAL_BACARNET,
@@ -331,12 +352,12 @@ export async function cancelarTransferenciaConfeccionada(input: {
 
   const updated = await getTransferenciaDocument(transferenciaId)
   if (!updated) throw new TransferenciaCancelacionError('Transferencia no encontrada', 404)
-  const compromisoActualizado = await getCompromisoDocument(row.data.compromisoPagoId)
+  const compromisoActualizado = await getCompromisoDocument(compromisoPagoId)
 
   return {
     transferencia: serializeTransferencia(transferenciaId, updated.data),
     compromiso: {
-      id: row.data.compromisoPagoId,
+      id: compromisoPagoId,
       estado: compromisoActualizado?.estado ?? 'pendiente',
       transferenciaConfeccionadaId: compromisoActualizado?.transferenciaConfeccionadaId ?? null,
     },
@@ -464,7 +485,13 @@ export async function listTransferenciasApi(filters: TransferenciasListFilters) 
   ])
   const cuentasPorId = new Map(cuentas.map((row) => [row.id, row.data]))
 
-  const compromisoIds = [...new Set(rows.map((row) => row.data.compromisoPagoId).filter(Boolean))]
+  const compromisoIds = [
+    ...new Set(
+      rows
+        .map((row) => row.data.compromisoPagoId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]
   const compromisos = await Promise.all(
     compromisoIds.map(async (id) => [id, await getCompromisoDocument(id)] as const),
   )
@@ -496,24 +523,36 @@ export async function listTransferenciasApi(filters: TransferenciasListFilters) 
       const debitoLabel = debito
         ? etiquetaCuenta(debito.bancoNombre, debito.tipo)
         : 'Cuenta de débito'
-      const compromiso = compromisoPorId.get(row.data.compromisoPagoId) ?? null
-      let destinoLabel = nombreDestinoNoPropio(row.data.tipo, compromiso)
+      const compromiso = row.data.compromisoPagoId
+        ? (compromisoPorId.get(row.data.compromisoPagoId) ?? null)
+        : null
+      let destinoLabel = row.data.destinoNombre?.trim() || nombreDestinoNoPropio(row.data.tipo, compromiso)
       if (row.data.tipo === 'cuentas_propias') {
         const creditoId = findCuentaIdByCbu(row.data.cuentaCreditoCbu)
         const credito = creditoId ? cuentasPorId.get(creditoId) : undefined
         destinoLabel = credito
           ? etiquetaCuenta(credito.bancoNombre, credito.tipo)
-          : 'Cuenta propia'
+          : row.data.destinoNombre?.trim() || 'Cuenta propia'
       }
+      const presentado = presentarEstadoInterbanking({
+        estado: row.data.estadoInterbanking,
+        fechaSolicitud: row.data.fechaSolicitudInterbanking ?? diaArgentina(row.data.fechaConfeccion),
+      })
       return {
         id: row.id,
         compromisoPagoId: row.data.compromisoPagoId,
+        origen: row.data.origen ?? (row.data.compromisoPagoId ? 'compromiso' : 'directa'),
         tipo: row.data.tipo,
+        referencia: row.data.referencia ?? null,
         estado: row.data.estado,
         montoCentavos: row.data.montoCentavos,
         concepto: row.data.concepto,
         fechaConfeccion: agendaTimestampToIso(row.data.fechaConfeccion),
         operationId: row.data.operationId,
+        estadoInterbanking: row.data.estadoInterbanking ?? null,
+        estadoInterbankingRotulo: presentado?.rotulo ?? null,
+        estadoInterbankingTono: presentado?.tono ?? null,
+        estadoInterbankingActualizadoAt: agendaTimestampToIso(row.data.estadoInterbankingActualizadoAt),
         cuentaDebitoId: row.data.cuentaDebitoId,
         direccion: `${debitoLabel} → ${destinoLabel}`,
         erroresInterbanking: row.data.erroresInterbanking,

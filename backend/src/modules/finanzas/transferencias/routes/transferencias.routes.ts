@@ -12,6 +12,13 @@ import {
   getTransferenciaHistorialApi,
   listTransferenciasApi,
 } from '../services/transferencias.service.js'
+import { confeccionarTransferenciaDirecta } from '../services/confeccion-directa.service.js'
+import { actualizarEstadosTransferencias } from '../services/actualizar-estados.service.js'
+import {
+  esErrorCandadoTransferencias,
+  MENSAJE_TRANSFERENCIAS_REALES_DESHABILITADAS,
+  TransferenciaHttpError,
+} from '../domain/confeccion-directa.rules.js'
 
 export const finanzasTransferenciasRouter = Router()
 
@@ -55,6 +62,47 @@ finanzasTransferenciasRouter.post('/confeccionar', async (req, res) => {
     console.error('[finanzas/transferencias] confeccionar', err)
     const message = err instanceof Error ? err.message : 'No se pudo confeccionar la transferencia'
     res.status(400).json({ error: message })
+  }
+})
+
+finanzasTransferenciasRouter.post('/confeccionar-directa', async (req, res) => {
+  try {
+    const result = await confeccionarTransferenciaDirecta({
+      actorUid: req.authedUser!.uid,
+      body: req.body as Record<string, unknown>,
+    })
+    if (!result.ok) {
+      res.status(422).json({
+        error: result.errores[0] ?? 'No se pudo confeccionar la transferencia',
+        errores: result.errores,
+        transferencia: result.transferencia,
+      })
+      return
+    }
+    res.status(result.idempotente ? 200 : 201).json(result)
+  } catch (err) {
+    console.error('[finanzas/transferencias] confeccionar-directa', err)
+    if (err instanceof TransferenciaHttpError) {
+      res.status(err.status).json(err.payload)
+      return
+    }
+    if (esErrorCandadoTransferencias(err)) {
+      res.status(503).json({ error: MENSAJE_TRANSFERENCIAS_REALES_DESHABILITADAS })
+      return
+    }
+    const message = err instanceof Error ? err.message : 'No se pudo confeccionar la transferencia'
+    res.status(400).json({ error: message })
+  }
+})
+
+finanzasTransferenciasRouter.post('/actualizar-estados', async (_req, res) => {
+  try {
+    const result = await actualizarEstadosTransferencias({ origen: 'usuario' })
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/transferencias] actualizar-estados', err)
+    const message = err instanceof Error ? err.message : 'No se pudieron actualizar los estados'
+    res.status(502).json({ error: message })
   }
 })
 

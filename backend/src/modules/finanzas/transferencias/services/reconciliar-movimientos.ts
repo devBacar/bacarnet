@@ -203,12 +203,17 @@ async function efectivizarConMovimiento(input: {
       throw new ReconciliacionError('El movimiento ya está reservado', 409, 'ocupado')
     }
 
-    const compromisoRef = adminDb().collection(COMPROMISOS_COLLECTION).doc(transferencia.compromisoPagoId)
-    const compromisoSnap = await tx.get(compromisoRef)
-    if (!compromisoSnap.exists) {
+    const compromisoId = transferencia.compromisoPagoId?.trim() ?? ''
+    const compromisoRef = compromisoId
+      ? adminDb().collection(COMPROMISOS_COLLECTION).doc(compromisoId)
+      : null
+    const compromisoSnap = compromisoRef ? await tx.get(compromisoRef) : null
+    if (compromisoRef && !compromisoSnap?.exists) {
       throw new ReconciliacionError('Compromiso de pago no encontrado', 409, 'compromiso')
     }
-    const compromiso = compromisoSnap.data() as CompromisoPagoDocument
+    const compromiso = compromisoSnap?.exists
+      ? (compromisoSnap.data() as CompromisoPagoDocument)
+      : null
 
     tx.update(transferenciaRef, {
       estado: 'efectivizada',
@@ -227,7 +232,7 @@ async function efectivizarConMovimiento(input: {
     })
     tx.update(movimientoRef, { reservadoPorTransferenciaId: input.transferenciaId })
 
-    if (compromiso.estado !== 'pagado') {
+    if (compromiso && compromisoRef && compromiso.estado !== 'pagado') {
       tx.update(compromisoRef, {
         estado: 'pagado',
         medioPago: 'transferencia',

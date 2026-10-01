@@ -1,0 +1,865 @@
+openapi: 3.0.0
+info:
+  title: Transferencias
+  description: |-
+    Obtener listado con el detalle de las transferencias. Podrá visualizar las transferencias de las cuentas con las que opera en el sistema. Tanto ejecutadas como recibidas (recibidas mediante el sistema Interbanking, aquellas transferencias recibidas desde otros canales como Homebanking no se visualizan). Visualización de transferencias programadas. Obteniendo información en sus estados, fecha, importe, etc.
+
+    <p><strong>Posibles estados de la transferencia:</strong></p>
+    <table>
+      <thead>
+        <tr><th>Estado</th><th>Descripción</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Confeccionada</td><td>La transferencia fue creada, falta que sea autorizada y enviada.</td></tr>
+        <tr><td>En autorización</td><td>Autorizada por alguno de los firmantes, falta la autorización de uno o mas firmantes. Luego debe ser enviada.</td></tr>
+        <tr><td>Autorizada</td><td>La transferencia fue Autorizada por los firmantes, falta que sea enviada.</td></tr>
+        <tr><td>Enviada banco débito</td><td>Transferencia enviada al banco de débito, el banco debe procesarla.</td></tr>
+        <tr><td>Enviada banco crédito</td><td>Las transferencias en este estado deben tomarse como pagadas/finalizadas luego del cierre del día (19hs aprox.). Por ejemplo: si una transferencia con Fecha de solicitud 01/12/26 queda en estado Enviada banco crédito (y no cambia de estado), puede considerarse como pagada (estado final) a partir de las 19hs del día de la Fecha de solicitud.</td></tr>
+        <tr><td>Ejecutada</td><td><strong>ESTADO FINAL:</strong> La transferencia finalizó con éxito.</td></tr>
+        <tr><td>Recibida por la red</td><td>Transferencia enviada con fecha diferida, se enviará al banco de débito el día de la fecha de solicitud.</td></tr>
+        <tr><td>Rechazada banco débito</td><td><strong>ESTADO FINAL:</strong> La transferencia fue rechazada.</td></tr>
+        <tr><td>Rechazada banco crédito</td><td><strong>ESTADO FINAL:</strong> La transferencia fue rechazada.</td></tr>
+        <tr><td>Rechazada por la red</td><td><strong>ESTADO FINAL:</strong> La transferencia fue rechazada.</td></tr>
+        <tr><td>Anulada</td><td><strong>ESTADO FINAL:</strong> La transferencia fue anulada por algún operador de la empresa.</td></tr>
+      </tbody>
+    </table>
+  contact:
+    name: Interbanking
+    url: https://interbanking.com.ar/
+    email: consultasapi@interbanking.com.ar
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.htmlmp.openapi.extensions.smallrye.openapi=3.0.0
+  version: v1.3.0
+  x-ibm-name: transferencias
+servers:
+  - url: https://api-gw.interbanking.com.ar/api/prod/v1
+tags:
+  - name: Transferencias
+paths:
+  /transfers/details:
+    get:
+      tags:
+        - Transferencias
+      summary: Obtener listado con el detalle de las transferencias
+      description: Podrá visualizar las transferencias de las cuentas con las que opera en el sistema. Tanto ejecutadas como recibidas (recibidas mediante el sistema Interbanking, aquellas transferencias recibidas desde otros canales como Homebanking no se visualizan).
+      parameters:
+        - name: Accept
+          in: header
+          required: false
+          schema:
+            type: string
+            default: application/json
+        - name: credit-account-number
+          in: query
+          description: Número de cuenta bancaria donde se realizó el crédito de la transferencia.
+          schema:
+            type: string
+            example: '5470496471974824'
+        - name: credit-account-type
+          in: query
+          description: |-
+            Tipo de cuenta.
+            * CA -> Caja de Ahorro
+            * CC -> Cuenta Corriente
+          schema:
+            type: string
+            enum:
+              - CC
+              - CA
+        - name: credit-bank-number
+          in: query
+          description: Número de banco de 3 dígitos asignados por el Banco Central de la Republica Argentina (BCRA).
+          schema:
+            type: string
+            pattern: ^[0-9]{3}$
+            example: '852'
+        - name: credit-currency
+          in: query
+          description: |-
+            Moneda de la cuenta.
+            * ARS -> Pesos
+            * USD -> Dolares
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+        - name: customer-id
+          in: query
+          description: |-
+            Código de abonado asignado por Interbanking.
+            Se obtiene desde Administración-> ABM | Configuración Datos -> Datos de Empresa.
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Z][0-9]{5}[A-Z]$
+            example: I02346W
+        - name: date-since
+          in: query
+          description: |-
+            Fecha inicial para la búsqueda de transferencias recibidas y emitidas.
+            Se podrá consultar hasta 180 días en periodos de 60 días por consulta. Formato ISO 8601: yyyy-mm-dd.
+            Default: fecha del día - 7
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-02-14'
+        - name: date-until
+          in: query
+          description: |-
+            Fecha final para la búsqueda de transferencias recibidas y emitidas.
+            Se podrá consultar hasta 180 días en periodos de 60 días por consulta. Formato ISO 8601: yyyy-mm-dd.
+            Default: fecha del día - 1
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-02-20'
+        - name: debit-account-number
+          in: query
+          description: Número de cuenta bancaria donde se realizó el débito de la transferencia.
+          schema:
+            type: string
+            example: '6334410436122142'
+        - name: debit-account-type
+          in: query
+          description: |-
+            Tipo de cuenta.
+            * CA -> Caja de Ahorro
+            * CC -> Cuenta Corriente
+          schema:
+            type: string
+            enum:
+              - CC
+              - CA
+        - name: debit-bank-number
+          in: query
+          description: Número de banco de 3 dígitos asignados por el Banco Central de la Republica Argentina (BCRA).
+          schema:
+            type: string
+            pattern: ^[0-9]{3}$
+            example: '017'
+        - name: debit-currency
+          in: query
+          description: |-
+            Moneda de la cuenta.
+            * ARS -> Pesos
+            * USD -> Dolares
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+        - name: limit
+          in: query
+          description: 'Cantidad de registros de transferencias a retornar. Default: 100'
+          schema:
+            type: string
+            default: 100
+            example: '100'
+        - name: page
+          in: query
+          description: 'Página sobre la cual retornar los "n" registros. Default: 0'
+          schema:
+            type: string
+            default: 0
+            example: '0'
+      responses:
+        '200':
+          description: Lista de detalles de transferencia encontrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaDetalleTransferenciaDTO'
+              example:
+                general_data:
+                  bank_number: string
+                  row_date: '2022-03-10T12:15:50'
+                  date_since: '2022-03-10'
+                  date_until: '2022-03-10'
+                  currency: USD
+                  account_number: string
+                  control_code: string
+                  limit: 0
+                  account_type: CC
+                  total_rows: 0
+                  page: 0
+                  denomination: string
+                transfers:
+                  - transfer_id: 0
+                    transaction_number: 0
+                    request_date: '2022-03-10T12:15:50'
+                    transfer_type_code: string
+                    transfer_type_description: string
+                    credit_account:
+                      bank_name: string
+                    debit_account:
+                      bank_name: string
+                    account_label: string
+                    amount: 0
+                    currency: string
+                    reference_number: string
+                    lot_number: 0
+                    payment_number: string
+                    status: string
+                    client: string
+                    comments: string
+                    transfer_comments: string
+                    statement_consolidated: string
+                    unified_send: string
+                    direct_import: string
+                    same_owner: string
+                    internal_client_id: string
+                    addenda: {}
+        '400':
+          description: |-
+            Request inválido
+            1051: Request param no esperado
+            1041: No se admiten caracteres especiales
+            0101: Cliente o cuit obligatorio, o datos no actualizados
+            1040: La Fecha no es válida
+            1044: El campo account-type no es válido
+            0002: El campo currency no es válida
+            1006: El campo page/limit debe ser de tipo numérico
+            1038: El campo page debe ser mayor o igual a cero
+            1022: El campo limit debe ser mayor a cero
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+              example:
+                message: string
+                code: string
+                status: 0
+                timestamp: '2022-03-10T12:15:50'
+        '404':
+          description: |-
+            1048: Fecha final no puede ser anterior a la fecha inicial
+            1049: La fecha no puede ser más antigua que un limite de dias
+            1042: Cliente no encontrado
+            1043: Cuenta no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+        '500':
+          description: '0000: Error interno'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+              example:
+                message: string
+                code: string
+                status: 0
+                timestamp: '2022-03-10T12:15:50'
+  /transfers/vouchers:
+    get:
+      tags:
+        - Transferencias
+      summary: Obtener listado de comprobantes de transferencias
+      description: Podrá visualizar los datos correspondientes a las transferencias ejecutadas de las cuentas con las que opera en el sistema. Con esta información se puede realizar la confección de los comprobantes.
+      parameters:
+        - name: Accept
+          in: header
+          required: false
+          schema:
+            type: string
+            default: application/json
+        - name: credit-account-number
+          in: query
+          description: Número de cuenta bancaria donde se realizó el crédito de la transferencia.
+          schema:
+            type: string
+            example: '5470496471974824'
+        - name: credit-account-type
+          in: query
+          description: |-
+            Tipo de cuenta.
+            * CA -> Caja de Ahorro
+            * CC -> Cuenta Corriente
+          schema:
+            type: string
+            enum:
+              - CC
+              - CA
+        - name: credit-bank-number
+          in: query
+          description: Número de banco de 3 dígitos asignados por el Banco Central de la Republica Argentina (BCRA).
+          schema:
+            type: string
+            pattern: ^[0-9]{3}$
+            example: '852'
+        - name: credit-currency
+          in: query
+          description: |-
+            Moneda de la cuenta.
+            * ARS -> Pesos
+            * USD -> Dolares
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+        - name: customer-id
+          in: query
+          description: |-
+            Código de abonado asignado por Interbanking.
+            Se obtiene desde Administración-> ABM | Configuración Datos -> Datos de Empresa.
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Z][0-9]{5}[A-Z]$
+            example: I02346W
+        - name: date-since
+          in: query
+          description: |-
+            Fecha inicial para la búsqueda de transferencias recibidas y emitidas.
+            Se podrá consultar hasta 180 días en periodos de 60 días por consulta. Formato ISO 8601: yyyy-mm-dd.
+            Default: fecha del día - 7
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-02-14'
+        - name: date-until
+          in: query
+          description: |-
+            Fecha final para la búsqueda de transferencias recibidas y emitidas.
+            Se podrá consultar hasta 180 días en periodos de 60 días por consulta. Formato ISO 8601: yyyy-mm-dd.
+            Default: fecha del día - 1
+          required: true
+          schema:
+            type: string
+            format: date
+            example: '2026-02-20'
+        - name: debit-account-number
+          in: query
+          description: Número de cuenta bancaria donde se realizó el débito de la transferencia.
+          schema:
+            type: string
+            example: '6334410436122142'
+        - name: debit-account-type
+          in: query
+          description: |-
+            Tipo de cuenta.
+            * CA -> Caja de Ahorro
+            * CC -> Cuenta Corriente
+          schema:
+            type: string
+            enum:
+              - CC
+              - CA
+        - name: debit-bank-number
+          in: query
+          description: Número de banco de 3 dígitos asignados por el Banco Central de la Republica Argentina (BCRA).
+          schema:
+            type: string
+            pattern: ^[0-9]{3}$
+            example: '017'
+        - name: debit-currency
+          in: query
+          description: |-
+            Moneda de la cuenta.
+            * ARS -> Pesos
+            * USD -> Dolares
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+        - name: limit
+          in: query
+          description: 'Cantidad de registros de transferencias a retornar. Default: 100'
+          schema:
+            type: string
+            default: 100
+            example: '100'
+        - name: page
+          in: query
+          description: 'Página sobre la cual retornar los "n" registros. Default: 0'
+          schema:
+            type: string
+            default: 0
+            example: '0'
+      responses:
+        '200':
+          description: Lista de comprobantes de transferencia encontrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaComprobanteTransferenciaDTO'
+              example:
+                general_data:
+                  bank_number: string
+                  row_date: '2022-03-10T12:15:50'
+                  date_since: '2022-03-10'
+                  date_until: '2022-03-10'
+                  currency: USD
+                  account_number: string
+                  control_code: string
+                  limit: 0
+                  account_type: CC
+                  total_rows: 0
+                  page: 0
+                  denomination: string
+                transfers:
+                  - request_date: '2022-03-10T12:15:50'
+                    transfer_type_description: string
+                    transfer_type_code: string
+                    transfer_id: 0
+                    network_number: 0
+                    amount: 0
+                    currency: string
+        '400':
+          description: |-
+            Request inválido
+            1051: Request param no esperado
+            1041: No se admiten caracteres especiales
+            0101: Cliente o cuit obligatorio, o datos no actualizados
+            1040: La Fecha no es válida
+            1044: El campo account-type no es válido
+            0002: El campo currency no es válida
+            1006: El campo page/limit debe ser de tipo numérico
+            1038: El campo page debe ser mayor o igual a cero
+            1022: El campo limit debe ser mayor a cero
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+              example:
+                message: string
+                code: string
+                status: 0
+                timestamp: '2022-03-10T12:15:50'
+        '404':
+          description: |-
+            1048: Fecha final no puede ser anterior a la fecha inicial
+            1049: La fecha no puede ser más antigua que un limite de dias
+            1042: Cliente no encontrado
+            1043: Cuenta no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+        '500':
+          description: '0000: Error interno'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+              example:
+                message: string
+                code: string
+                status: 0
+                timestamp: '2022-03-10T12:15:50'
+components:
+  schemas:
+    RespuestaDetalleTransferenciaDTO:
+      type: object
+      required:
+        - general_data
+        - transfers
+      properties:
+        general_data:
+          description: Datos generales de la consulta
+          $ref: '#/components/schemas/DatosGeneralesDTO'
+        transfers:
+          description: Listado de transferencias
+          type: array
+          items:
+            $ref: '#/components/schemas/DetalleTransferenciaDTO'
+    DatosGeneralesDTO:
+      type: object
+      required:
+        - date_since
+        - date_until
+        - control_code
+        - limit
+        - total_rows
+        - page
+        - debit_bank_number
+        - debit_currency
+        - debit_account_number
+        - debit_account_type
+        - credit_bank_number
+        - credit_currency
+        - credit_account_number
+        - credit_account_type
+      properties:
+        date_since:
+          description: Fecha inicial de la consulta. Formato AAAA-MM-DD
+          $ref: '#/components/schemas/LocalDate'
+        date_until:
+          description: Fecha final de la consulta. Formato AAAA-MM-DD
+          $ref: '#/components/schemas/LocalDate'
+        control_code:
+          description: Código interno de la consulta
+          type: string
+        limit:
+          format: int32
+          description: Cantidad de registros devuelto por página
+          type: integer
+        total_rows:
+          format: int64
+          description: Cantidad de total de registros de la consulta
+          type: integer
+        page:
+          format: int32
+          description: Número de página de la consulta
+          type: integer
+        debit_bank_number:
+          description: Código de Banco según el BCRA de la cuenta débito
+          type: string
+          format: ^[0-9]{3}$
+        debit_currency:
+          description: Moneda de la cuenta débito
+          type: string
+          enum:
+            - ARS
+            - USD
+        debit_account_number:
+          description: Número de la cuenta débito
+          type: string
+        debit_account_type:
+          description: Tipo de la cuenta débito
+          type: string
+          enum:
+            - CA
+            - CC
+        credit_bank_number:
+          description: Código de Banco según el BCRA de la cuenta crédito
+          type: string
+          format: ^[0-9]{3}$
+        credit_currency:
+          description: Moneda de la cuenta crédito
+          type: string
+          enum:
+            - ARS
+            - USD
+        credit_account_number:
+          description: Número de la cuenta crédito
+          type: string
+        credit_account_type:
+          description: Tipo de la cuenta crédito
+          type: string
+          enum:
+            - CA
+            - CC
+    DetalleTransferenciaDTO:
+      type: object
+      required:
+        - transfer_id
+        - transaction_number
+        - request_date
+        - transfer_type_code
+        - transfer_type_description
+        - debit_account
+        - credit_account
+        - account_label
+        - amount
+        - currency
+        - refence_number
+        - lot_number
+        - comments
+      properties:
+        addenda:
+          description: Addenda relacionada
+          $ref: '#/components/schemas/AddendaDTO'
+        transfer_id:
+          format: int32
+          description: Número de orden de transferencia
+          type: integer
+        transaction_number:
+          format: int32
+          description: Nro. de transacción
+          type: integer
+        request_date:
+          description: Fecha de solicitud (AAAAMMDD)
+          $ref: '#/components/schemas/LocalDateTime'
+        transfer_type_code:
+          description: Identificador de Tipo de Transferencia
+          type: string
+        transfer_type_description:
+          description: Descripcion de Tipo de Transferencia
+          type: string
+        debit_account:
+          description: Detalle de la cuenta débito
+          type: object
+          $ref: '#/components/schemas/CuentaTransferenciaDTO'
+        credit_account:
+          description: Detalle de la cuenta crédito
+          type: object
+          $ref: '#/components/schemas/CuentaTransferenciaDTO'
+        account_label:
+          description: Nombre del beneficiario
+          type: string
+        amount:
+          description: Importe de la transferencia
+          type: number
+        currency:
+          description: Moneda de la transferencia
+          type: string
+        reference_number:
+          description: Número de referencia
+          type: string
+        lot_number:
+          format: int32
+          description: Número de lote
+          type: integer
+        payment_number:
+          description: Número de pago
+          type: string
+        status:
+          description: Estado de la transferencia
+          type: string
+        client:
+          description: Cliente generador de la transferencia
+          type: string
+        comments:
+          description: Observaciones de la transferencia
+          type: string
+        statement_consolidated:
+          description: Movimiento consolidado en extracto
+          type: string
+        unified_send:
+          description: Envío unificado de la transferencia
+          type: string
+        direct_import:
+          description: Observaciones de la transferencia
+          type: string
+        same_owner:
+          description: Observaciones de la transferencia
+          type: string
+        internal_client_id:
+          description: Nro cliente interno
+          type: string
+    RespuestaComprobanteTransferenciaDTO:
+      type: object
+      required:
+        - general_data
+        - transfers
+      properties:
+        general_data:
+          $ref: '#/components/schemas/DatosGeneralesDTO'
+        transfers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ComprobanteTransferenciaDTO'
+    AddendaDTO:
+      type: object
+    ComprobanteTransferenciaDTO:
+      type: object
+      required:
+        - request_date
+        - transfer_type_description
+        - transfer_type_code
+        - network_number
+        - amount
+        - currency
+        - debit_account
+        - validation_code
+      properties:
+        request_date:
+          description: Fecha de solicitud
+          $ref: '#/components/schemas/LocalDateTime'
+        transfer_type_description:
+          description: Tipo de Transferencia
+          type: string
+        transfer_type_code:
+          description: Identificador de Tipo de Transferencia
+          type: string
+        transfer_id:
+          format: int32
+          description: Número de orden de transferencia
+          type: integer
+        network_number:
+          format: int32
+          description: Nro. de Red
+          type: integer
+        amount:
+          description: Importe de la transferencia
+          type: number
+        currency:
+          description: Moneda de la transferencia
+          type: string
+          enum:
+            - ARS
+            - USD
+        debit_account:
+          description: Cuenta débito
+          type: string
+        credit_account:
+          description: Cuenta crédito
+          type: string
+        validation_code:
+          description: Codigo de validación
+          type: string
+        afip:
+          description: Detalle comprobante afip
+          $ref: '#/components/schemas/AfipDTO'
+    CuentaTransferenciaDTO:
+      type: object
+      required:
+        - bank_name
+      properties:
+        bank_name:
+          description: Denominacion del banco
+          type: string
+        customer_cuit:
+          description: CUIT de la empresa
+          type: string
+          pattern: ^[0-9]{11}$
+        bank_number:
+          description: Codigo de banco según BCRA
+          type: string
+          format: ^[0-9]{3}$
+        account_type:
+          description: Tipo de cuenta
+          type: string
+          enum:
+            - CA
+            - CC
+        account_number:
+          description: Número de la cuenta
+          type: string
+        currency:
+          description: Moneda de la cuenta
+          type: string
+          enum:
+            - ARS
+            - USD
+        account_cbu:
+          description: CBU de la cuenta
+          type: string
+        account_label:
+          description: Nombre de la empresa
+          type: string
+    CuentaComprobanteDTO:
+      type: object
+      properties:
+        bank_name:
+          description: Denominacion del banco
+          type: string
+        bank_number:
+          description: Codigo de banco según BCRA
+          type: string
+          format: ^[0-9]{3}$
+        account_label:
+          description: Nombre de la empresa
+          type: string
+        account_cbu:
+          description: CBU de la cuenta
+          type: string
+        customer_cuit:
+          description: CUIT de la empresa
+          type: string
+          pattern: ^[0-9]{11}$
+        taxpayer_cuit:
+          description: CUIT de la empresa pagadora
+          type: string
+          pattern: ^[0-9]{11}$
+    AfipDTO:
+      type: object
+      properties:
+        provider_code:
+          description: Codigo de proveedor
+          type: string
+        provider_name:
+          description: Nombre del proveedor
+          type: string
+        vep_number:
+          description: Número de Volante Eletrónico de Pago
+          type: string
+        control_code:
+          description: Codigo de control
+          type: string
+        concept_code:
+          description: Codigo de concepto
+          type: string
+        concept_description:
+          description: Descripcion del concepto
+          type: string
+        fee_number:
+          description: Número de cuota
+          type: string
+        fiscal_period:
+          description: Período fiscal
+          type: string
+        tax_code:
+          description: Codigo del impuesto
+          type: string
+        tax_description:
+          description: Descripción del impuesto
+          type: string
+    ETipoCuenta:
+      enum:
+        - CC
+        - CA
+      type: string
+    ETipoMoneda:
+      enum:
+        - USD
+        - ARS
+      type: string
+    LocalDate:
+      format: date
+      type: string
+      example: '2022-03-10T00:00:00.000Z'
+    LocalDateTime:
+      format: date-time
+      type: string
+      example: '2022-03-10T12:15:50.000Z'
+    MensajeError:
+      type: object
+      required:
+        - message
+        - code
+        - status
+        - timestamp
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+        status:
+          format: int32
+          type: integer
+        timestamp:
+          $ref: '#/components/schemas/LocalDateTime'
+  securitySchemes:
+    ClientID:
+      type: apiKey
+      name: client_id
+      x-key-type: client_id
+      in: header
+    Authorization:
+      type: oauth2
+      x-ibm-oauth-provider: cas
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.interbanking.com.ar/cas/oidc/accessToken
+          scopes:
+            info-financiera: Informacion Financiera
+x-ibm-configuration:
+  type: rest
+  phase: realized
+  enforced: true
+  testable: true
+  cors:
+    enabled: true
+  oauth-servers:
+    Authorization:
+      clientCredentials:
+        tokenUrls:
+          - https://auth.interbanking.com.ar/cas/oidc/accessToken
+        authorizationUrls: []
+        refreshUrls: []
+security:
+  - ClientID: []
+    Authorization:
+      - info-financiera
+x-ibm-endpoints:
+  - url: https://api-gw.interbanking.com.ar/api/prod/v1

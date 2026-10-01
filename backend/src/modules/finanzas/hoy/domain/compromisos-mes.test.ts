@@ -217,3 +217,102 @@ describe('planificado, acumulado y totales', () => {
     expect(planilla.grupos.find((grupo) => grupo.grupo === 'Otros egresos')?.filas).toHaveLength(1)
   })
 })
+
+describe('arrastre de meses anteriores', () => {
+  const pago = (fecha: string, montoCentavos: number) => ({
+    fecha,
+    montoCentavos,
+    medio: 'transferencia' as const,
+    referenciaId: null,
+    registradoPor: 'ana',
+    registradoAt: null,
+  })
+
+  it('muestra lo vencido de antes que sigue sin pagar, y no lo que ya se pagó', () => {
+    const planilla = armarPlanillaMes({
+      mes: '2026-10',
+      hoy: '2026-10-01',
+      tipoCambio: null,
+      feriados,
+      compromisos: [
+        compromiso({
+          id: 'viejo',
+          grupo: 'Préstamos bancarios',
+          fechaVencimiento: '2026-09-15',
+          montoCentavos: 50_000,
+        }),
+        compromiso({
+          id: 'viejo-usd',
+          grupo: 'Inversores USD',
+          moneda: 'USD',
+          fechaVencimiento: '2026-08-03',
+          montoCentavos: 200,
+          pagos: [pago('2026-08-03', 50)],
+        }),
+        compromiso({
+          id: 'viejo-pago',
+          fechaVencimiento: '2026-09-01',
+          estado: 'pagado',
+          fechaPago: '2026-09-02',
+          pagos: [],
+        }),
+        compromiso({
+          id: 'de-octubre',
+          grupo: 'Impositivo',
+          fechaVencimiento: '2026-10-05',
+          montoCentavos: 10_000,
+        }),
+      ],
+    })
+
+    const prestamo = planilla.grupos.find((grupo) => grupo.grupo === 'Préstamos bancarios')?.filas[0]
+    expect(prestamo).toMatchObject({
+      compromisoId: 'viejo',
+      deMesAnterior: true,
+      arrastreCentavos: 50_000,
+      diferenciaCentavos: 50_000,
+      porDia: {},
+    })
+    const dolares = planilla.grupos.find((grupo) => grupo.grupo === 'Inversores USD')
+    expect(dolares?.filas[0]).toMatchObject({ deMesAnterior: true, arrastreCentavos: 150 })
+    expect(dolares?.subtotal.arrastre).toEqual({ ars: 0, usd: 150 })
+    expect(planilla.grupos.find((grupo) => grupo.grupo === 'Préstamos bancarios')?.subtotal.arrastre).toEqual({
+      ars: 50_000,
+      usd: 0,
+    })
+    expect(planilla.arrastreCentavos).toEqual({ ars: 50_000, usd: 150 })
+    expect(planilla.grupos.every((grupo) => grupo.filas.every((fila) => fila.compromisoId !== 'viejo-pago'))).toBe(true)
+    expect(planilla.grupos.find((grupo) => grupo.grupo === 'Impositivo')?.filas[0]).toMatchObject({
+      compromisoId: 'de-octubre',
+      deMesAnterior: false,
+      arrastreCentavos: 0,
+    })
+  })
+
+  it('un vencido anterior con un pago en el mes entra una sola vez', () => {
+    const planilla = armarPlanillaMes({
+      mes: '2026-10',
+      hoy: '2026-10-06',
+      tipoCambio: null,
+      feriados,
+      compromisos: [
+        compromiso({
+          id: 'parcial-viejo',
+          fechaVencimiento: '2026-09-10',
+          montoCentavos: 10_000,
+          pagos: [pago('2026-10-05', 4_000)],
+        }),
+      ],
+    })
+    const filas = planilla.grupos.flatMap((grupo) => grupo.filas).filter((fila) => fila.compromisoId === 'parcial-viejo')
+    expect(filas).toHaveLength(1)
+    expect(filas[0]).toMatchObject({
+      deMesAnterior: true,
+      arrastreCentavos: 6_000,
+      acumuladoCentavos: 4_000,
+      diferenciaCentavos: 6_000,
+    })
+    expect(filas[0]?.porDia['2026-10-05']?.pagadoCentavos).toBe(4_000)
+    expect(planilla.arrastreCentavos).toEqual({ ars: 6_000, usd: 0 })
+  })
+})

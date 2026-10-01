@@ -13,9 +13,19 @@ import {
   type CompromisoMesInput,
   type FilaCompromisoMes,
 } from '../../../services/finanzasCompromisosMesApi'
+import { hoyArgentina } from './cajaDelDia/fechasCaja'
 import { COMPROMISO_VACIO } from './compromisosMes/compromisoVacio'
 import { FormularioCompromiso } from './compromisosMes/FormularioCompromiso'
+import { LeyendaPlanilla } from './compromisosMes/planillaComun'
 import { PlanillaCompromisos } from './compromisosMes/PlanillaCompromisos'
+import { PlanillaPorSemana } from './compromisosMes/PlanillaPorSemana'
+import { botonChico } from './TarjetasHoy'
+
+const CLAVE_VISTA = 'bacarnet.planilla-mes.vista'
+type VistaPlanilla = 'semana' | 'dia'
+
+const control =
+  'inline-flex items-center justify-center rounded-md border border-[var(--color-primary-muted)] bg-white/80 p-1 text-[var(--color-primary)] hover:bg-white dark:bg-zinc-900/60 dark:hover:bg-zinc-800'
 
 function mesActual(): string {
   return new Intl.DateTimeFormat('en-CA', {
@@ -33,12 +43,30 @@ function moverMes(mes: string, delta: number): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
-function etiquetaMes(mes: string): string {
+function nombreMes(mes: string): string {
   const [anio, numero] = mes.split('-').map(Number)
-  const nombre = new Intl.DateTimeFormat('es-AR', { month: 'long', timeZone: 'UTC' }).format(
-    new Date(Date.UTC(anio, numero - 1, 1)),
-  )
-  return `${nombre} ${anio}`
+  return new Intl.DateTimeFormat('es-AR', { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(anio, numero - 1, 1)))
+}
+
+function etiquetaMes(mes: string): string {
+  const [anio] = mes.split('-').map(Number)
+  return `${nombreMes(mes)} ${anio}`
+}
+
+function vistaGuardada(): VistaPlanilla {
+  try {
+    return localStorage.getItem(CLAVE_VISTA) === 'dia' ? 'dia' : 'semana'
+  } catch {
+    return 'semana'
+  }
+}
+
+function guardarVista(vista: VistaPlanilla) {
+  try {
+    localStorage.setItem(CLAVE_VISTA, vista)
+  } catch {
+    // el navegador puede bloquear el almacenamiento
+  }
 }
 
 function parseTipoCambio(raw: string): number | null {
@@ -57,6 +85,7 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [mes, setMes] = useState(mesActual)
+  const [vista, setVista] = useState<VistaPlanilla>(vistaGuardada)
   const [formulario, setFormulario] = useState<
     null | { modo: 'alta'; inicial: CompromisoMesInput } | { modo: 'editar'; id: string; inicial: CompromisoMesInput }
   >(null)
@@ -122,65 +151,80 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
       .finally(() => setGuardandoTc(false))
   }
 
+  const elegirVista = (siguiente: VistaPlanilla) => {
+    setVista(siguiente)
+    guardarVista(siguiente)
+  }
+
   const tipoCambio = planilla.data?.tipoCambio ?? null
-  const nombreMes = etiquetaMes(mes)
+  const nombre = etiquetaMes(mes)
+  const mesPrevio = nombreMes(moverMes(mes, -1))
+  const hoy = hoyArgentina()
 
   return (
-    <section className="rounded-2xl border border-neutral-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 px-3 py-3 dark:border-zinc-800">
+    <section className="min-w-0 max-w-full rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-[var(--color-primary-muted)] bg-[var(--color-primary-light)] px-3 py-2.5 sm:px-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-heading text-sm font-semibold">Compromisos de</h2>
+          <h2 className="text-[15px] font-medium text-[var(--color-primary)]">Compromisos de</h2>
           <div className="inline-flex items-center gap-1">
-            <button
-              type="button"
-              className="rounded-lg border border-neutral-200 p-1 dark:border-zinc-700"
-              aria-label="Mes anterior"
-              onClick={() => setMes((actual) => moverMes(actual, -1))}
-            >
+            <button type="button" className={control} aria-label="Mes anterior" onClick={() => setMes((actual) => moverMes(actual, -1))}>
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <span className="min-w-32 text-center text-sm">{nombreMes}</span>
-            <button
-              type="button"
-              className="rounded-lg border border-neutral-200 p-1 dark:border-zinc-700"
-              aria-label="Mes siguiente"
-              onClick={() => setMes((actual) => moverMes(actual, 1))}
-            >
+            <span className="min-w-32 text-center text-[15px] font-medium text-[var(--color-primary)]">{nombre}</span>
+            <button type="button" className={control} aria-label="Mes siguiente" onClick={() => setMes((actual) => moverMes(actual, 1))}>
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div role="group" aria-label="Cómo ver el mes" className="inline-flex rounded-lg border border-[var(--color-primary-muted)] bg-white/60 p-0.5 dark:bg-zinc-900/40">
+            {(
+              [
+                ['semana', 'Por semana'],
+                ['dia', 'Por día'],
+              ] as const
+            ).map(([opcion, texto]) => (
+              <button
+                key={opcion}
+                type="button"
+                aria-pressed={vista === opcion}
+                className={`rounded-md px-2.5 py-1 text-[13px] font-medium ${vista === opcion ? 'bg-white text-[var(--color-primary)] shadow-sm dark:bg-zinc-900' : 'text-[var(--color-primary)]'}`}
+                onClick={() => elegirVista(opcion)}
+              >
+                {texto}
+              </button>
+            ))}
+          </div>
           {editandoTc ? (
-            <div className="flex items-center gap-2">
-              <label className="text-xs" htmlFor="mes-tc">
-                TC USD
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-[13px] text-[var(--color-primary)]" htmlFor="mes-tc">
+                Dólar del mes
               </label>
               <input
                 id="mes-tc"
                 inputMode="decimal"
-                className="w-28 rounded-lg border border-neutral-200 px-2 py-1 text-sm tabular-nums dark:border-zinc-700 dark:bg-zinc-950"
+                className="w-28 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[15px] tabular-nums dark:border-zinc-700 dark:bg-zinc-950"
                 value={tcTexto}
                 onChange={(event) => setTcTexto(event.target.value)}
               />
-              <button type="button" className="text-xs font-medium text-brand-primary" disabled={guardandoTc} onClick={guardarTc}>
+              <button type="button" className="text-[13px] font-medium text-[var(--color-primary)]" disabled={guardandoTc} onClick={guardarTc}>
                 {guardandoTc ? 'Guardando…' : 'Guardar'}
               </button>
-              <button type="button" className="text-xs" onClick={() => setEditandoTc(false)}>
+              <button type="button" className="text-[13px] text-[var(--color-primary)]" onClick={() => setEditandoTc(false)}>
                 Cancelar
               </button>
             </div>
           ) : (
-            <p className="text-sm tabular-nums">
-              TC USD:{' '}
+            <p className="text-[13px] text-[var(--color-primary)]">
+              Dólar del mes:{' '}
               {tipoCambio == null ? (
-                <span className="text-body-muted">sin cargar</span>
+                <span>sin cargar</span>
               ) : (
-                <span>$ {textoTipoCambio(tipoCambio)}</span>
+                <span className="text-[15px] font-medium tabular-nums">$ {textoTipoCambio(tipoCambio)}</span>
               )}
               <button
                 type="button"
-                className="ml-2 text-xs font-medium text-brand-primary"
+                className="ml-2 text-[13px] font-medium underline-offset-2 hover:underline"
                 onClick={() => {
                   setTcTexto(tipoCambio == null ? '' : textoTipoCambio(tipoCambio))
                   setEditandoTc(true)
@@ -190,30 +234,43 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
               </button>
             </p>
           )}
-          <button
-            type="button"
-            className="inline-flex items-center gap-1 rounded-lg bg-brand-primary px-3 py-1.5 text-sm text-white"
-            onClick={() => abrirAlta('Otros egresos')}
-          >
-            <Plus className="h-4 w-4" />
-            Agregar compromiso
+          <button type="button" className={`${botonChico} gap-1`} onClick={() => abrirAlta('Otros egresos')}>
+            <Plus className="h-4 w-4" aria-hidden />
+            Agregar
           </button>
         </div>
       </header>
-      {planilla.isLoading ? <p className="text-body-muted px-3 py-6 text-sm">Cargando la planilla…</p> : null}
+      {planilla.isLoading ? <p className="text-body-muted px-3 py-6 text-[15px]">Cargando la planilla…</p> : null}
       {planilla.isError ? (
-        <p className="px-3 py-6 text-sm text-red-600 dark:text-red-400">
+        <p className="px-3 py-6 text-[15px] text-red-600 dark:text-red-400">
           {planilla.error instanceof Error ? planilla.error.message : 'No se pudo cargar la planilla'}
         </p>
       ) : null}
       {planilla.data ? (
-        <PlanillaCompromisos
-          key={mes}
-          planilla={planilla.data}
-          onPagar={onPagar}
-          onEditar={abrirEdicion}
-          onAgregar={abrirAlta}
-        />
+        <>
+          <LeyendaPlanilla />
+          {vista === 'semana' ? (
+            <PlanillaPorSemana
+              key={mes}
+              planilla={planilla.data}
+              hoy={hoy}
+              mesAnterior={mesPrevio}
+              onPagar={onPagar}
+              onEditar={abrirEdicion}
+              onAgregar={abrirAlta}
+            />
+          ) : (
+            <PlanillaCompromisos
+              key={mes}
+              planilla={planilla.data}
+              hoy={hoy}
+              mesAnterior={mesPrevio}
+              onPagar={onPagar}
+              onEditar={abrirEdicion}
+              onAgregar={abrirAlta}
+            />
+          )}
+        </>
       ) : null}
       {formulario ? (
         <FormularioCompromiso

@@ -74,6 +74,10 @@ export interface FilaPlanilla {
   diferenciaCentavos: number
   enFirmaCentavos: number
   estado: string
+  /** El vencimiento es de un mes anterior al que se está mirando. */
+  deMesAnterior: boolean
+  /** Lo que sigue sin pagar de ese vencimiento anterior, en la moneda de la fila. Cero si es de este mes. */
+  arrastreCentavos: number
 }
 
 export interface GrupoPlanilla {
@@ -84,6 +88,7 @@ export interface GrupoPlanilla {
     importe: MontosMoneda
     acumulado: MontosMoneda
     diferencia: MontosMoneda
+    arrastre: MontosMoneda
   }
 }
 
@@ -93,6 +98,8 @@ export interface PlanillaMes {
   dias: ColumnaDia[]
   grupos: GrupoPlanilla[]
   totalEgresosPorDia: Record<string, MontosMoneda & { arsConvertido: number }>
+  /** Suma de lo vencido antes de este mes que sigue sin pagar del todo. */
+  arrastreCentavos: MontosMoneda
 }
 
 export function parseMes(value: string): { anio: number; mes: number } | null {
@@ -205,6 +212,7 @@ function filaDe(
   row: CompromisoParaPlanilla,
   columnas: readonly ColumnaDia[],
   feriados: ReadonlySet<string>,
+  mes: string,
 ): FilaPlanilla {
   const pagos = pagosDelCompromiso(row)
   const acumuladoCentavos = pagadoLegacyCompleto(row)
@@ -236,6 +244,7 @@ function filaDe(
 
   const cuota = normalizarCuota(row.cuotaNumero, row.cuotaTotal)
   const completo = pagadoLegacyCompleto(row) || acumuladoCentavos >= row.montoCentavos
+  const deMesAnterior = row.fechaVencimiento < `${mes}-01`
   return {
     compromisoId: row.id,
     concepto: row.concepto,
@@ -257,6 +266,8 @@ function filaDe(
         ? diferenciaCentavos
         : Math.min(diferenciaCentavos, Math.max(0, row.enFirmaCentavos ?? 0)),
     estado: completo ? 'pagado' : row.estado,
+    deMesAnterior,
+    arrastreCentavos: deMesAnterior ? diferenciaCentavos : 0,
   }
 }
 
@@ -265,6 +276,17 @@ function entraEnMes(row: CompromisoParaPlanilla, mes: string): boolean {
   if (row.pagos.some((pago) => pago.fecha.startsWith(mes))) return true
   if (pagadoLegacyCompleto(row) && (row.fechaPago ?? row.fechaVencimiento).startsWith(mes)) return true
   return false
+}
+
+function sinPagarDelTodo(row: CompromisoParaPlanilla): boolean {
+  if (pagadoLegacyCompleto(row)) return false
+  return acumuladoDePagos(row.pagos) < row.montoCentavos
+}
+
+/** Entra lo del mes, más lo vencido antes que sigue sin pagar entero. */
+function visibleEnMes(row: CompromisoParaPlanilla, mes: string): boolean {
+  if (entraEnMes(row, mes)) return true
+  return row.fechaVencimiento < `${mes}-01` && sinPagarDelTodo(row)
 }
 
 /**
@@ -283,8 +305,8 @@ export function armarPlanillaMes(input: {
   for (const grupo of GRUPOS_COMPROMISO) grupos.set(grupo, [])
 
   const filas = input.compromisos
-    .filter((row) => entraEnMes(row, input.mes))
-    .map((row) => ({ grupo: normalizarGrupo(row.grupo), fila: filaDe(row, columnas, input.feriados) }))
+    .filter((row) => visibleEnMes(row, input.mes))
+    .map((row) => ({ grupo: normalizarGrupo(row.grupo), fila: filaDe(row, columnas, input.feriados, input.mes) }))
     .sort((a, b) => {
       const porFecha = a.fila.fechaVencimiento.localeCompare(b.fila.fechaVencimiento)
       if (porFecha !== 0) return porFecha
@@ -306,11 +328,13 @@ export function armarPlanillaMes(input: {
       importe: vacioMoneda(),
       acumulado: vacioMoneda(),
       diferencia: vacioMoneda(),
+      arrastre: vacioMoneda(),
     }
     for (const fila of filasGrupo) {
       sumarMoneda(subtotal.importe, fila.moneda, fila.importeCentavos)
       sumarMoneda(subtotal.acumulado, fila.moneda, fila.acumuladoCentavos)
       sumarMoneda(subtotal.diferencia, fila.moneda, fila.diferenciaCentavos)
+      sumarMoneda(subtotal.arrastre, fila.moneda, fila.arrastreCentavos)
       for (const [fecha, celdaDia] of Object.entries(fila.porDia)) {
         if (celdaDia.pagadoCentavos <= 0) continue
         const bucket = subtotalPorDia[fecha] ?? (subtotalPorDia[fecha] = vacioMoneda())
@@ -329,11 +353,20 @@ export function armarPlanillaMes(input: {
     gruposArmados.push({ grupo, filas: filasGrupo, subtotalPorDia, subtotal })
   }
 
+  const arrastreCentavos = gruposArmados.reduce(
+    (total, grupo) => ({
+      ars: total.ars + grupo.subtotal.arrastre.ars,
+      usd: total.usd + grupo.subtotal.arrastre.usd,
+    }),
+    vacioMoneda(),
+  )
+
   return {
     mes: input.mes,
     tipoCambio: input.tipoCambio,
     dias: columnas,
     grupos: gruposArmados,
     totalEgresosPorDia,
+    arrastreCentavos,
   }
 }

@@ -58,6 +58,15 @@ function vacio(): MontosMoneda {
   return { ars: 0, usd: 0 }
 }
 
+/**
+ * La planilla del mes también trae vencidos de antes que no se movieron en estos días.
+ * Hoy ya lista lo que vence o se paga en los meses cargados; esos arrastres no van acá.
+ */
+function visibleEnHoy(fila: FilaCompromisoMes): boolean {
+  if (fila.deMesAnterior !== true) return true
+  return Object.values(fila.porDia).some((celda) => celda.planificadoCentavos > 0 || celda.pagadoCentavos > 0)
+}
+
 export function sumarMoneda(destino: MontosMoneda, moneda: MonedaCompromiso, centavos: number): void {
   if (moneda === 'USD') destino.usd += centavos
   else destino.ars += centavos
@@ -89,6 +98,7 @@ export function armarSemana(planillas: PlanillaCompromisosMes[], dias: string[])
     for (const grupo of planilla.grupos) {
       if (!ordenGrupos.includes(grupo.grupo)) ordenGrupos.push(grupo.grupo)
       for (const fila of grupo.filas) {
+        if (!visibleEnHoy(fila)) continue
         const previa = filasPorId.get(fila.compromisoId)
         if (previa) {
           previa.porDia = { ...previa.porDia, ...fila.porDia }
@@ -217,6 +227,7 @@ function unirFilas(planillas: PlanillaCompromisosMes[]): FilaSemana[] {
   for (const planilla of planillas) {
     for (const grupo of planilla.grupos) {
       for (const fila of grupo.filas) {
+        if (!visibleEnHoy(fila)) continue
         const previa = porId.get(fila.compromisoId)
         if (previa) {
           previa.porDia = { ...previa.porDia, ...fila.porDia }

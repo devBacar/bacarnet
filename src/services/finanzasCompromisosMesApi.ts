@@ -57,6 +57,10 @@ export interface FilaCompromisoMes {
   /** Reservado en una transferencia que todavía no se firmó. */
   enFirmaCentavos?: number
   estado: string
+  /** El vencimiento es de un mes anterior al que se está mirando. */
+  deMesAnterior: boolean
+  /** Lo que sigue sin pagar de ese vencimiento anterior, en la moneda de la fila. */
+  arrastreCentavos: number
 }
 
 export interface GrupoCompromisoMes {
@@ -67,6 +71,7 @@ export interface GrupoCompromisoMes {
     importe: MontosMoneda
     acumulado: MontosMoneda
     diferencia: MontosMoneda
+    arrastre: MontosMoneda
   }
 }
 
@@ -76,6 +81,8 @@ export interface PlanillaCompromisosMes {
   dias: ColumnaDiaMes[]
   grupos: GrupoCompromisoMes[]
   totalEgresosPorDia: Record<string, MontosMoneda & { arsConvertido: number }>
+  /** Suma de lo vencido antes de este mes que sigue sin pagar del todo. */
+  arrastreCentavos: MontosMoneda
 }
 
 export interface CompromisoMesInput {

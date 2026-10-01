@@ -1,32 +1,38 @@
-import { useState } from 'react'
 import { formatMoneyCentavos } from '../../formatMoney'
 import type {
   ColumnaDiaMes,
   FilaCompromisoMes,
-  MonedaCompromiso,
-  MontosMoneda,
+  GrupoCompromisoMes,
   PlanillaCompromisosMes,
 } from '../../../../services/finanzasCompromisosMesApi'
+import { BotonAgregar, ConceptoFila, MontoUno, MontosEnLineas, NombreGrupo, PieGruposVacios } from './planillaComun'
+import {
+  GRILLA,
+  claseTono,
+  estaPago,
+  montosVacios,
+  puedePagarFila,
+  sumarCampo,
+  tonoFalta,
+  useGruposPlanilla,
+} from './planillaModelo'
+import { montosPlanificados } from './semanasDelMes'
 
-const FONDO = 'bg-white dark:bg-zinc-900'
-const FONDO_CABECERA = 'bg-neutral-50 dark:bg-zinc-950'
+const FONDO_HEAD = 'bg-neutral-50 dark:bg-zinc-950'
 const FONDO_GRUPO = 'bg-neutral-100 dark:bg-zinc-800'
-const FONDO_SUB = 'bg-neutral-50 dark:bg-zinc-950/80'
-const FONDO_HOY = 'bg-sky-50 dark:bg-sky-950/40'
-const FONDO_GRIS = 'bg-neutral-100 dark:bg-zinc-800/70'
+const FONDO_TOTAL = 'bg-neutral-200 dark:bg-zinc-800'
+const FONDO_HOY = 'bg-sky-50 dark:bg-sky-950'
+const FONDO_GRIS = 'bg-neutral-100 dark:bg-zinc-800'
+const FONDO_FILA = 'bg-white group-hover:bg-neutral-100 dark:bg-zinc-900 dark:group-hover:bg-zinc-800'
 
-function monto(centavos: number, moneda: MonedaCompromiso): string {
-  return formatMoneyCentavos(centavos, moneda)
-}
-
-function pesosDe(valores: MontosMoneda, tipoCambio: number | null): string {
-  if (valores.usd > 0 && tipoCambio == null) {
-    const pesos = valores.ars > 0 ? `${monto(valores.ars, 'ARS')} + ` : ''
-    return `${pesos}${monto(valores.usd, 'USD')}`
-  }
-  const convertido = valores.ars + (tipoCambio == null ? 0 : Math.round(valores.usd * tipoCambio))
-  return monto(convertido, 'ARS')
-}
+const CONCEPTO = 'sticky left-0 z-20 w-44 min-w-44 max-w-44'
+const VENIA = 'w-28 min-w-28 sm:sticky sm:left-44 sm:z-20'
+const PAGADO = 'min-w-28 md:sticky md:right-28 md:z-20'
+const FALTA = 'min-w-28 md:sticky md:right-0 md:z-20'
+const CONCEPTO_HEAD = 'sticky left-0 z-30 w-44 min-w-44 max-w-44'
+const VENIA_HEAD = 'w-28 min-w-28 sm:sticky sm:left-44 sm:z-30'
+const PAGADO_HEAD = 'min-w-28 md:sticky md:right-28 md:z-30'
+const FALTA_HEAD = 'min-w-28 md:sticky md:right-0 md:z-30'
 
 function rotuloDia(dia: ColumnaDiaMes): { arriba: string; abajo: string } {
   const numeros = dia.fechas.map((fecha) => String(Number(fecha.slice(8)))).join('-')
@@ -44,330 +50,237 @@ function fondoDia(dia: ColumnaDiaMes, base: string): string {
   return base
 }
 
-function claseBorde(): string {
-  return 'border-b border-neutral-200 px-2 py-1.5 align-top dark:border-zinc-800'
+function angosta(dia: ColumnaDiaMes): string {
+  return dia.tipo === 'habil' ? 'min-w-[4.5rem]' : 'w-9 min-w-9'
 }
 
 export function PlanillaCompromisos({
   planilla,
+  hoy,
+  mesAnterior,
   onPagar,
   onEditar,
   onAgregar,
 }: {
   planilla: PlanillaCompromisosMes
+  hoy: string
+  mesAnterior: string
   onPagar: (compromisoId: string) => void
   onEditar: (fila: FilaCompromisoMes) => void
   onAgregar: (grupo: string) => void
 }) {
-  const [cerrados, setCerrados] = useState<Record<string, boolean>>({})
-  const hayDolares = planilla.grupos.some(
-    (grupo) => grupo.subtotal.importe.usd > 0 || grupo.subtotal.acumulado.usd > 0,
-  )
-  const totalImporte = sumar(planilla, 'importe')
-  const totalAcumulado = sumar(planilla, 'acumulado')
-  const totalDiferencia = sumar(planilla, 'diferencia')
+  const { cerrados, toggle, mostrarVacios, setMostrarVacios, vacios, visibles } = useGruposPlanilla(planilla.grupos)
+  const hayArrastre = !montosVacios(planilla.arrastreCentavos)
+  const filas = planilla.grupos.flatMap((grupo) => grupo.filas)
+  const totalPagado = sumarCampo(planilla.grupos, 'acumulado')
+  const totalFalta = sumarCampo(planilla.grupos, 'diferencia')
 
   return (
-    <div>
+    <div className="min-w-0">
       <div className="overflow-x-auto">
-        <table className="min-w-max border-collapse text-sm">
+        <table className="border-collapse text-[13px]">
           <thead>
             <tr>
-              <th className={`sticky left-0 z-30 w-36 min-w-32 text-left text-xs font-medium ${claseBorde()} ${FONDO_CABECERA}`}>
-                Concepto
-              </th>
-              <MetaHead texto="Deuda" left="min-[880px]:left-36" />
-              <MetaHead texto="A pagar" left="min-[880px]:left-[16rem]" />
-              <MetaHead texto="Cuota" left="min-[880px]:left-[23rem]" ancho="min-w-[4.5rem] w-[4.5rem]" />
-              <MetaHead texto="Obs." left="min-[880px]:left-[27.5rem]" ancho="min-w-24 w-24" borde />
+              <th className={`${GRILLA} ${CONCEPTO_HEAD} ${FONDO_HEAD} text-left text-[13px] font-medium`}>Concepto</th>
+              {hayArrastre ? (
+                <th className={`${GRILLA} ${VENIA_HEAD} ${FONDO_HEAD} text-left text-[13px] font-medium leading-tight text-red-700 dark:text-red-400`}>
+                  <span className="block">Venía de {mesAnterior}</span>
+                  <span className="block">sin pagar</span>
+                </th>
+              ) : null}
               {planilla.dias.map((dia) => {
                 const rotulo = rotuloDia(dia)
+                const habil = dia.tipo === 'habil'
                 return (
                   <th
                     key={dia.fecha}
-                    className={`min-w-[4.75rem] text-center text-xs font-medium ${claseBorde()} ${fondoDia(dia, FONDO_CABECERA)} ${dia.tipo === 'habil' && !dia.esHoy ? '' : 'text-neutral-500 dark:text-neutral-400'} ${dia.esHoy ? 'text-sky-900 dark:text-sky-100' : ''}`}
+                    title={rotulo.arriba}
+                    className={`${GRILLA} ${angosta(dia)} text-center text-[13px] font-medium ${fondoDia(dia, FONDO_HEAD)} ${habil ? '' : 'text-neutral-500 dark:text-neutral-400'}`}
                   >
-                    <span className="block">{rotulo.arriba}</span>
+                    {habil ? <span className="block">{rotulo.arriba}</span> : null}
                     <span className="block tabular-nums">{rotulo.abajo}</span>
                   </th>
                 )
               })}
-              <th className={`z-30 min-w-28 text-right text-xs font-medium min-[880px]:sticky min-[880px]:right-28 ${claseBorde()} ${FONDO_CABECERA}`}>
-                Acumulado
+              <th className={`${GRILLA} ${PAGADO_HEAD} ${FONDO_HEAD} text-right text-[13px] font-medium text-emerald-700 dark:text-emerald-400`}>
+                Pagado
               </th>
-              <th className={`z-30 min-w-28 text-right text-xs font-medium min-[880px]:sticky min-[880px]:right-0 ${claseBorde()} border-l border-neutral-200 dark:border-zinc-700 ${FONDO_CABECERA}`}>
-                Diferencia
-              </th>
+              <th className={`${GRILLA} ${FALTA_HEAD} ${FONDO_HEAD} text-right text-[13px] font-medium`}>Falta pagar</th>
             </tr>
           </thead>
           <tbody>
-            {planilla.grupos.map((grupo) => {
-              const cerrado = cerrados[grupo.grupo] === true
-              return (
-                <GrupoFilas
-                  key={grupo.grupo}
-                  grupoNombre={grupo.grupo}
-                  filas={grupo.filas}
-                  subtotal={grupo.subtotal}
-                  subtotalPorDia={grupo.subtotalPorDia}
-                  dias={planilla.dias}
-                  cerrado={cerrado}
-                  onToggle={() => setCerrados((actual) => ({ ...actual, [grupo.grupo]: !cerrado }))}
-                  onPagar={onPagar}
-                  onEditar={onEditar}
-                  onAgregar={onAgregar}
-                />
-              )
-            })}
+            {visibles.map((grupo) => (
+              <GrupoDias
+                key={grupo.grupo}
+                grupo={grupo}
+                dias={planilla.dias}
+                hayArrastre={hayArrastre}
+                hoy={hoy}
+                cerrado={cerrados[grupo.grupo] === true}
+                onToggle={() => toggle(grupo.grupo)}
+                onAgregar={() => onAgregar(grupo.grupo)}
+                onEditar={onEditar}
+                onPagar={onPagar}
+              />
+            ))}
             <tr>
-              <td className={`sticky left-0 z-10 text-sm font-medium ${claseBorde()} ${FONDO_GRUPO}`}>Total egresos</td>
-              <td className={meta(FONDO_GRUPO, 'min-[880px]:left-36')} />
-              <td className={`text-right text-xs font-medium tabular-nums ${meta(FONDO_GRUPO, 'min-[880px]:left-[16rem]')}`}>
-                {pesosDe(totalImporte, planilla.tipoCambio)}
+              <td className={`${GRILLA} ${CONCEPTO} ${FONDO_TOTAL} text-[15px] font-bold`}>Total</td>
+              {hayArrastre ? (
+                <td className={`${GRILLA} ${VENIA} ${FONDO_TOTAL} text-right font-bold`}>
+                  <MontosEnLineas valores={planilla.arrastreCentavos} className="text-red-600 dark:text-red-400" />
+                </td>
+              ) : null}
+              {planilla.dias.map((dia) => (
+                <td key={dia.fecha} className={`${GRILLA} ${angosta(dia)} text-center font-bold ${fondoDia(dia, FONDO_TOTAL)}`}>
+                  <MontosEnLineas valores={montosPlanificados(filas, [dia.fecha])} />
+                </td>
+              ))}
+              <td className={`${GRILLA} ${PAGADO} ${FONDO_TOTAL} text-right font-bold`}>
+                <MontosEnLineas valores={totalPagado} className="text-emerald-700 dark:text-emerald-400" />
               </td>
-              <td className={meta(FONDO_GRUPO, 'min-[880px]:left-[23rem]', 'min-w-[4.5rem] w-[4.5rem]')} />
-              <td className={meta(FONDO_GRUPO, 'min-[880px]:left-[27.5rem]', 'min-w-24 w-24', true)} />
-              {planilla.dias.map((dia) => {
-                const total = planilla.totalEgresosPorDia[dia.fecha]
-                const vacio = !total || (total.ars === 0 && total.usd === 0)
-                return (
-                  <td
-                    key={dia.fecha}
-                    className={`text-center text-xs font-medium tabular-nums ${claseBorde()} ${fondoDia(dia, FONDO_GRUPO)}`}
-                  >
-                    {vacio ? '' : pesosDe(total, planilla.tipoCambio)}
-                  </td>
-                )
-              })}
-              <td className={`text-right text-xs font-medium tabular-nums min-[880px]:sticky min-[880px]:right-28 z-10 ${claseBorde()} ${FONDO_GRUPO}`}>
-                {pesosDe(totalAcumulado, planilla.tipoCambio)}
-              </td>
-              <td
-                className={`z-10 border-l border-neutral-200 text-right text-xs font-medium tabular-nums min-[880px]:sticky min-[880px]:right-0 dark:border-zinc-700 ${claseBorde()} ${FONDO_GRUPO} ${totalDiferencia.ars > 0 || totalDiferencia.usd > 0 ? 'text-red-600 dark:text-red-400' : ''}`}
-              >
-                {pesosDe(totalDiferencia, planilla.tipoCambio)}
+              <td className={`${GRILLA} ${FALTA} ${FONDO_TOTAL} text-right font-bold`}>
+                <MontosEnLineas valores={totalFalta} />
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p className="text-body-muted px-3 py-2 text-xs">
-        En gris, lo previsto para ese día. En verde, lo pagado. Si el vencimiento cae en finde o feriado, se marca en el
-        hábil anterior.
-      </p>
-      {hayDolares && planilla.tipoCambio != null ? (
-        <p className="text-body-muted px-3 pb-3 text-xs">
-          El total en pesos incluye los dólares al tipo de cambio{' '}
-          {planilla.tipoCambio.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
-        </p>
-      ) : null}
-      {hayDolares && planilla.tipoCambio == null ? (
-        <p className="px-3 pb-3 text-xs text-red-600 dark:text-red-400">
-          Falta el tipo de cambio para pasar los dólares a pesos. El total muestra las dos monedas.
-        </p>
-      ) : null}
+      <PieGruposVacios cantidad={vacios.length} mostrar={mostrarVacios} onToggle={() => setMostrarVacios((actual) => !actual)} />
     </div>
   )
 }
 
-function sumar(planilla: PlanillaCompromisosMes, campo: 'importe' | 'acumulado' | 'diferencia'): MontosMoneda {
-  return planilla.grupos.reduce(
-    (total, grupo) => ({
-      ars: total.ars + grupo.subtotal[campo].ars,
-      usd: total.usd + grupo.subtotal[campo].usd,
-    }),
-    { ars: 0, usd: 0 },
-  )
-}
-
-function meta(fondo: string, left: string, ancho = 'min-w-28 w-28', borde = false): string {
-  return `${claseBorde()} ${fondo} ${ancho} min-[880px]:sticky ${left} z-10 ${borde ? 'min-[880px]:border-r min-[880px]:border-neutral-200 min-[880px]:dark:border-zinc-700' : ''}`
-}
-
-function MetaHead({
-  texto,
-  left,
-  ancho = 'min-w-28 w-28',
-  borde = false,
-}: {
-  texto: string
-  left: string
-  ancho?: string
-  borde?: boolean
-}) {
-  return (
-    <th className={`z-30 text-left text-xs font-medium min-[880px]:sticky ${left} ${ancho} ${claseBorde()} ${FONDO_CABECERA} ${borde ? 'min-[880px]:border-r min-[880px]:border-neutral-200 dark:min-[880px]:border-zinc-700' : ''}`}>
-      {texto}
-    </th>
-  )
-}
-
-function GrupoFilas({
-  grupoNombre,
-  filas,
-  subtotal,
-  subtotalPorDia,
+function GrupoDias({
+  grupo,
   dias,
+  hayArrastre,
+  hoy,
   cerrado,
   onToggle,
-  onPagar,
-  onEditar,
   onAgregar,
+  onEditar,
+  onPagar,
 }: {
-  grupoNombre: string
-  filas: FilaCompromisoMes[]
-  subtotal: { importe: MontosMoneda; acumulado: MontosMoneda; diferencia: MontosMoneda }
-  subtotalPorDia: Record<string, MontosMoneda>
+  grupo: GrupoCompromisoMes
   dias: ColumnaDiaMes[]
+  hayArrastre: boolean
+  hoy: string
   cerrado: boolean
   onToggle: () => void
-  onPagar: (compromisoId: string) => void
+  onAgregar: () => void
   onEditar: (fila: FilaCompromisoMes) => void
-  onAgregar: (grupo: string) => void
+  onPagar: (compromisoId: string) => void
 }) {
+  const hayFilas = grupo.filas.length > 0
+  const plegar = hayFilas ? onToggle : undefined
   return (
     <>
       <tr>
-        <td className={`sticky left-0 z-10 ${claseBorde()} ${FONDO_GRUPO}`}>
-          <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="text-left text-sm font-medium" aria-expanded={!cerrado} onClick={onToggle}>
-              <span className="mr-1 text-xs">{cerrado ? '▸' : '▾'}</span>
-              {grupoNombre}
-            </button>
-            <button type="button" className="text-xs font-medium text-brand-primary" onClick={() => onAgregar(grupoNombre)}>
-              + Agregar
-            </button>
+        <td className={`${GRILLA} ${CONCEPTO} ${FONDO_GRUPO}`}>
+          <div className="flex min-w-0 items-center justify-between gap-1">
+            {hayFilas ? (
+              <button type="button" className="min-w-0 text-left" aria-expanded={!cerrado} onClick={onToggle}>
+                <NombreGrupo cerrado={cerrado}>{grupo.grupo}</NombreGrupo>
+              </button>
+            ) : (
+              <span className="truncate text-[15px] font-medium">{grupo.grupo}</span>
+            )}
+            <BotonAgregar onClick={onAgregar} />
           </div>
         </td>
-        <td className={meta(FONDO_GRUPO, 'min-[880px]:left-36')} />
-        <td className={meta(FONDO_GRUPO, 'min-[880px]:left-[16rem]')} />
-        <td className={meta(FONDO_GRUPO, 'min-[880px]:left-[23rem]', 'min-w-[4.5rem] w-[4.5rem]')} />
-        <td className={meta(FONDO_GRUPO, 'min-[880px]:left-[27.5rem]', 'min-w-24 w-24', true)} />
+        {hayArrastre ? (
+          <td className={`${GRILLA} ${VENIA} ${FONDO_GRUPO} text-right font-medium`} onClick={plegar}>
+            <MontosEnLineas valores={grupo.subtotal.arrastre} className="text-red-600 dark:text-red-400" />
+          </td>
+        ) : null}
         {dias.map((dia) => (
-          <td key={dia.fecha} className={`${claseBorde()} ${fondoDia(dia, FONDO_GRUPO)}`} />
+          <td
+            key={dia.fecha}
+            className={`${GRILLA} ${angosta(dia)} text-center font-medium ${fondoDia(dia, FONDO_GRUPO)}`}
+            onClick={plegar}
+          >
+            <MontosEnLineas valores={montosPlanificados(grupo.filas, [dia.fecha])} />
+          </td>
         ))}
-        <td className={`min-[880px]:sticky min-[880px]:right-28 z-10 ${claseBorde()} ${FONDO_GRUPO}`} />
-        <td className={`min-[880px]:sticky min-[880px]:right-0 z-10 border-l border-neutral-200 dark:border-zinc-700 ${claseBorde()} ${FONDO_GRUPO}`} />
+        <td className={`${GRILLA} ${PAGADO} ${FONDO_GRUPO} text-right font-medium`} onClick={plegar}>
+          <MontosEnLineas valores={grupo.subtotal.acumulado} className="text-emerald-700 dark:text-emerald-400" />
+        </td>
+        <td className={`${GRILLA} ${FALTA} ${FONDO_GRUPO} text-right font-medium`} onClick={plegar}>
+          <MontosEnLineas valores={grupo.subtotal.diferencia} />
+        </td>
       </tr>
       {cerrado
         ? null
-        : filas.map((fila) => (
-            <tr key={fila.compromisoId}>
-              <td className={`sticky left-0 z-10 w-36 min-w-32 ${claseBorde()} ${FONDO}`}>
-                <button type="button" className="text-left text-sm font-medium text-heading hover:underline" onClick={() => onEditar(fila)}>
-                  {fila.concepto}
-                </button>
-                <p className="text-body-muted text-xs">{fila.proveedorONombre}</p>
-                {fila.acumuladoCentavos > 0 && fila.diferenciaCentavos > 0 ? (
-                  <p className="text-body-muted text-xs">
-                    Pagado {monto(fila.acumuladoCentavos, fila.moneda)} de {monto(fila.importeCentavos, fila.moneda)}
-                  </p>
-                ) : null}
+        : grupo.filas.map((fila) => (
+            <tr key={fila.compromisoId} className="group cursor-pointer" onClick={() => onEditar(fila)}>
+              <td className={`${GRILLA} ${CONCEPTO} overflow-hidden ${FONDO_FILA}`}>
+                <ConceptoFila fila={fila} onEditar={() => onEditar(fila)} />
               </td>
-              <td className={`text-right text-xs tabular-nums ${meta(FONDO, 'min-[880px]:left-36')}`}>
-                {fila.deudaTotalCentavos == null ? '—' : monto(fila.deudaTotalCentavos, fila.moneda)}
-              </td>
-              <td className={`text-right text-xs tabular-nums ${meta(FONDO, 'min-[880px]:left-[16rem]')}`}>
-                {monto(fila.importeCentavos, fila.moneda)}
-              </td>
-              <td className={`text-xs ${meta(FONDO, 'min-[880px]:left-[23rem]', 'min-w-[4.5rem] w-[4.5rem]')}`}>
-                {fila.cuota ?? '—'}
-              </td>
-              <td className={`max-w-24 truncate text-xs ${meta(FONDO, 'min-[880px]:left-[27.5rem]', 'min-w-24 w-24', true)}`} title={fila.observacion ?? undefined}>
-                {fila.observacion ?? '—'}
-              </td>
+              {hayArrastre ? (
+                <td className={`${GRILLA} ${VENIA} text-right ${FONDO_FILA}`}>
+                  <MontoUno centavos={fila.arrastreCentavos} moneda={fila.moneda} tono="vencido" />
+                </td>
+              ) : null}
               {dias.map((dia) => (
-                <td key={dia.fecha} className={`text-center text-xs ${claseBorde()} ${fondoDia(dia, FONDO)}`}>
-                  <Celda fila={fila} dia={dia} onPagar={onPagar} />
+                <td key={dia.fecha} className={`${GRILLA} ${angosta(dia)} text-center ${fondoDia(dia, FONDO_FILA)}`}>
+                  <Celda fila={fila} dia={dia} hoy={hoy} onPagar={onPagar} />
                 </td>
               ))}
-              <td className={`text-right text-xs tabular-nums min-[880px]:sticky min-[880px]:right-28 z-10 ${claseBorde()} ${FONDO}`}>
-                {monto(fila.acumuladoCentavos, fila.moneda)}
+              <td className={`${GRILLA} ${PAGADO} text-right ${FONDO_FILA}`}>
+                <MontoUno centavos={fila.acumuladoCentavos} moneda={fila.moneda} tono="pagado" tilde={estaPago(fila)} />
               </td>
-              <td
-                className={`z-10 border-l border-neutral-200 text-right text-xs tabular-nums min-[880px]:sticky min-[880px]:right-0 dark:border-zinc-700 ${claseBorde()} ${FONDO} ${fila.diferenciaCentavos > 0 ? 'text-red-600 dark:text-red-400' : ''}`}
-              >
-                {monto(fila.diferenciaCentavos, fila.moneda)}
+              <td className={`${GRILLA} ${FALTA} text-right ${FONDO_FILA}`}>
+                <MontoUno centavos={fila.diferenciaCentavos} moneda={fila.moneda} tono={tonoFalta(fila, hoy)} />
               </td>
             </tr>
           ))}
-      {filas.length === 0 ? null : (
-        <tr>
-          <td className={`sticky left-0 z-10 text-xs font-medium ${claseBorde()} ${FONDO_SUB}`}>Subtotal</td>
-          <td className={meta(FONDO_SUB, 'min-[880px]:left-36')} />
-          <td className={`text-right text-xs font-medium tabular-nums ${meta(FONDO_SUB, 'min-[880px]:left-[16rem]')}`}>
-            <MonedaDoble valores={subtotal.importe} />
-          </td>
-          <td className={meta(FONDO_SUB, 'min-[880px]:left-[23rem]', 'min-w-[4.5rem] w-[4.5rem]')} />
-          <td className={meta(FONDO_SUB, 'min-[880px]:left-[27.5rem]', 'min-w-24 w-24', true)} />
-          {dias.map((dia) => (
-            <td key={dia.fecha} className={`text-center text-xs font-medium ${claseBorde()} ${fondoDia(dia, FONDO_SUB)}`}>
-              <MonedaDoble valores={subtotalPorDia[dia.fecha]} />
-            </td>
-          ))}
-          <td className={`text-right text-xs font-medium min-[880px]:sticky min-[880px]:right-28 z-10 ${claseBorde()} ${FONDO_SUB}`}>
-            <MonedaDoble valores={subtotal.acumulado} />
-          </td>
-          <td
-            className={`z-10 border-l border-neutral-200 text-right text-xs font-medium min-[880px]:sticky min-[880px]:right-0 dark:border-zinc-700 ${claseBorde()} ${FONDO_SUB} ${subtotal.diferencia.ars > 0 || subtotal.diferencia.usd > 0 ? 'text-red-600 dark:text-red-400' : ''}`}
-          >
-            <MonedaDoble valores={subtotal.diferencia} />
-          </td>
-        </tr>
-      )}
     </>
-  )
-}
-
-function MonedaDoble({ valores }: { valores: MontosMoneda | undefined }) {
-  if (!valores || (valores.ars === 0 && valores.usd === 0)) return null
-  return (
-    <span className="tabular-nums">
-      {valores.ars > 0 ? <span className="block">{monto(valores.ars, 'ARS')}</span> : null}
-      {valores.usd > 0 ? <span className="block">{monto(valores.usd, 'USD')}</span> : null}
-    </span>
   )
 }
 
 function Celda({
   fila,
   dia,
+  hoy,
   onPagar,
 }: {
   fila: FilaCompromisoMes
   dia: ColumnaDiaMes
+  hoy: string
   onPagar: (compromisoId: string) => void
 }) {
   const celda = fila.porDia[dia.fecha]
   if (!celda || (celda.planificadoCentavos <= 0 && celda.pagadoCentavos <= 0)) return null
-  const muestraPlan = celda.planificadoCentavos > 0 && celda.pagadoCentavos < celda.planificadoCentavos
-  const puedePagar =
-    dia.esHoy &&
-    muestraPlan &&
-    fila.diferenciaCentavos > 0 &&
-    fila.estado !== 'pagado' &&
-    fila.estado !== 'confeccionada_pendiente_autorizacion'
+  const pagoCompleto = estaPago(fila)
+  const faltaEnElDia = celda.planificadoCentavos > celda.pagadoCentavos
+  const tonoPlan = pagoCompleto ? 'pagado' : dia.fecha < hoy ? 'vencido' : 'aPagar'
+  const puedePagar = dia.esHoy && puedePagarFila(fila) && faltaEnElDia
   return (
-    <span className="inline-flex flex-col items-center gap-0.5">
-      {muestraPlan ? (
+    <span className="inline-flex max-w-full flex-col items-center gap-0.5">
+      {faltaEnElDia ? (
         <span
-          className="text-neutral-400 tabular-nums dark:text-neutral-500"
-          title={celda.corrido ? 'Pasado al día hábil anterior' : undefined}
+          className={`tabular-nums ${claseTono(tonoPlan)}`}
+          title={celda.corrido ? 'Cayó en finde o feriado: se anota este día.' : undefined}
         >
           {celda.corrido ? '↩ ' : ''}
-          {monto(celda.planificadoCentavos, fila.moneda)}
+          {pagoCompleto ? '✓ ' : ''}
+          {formatMoneyCentavos(celda.planificadoCentavos, fila.moneda)}
         </span>
       ) : null}
       {celda.pagadoCentavos > 0 ? (
-        <span className="text-emerald-700 tabular-nums dark:text-emerald-400">
-          ✓ {monto(celda.pagadoCentavos, fila.moneda)}
+        <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
+          {pagoCompleto && !faltaEnElDia ? '✓ ' : ''}
+          {formatMoneyCentavos(celda.pagadoCentavos, fila.moneda)}
         </span>
       ) : null}
       {puedePagar ? (
         <button
           type="button"
-          className="rounded bg-brand-primary px-1.5 py-0.5 text-[11px] font-medium leading-none text-white"
-          onClick={() => onPagar(fila.compromisoId)}
+          className="rounded bg-brand-primary px-1.5 py-0.5 text-[13px] font-medium leading-none text-white"
+          onClick={(event) => {
+            event.stopPropagation()
+            onPagar(fila.compromisoId)
+          }}
         >
           Pagar
         </button>

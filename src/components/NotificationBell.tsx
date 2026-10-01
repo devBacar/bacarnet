@@ -358,17 +358,16 @@ export function NotificationBell() {
   }
 
   const badgeLabel = unreadCount > 9 ? '9+' : String(unreadCount)
+  const bellLabel =
+    unreadCount > 0 ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'
 
   return (
     <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        aria-label={
-          unreadCount > 0
-            ? `Notificaciones, ${unreadCount} sin leer`
-            : 'Notificaciones'
-        }
+        aria-label={bellLabel}
+        title={bellLabel}
         aria-expanded={open}
         data-testid="notification-bell-button"
         className="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-neutral-200 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900 dark:border-zinc-700 dark:text-gray-400 dark:hover:bg-zinc-800 dark:hover:text-gray-100"

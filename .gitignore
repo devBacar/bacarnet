@@ -59,3 +59,16 @@ body*.json
 
 # Mapa local para git filter-repo (contiene contraseñas literales; nunca commitear)
 scripts/git-filter-repo-passwords.txt
+
+# Entorno de pruebas local (emuladores, backend compilado aparte, respaldos). Nunca commitear.
+.emulator-data/
+firebase-export-*/
+backend_clean/
+backend/.secrets/
+backend/output/
+backend/scripts/output/
+scripts/n8n-admin/output/
+scripts/bin/*.log
+tmp/
+tmp-*.html
+mobile-audit-screenshots/

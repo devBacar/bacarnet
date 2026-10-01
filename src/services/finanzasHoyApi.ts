@@ -24,6 +24,7 @@ export interface PagoHoy {
   medioPago: MedioPagoHoy
   proveedorONombre: string
   sugerenciasBanco: SugerenciaBanco[]
+  moneda?: 'ARS' | 'USD'
 }
 
 export interface IngresoHoy {
@@ -186,6 +187,39 @@ export async function fetchCarteraHoy(montoCentavos: number): Promise<ChequeCart
   if (!res.ok) await leerError(res, 'No pude mirar los cheques de la cartera')
   const data = (await res.json()) as { cheques: ChequeCarteraHoy[] }
   return data.cheques
+}
+
+export type PartePagoCombinado =
+  | { medio: 'efectivo'; cajaId: string; montoCentavos: number }
+  | { medio: 'cheque_cartera'; chequeId: string }
+  | {
+      medio: 'cheque_propio'
+      montoCentavos: number
+      cheque: { tipo: 'echeq' | 'fisico'; numero: string; banco: string; fechaPago: string }
+    }
+
+/** Varias formas juntas. Las transferencias no van acá: se arman en el flujo de firma. */
+export async function pagarHoyCombinado(
+  compromisoId: string,
+  partes: PartePagoCombinado[],
+  comprobantes: Array<{ indice: number; archivo: File }> = [],
+): Promise<string> {
+  const body =
+    comprobantes.length > 0
+      ? (() => {
+          const form = new FormData()
+          form.set('partes', JSON.stringify(partes))
+          for (const item of comprobantes) form.set(`comprobante_${item.indice}`, item.archivo)
+          return form
+        })()
+      : JSON.stringify({ partes })
+  const res = await hoyFetch(`/compromisos/${encodeURIComponent(compromisoId)}/pago-combinado`, {
+    method: 'POST',
+    body,
+  })
+  if (!res.ok) await leerError(res, 'No se pudo anotar el pago')
+  const data = (await res.json()) as { mensaje: string }
+  return data.mensaje
 }
 
 export async function pagarHoyConCheque(compromisoId: string, chequeId: string): Promise<string> {

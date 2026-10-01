@@ -151,6 +151,8 @@ describe('actualizarEstadosTransferencias', () => {
       compromisoId: 'comp-1',
       cuentaDebitoId: 'patagonia-cc',
       nota: 'La transferencia quedó hecha en el banco.',
+      transferenciaId: 't1',
+      montoCentavos: 150050,
     })
   })
 })

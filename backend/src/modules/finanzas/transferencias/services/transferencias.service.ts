@@ -322,6 +322,36 @@ export async function cancelarTransferenciaConfeccionada(input: {
 
   const compromiso = await getCompromisoDocument(compromisoPagoId)
   if (!compromiso) throw new TransferenciaCancelacionError('Compromiso no encontrado', 404)
+  const { listarTransferenciasEnFirma } = await import('../../hoy/domain/transferencia-en-firma.js')
+  const enFirma = listarTransferenciasEnFirma(compromiso.transferenciasEnFirma)
+  if (enFirma.some((item) => item.transferenciaId === transferenciaId)) {
+    await marcarTransferenciaCancelada({
+      transferenciaId,
+      estadoAnterior: row.data.estado,
+      nota: NOTA_CANCELACION_MANUAL_BACARNET,
+    })
+    const { liberarTransferenciaDelCompromiso } = await import('../../agenda/services/compromisos.service.js')
+    await liberarTransferenciaDelCompromiso({
+      compromisoId: compromisoPagoId,
+      transferenciaId,
+      actorUid: input.actorUid,
+      nota: NOTA_CANCELACION_MANUAL_BACARNET,
+    })
+    const updatedParcial = await getTransferenciaDocument(transferenciaId)
+    if (!updatedParcial) throw new TransferenciaCancelacionError('Transferencia no encontrada', 404)
+    const compromisoParcial = await getCompromisoDocument(compromisoPagoId)
+    return {
+      transferencia: serializeTransferencia(transferenciaId, updatedParcial.data),
+      compromiso: compromisoParcial
+        ? {
+            id: compromisoPagoId,
+            estado: compromisoParcial.estado,
+            transferenciaConfeccionadaId: compromisoParcial.transferenciaConfeccionadaId ?? null,
+          }
+        : null,
+      nota: NOTA_CANCELACION_MANUAL_BACARNET,
+    }
+  }
   if (compromiso.transferenciaConfeccionadaId !== transferenciaId) {
     throw new TransferenciaCancelacionError(
       'El compromiso no apunta a esta transferencia. No se modificó ningún registro.',

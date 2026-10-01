@@ -52,6 +52,8 @@ export interface CompromisoParaPlanilla {
   cuotaTotal: number | null
   observacion: string | null
   pagos: PagoRegistradoVista[]
+  /** Monto reservado en transferencias que todavía no se firmaron. */
+  enFirmaCentavos?: number
 }
 
 export interface FilaPlanilla {
@@ -70,6 +72,7 @@ export interface FilaPlanilla {
   porDia: Record<string, CeldaDia>
   acumuladoCentavos: number
   diferenciaCentavos: number
+  enFirmaCentavos: number
   estado: string
 }
 
@@ -249,6 +252,10 @@ function filaDe(
     porDia,
     acumuladoCentavos,
     diferenciaCentavos,
+    enFirmaCentavos:
+      row.estado === 'confeccionada_pendiente_autorizacion'
+        ? diferenciaCentavos
+        : Math.min(diferenciaCentavos, Math.max(0, row.enFirmaCentavos ?? 0)),
     estado: completo ? 'pagado' : row.estado,
   }
 }

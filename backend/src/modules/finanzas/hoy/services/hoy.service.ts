@@ -1,5 +1,6 @@
 import { agendaTimestampToDate, agendaTimestampToIso } from '../../agenda/domain/agendaTimestamps.js'
-import { listarPagos, restanteAPagarCentavos } from '../../agenda/domain/pago-compromiso.js'
+import { listarPagos } from '../../agenda/domain/pago-compromiso.js'
+import { faltaPagarCentavos, listarTransferenciasEnFirma } from '../domain/transferencia-en-firma.js'
 import { parsePrioridadUrgencia } from '../../agenda/domain/agenda.prioridad.js'
 import type { CobroEsperadoDocument, CompromisoPagoDocument, MedioPago } from '../../agenda/domain/agenda.types.js'
 import { listAllCobros, listAllCompromisos } from '../../agenda/services/agenda.repository.js'
@@ -61,10 +62,11 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
     id,
     concepto: data.concepto,
     proveedorONombre: data.proveedorONombre,
-    montoCentavos: restanteAPagarCentavos({
+    montoCentavos: faltaPagarCentavos({
       estado: data.estado,
       montoCentavos: data.montoCentavos,
       pagos: listarPagos(data.pagos),
+      transferenciasEnFirma: listarTransferenciasEnFirma(data.transferenciasEnFirma),
     }),
     fechaVencimiento,
     urgencia: parsePrioridadUrgencia(data.urgenciaManual),
@@ -181,6 +183,8 @@ export async function cerrarCompromisosConTransferenciaHecha(actorUid: string, n
       actorUid,
       cuentaId: row.data.cuentaDebitoId,
       nota: 'La transferencia quedó hecha en el banco.',
+      transferenciaId: row.id,
+      montoCentavos: row.data.montoCentavos,
     })
   }
 }

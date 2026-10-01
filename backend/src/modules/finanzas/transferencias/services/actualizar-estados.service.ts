@@ -41,7 +41,15 @@ export interface ActualizarEstadosDeps {
   cbuDebito: (cuentaId: string) => string | null
   numeroDebito: (cuentaId: string) => string | null
   /** Cuando el banco informa que la transferencia quedó hecha. */
-  alQuedarHecha: (input: { compromisoId: string; cuentaDebitoId: string; nota: string }) => Promise<void>
+  alQuedarHecha: (input: {
+    compromisoId: string
+    cuentaDebitoId: string
+    nota: string
+    transferenciaId: string
+    montoCentavos: number
+  }) => Promise<void>
+  /** Cuando el banco la rechaza: el monto reservado vuelve a faltar. */
+  alQuedarRechazada: (input: { compromisoId: string; transferenciaId: string; nota: string }) => Promise<void>
 }
 
 function diaDeTimestamp(value: unknown): string | null {
@@ -62,6 +70,8 @@ async function marcarCompromisoHechoPorDefecto(input: {
   compromisoId: string
   cuentaDebitoId: string
   nota: string
+  transferenciaId: string
+  montoCentavos: number
 }): Promise<void> {
   const { marcarCompromisoPagadoPorTransferenciaHecha } = await import(
     '../../agenda/services/compromisos.service.js'
@@ -70,6 +80,22 @@ async function marcarCompromisoHechoPorDefecto(input: {
     compromisoId: input.compromisoId,
     actorUid: 'sistema',
     cuentaId: input.cuentaDebitoId,
+    nota: input.nota,
+    transferenciaId: input.transferenciaId,
+    montoCentavos: input.montoCentavos,
+  })
+}
+
+async function liberarCompromisoRechazadoPorDefecto(input: {
+  compromisoId: string
+  transferenciaId: string
+  nota: string
+}): Promise<void> {
+  const { liberarTransferenciaDelCompromiso } = await import('../../agenda/services/compromisos.service.js')
+  await liberarTransferenciaDelCompromiso({
+    compromisoId: input.compromisoId,
+    transferenciaId: input.transferenciaId,
+    actorUid: 'sistema',
     nota: input.nota,
   })
 }
@@ -84,6 +110,7 @@ function depsPorDefecto(now: Date): ActualizarEstadosDeps {
     cbuDebito: cbuDeCuentaPropia,
     numeroDebito: numeroDebitoSeguro,
     alQuedarHecha: marcarCompromisoHechoPorDefecto,
+    alQuedarRechazada: liberarCompromisoRechazadoPorDefecto,
   }
 }
 
@@ -188,13 +215,22 @@ export async function actualizarEstadosTransferencias(input?: {
       estadoInterbanking: nuevo,
       fechaSolicitudInterbanking: match.detalle.requestDate,
     })
-    if (rotuloNuevo?.tono === 'hecha') {
+    if (rotuloNuevo?.tono === 'hecha' || rotuloNuevo?.tono === 'rechazada') {
       const compromisoId = row.data.compromisoPagoId?.trim() ?? ''
-      if (compromisoId) {
+      if (compromisoId && rotuloNuevo.tono === 'hecha') {
         await deps.alQuedarHecha({
           compromisoId,
           cuentaDebitoId: row.data.cuentaDebitoId,
           nota: 'La transferencia quedó hecha en el banco.',
+          transferenciaId: row.id,
+          montoCentavos: row.data.montoCentavos,
+        })
+      }
+      if (compromisoId && rotuloNuevo.tono === 'rechazada') {
+        await deps.alQuedarRechazada({
+          compromisoId,
+          transferenciaId: row.id,
+          nota: 'El banco rechazó la transferencia. Ese monto vuelve a faltar.',
         })
       }
     }

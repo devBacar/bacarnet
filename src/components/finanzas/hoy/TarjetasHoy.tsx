@@ -12,11 +12,11 @@ import { montoCorto } from './montoCorto'
  * -------------------------------------------------------------------------- */
 
 export const botonChico =
-  'inline-flex shrink-0 items-center justify-center rounded-md bg-brand-primary px-2 py-1 text-xs font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
+  'inline-flex shrink-0 items-center justify-center rounded-md bg-brand-primary px-2.5 py-1.5 text-[13px] font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50'
 export const botonChicoSecundario =
-  'inline-flex shrink-0 items-center justify-center rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800'
+  'inline-flex shrink-0 items-center justify-center rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-[13px] font-medium text-neutral-800 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800'
 export const linkChico =
-  'text-xs text-neutral-600 underline-offset-2 transition hover:text-neutral-900 hover:underline dark:text-gray-400 dark:hover:text-gray-100'
+  'text-[13px] text-neutral-600 underline-offset-2 transition hover:text-neutral-900 hover:underline dark:text-gray-400 dark:hover:text-gray-100'
 
 /** Monto completo con centavos; en rojo si es negativo. */
 export function Monto({
@@ -39,7 +39,7 @@ export function Monto({
 
 export function Etiqueta({ tono, children }: { tono: TonoEstado; children: ReactNode }) {
   return (
-    <span className={`inline-flex shrink-0 rounded-full px-1.5 py-0.5 text-xs font-medium ${ETIQUETA_ESTADO_CLASES[tono]}`}>
+    <span className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[13px] font-medium ${ETIQUETA_ESTADO_CLASES[tono]}`}>
       {children}
     </span>
   )
@@ -59,7 +59,7 @@ export function EtiquetaEstado({
 /** Línea de ayuda gris con ícono, al pie de una tarjeta. */
 export function Ayuda({ children }: { children: ReactNode }) {
   return (
-    <p className="text-body-muted mt-2 flex items-start gap-1.5 border-t border-neutral-100 pt-2 text-xs dark:border-zinc-800">
+    <p className="text-body-muted mx-4 mb-3 mt-2 flex items-start gap-1.5 border-t border-neutral-100 pt-2 text-[13px] dark:border-zinc-800">
       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>{children}</span>
     </p>
@@ -81,15 +81,15 @@ export function Tarjeta({
   children: ReactNode
 }) {
   return (
-    <section className="min-w-0 rounded-xl border border-neutral-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-      <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+    <section className="min-w-0 overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
         <div className="min-w-0">
-          <h2 className="text-heading text-sm font-medium">{titulo}</h2>
-          {subtitulo ? <p className="text-body-muted text-xs">{subtitulo}</p> : null}
+          <h2 className="text-brand-primary text-[15px] font-medium">{titulo}</h2>
+          {subtitulo ? <p className="text-brand-primary text-[13px]">{subtitulo}</p> : null}
         </div>
         {derecha ? <div className="flex min-w-0 flex-wrap items-center gap-2">{derecha}</div> : null}
       </header>
-      <div className="mt-2 min-w-0">{children}</div>
+      <div className="min-w-0 p-4">{children}</div>
       {ayuda ? <Ayuda>{ayuda}</Ayuda> : null}
     </section>
   )
@@ -97,7 +97,7 @@ export function Tarjeta({
 
 /** Una sola línea gris para cuando no hay nada. */
 export function Vacio({ texto }: { texto: string }) {
-  return <p className="text-body-muted py-1 text-xs">{texto}</p>
+  return <p className="text-body-muted py-1.5 text-[13px]">{texto}</p>
 }
 
 /** Menú ⋯ chico con las acciones secundarias de una fila. */
@@ -137,7 +137,7 @@ export function MenuAcciones({ opciones, etiqueta = 'Más acciones' }: { opcione
               key={opcion.texto}
               type="button"
               role="menuitem"
-              className="block w-full rounded px-2 py-1.5 text-left text-xs text-neutral-800 hover:bg-neutral-100 dark:text-gray-100 dark:hover:bg-zinc-800"
+              className="block w-full rounded px-2 py-2 text-left text-[13px] text-neutral-800 hover:bg-neutral-100 dark:text-gray-100 dark:hover:bg-zinc-800"
               onClick={() => {
                 setAbierto(false)
                 opcion.onClick()
@@ -159,7 +159,7 @@ export function MenuAcciones({ opciones, etiqueta = 'Más acciones' }: { opcione
 /** Una línea discreta arriba cuando hay datos de ejemplo en el entorno de pruebas. */
 export function FranjaDemo({ borrando, onBorrar }: { borrando: boolean; onBorrar: () => void }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-[13px] text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
       <span>Estás viendo datos de ejemplo (DEMO).</span>
       <button
         type="button"
@@ -174,16 +174,16 @@ export function FranjaDemo({ borrando, onBorrar }: { borrando: boolean; onBorrar
 }
 
 export function EncabezadoHoy({ fecha }: { fecha: string }) {
-  return <h1 className="text-heading text-lg font-semibold">Hoy · {fechaLarga(fecha)}</h1>
+  return <h1 className="text-heading text-xl font-semibold">Hoy · {fechaLarga(fecha)}</h1>
 }
 
 function Numero({ titulo, centavos, tono = 'normal' }: { titulo: string; centavos: number; tono?: 'normal' | 'verde' }) {
   const color =
     centavos < 0 ? 'text-red-600 dark:text-red-400' : tono === 'verde' ? 'text-emerald-700 dark:text-emerald-300' : 'text-heading'
   return (
-    <div className="min-w-0 rounded-lg bg-neutral-50 px-2.5 py-2 dark:bg-zinc-800/60">
-      <p className="text-body-muted text-xs">{titulo}</p>
-      <p className={`break-words text-base font-medium tabular-nums ${color}`}>{formatMoneyCentavos(centavos, 'ARS')}</p>
+    <div className="min-w-0 rounded-xl border border-neutral-300 bg-white px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
+      <p className="text-body-muted text-[13px]">{titulo}</p>
+      <p className={`break-words text-[17px] font-medium tabular-nums ${color}`}>{formatMoneyCentavos(centavos, 'ARS')}</p>
     </div>
   )
 }
@@ -226,7 +226,7 @@ export function TarjetaBancos({
           {dia.bancos.map((banco) => {
             const queda = banco.saldoAhoraCentavos - dia.pagosCentavos
             return (
-              <li key={banco.bancoNombre} className="flex items-center justify-between gap-2 py-1.5 text-sm">
+              <li key={banco.bancoNombre} className="flex items-center justify-between gap-2 py-2 text-[15px]">
                 {onAbrirBanco ? (
                   <button
                     type="button"
@@ -248,7 +248,7 @@ export function TarjetaBancos({
         </ul>
       )}
       {sugerencia ? (
-        <p className={`mt-1 text-xs ${sugerencia.tono === 'ok' ? 'text-emerald-800 dark:text-emerald-200' : 'text-amber-900 dark:text-amber-200'}`}>
+        <p className={`mt-1 text-[13px] ${sugerencia.tono === 'ok' ? 'text-emerald-800 dark:text-emerald-200' : 'text-amber-900 dark:text-amber-200'}`}>
           {sugerencia.texto}
         </p>
       ) : null}
@@ -282,12 +282,12 @@ export function TarjetaSemanaGrafico({ prevision }: { prevision: HoyResponse['pr
                     title={`A cobrar: ${formatMoneyCentavos(fila.aCobrarCentavos, 'ARS')}`}
                   />
                 </div>
-                <span className={`text-xs ${fila.esElMasPesado ? 'text-heading font-medium' : 'text-body-muted'}`}>{diaCorto(fila.fecha)}</span>
+                <span className={`text-[13px] ${fila.esElMasPesado ? 'text-heading font-medium' : 'text-body-muted'}`}>{diaCorto(fila.fecha)}</span>
               </div>
             ))}
           </div>
           {pesado ? (
-            <p className="mt-1 text-xs text-amber-900 dark:text-amber-200">
+            <p className="mt-1 text-[13px] text-amber-900 dark:text-amber-200">
               El {nombreDia(pesado.fecha)} es el día más pesado: pagás {montoCorto(pesado.aPagarCentavos)}.
             </p>
           ) : null}
@@ -360,7 +360,7 @@ export function TarjetaOjo({ prevision }: { prevision: HoyResponse['prevision'] 
       ) : (
         <ul className="divide-y divide-neutral-100 dark:divide-zinc-800">
           {avisos.map((aviso) => (
-            <li key={aviso.clave} className="flex items-start justify-between gap-2 py-1.5 text-xs">
+            <li key={aviso.clave} className="flex items-start justify-between gap-2 py-2 text-[13px]">
               <span className={`min-w-0 ${aviso.tono === 'rojo' ? 'text-red-700 dark:text-red-300' : 'text-amber-900 dark:text-amber-200'}`}>
                 {aviso.href ? (
                   <Link to={aviso.href} className="underline-offset-2 hover:underline">

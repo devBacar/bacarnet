@@ -126,9 +126,163 @@ export function armarSemana(planillas: PlanillaCompromisosMes[], dias: string[])
   return { grupos, totalPorDia, totalFaltaPagar, feriados, hayFilas: grupos.length > 0 }
 }
 
-/** "pagado la mitad" o "pagado 1,2 M de 2,4 M" cuando hay un pago parcial. */
+/** "pagado $X de $Y" cuando hay un pago parcial. */
 export function textoParcial(fila: FilaCompromisoMes, corto: (centavos: number, moneda: MonedaCompromiso) => string): string | null {
   if (fila.acumuladoCentavos <= 0 || fila.diferenciaCentavos <= 0) return null
-  if (fila.acumuladoCentavos * 2 === fila.importeCentavos) return 'pagado la mitad'
   return `pagado ${corto(fila.acumuladoCentavos, fila.moneda)} de ${corto(fila.importeCentavos, fila.moneda)}`
+}
+
+export function textoComoSePaga(medio: string): string {
+  if (medio === 'cheque') return 'con cheque'
+  if (medio === 'efectivo') return 'en efectivo'
+  return 'por transferencia'
+}
+
+/** "venció ayer" o "venció el martes". */
+export function textoVencido(fecha: string, hoy: string): string | null {
+  if (fecha >= hoy) return null
+  if (fecha === sumarDias(hoy, -1)) return 'venció ayer'
+  const nombre = new Intl.DateTimeFormat('es-AR', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${fecha}T12:00:00Z`))
+  return `venció el ${nombre}`
+}
+
+/** "Hoy jueves 1" o "Viernes 2". */
+export function tituloDiaLista(fecha: string, hoy: string): { texto: string; esHoy: boolean } {
+  const nombre = new Intl.DateTimeFormat('es-AR', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${fecha}T12:00:00Z`))
+  const numero = Number(fecha.slice(8))
+  if (fecha === hoy) return { texto: `Hoy ${nombre} ${numero}`, esHoy: true }
+  return { texto: `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${numero}`, esHoy: false }
+}
+
+export interface FilaListaSemana {
+  compromisoId: string
+  concepto: string
+  proveedorONombre: string
+  grupo: string
+  moneda: MonedaCompromiso
+  cuota: string | null
+  medioPago: string
+  fechaVencimiento: string
+  importeCentavos: number
+  acumuladoCentavos: number
+  diferenciaCentavos: number
+  enFirmaCentavos: number
+  faltaCentavos: number
+  estado: string
+}
+
+export interface DiaListaSemana {
+  fecha: string
+  filas: FilaListaSemana[]
+  total: MontosMoneda
+}
+
+export interface ListaSemana {
+  vencidos: FilaListaSemana[]
+  totalVencidos: MontosMoneda
+  dias: DiaListaSemana[]
+}
+
+function enFirmaDe(fila: FilaCompromisoMes): number {
+  const extra = fila.enFirmaCentavos
+  if (fila.estado === 'confeccionada_pendiente_autorizacion') return fila.diferenciaCentavos
+  if (typeof extra === 'number' && extra > 0) return Math.min(extra, fila.diferenciaCentavos)
+  return 0
+}
+
+function aLista(fila: FilaSemana, dias: string[]): FilaListaSemana & { dia: string | null } {
+  const enFirmaCentavos = enFirmaDe(fila)
+  return {
+    dia: diaColocado(fila, dias),
+    compromisoId: fila.compromisoId,
+    concepto: fila.concepto,
+    proveedorONombre: fila.proveedorONombre,
+    grupo: fila.grupo,
+    moneda: fila.moneda,
+    cuota: fila.cuota,
+    medioPago: fila.medioPago,
+    fechaVencimiento: fila.fechaVencimiento,
+    importeCentavos: fila.importeCentavos,
+    acumuladoCentavos: fila.acumuladoCentavos,
+    diferenciaCentavos: fila.diferenciaCentavos,
+    enFirmaCentavos,
+    faltaCentavos: Math.max(0, fila.diferenciaCentavos - enFirmaCentavos),
+    estado: fila.estado,
+  }
+}
+
+function unirFilas(planillas: PlanillaCompromisosMes[]): FilaSemana[] {
+  const orden: string[] = []
+  const porId = new Map<string, FilaSemana>()
+  for (const planilla of planillas) {
+    for (const grupo of planilla.grupos) {
+      for (const fila of grupo.filas) {
+        const previa = porId.get(fila.compromisoId)
+        if (previa) {
+          previa.porDia = { ...previa.porDia, ...fila.porDia }
+          continue
+        }
+        orden.push(fila.compromisoId)
+        porId.set(fila.compromisoId, { ...fila, porDia: { ...fila.porDia }, grupo: grupo.grupo })
+      }
+    }
+  }
+  return orden.flatMap((id) => {
+    const fila = porId.get(id)
+    return fila ? [fila] : []
+  })
+}
+
+function diaColocado(fila: FilaCompromisoMes, dias: string[]): string | null {
+  const conPlan = dias.find((dia) => (fila.porDia[dia]?.planificadoCentavos ?? 0) > 0)
+  if (conPlan) return conPlan
+  const conPago = dias.find((dia) => (fila.porDia[dia]?.pagadoCentavos ?? 0) > 0)
+  if (conPago) return conPago
+  return dias.includes(fila.fechaVencimiento) ? fila.fechaVencimiento : null
+}
+
+function sumarFalta(filas: readonly FilaListaSemana[]): MontosMoneda {
+  const total = vacio()
+  for (const fila of filas) sumarMoneda(total, fila.moneda, fila.faltaCentavos)
+  return total
+}
+
+/**
+ * Lista de la semana: vencidos aparte (solo la semana actual) y un bloque por día hábil.
+ * En la semana actual, lo ya pasado entra en vencidos y lo pagado de esos días no se muestra.
+ */
+export function armarListaSemana(input: {
+  planillas: PlanillaCompromisosMes[]
+  dias: string[]
+  hoy: string
+  esEstaSemana: boolean
+  feriados?: ReadonlySet<string>
+}): ListaSemana {
+  const feriados = new Set<string>(input.feriados ?? [])
+  for (const planilla of input.planillas) {
+    for (const columna of planilla.dias) {
+      if (columna.tipo === 'feriado') feriados.add(columna.fecha)
+    }
+  }
+  const filas = unirFilas(input.planillas).map((fila) => aLista(fila, input.dias))
+  const vencidos = input.esEstaSemana
+    ? filas
+        .filter((fila) => fila.fechaVencimiento < input.hoy && fila.diferenciaCentavos > 0 && fila.estado !== 'pagado')
+        .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento) || a.concepto.localeCompare(b.concepto, 'es'))
+    : []
+  const idsVencidos = new Set(vencidos.map((fila) => fila.compromisoId))
+  const desde = input.esEstaSemana ? input.dias.filter((dia) => dia >= input.hoy) : input.dias
+  const dias: DiaListaSemana[] = []
+  for (const fecha of desde) {
+    if (feriados.has(fecha)) continue
+    const delDia = filas
+      .filter((fila) => !idsVencidos.has(fila.compromisoId) && fila.dia === fecha)
+      .sort((a, b) => a.concepto.localeCompare(b.concepto, 'es'))
+    const visibles = input.esEstaSemana
+      ? delDia.filter((fila) => fila.faltaCentavos > 0 || fila.enFirmaCentavos > 0)
+      : delDia
+    if (!input.esEstaSemana && visibles.length === 0) continue
+    dias.push({ fecha, filas: visibles, total: sumarFalta(visibles) })
+  }
+  return { vencidos, totalVencidos: sumarFalta(vencidos), dias }
 }

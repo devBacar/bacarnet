@@ -31,6 +31,12 @@ import {
   estadoTrasEditarImporte,
 } from '../domain/pago-compromiso.js'
 import {
+  aplicarTransferenciaHecha,
+  aplicarTransferenciaRechazada,
+  listarTransferenciasEnFirma,
+  montoEnFirmaCentavos,
+} from '../../hoy/domain/transferencia-en-firma.js'
+import {
   appendCompromisoHistorial,
   commitPagoCompromiso,
   createCompromisoWithHistorial,
@@ -95,6 +101,7 @@ export async function serializeCompromiso(id: string, data: CompromisoPagoDocume
       montoCentavos: data.montoCentavos,
       pagos,
     }),
+    enFirmaCentavos: montoEnFirmaCentavos(listarTransferenciasEnFirma(data.transferenciasEnFirma)),
     alertaVencimiento,
     createdAt: agendaTimestampToIso(data.createdAt),
     updatedAt: agendaTimestampToIso(data.updatedAt),
@@ -190,6 +197,7 @@ export async function createCompromisoAgenda(input: {
       medioPago: chequeId ? 'cheque' : medioPago,
       chequeId,
       transferenciaConfeccionadaId: null,
+      transferenciasEnFirma: [],
       estado: 'pendiente',
       esViatico,
       beneficiarioEmpleado: esViatico ? beneficiarioEmpleado : null,
@@ -309,27 +317,111 @@ function fechaDesdeDiaArgentina(ymd: string): Date | null {
   return Number.isNaN(fecha.getTime()) ? null : fecha
 }
 
-/** La transferencia ya figura hecha en el banco: el pago deja de estar pendiente. */
+/** La transferencia ya figura hecha en el banco: se anota el pago por el monto de esa transferencia. */
 export async function marcarCompromisoPagadoPorTransferenciaHecha(input: {
   compromisoId: string
   actorUid: string
   cuentaId: string | null
   nota: string
+  transferenciaId?: string | null
+  montoCentavos?: number | null
 }): Promise<void> {
   const current = await getCompromisoDocument(input.compromisoId)
   if (!current || current.estado === 'pagado') return
+  const transferenciaId = input.transferenciaId?.trim() ?? ''
+  const aplicado = aplicarTransferenciaHecha(
+    {
+      estado: current.estado,
+      montoCentavos: current.montoCentavos,
+      pagos: listarPagos(current.pagos),
+      transferenciasEnFirma: listarTransferenciasEnFirma(current.transferenciasEnFirma),
+      transferenciaConfeccionadaId: current.transferenciaConfeccionadaId ?? null,
+    },
+    {
+      transferenciaId,
+      montoCentavos: input.montoCentavos ?? 0,
+      fecha: dateKeyInArgentina(new Date()),
+      registradoPor: input.actorUid.trim() || 'sistema',
+      registradoAt: null,
+    },
+  )
+  const montoSolicitado =
+    aplicado.decision.tipo === 'aplicado' ? aplicado.decision.montoCentavos : aplicado.montoRegistrado
+  if (aplicado.decision.tipo === 'ya_pagado' || montoSolicitado <= 0) {
+    if (transferenciaId) {
+      await guardarTransferenciasEnFirma(input.compromisoId, input.actorUid, aplicado.transferenciasEnFirma, input.nota)
+    }
+    return
+  }
   await registrarPagoCompromiso({
     compromisoId: input.compromisoId,
     actorUid: input.actorUid,
     medio: 'transferencia',
     fecha: new Date(),
-    montoSolicitado: null,
-    referenciaId: null,
+    montoSolicitado,
+    referenciaId: transferenciaId || null,
     cuentaId: input.cuentaId ?? current.cuentaId,
     chequeId: null,
     nota: input.nota,
     aplicarCuenta: true,
     siYaPagado: 'silencio',
+  })
+  if (transferenciaId) {
+    await guardarTransferenciasEnFirma(input.compromisoId, input.actorUid, aplicado.transferenciasEnFirma, input.nota)
+  }
+}
+
+/** El banco rechazó o se anuló la transferencia: el monto reservado vuelve a faltar. */
+export async function liberarTransferenciaDelCompromiso(input: {
+  compromisoId: string
+  transferenciaId: string
+  actorUid: string
+  nota: string
+}): Promise<void> {
+  const current = await getCompromisoDocument(input.compromisoId)
+  if (!current || current.estado === 'pagado') return
+  const siguiente = aplicarTransferenciaRechazada(
+    {
+      estado: current.estado,
+      transferenciaConfeccionadaId: current.transferenciaConfeccionadaId ?? null,
+      transferenciasEnFirma: listarTransferenciasEnFirma(current.transferenciasEnFirma),
+    },
+    input.transferenciaId,
+  )
+  if (!siguiente.cambio) return
+  await appendCompromisoHistorial({
+    compromisoId: input.compromisoId,
+    historial: buildAgendaHistorialEntry({
+      estadoAnterior: current.estado,
+      estadoNuevo: siguiente.estado,
+      usuario: input.actorUid.trim() || 'sistema',
+      nota: input.nota,
+    }),
+    patch: {
+      estado: siguiente.estado,
+      transferenciaConfeccionadaId: siguiente.transferenciaConfeccionadaId,
+      transferenciasEnFirma: siguiente.transferenciasEnFirma,
+    },
+  })
+}
+
+async function guardarTransferenciasEnFirma(
+  compromisoId: string,
+  actorUid: string,
+  transferenciasEnFirma: Array<{ transferenciaId: string; montoCentavos: number }>,
+  nota: string,
+): Promise<void> {
+  const current = await getCompromisoDocument(compromisoId)
+  if (!current) return
+  await appendCompromisoHistorial({
+    compromisoId,
+    historial: buildAgendaHistorialEntry({
+      estadoAnterior: current.estado,
+      estadoNuevo: current.estado,
+      usuario: actorUid.trim() || 'sistema',
+      nota,
+    }),
+    patch: { transferenciasEnFirma },
   })
 }
 

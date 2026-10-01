@@ -132,6 +132,7 @@ async function vincularSiCorresponde(input: {
   transferenciaId: string
   actorUid: string
   cuentaDebitoId: string
+  montoCentavos: number
 }) {
   if (!input.compromisoPagoId) return
   const { vincularCompromisoATransferenciaDirecta } = await import('./vincular-compromiso-confeccion.js')
@@ -141,6 +142,7 @@ async function vincularSiCorresponde(input: {
       transferenciaId: input.transferenciaId,
       actorUid: input.actorUid,
       cuentaDebitoId: input.cuentaDebitoId,
+      montoCentavos: input.montoCentavos,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'No se pudo vincular el pago'
@@ -204,6 +206,7 @@ export async function confeccionarTransferenciaDirecta(input: {
       transferenciaId: existente.id,
       actorUid: input.actorUid,
       cuentaDebitoId: existente.data.cuentaDebitoId,
+      montoCentavos: existente.data.montoCentavos,
     })
     return {
       ok: true as const,
@@ -216,6 +219,17 @@ export async function confeccionarTransferenciaDirecta(input: {
   if (compromisoParaTransferir === 'confeccionada') {
     await abortIdempotentConfeccion(parsed.idempotencyKey)
     throw new TransferenciaHttpError(400, { error: 'Ese pago ya tiene una transferencia armada' })
+  }
+
+  if (parsed.compromisoPagoId) {
+    const { assertMontoTransferenciaCabe } = await import('./vincular-compromiso-confeccion.js')
+    try {
+      await assertMontoTransferenciaCabe(parsed.compromisoPagoId, parsed.montoCentavos)
+    } catch (err) {
+      await abortIdempotentConfeccion(parsed.idempotencyKey)
+      const message = err instanceof Error ? err.message : 'El monto supera lo que falta pagar'
+      throw new TransferenciaHttpError(400, { error: message })
+    }
   }
 
   const item: ConfeccionTransferenciaItem = {
@@ -353,6 +367,7 @@ export async function confeccionarTransferenciaDirecta(input: {
     transferenciaId,
     actorUid: input.actorUid,
     cuentaDebitoId: parsed.cuentaDebitoId,
+    montoCentavos: parsed.montoCentavos,
   })
 
   return {

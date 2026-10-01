@@ -150,7 +150,7 @@ function rankUrgencia(urgencia: UrgenciaHoy): number {
 
 export function seleccionarPagos(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
   const filas = compromisos.filter(
-    (row) => compromisoAbierto(row.estado) && row.fechaVencimiento <= hoy,
+    (row) => compromisoAbierto(row.estado) && row.fechaVencimiento <= hoy && row.montoCentavos > 0,
   )
   filas.sort((a, b) => {
     const vencidoA = a.fechaVencimiento < hoy ? 0 : 1

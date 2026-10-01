@@ -14,6 +14,7 @@ const {
   confeccionarLote,
   estadoCompromisoParaTransferencia,
   vincularCompromisoATransferenciaDirecta,
+  assertMontoTransferenciaCabe,
 } = vi.hoisted(() => ({
   getCuentaDocument: vi.fn(),
   beginIdempotentConfeccion: vi.fn(),
@@ -27,6 +28,7 @@ const {
   confeccionarLote: vi.fn(),
   estadoCompromisoParaTransferencia: vi.fn(),
   vincularCompromisoATransferenciaDirecta: vi.fn(),
+  assertMontoTransferenciaCabe: vi.fn(),
 }))
 
 vi.mock('../../services/cuentas.repository.js', () => ({ getCuentaDocument }))
@@ -45,6 +47,7 @@ vi.mock('./destinatarios.service.js', () => ({ registrarUsoDestinatario }))
 vi.mock('./vincular-compromiso-confeccion.js', () => ({
   estadoCompromisoParaTransferencia,
   vincularCompromisoATransferenciaDirecta,
+  assertMontoTransferenciaCabe,
 }))
 
 import { confeccionarTransferenciaDirecta } from './confeccion-directa.service.js'
@@ -125,6 +128,7 @@ describe('confeccionarTransferenciaDirecta', () => {
     abortIdempotentConfeccion.mockResolvedValue(undefined)
     estadoCompromisoParaTransferencia.mockResolvedValue('listo')
     vincularCompromisoATransferenciaDirecta.mockResolvedValue(undefined)
+    assertMontoTransferenciaCabe.mockResolvedValue(undefined)
   })
 
   it('no llama al proveedor si la misma clave ya confeccionó', async () => {

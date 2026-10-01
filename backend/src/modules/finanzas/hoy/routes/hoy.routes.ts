@@ -1,9 +1,13 @@
 import { Router } from 'express'
+import Busboy from 'busboy'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
+import { MULTIPART_UPLOAD_MAX_BYTES } from '../../../drive/uploadLimits.js'
 import {
   cobrarEnEfectivo,
   confirmarCobroLlegado,
+  PagoCombinadoIncompletoError,
+  pagarCompromisoCombinado,
   pagarCompromisoConChequeDeCartera,
   pagarCompromisoEnEfectivo,
   pasarCobroDeDia,
@@ -89,6 +93,90 @@ finanzasHoyRouter.get('/cartera', async (req, res) => {
   } catch (err) {
     console.error('[finanzas/hoy] cartera', err)
     res.status(500).json({ error: 'No pude mirar los cheques de la cartera.' })
+  }
+})
+
+async function leerPagoCombinado(req: import('express').Request): Promise<{
+  partes: unknown
+  comprobantes: Map<number, { fileName: string; mimeType: string; buffer: Buffer }>
+}> {
+  const contentType = req.headers['content-type'] ?? ''
+  if (!contentType.includes('multipart/form-data')) {
+    const body = (req.body ?? {}) as { partes?: unknown }
+    return { partes: body.partes, comprobantes: new Map() }
+  }
+  return new Promise((resolve, reject) => {
+    const fields: Record<string, string> = {}
+    const comprobantes = new Map<number, { fileName: string; mimeType: string; buffer: Buffer }>()
+    let tooLarge = false
+    let parser: ReturnType<typeof Busboy>
+    try {
+      parser = Busboy({
+        headers: req.headers,
+        limits: { fileSize: MULTIPART_UPLOAD_MAX_BYTES, files: 8, fields: 12 },
+      })
+    } catch (err) {
+      reject(err)
+      return
+    }
+    parser.on('field', (name, value) => {
+      fields[name] = value
+    })
+    parser.on('file', (fieldName, stream, info) => {
+      const chunks: Buffer[] = []
+      let size = 0
+      stream.on('data', (chunk: Buffer) => {
+        chunks.push(chunk)
+        size += chunk.length
+      })
+      stream.on('limit', () => {
+        tooLarge = true
+      })
+      stream.on('end', () => {
+        const match = /^comprobante_(\d+)$/.exec(fieldName)
+        if (!match || size === 0) return
+        comprobantes.set(Number(match[1]), {
+          fileName: info.filename,
+          mimeType: info.mimeType,
+          buffer: Buffer.concat(chunks),
+        })
+      })
+    })
+    parser.on('error', reject)
+    parser.on('finish', () => {
+      if (tooLarge) {
+        reject(new Error('El comprobante es demasiado grande'))
+        return
+      }
+      let partes: unknown = []
+      try {
+        partes = fields.partes ? JSON.parse(fields.partes) : []
+      } catch {
+        reject(new Error('No pude leer las formas de pago'))
+        return
+      }
+      resolve({ partes, comprobantes })
+    })
+    const rawBody = (req as import('express').Request & { rawBody?: Buffer }).rawBody
+    if (rawBody && rawBody.length > 0) parser.end(rawBody)
+    else if (req.readable) req.pipe(parser)
+    else reject(new Error('No llegó el pago'))
+  })
+}
+
+finanzasHoyRouter.post('/compromisos/:id/pago-combinado', async (req, res) => {
+  try {
+    const { partes, comprobantes } = await leerPagoCombinado(req)
+    const resultado = await pagarCompromisoCombinado({
+      user: req.authedUser!,
+      compromisoId: req.params.id,
+      partes,
+      comprobantes,
+    })
+    res.json(resultado)
+  } catch (err) {
+    const status = err instanceof PagoCombinadoIncompletoError ? 409 : 400
+    res.status(status).json({ error: mensajeDe(err, 'No se pudo anotar el pago') })
   }
 })
 

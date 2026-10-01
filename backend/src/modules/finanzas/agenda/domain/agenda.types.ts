@@ -49,6 +49,11 @@ export interface CompromisoPagoDocument {
   observacion?: string | null
   /** Docs viejos sin el campo: []. Un pagado sin pagos cuenta como pago completo. */
   pagos?: PagoCompromisoRegistrado[]
+  /**
+   * Transferencias parciales esperando firma.
+   * Ese monto ya no se puede pagar por otro lado hasta que se hagan o se rechacen.
+   */
+  transferenciasEnFirma?: Array<{ transferenciaId: string; montoCentavos: number }>
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string

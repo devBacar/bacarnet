@@ -54,6 +54,8 @@ export interface FilaCompromisoMes {
   porDia: Record<string, CeldaDiaMes>
   acumuladoCentavos: number
   diferenciaCentavos: number
+  /** Reservado en una transferencia que todavía no se firmó. */
+  enFirmaCentavos?: number
   estado: string
 }
 

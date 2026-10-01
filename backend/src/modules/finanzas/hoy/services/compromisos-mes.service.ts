@@ -2,6 +2,7 @@ import { dateKeyInArgentina } from '../../agenda/domain/vencimiento.alert.js'
 import { normalizarCuota, normalizarGrupo, normalizarMoneda, normalizarObservacion, normalizarCentavosOpcional } from '../../agenda/domain/compromiso-campos.js'
 import type { CompromisoPagoDocument, MedioPago } from '../../agenda/domain/agenda.types.js'
 import { listarPagos } from '../../agenda/domain/pago-compromiso.js'
+import { listarTransferenciasEnFirma, montoEnFirmaCentavos } from '../domain/transferencia-en-firma.js'
 import { agendaTimestampToDate } from '../../agenda/domain/agendaTimestamps.js'
 import { listAllCompromisos } from '../../agenda/services/agenda.repository.js'
 import {
@@ -53,6 +54,7 @@ function aPlanilla(id: string, data: CompromisoPagoDocument): CompromisoParaPlan
     cuotaTotal: cuota.cuotaTotal,
     observacion: normalizarObservacion(data.observacion),
     pagos: listarPagos(data.pagos),
+    enFirmaCentavos: montoEnFirmaCentavos(listarTransferenciasEnFirma(data.transferenciasEnFirma)),
   }
 }
 

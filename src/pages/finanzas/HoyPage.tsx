@@ -3,8 +3,7 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
 import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
-import { CajaDelDia } from '../../components/finanzas/hoy/CajaDelDia'
-import { CompromisosSemana } from '../../components/finanzas/hoy/CompromisosSemana'
+import { CompromisosSemana, type PagoDesdePlanilla } from '../../components/finanzas/hoy/CompromisosSemana'
 import {
   ComoLoPagasModal,
   EfectivoModal,
@@ -29,8 +28,7 @@ import {
   cobrarHoyEnEfectivo,
   confirmarCobroHoy,
   fetchHoy,
-  pagarHoyConCheque,
-  pagarHoyEnEfectivo,
+  pagarHoyCombinado,
   reprogramarCobroHoy,
   reprogramarPagoHoy,
   yaPagueHoy,
@@ -60,7 +58,6 @@ export function FinanzasHoyPage() {
     isSuperAdmin(userProfile) || userProfile?.permissions.manage_finanzas_caja === true
 
   const [pagoModo, setPagoModo] = useState<PagoHoy | null>(null)
-  const [pagoEfectivo, setPagoEfectivo] = useState<PagoHoy | null>(null)
   const [yaPague, setYaPague] = useState<PagoHoy | null>(null)
   const [reprogramarPago, setReprogramarPago] = useState<PagoHoy | null>(null)
   const [transferencia, setTransferencia] = useState<PrecargaTransferenciaHoy | null>(null)
@@ -84,14 +81,23 @@ export function FinanzasHoyPage() {
     await queryClient.invalidateQueries({ queryKey: ['finanzas', 'caja-dia'] })
   }
 
-  /** "Pagar" desde la planilla de la semana abre la misma ventana que los pagos de hoy. */
-  function pagarDesdePlanilla(compromisoId: string) {
-    const pago = data?.pagos.filas.find((fila) => fila.id === compromisoId)
-    if (pago) {
-      setPagoModo(pago)
-      return
-    }
-    toast('Ese compromiso no vence hoy. Pagalo desde su día o desde la Agenda.')
+  /** "Pagar" desde la lista de la semana abre la misma ventana que los pagos de hoy. */
+  function pagarDesdePlanilla(origen: PagoDesdePlanilla) {
+    const pago = data?.pagos.filas.find((fila) => fila.id === origen.id)
+    setPagoModo({
+      id: origen.id,
+      urgencia: pago?.urgencia ?? 'Normal',
+      vencido: pago?.vencido ?? origen.montoCentavos > 0,
+      vencidoTexto: pago?.vencidoTexto ?? null,
+      aQuien: origen.aQuien,
+      concepto: origen.concepto,
+      montoCentavos: origen.montoCentavos,
+      comoPagar: pago?.comoPagar ?? '',
+      medioPago: origen.medioPago,
+      proveedorONombre: origen.proveedorONombre,
+      sugerenciasBanco: pago?.sugerenciasBanco ?? [],
+      moneda: origen.moneda,
+    })
   }
 
   async function correr(tarea: () => Promise<string>, cerrar: () => void) {
@@ -136,16 +142,17 @@ export function FinanzasHoyPage() {
   }
 
   return (
-    <div className="mx-auto grid min-w-0 max-w-7xl gap-3">
-      {isLoading ? <p className="text-body-muted text-sm">Armando el día…</p> : null}
+    <div className="-mx-[var(--layout-padding-x)] bg-neutral-100 px-[var(--layout-padding-x)] py-4 dark:bg-zinc-950">
+    <div className="mx-auto grid min-w-0 max-w-7xl gap-4">
+      {isLoading ? <p className="text-body-muted text-[15px]">Armando el día…</p> : null}
       {isError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">
-          <p className="text-sm font-medium text-red-800 dark:text-red-200">
+          <p className="text-[15px] font-medium text-red-800 dark:text-red-200">
             {error instanceof Error ? error.message : 'No se pudo cargar el día.'}
           </p>
           <button
             type="button"
-            className="mt-2 rounded-lg border border-red-300 px-3 py-1 text-xs font-medium text-red-800 transition hover:bg-red-100 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-900/40"
+            className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-[13px] font-medium text-red-800 transition hover:bg-red-100 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-900/40"
             onClick={() => void refetch()}
           >
             Probar de nuevo
@@ -158,10 +165,9 @@ export function FinanzasHoyPage() {
           <EncabezadoHoy fecha={data.fecha} />
           <CuatroNumeros data={data} />
           {data.vacio ? (
-            <p className="text-xs text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>
+            <p className="text-[13px] text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>
           ) : null}
-          <CajaDelDia />
-          <div className="grid min-w-0 items-start gap-3 lg:grid-cols-2">
+          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
             <PagosHoy pagos={data.pagos} onPagar={setPagoModo} onYaPague={setYaPague} onReprogramar={setReprogramarPago} />
             <CobrosHoy
               ingresos={data.ingresos.filas}
@@ -184,7 +190,7 @@ export function FinanzasHoyPage() {
             />
           </div>
           <CompromisosSemana onPagar={pagarDesdePlanilla} />
-          <div className="grid min-w-0 items-start gap-3 lg:grid-cols-3">
+          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-3">
             <TarjetaBancos dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
             <TarjetaSemanaGrafico prevision={data.prevision} />
             <TarjetaOjo prevision={data.prevision} />
@@ -197,45 +203,42 @@ export function FinanzasHoyPage() {
           pago={pagoModo}
           guardando={guardando}
           onClose={() => setPagoModo(null)}
-          onCheque={(chequeId) => {
+          onConfirmar={(resultado) => {
             const pago = pagoModo
-            void correr(() => pagarHoyConCheque(pago.id, chequeId), () => setPagoModo(null))
-          }}
-          onBanco={() => {
-            setTransferencia({
-              compromisoPagoId: pagoModo.id,
-              montoCentavos: pagoModo.montoCentavos,
-              concepto: pagoModo.concepto,
-              destinatarioNombre: pagoModo.proveedorONombre,
-              destinatarioCuit: null,
-            })
-            setPagoModo(null)
-          }}
-          onEfectivo={() => {
-            setPagoEfectivo(pagoModo)
-            setPagoModo(null)
+            const abrirTransferencia = () => {
+              if (!resultado.transferencia) return
+              setTransferencia(resultado.transferencia)
+              setPagoModo(null)
+            }
+            if (resultado.partes.length === 0) {
+              abrirTransferencia()
+              return
+            }
+            setGuardando(true)
+            void pagarHoyCombinado(pago.id, resultado.partes, resultado.comprobantes)
+              .then(async (mensaje) => {
+                if (resultado.transferencia) {
+                  toast.success(mensaje)
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'hoy'] })
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cajas'] })
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques'] })
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'compromisos-mes'] })
+                  abrirTransferencia()
+                  return
+                }
+                setPagoModo(null)
+                await recargar(mensaje)
+              })
+              .catch((err: unknown) => {
+                toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
+              })
+              .finally(() => setGuardando(false))
           }}
         />
       ) : null}
       {transferencia ? (
         <NuevaTransferenciaModal precarga={transferencia} onClose={() => setTransferencia(null)} />
-      ) : null}
-      {pagoEfectivo ? (
-        <EfectivoModal
-          titulo="Pagar en efectivo"
-          detalle={`${pagoEfectivo.aQuien} · ${pagoEfectivo.concepto}`}
-          montoCentavos={pagoEfectivo.montoCentavos}
-          esIngreso={false}
-          guardando={guardando}
-          onClose={() => setPagoEfectivo(null)}
-          onConfirmar={(cajaId, comprobante) => {
-            const pago = pagoEfectivo
-            void correr(
-              () => pagarHoyEnEfectivo(pago.id, { cajaId, comprobante }),
-              () => setPagoEfectivo(null),
-            )
-          }}
-        />
       ) : null}
       {yaPague ? (
         <YaLoPagueModal
@@ -312,6 +315,7 @@ export function FinanzasHoyPage() {
         onClose={() => setDescubiertoCuenta(null)}
         onSave={(body) => void guardarDescubierto(body)}
       />
+    </div>
     </div>
   )
 }

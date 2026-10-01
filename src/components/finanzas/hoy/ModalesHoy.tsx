@@ -1,12 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { Banknote, Copy, FileText, Landmark, Mail, Wallet, type LucideIcon } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { fetchFinanzasCuentas } from '../../../services/finanzasApi'
 import { fetchCajas } from '../../../services/finanzasCajasApi'
 import {
-  fetchCarteraHoy,
-  type ChequeCarteraHoy,
   type IngresoHoy,
   type MedioPagoHoy,
   type PagoHoy,
@@ -14,7 +11,7 @@ import {
 } from '../../../services/finanzasHoyApi'
 import { formatMoneyCentavos } from '../formatMoney'
 import { finanzasInputClass } from '../FinanzasFormField'
-import { TEXTO_CHEQUE_PROPIO, textoDiferenciaCheque, type PagoConCheque } from './pagoConCheque'
+export { ComoLoPagasModal } from './ComoLoPagasModal'
 
 const botonPrimario =
   'rounded-xl bg-brand-primary px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60'
@@ -129,144 +126,6 @@ function fechaCorta(ymd: string): string {
   const [anio, mes, dia] = ymd.split('-')
   if (!anio || !mes || !dia) return ymd
   return `${Number(dia)}/${Number(mes)}/${anio}`
-}
-
-export function ComoLoPagasModal({
-  pago,
-  guardando,
-  onClose,
-  onBanco,
-  onEfectivo,
-  onCheque,
-}: {
-  pago: PagoHoy
-  guardando: boolean
-  onClose: () => void
-  onBanco: () => void
-  onEfectivo: () => void
-  onCheque: (chequeId: string) => void
-}) {
-  const [paso, setPaso] = useState<'elegir' | 'cheque'>('elegir')
-  const [elegido, setElegido] = useState<PagoConCheque | null>(null)
-  const cartera = useQuery({
-    queryKey: ['finanzas', 'hoy', 'cartera', pago.montoCentavos],
-    queryFn: () => fetchCarteraHoy(pago.montoCentavos),
-    enabled: paso === 'cheque',
-  })
-  const chequeElegido = cartera.data?.find((cheque) => cheque.id === elegido?.chequeId) ?? null
-  const diferencia = chequeElegido ? textoDiferenciaCheque(chequeElegido.montoCentavos, pago.montoCentavos) : null
-
-  if (paso === 'cheque') {
-    return (
-      <Ventana
-        titulo="Pagar con cheque"
-        textoCerrar="Volver"
-        onClose={() => setPaso('elegir')}
-        accion={
-          <button
-            type="button"
-            className={botonPrimario}
-            disabled={guardando || elegido?.modo !== 'cartera' || !elegido.chequeId}
-            onClick={() => {
-              if (elegido?.modo === 'cartera' && elegido.chequeId) onCheque(elegido.chequeId)
-            }}
-          >
-            {guardando ? 'Endosando…' : diferencia ? 'Confirmar el endoso' : 'Endosar este cheque'}
-          </button>
-        }
-      >
-        <Encabezado detalle={`${pago.aQuien} · ${pago.concepto}`} montoCentavos={pago.montoCentavos} />
-
-        <h3 className="text-heading mt-4 text-sm font-semibold">Con un cheque de la cartera</h3>
-        <p className="text-body-muted text-xs">Elegí uno de los cheques que nos dieron y se lo endosás.</p>
-        {cartera.isLoading ? <p className="text-body-muted mt-2 text-sm">Buscando cheques en la cartera…</p> : null}
-        {cartera.isError ? (
-          <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-            {cartera.error instanceof Error ? cartera.error.message : 'No se pudo leer la cartera.'}
-          </p>
-        ) : null}
-        {!cartera.isLoading && cartera.data && cartera.data.length === 0 ? (
-          <p className="text-body-muted mt-2 text-sm">No hay cheques en la cartera para usar.</p>
-        ) : null}
-        <div className="mt-2 grid gap-2">
-          {(cartera.data ?? []).map((cheque) => (
-            <ChequeCartera
-              key={cheque.id}
-              cheque={cheque}
-              activo={elegido?.chequeId === cheque.id}
-              onElegir={() =>
-                setElegido({
-                  modo: 'cartera',
-                  chequeId: cheque.id,
-                  numero: cheque.numero,
-                  banco: cheque.banco,
-                  fechaPago: cheque.fechaPago,
-                  destinatario: pago.proveedorONombre,
-                })
-              }
-            />
-          ))}
-        </div>
-        {diferencia ? (
-          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
-            {diferencia}
-          </p>
-        ) : null}
-
-        <h3 className="text-heading mt-5 text-sm font-semibold">Con un cheque propio</h3>
-        <p className="text-body-muted mt-1 text-xs">{TEXTO_CHEQUE_PROPIO}</p>
-        <Link to="/finanzas/cheques" className={`${botonSecundario} mt-2`}>
-          Cargarlo en Cheques
-        </Link>
-      </Ventana>
-    )
-  }
-
-  return (
-    <Ventana titulo="¿Cómo lo pagás?" onClose={onClose}>
-      <Encabezado detalle={`${pago.aQuien} · ${pago.concepto}`} montoCentavos={pago.montoCentavos} />
-      <div className="mt-4 grid gap-2">
-        <Opcion
-          icono={Landmark}
-          titulo="Por banco"
-          explicacion="Armás la transferencia y queda esperando la firma."
-          onClick={onBanco}
-        />
-        <Opcion
-          icono={Banknote}
-          titulo="En efectivo"
-          explicacion="Sale de una caja. Podés adjuntar el ticket."
-          onClick={onEfectivo}
-        />
-        <Opcion
-          icono={FileText}
-          titulo="Con cheque"
-          explicacion="Endosás un cheque de la cartera o cargás uno propio en Cheques."
-          onClick={() => setPaso('cheque')}
-        />
-      </div>
-    </Ventana>
-  )
-}
-
-function ChequeCartera({
-  cheque,
-  activo,
-  onElegir,
-}: {
-  cheque: ChequeCarteraHoy
-  activo: boolean
-  onElegir: () => void
-}) {
-  return (
-    <Opcion
-      icono={FileText}
-      titulo={`N.º ${cheque.numero} · ${formatMoneyCentavos(cheque.montoCentavos, 'ARS')}`}
-      explicacion={`${cheque.emisor} · ${cheque.banco} · se paga el ${fechaCorta(cheque.fechaPago)}`}
-      activa={activo}
-      onClick={onElegir}
-    />
-  )
 }
 
 export function EfectivoModal({

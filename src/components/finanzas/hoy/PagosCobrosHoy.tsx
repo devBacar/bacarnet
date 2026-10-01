@@ -7,8 +7,8 @@ const FILAS_VISIBLES = 4
 /** Total chico y gris a la derecha del título. */
 function Total({ centavos }: { centavos: number }) {
   return (
-    <p className="text-body-muted text-xs">
-      Total <Monto centavos={centavos} className="text-heading" />
+    <p className="text-brand-primary text-[13px]">
+      Total <Monto centavos={centavos} className="text-brand-primary" />
     </p>
   )
 }
@@ -30,13 +30,13 @@ function Fila({
   menu?: Array<{ texto: string; onClick: () => void }>
 }) {
   return (
-    <div className="flex items-center gap-2 py-1.5 text-sm">
+    <div className="flex items-center gap-2 py-2 text-[15px]">
       <div className="min-w-0 flex-1">
         <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
           <span className="text-heading break-words font-medium">{nombre}</span>
           {etiqueta}
         </p>
-        <p className="text-body-muted break-words text-xs">{detalle}</p>
+        <p className="text-body-muted break-words text-[13px]">{detalle}</p>
       </div>
       <Monto centavos={centavos} className="text-heading shrink-0" />
       {accion}
@@ -205,7 +205,7 @@ export function CobrosHoy({
       {atrasados.length > 0 ? (
         <ul className="mt-2 space-y-1 border-t border-neutral-100 pt-2 dark:border-zinc-800">
           {atrasados.map((cobro) => (
-            <li key={cobro.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-0.5 text-xs">
+            <li key={cobro.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[13px]">
               <span className="min-w-0">
                 <span className="font-medium text-red-700 dark:text-red-300">Atrasado:</span>{' '}
                 <span className="text-heading">{cobro.cliente}</span>

@@ -142,6 +142,18 @@ export function textoParcial(fila: FilaCompromisoMes, corto: (centavos: number, 
   return `pagado ${corto(fila.acumuladoCentavos, fila.moneda)} de ${corto(fila.importeCentavos, fila.moneda)}`
 }
 
+/** "pagado la mitad" si es exacta; si no, "pagado $ X de $ Y". */
+export function textoPagoParcial(
+  acumuladoCentavos: number,
+  importeCentavos: number,
+  diferenciaCentavos: number,
+  monto: (centavos: number) => string,
+): string | null {
+  if (acumuladoCentavos <= 0 || diferenciaCentavos <= 0 || importeCentavos <= 0) return null
+  if (acumuladoCentavos * 2 === importeCentavos) return 'pagado la mitad'
+  return `pagado ${monto(acumuladoCentavos)} de ${monto(importeCentavos)}`
+}
+
 export function textoComoSePaga(medio: string): string {
   if (medio === 'cheque') return 'con cheque'
   if (medio === 'efectivo') return 'en efectivo'
@@ -156,11 +168,19 @@ export function textoVencido(fecha: string, hoy: string): string | null {
   return `venció el ${nombre}`
 }
 
-/** "Hoy jueves 1" o "Viernes 2". */
+/** Días corridos desde el vencimiento: "ayer" o "hace 4 días". */
+export function etiquetaAtraso(fecha: string, hoy: string): string | null {
+  if (fecha >= hoy) return null
+  const dias = Math.round((Date.parse(`${hoy}T12:00:00Z`) - Date.parse(`${fecha}T12:00:00Z`)) / 86_400_000)
+  if (dias <= 1) return 'ayer'
+  return `hace ${dias} días`
+}
+
+/** "Hoy · jueves 1" o "Viernes 2". */
 export function tituloDiaLista(fecha: string, hoy: string): { texto: string; esHoy: boolean } {
   const nombre = new Intl.DateTimeFormat('es-AR', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${fecha}T12:00:00Z`))
   const numero = Number(fecha.slice(8))
-  if (fecha === hoy) return { texto: `Hoy ${nombre} ${numero}`, esHoy: true }
+  if (fecha === hoy) return { texto: `Hoy · ${nombre} ${numero}`, esHoy: true }
   return { texto: `${nombre.charAt(0).toUpperCase()}${nombre.slice(1)} ${numero}`, esHoy: false }
 }
 

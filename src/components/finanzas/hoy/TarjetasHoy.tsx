@@ -57,9 +57,9 @@ export function EtiquetaEstado({
 }
 
 /** Línea de ayuda gris con ícono, al pie de una tarjeta. */
-export function Ayuda({ children }: { children: ReactNode }) {
+export function Ayuda({ children, tamano = 'text-[13px]' }: { children: ReactNode; tamano?: string }) {
   return (
-    <p className="text-body-muted mx-4 mb-3 mt-2 flex items-start gap-1.5 border-t border-neutral-100 pt-2 text-[13px] dark:border-zinc-800">
+    <p className={`text-body-muted mx-4 mb-3 mt-2 flex items-start gap-1.5 border-t border-neutral-100 pt-2 dark:border-zinc-800 ${tamano}`}>
       <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
       <span>{children}</span>
     </p>
@@ -72,25 +72,31 @@ export function Tarjeta({
   subtitulo,
   derecha,
   ayuda,
+  claseTitulo = 'text-brand-primary text-[15px] font-medium',
+  claseSubtitulo = 'text-brand-primary text-[13px]',
+  claseAyuda,
   children,
 }: {
   titulo: ReactNode
   subtitulo?: ReactNode
   derecha?: ReactNode
   ayuda?: ReactNode
+  claseTitulo?: string
+  claseSubtitulo?: string
+  claseAyuda?: string
   children: ReactNode
 }) {
   return (
     <section className="min-w-0 overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
         <div className="min-w-0">
-          <h2 className="text-brand-primary text-[15px] font-medium">{titulo}</h2>
-          {subtitulo ? <p className="text-brand-primary text-[13px]">{subtitulo}</p> : null}
+          <h2 className={claseTitulo}>{titulo}</h2>
+          {subtitulo ? <p className={claseSubtitulo}>{subtitulo}</p> : null}
         </div>
         {derecha ? <div className="flex min-w-0 flex-wrap items-center gap-2">{derecha}</div> : null}
       </header>
       <div className="min-w-0 p-4">{children}</div>
-      {ayuda ? <Ayuda>{ayuda}</Ayuda> : null}
+      {ayuda ? <Ayuda tamano={claseAyuda}>{ayuda}</Ayuda> : null}
     </section>
   )
 }

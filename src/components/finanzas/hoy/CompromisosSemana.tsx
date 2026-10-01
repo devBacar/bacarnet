@@ -19,18 +19,25 @@ import { FormularioCompromiso } from './compromisosMes/FormularioCompromiso'
 import {
   armarListaSemana,
   diasDeLaSemana,
+  etiquetaAtraso,
   lunesDe,
   mesesDe,
   rangoSemana,
   textoComoSePaga,
-  textoVencido,
+  textoPagoParcial,
   tituloDiaLista,
   type FilaListaSemana,
 } from './compromisosSemana/semana'
-import { botonChico, linkChico, Tarjeta, Vacio } from './TarjetasHoy'
+import { botonChico, Tarjeta, Vacio } from './TarjetasHoy'
 
 const control =
   'inline-flex items-center justify-center rounded-md border border-[var(--color-primary-muted)] bg-white p-1.5 text-neutral-800 transition hover:bg-neutral-50 disabled:opacity-40 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800'
+
+const botonPagar =
+  'inline-flex w-[76px] shrink-0 items-center justify-center rounded-lg border border-[var(--color-primary)] bg-white px-2 py-1.5 text-xs font-medium text-[var(--color-primary)] transition hover:bg-[var(--color-primary-light)] dark:bg-transparent dark:hover:bg-[var(--color-primary-light)]'
+
+/** Cuántos vencidos se ven antes de "Ver los N restantes". */
+const VENCIDOS_A_LA_VISTA = 3
 
 export interface PagoDesdePlanilla {
   id: string
@@ -42,11 +49,44 @@ export interface PagoDesdePlanilla {
   moneda: MonedaCompromiso
 }
 
-function textoMontos(valores: MontosMoneda): string {
-  const partes: string[] = []
-  if (valores.ars > 0) partes.push(formatMoneyCentavos(valores.ars, 'ARS'))
-  if (valores.usd > 0) partes.push(formatMoneyCentavos(valores.usd, 'USD'))
-  return partes.join(' + ')
+function TotalSeccion({ valores, rojo = false }: { valores: MontosMoneda; rojo?: boolean }) {
+  const hayPesos = valores.ars > 0
+  const hayDolares = valores.usd > 0
+  if (!hayPesos && !hayDolares) {
+    return <span className="text-sm text-neutral-500 dark:text-neutral-400">nada para pagar</span>
+  }
+  const color = rojo ? 'text-red-700 dark:text-red-300' : 'text-heading'
+  const pesos = hayPesos ? formatMoneyCentavos(valores.ars, 'ARS') : ''
+  const dolares = hayDolares ? formatMoneyCentavos(valores.usd, 'USD') : ''
+  return (
+    <span className={`ml-auto shrink-0 text-right whitespace-nowrap ${color}`}>
+      {pesos ? <span className="text-base font-semibold tabular-nums">{pesos}</span> : null}
+      {dolares ? (
+        <span className={pesos ? 'ml-1.5 text-sm font-normal tabular-nums' : 'text-base font-semibold tabular-nums'}>
+          {pesos ? `+ ${dolares}` : dolares}
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+function EncabezadoSeccion({
+  titulo,
+  valores,
+  tono,
+}: {
+  titulo: string
+  valores: MontosMoneda
+  tono: 'normal' | 'hoy' | 'vencidos'
+}) {
+  const color =
+    tono === 'vencidos' ? 'text-red-700 dark:text-red-300' : tono === 'hoy' ? 'text-[var(--color-primary)]' : 'text-heading'
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-4 pt-3 pb-1.5">
+      <h3 className={`min-w-0 text-base font-semibold ${color}`}>{titulo}</h3>
+      <TotalSeccion valores={valores} rojo={tono === 'vencidos'} />
+    </div>
+  )
 }
 
 function medioDe(medio: string): PagoDesdePlanilla['medioPago'] {
@@ -58,22 +98,21 @@ function FilaCompromiso({
   fila,
   hoy,
   onPagar,
+  mostrarAtraso = false,
 }: {
   fila: FilaListaSemana
   hoy: string
   onPagar: (pago: PagoDesdePlanilla) => void
+  mostrarAtraso?: boolean
 }) {
-  const secundario = [
-    fila.proveedorONombre,
-    fila.cuota ? `cuota ${fila.cuota}` : '',
-    textoComoSePaga(fila.medioPago),
-    textoVencido(fila.fechaVencimiento, hoy) ?? '',
-    fila.grupo,
-  ].filter(Boolean)
-  const parcial =
-    fila.acumuladoCentavos > 0 && fila.diferenciaCentavos > 0
-      ? `pagado ${formatMoneyCentavos(fila.acumuladoCentavos, fila.moneda)} de ${formatMoneyCentavos(fila.importeCentavos, fila.moneda)}`
-      : null
+  const como = fila.cuota ? `${textoComoSePaga(fila.medioPago)} y cuota ${fila.cuota}` : textoComoSePaga(fila.medioPago)
+  const parcial = textoPagoParcial(fila.acumuladoCentavos, fila.importeCentavos, fila.diferenciaCentavos, (centavos) =>
+    formatMoneyCentavos(centavos, fila.moneda),
+  )
+  const detalle = [fila.proveedorONombre, como, parcial ?? '', fila.enFirmaCentavos > 0 ? `${formatMoneyCentavos(fila.enFirmaCentavos, fila.moneda)} en firma` : '']
+    .filter((parte) => parte.trim().length > 0)
+    .join(' · ')
+  const atraso = mostrarAtraso ? etiquetaAtraso(fila.fechaVencimiento, hoy) : null
   const puedePagar = fila.faltaCentavos > 0 && fila.estado !== 'pagado' && fila.estado !== 'confeccionada_pendiente_autorizacion'
   const monto =
     fila.faltaCentavos > 0
@@ -81,32 +120,41 @@ function FilaCompromiso({
       : fila.enFirmaCentavos > 0
         ? ''
         : 'pagado'
+  const porcentaje = fila.importeCentavos > 0 ? Math.min(100, Math.round((fila.acumuladoCentavos / fila.importeCentavos) * 100)) : 0
   return (
-    <div className="flex min-w-0 items-start justify-between gap-2 px-4 py-2">
-      <div className="min-w-0 flex-1">
-        <p className="text-heading break-words text-[15px] font-medium">{fila.concepto}</p>
-        <p className="text-body-muted break-words text-[13px]">{secundario.join(' · ')}</p>
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+      <div className="col-span-2 min-w-0 sm:col-span-1">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="text-heading break-words text-[15px] font-medium">{fila.concepto}</span>
+          {atraso ? (
+            <span className="inline-flex shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] text-red-700 dark:bg-red-950/40 dark:text-red-300">
+              {atraso}
+            </span>
+          ) : null}
+        </p>
+        {detalle ? <p className="mt-0.5 break-words text-xs text-neutral-500 dark:text-neutral-400">{detalle}</p> : null}
         {parcial ? (
-          <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[13px] text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
-            {parcial}
-          </span>
+          <div className="mt-1.5 h-1 w-40 overflow-hidden rounded bg-neutral-100 dark:bg-zinc-800" aria-hidden>
+            <div className="h-full rounded bg-emerald-600 dark:bg-emerald-400" style={{ width: `${porcentaje}%` }} />
+          </div>
         ) : null}
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
+      <div className="text-left sm:text-right">
         {monto ? (
-          <span className={`text-[15px] font-medium tabular-nums ${monto === 'pagado' ? 'text-emerald-700 dark:text-emerald-400' : 'text-heading'}`}>
+          <span
+            className={`text-[15px] font-semibold whitespace-nowrap tabular-nums ${
+              monto === 'pagado' ? 'text-emerald-700 dark:text-emerald-400' : 'text-heading'
+            }`}
+          >
             {monto}
           </span>
         ) : null}
-        {fila.enFirmaCentavos > 0 ? (
-          <span className="text-[13px] tabular-nums text-neutral-500 dark:text-neutral-400">
-            {formatMoneyCentavos(fila.enFirmaCentavos, fila.moneda)} en firma
-          </span>
-        ) : null}
+      </div>
+      <div className="justify-self-end">
         {puedePagar ? (
           <button
             type="button"
-            className={botonChico}
+            className={botonPagar}
             onClick={() =>
               onPagar({
                 id: fila.compromisoId,
@@ -150,7 +198,8 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
   const esEstaSemana = lunes === lunesDe(hoy)
   const lista = armarListaSemana({ planillas, dias, hoy, esEstaSemana })
   const grupos = planillas[0]?.grupos.map((grupo) => grupo.grupo) ?? [...GRUPOS_COMPROMISO]
-  const vencidosVisibles = verVencidos ? lista.vencidos : lista.vencidos.slice(0, 3)
+  const vencidosVisibles = verVencidos ? lista.vencidos : lista.vencidos.slice(0, VENCIDOS_A_LA_VISTA)
+  const vencidosOcultos = lista.vencidos.length - VENCIDOS_A_LA_VISTA
 
   const recargar = () => {
     void queryClient.invalidateQueries({ queryKey: COMPROMISOS_MES_QUERY_KEY })
@@ -162,6 +211,9 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
     <Tarjeta
       titulo={esEstaSemana ? 'Compromisos de esta semana' : 'Compromisos de la semana'}
       subtitulo={rangoSemana(dias)}
+      claseTitulo="text-brand-primary text-base font-semibold"
+      claseSubtitulo="text-brand-primary text-xs"
+      claseAyuda="text-xs"
       derecha={
         <>
           <span className="inline-flex items-center gap-1">
@@ -172,8 +224,8 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
               <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
           </span>
-          <Link to="/finanzas/agenda?tab=planilla" className="text-brand-primary text-[13px] underline-offset-2 hover:underline">
-            ver el mes completo en Agenda
+          <Link to="/finanzas/agenda?tab=planilla" className="text-xs text-[var(--color-primary)] underline-offset-2 hover:underline">
+            ver mes en Agenda
           </Link>
           <button type="button" className={`${botonChico} gap-1`} onClick={() => setAlta(true)}>
             <Plus className="h-4 w-4" aria-hidden />
@@ -194,37 +246,33 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
       ) : null}
 
       {lista.vencidos.length > 0 ? (
-        <section className="-mx-4 mb-2">
-          <div className="flex items-center justify-between gap-2 bg-red-50 px-4 py-2 text-[13px] text-red-800 dark:bg-red-950/40 dark:text-red-200">
-            <span className="font-medium">Vencidos sin pagar ({lista.vencidos.length})</span>
-            <span className="shrink-0 text-right font-medium tabular-nums">{textoMontos(lista.totalVencidos)}</span>
-          </div>
-          <div className="divide-y divide-neutral-100 dark:divide-zinc-800">
+        <section className="-mx-4 rounded-none border-l-[3px] border-red-500">
+          <EncabezadoSeccion titulo={`Vencidos sin pagar · ${lista.vencidos.length}`} valores={lista.totalVencidos} tono="vencidos" />
+          <div className="divide-y divide-neutral-200 dark:divide-zinc-800">
             {vencidosVisibles.map((fila) => (
-              <FilaCompromiso key={fila.compromisoId} fila={fila} hoy={hoy} onPagar={onPagar} />
+              <FilaCompromiso key={fila.compromisoId} fila={fila} hoy={hoy} onPagar={onPagar} mostrarAtraso />
             ))}
           </div>
-          {lista.vencidos.length > 3 && !verVencidos ? (
-            <button type="button" className={`${linkChico} px-4 py-2`} onClick={() => setVerVencidos(true)}>
-              Ver todos ({lista.vencidos.length}) ›
+          {vencidosOcultos > 0 ? (
+            <button
+              type="button"
+              className="px-4 py-2 text-left text-sm text-[var(--color-primary)] underline-offset-2 hover:underline"
+              onClick={() => setVerVencidos((actual) => !actual)}
+            >
+              {verVencidos ? 'Ver menos' : vencidosOcultos === 1 ? 'Ver el restante ›' : `Ver los ${vencidosOcultos} restantes ›`}
             </button>
           ) : null}
         </section>
       ) : null}
 
-      {lista.dias.map((dia) => {
+      {lista.dias.map((dia, indice) => {
         const titulo = tituloDiaLista(dia.fecha, hoy)
-        const total = textoMontos(dia.total)
+        const separada = lista.vencidos.length > 0 || indice > 0
         return (
-          <section key={dia.fecha} className="-mx-4">
-            <div className="flex items-center justify-between gap-2 bg-neutral-100 px-4 py-2 text-[13px] dark:bg-zinc-800">
-              <span className={`font-medium ${titulo.esHoy ? 'text-brand-primary' : 'text-heading'}`}>{titulo.texto}</span>
-              <span className={`shrink-0 text-right tabular-nums ${total ? 'text-heading font-medium' : 'text-body-muted'}`}>
-                {total || 'nada para pagar'}
-              </span>
-            </div>
+          <section key={dia.fecha} className={`-mx-4 ${separada ? 'border-t border-neutral-300 dark:border-zinc-600' : ''}`}>
+            <EncabezadoSeccion titulo={titulo.texto} valores={dia.total} tono={titulo.esHoy ? 'hoy' : 'normal'} />
             {dia.filas.length > 0 ? (
-              <div className="divide-y divide-neutral-100 dark:divide-zinc-800">
+              <div className="divide-y divide-neutral-200 dark:divide-zinc-800">
                 {dia.filas.map((fila) => (
                   <FilaCompromiso key={fila.compromisoId} fila={fila} hoy={hoy} onPagar={onPagar} />
                 ))}

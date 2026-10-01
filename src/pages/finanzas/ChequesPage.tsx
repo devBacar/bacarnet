@@ -42,6 +42,14 @@ function formatFecha(iso: string): string {
 
 // ── Main page ───────────────────────────────────────────────────────
 
+function mesActual() {
+  const now = new Date()
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const last = new Date(y, now.getMonth() + 1, 0).getDate()
+  return { desde: `${y}-${m}-01`, hasta: `${y}-${m}-${String(last).padStart(2, '0')}` }
+}
+
 export function FinanzasChequesPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -51,8 +59,9 @@ export function FinanzasChequesPage() {
   const [origen, setOrigen] = useState<ChequeOrigen | ''>('')
   const [estado, setEstado] = useState<ChequeEstado | ''>('')
   const [tipo, setTipo] = useState<ChequeTipo | ''>('')
-  const [desde, setDesde] = useState('')
-  const [hasta, setHasta] = useState('')
+  const { desde: mesDesde, hasta: mesHasta } = mesActual()
+  const [desde, setDesde] = useState(mesDesde)
+  const [hasta, setHasta] = useState(mesHasta)
   const [page, setPage] = useState(1)
   const [showPegar, setShowPegar] = useState(false)
 

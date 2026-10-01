@@ -1,10 +1,12 @@
 import { dateKeyInArgentina } from '../../agenda/domain/vencimiento.alert.js'
 import { normalizarCuota, normalizarGrupo, normalizarMoneda, normalizarObservacion, normalizarCentavosOpcional } from '../../agenda/domain/compromiso-campos.js'
 import type { CompromisoPagoDocument, MedioPago } from '../../agenda/domain/agenda.types.js'
+import { lineasPagosPlanilla, type FuentePago } from '../../agenda/domain/como-se-pago.js'
 import { listarPagos } from '../../agenda/domain/pago-compromiso.js'
 import { listarTransferenciasEnFirma, montoEnFirmaCentavos } from '../domain/transferencia-en-firma.js'
 import { agendaTimestampToDate } from '../../agenda/domain/agendaTimestamps.js'
 import { listAllCompromisos } from '../../agenda/services/agenda.repository.js'
+import { cargarCatalogo } from '../../agenda/services/pagos-hechos.service.js'
 import {
   createCompromisoAgenda,
   patchCompromisoAgenda,
@@ -55,16 +57,44 @@ function aPlanilla(id: string, data: CompromisoPagoDocument): CompromisoParaPlan
     observacion: normalizarObservacion(data.observacion),
     pagos: listarPagos(data.pagos),
     enFirmaCentavos: montoEnFirmaCentavos(listarTransferenciasEnFirma(data.transferenciasEnFirma)),
+    chequeId: data.chequeId ?? null,
+    cuentaId: data.cuentaId ?? null,
+    transferenciaConfeccionadaId: data.transferenciaConfeccionadaId ?? null,
+  }
+}
+
+function fuenteDe(row: CompromisoParaPlanilla): FuentePago {
+  return {
+    id: row.id,
+    concepto: row.concepto,
+    proveedorONombre: row.proveedorONombre,
+    montoCentavos: row.montoCentavos,
+    moneda: row.moneda,
+    estado: row.estado,
+    medioPago: row.medioPago,
+    fechaPago: row.fechaPago,
+    fechaVencimiento: row.fechaVencimiento,
+    chequeId: row.chequeId ?? null,
+    cuentaId: row.cuentaId ?? null,
+    transferenciaConfeccionadaId: row.transferenciaConfeccionadaId ?? null,
+    cuotaNumero: row.cuotaNumero,
+    cuotaTotal: row.cuotaTotal,
+    pagos: row.pagos,
   }
 }
 
 export async function getPlanillaCompromisosMes(mes: string, now = new Date()): Promise<PlanillaMes> {
   if (!parseMes(mes)) throw new CompromisoMesError('Indicá el mes con formato AAAA-MM', 400)
   const [rows, tipo] = await Promise.all([listAllCompromisos(), getTipoCambioMes(mes)])
-  const compromisos = rows.flatMap((row) => {
+  const bases = rows.flatMap((row) => {
     const mapped = aPlanilla(row.id, row.data)
     return mapped ? [mapped] : []
   })
+  const catalogo = await cargarCatalogo(bases.map(fuenteDe))
+  const compromisos = bases.map((row) => ({
+    ...row,
+    pagosResumen: lineasPagosPlanilla(fuenteDe(row), catalogo),
+  }))
   return armarPlanillaMes({
     mes,
     hoy: fechaHoyArgentina(now),

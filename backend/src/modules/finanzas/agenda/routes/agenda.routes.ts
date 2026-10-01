@@ -16,10 +16,29 @@ import {
   patchCompromisoAgenda,
   patchCompromisoUrgencia,
 } from '../services/compromisos.service.js'
+import { listarPagosHechos, PagosHechosError } from '../services/pagos-hechos.service.js'
 
 export const finanzasAgendaRouter = Router()
 
 finanzasAgendaRouter.use(requireWorkspaceUser, requireViewFinanzas)
+
+finanzasAgendaRouter.get('/pagos-hechos', async (req, res) => {
+  try {
+    const data = await listarPagosHechos({
+      mes: req.query.mes,
+      desde: req.query.desde,
+      hasta: req.query.hasta,
+    })
+    res.json(data)
+  } catch (err) {
+    if (err instanceof PagosHechosError) {
+      res.status(err.status).json({ error: err.message })
+      return
+    }
+    console.error('[finanzas/agenda] pagos hechos', err)
+    res.status(500).json({ error: 'No se pudieron listar los pagos hechos' })
+  }
+})
 
 finanzasAgendaRouter.get('/compromisos', async (req, res) => {
   try {

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { formatMoneyCentavos } from '../../formatMoney'
 import type {
   ColumnaDiaMes,
@@ -5,7 +6,16 @@ import type {
   GrupoCompromisoMes,
   PlanillaCompromisosMes,
 } from '../../../../services/finanzasCompromisosMesApi'
-import { BotonAgregar, ConceptoFila, MontoUno, MontosEnLineas, NombreGrupo, PieGruposVacios } from './planillaComun'
+import {
+  BotonAgregar,
+  ConceptoFila,
+  LineasPagosHechos,
+  MontoUno,
+  MontosEnLineas,
+  NombreGrupo,
+  PanelJuntoAlBoton,
+  PieGruposVacios,
+} from './planillaComun'
 import {
   GRILLA,
   claseTono,
@@ -249,30 +259,43 @@ function Celda({
   hoy: string
   onPagar: (compromisoId: string) => void
 }) {
+  const [ancla, setAncla] = useState<HTMLButtonElement | null>(null)
   const celda = fila.porDia[dia.fecha]
   if (!celda || (celda.planificadoCentavos <= 0 && celda.pagadoCentavos <= 0)) return null
   const pagoCompleto = estaPago(fila)
   const faltaEnElDia = celda.planificadoCentavos > celda.pagadoCentavos
   const tonoPlan = pagoCompleto ? 'pagado' : dia.fecha < hoy ? 'vencido' : 'aPagar'
   const puedePagar = dia.esHoy && puedePagarFila(fila) && faltaEnElDia
+  const lineas = fila.pagosResumen ?? []
+  const abrir = (boton: HTMLButtonElement) => setAncla(boton)
+  const monto = (centavos: number, clase: string, conTilde: boolean) =>
+    lineas.length > 0 ? (
+      <button
+        type="button"
+        className={`max-w-full truncate tabular-nums underline-offset-2 hover:underline ${clase}`}
+        onClick={(event) => {
+          event.stopPropagation()
+          abrir(event.currentTarget)
+        }}
+      >
+        {conTilde ? '✓ ' : ''}
+        {formatMoneyCentavos(centavos, fila.moneda)}
+      </button>
+    ) : (
+      <span className={`tabular-nums ${clase}`}>
+        {conTilde ? '✓ ' : ''}
+        {formatMoneyCentavos(centavos, fila.moneda)}
+      </span>
+    )
   return (
     <span className="inline-flex max-w-full flex-col items-center gap-0.5">
       {faltaEnElDia ? (
-        <span
-          className={`tabular-nums ${claseTono(tonoPlan)}`}
-          title={celda.corrido ? 'Cayó en finde o feriado: se anota este día.' : undefined}
-        >
-          {celda.corrido ? '↩ ' : ''}
-          {pagoCompleto ? '✓ ' : ''}
-          {formatMoneyCentavos(celda.planificadoCentavos, fila.moneda)}
+        <span title={celda.corrido ? 'Cayó en finde o feriado: se anota este día.' : undefined}>
+          {celda.corrido ? <span className={claseTono(tonoPlan)}>↩ </span> : null}
+          {monto(celda.planificadoCentavos, claseTono(tonoPlan), pagoCompleto)}
         </span>
       ) : null}
-      {celda.pagadoCentavos > 0 ? (
-        <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
-          {pagoCompleto && !faltaEnElDia ? '✓ ' : ''}
-          {formatMoneyCentavos(celda.pagadoCentavos, fila.moneda)}
-        </span>
-      ) : null}
+      {celda.pagadoCentavos > 0 ? monto(celda.pagadoCentavos, 'text-emerald-700 dark:text-emerald-400', pagoCompleto && !faltaEnElDia) : null}
       {puedePagar ? (
         <button
           type="button"
@@ -284,6 +307,12 @@ function Celda({
         >
           Pagar
         </button>
+      ) : null}
+      {ancla ? (
+        <PanelJuntoAlBoton boton={ancla} etiqueta={`Pagos de ${fila.concepto}`} onCerrar={() => setAncla(null)}>
+          <p className="text-[15px] font-medium text-neutral-900 dark:text-gray-100">{fila.concepto}</p>
+          <LineasPagosHechos pagos={lineas} />
+        </PanelJuntoAlBoton>
       ) : null}
     </span>
   )

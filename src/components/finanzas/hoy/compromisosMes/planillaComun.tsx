@@ -1,5 +1,7 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronRight, Pencil } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { formatMoneyCentavos } from '../../formatMoney'
 import { montoCorto } from '../montoCorto'
 import type { FilaCompromisoMes, MonedaCompromiso, MontosMoneda } from '../../../../services/finanzasCompromisosMesApi'
@@ -139,5 +141,87 @@ export function MontoUno({
       {tilde ? '✓ ' : ''}
       {corto ? montoCorto(centavos, moneda) : completo}
     </span>
+  )
+}
+
+export function LineasPagosHechos({
+  pagos,
+}: {
+  pagos: Array<{ linea: string }> | undefined
+}) {
+  if (!pagos || pagos.length === 0) return null
+  return (
+    <div className="mt-2 border-t border-neutral-200 pt-2 dark:border-zinc-700">
+      <ul className="space-y-1">
+        {pagos.map((pago, indice) => (
+          <li key={`${pago.linea}-${indice}`} className="text-[13px] text-emerald-800 dark:text-emerald-300">
+            {pago.linea}
+          </li>
+        ))}
+      </ul>
+      <Link
+        to="/finanzas/agenda?tab=pagos&vista=hechos"
+        className="mt-1 inline-block text-[13px] font-medium text-[var(--color-primary)]"
+      >
+        Ver en Pagos hechos ›
+      </Link>
+    </div>
+  )
+}
+
+export function PanelJuntoAlBoton({
+  boton,
+  onCerrar,
+  children,
+  etiqueta,
+}: {
+  boton: HTMLButtonElement
+  onCerrar: () => void
+  children: ReactNode
+  etiqueta: string
+}) {
+  const panel = useRef<HTMLDivElement>(null)
+  const cerrarRef = useRef(onCerrar)
+  cerrarRef.current = onCerrar
+  useEffect(() => {
+    const cerrar = (event: PointerEvent) => {
+      const target = event.target as Node
+      if (panel.current?.contains(target) || boton.contains(target)) return
+      cerrarRef.current()
+    }
+    const tecla = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') cerrarRef.current()
+    }
+    const desde = performance.now()
+    const alScroll = () => {
+      if (performance.now() - desde < 200) return
+      cerrarRef.current()
+    }
+    document.addEventListener('pointerdown', cerrar)
+    document.addEventListener('keydown', tecla)
+    window.addEventListener('scroll', alScroll, true)
+    return () => {
+      document.removeEventListener('pointerdown', cerrar)
+      document.removeEventListener('keydown', tecla)
+      window.removeEventListener('scroll', alScroll, true)
+    }
+  }, [boton])
+
+  const rect = boton.getBoundingClientRect()
+  const ancho = 288
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - ancho - 8))
+  const arriba = rect.bottom + 220 > window.innerHeight && rect.top > 180
+  return createPortal(
+    <div
+      ref={panel}
+      role="dialog"
+      aria-label={etiqueta}
+      className="fixed z-50 w-72 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+      style={{ top: arriba ? rect.top - 8 : rect.bottom + 6, left, transform: arriba ? 'translateY(-100%)' : undefined }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {children}
+    </div>,
+    document.body,
   )
 }

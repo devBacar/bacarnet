@@ -10,6 +10,7 @@ import type {
 import {
   BotonAgregar,
   ConceptoFila,
+  LineasPagosHechos,
   MontoUno,
   MontosEnLineas,
   NombreGrupo,
@@ -593,6 +594,7 @@ function PopoverSemana({
           </li>
         ))}
       </ul>
+      <LineasPagosHechos pagos={fila.pagosResumen} />
       <div className="mt-3 flex flex-wrap gap-2">
         {puedePagarFila(fila) ? (
           <button type="button" className={botonChico} onClick={onPagar}>

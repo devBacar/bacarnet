@@ -6,6 +6,7 @@ import { GRUPO_COMPROMISO_DEFAULT } from '../domain/grupos-compromiso.js'
 import {
   decidirPagoCompromiso,
   listarPagos,
+  type DatosNuevoPago,
   type DecisionPago,
 } from '../domain/pago-compromiso.js'
 import type {
@@ -323,13 +324,7 @@ export async function commitPagoCompromiso(input: {
   compromisoId: string
   usuario: string
   nota: string | null
-  pago: {
-    fecha: string
-    montoSolicitado: number | null
-    medio: MedioPago
-    referenciaId: string | null
-    registradoPor: string
-  }
+  pago: Omit<DatosNuevoPago, 'registradoAt'>
   cuentaId: string | null
   chequeId: string | null
   aplicarCuenta: boolean

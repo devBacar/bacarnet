@@ -6,6 +6,7 @@ import {
   normalizarObservacion,
   textoCuota,
 } from '../../agenda/domain/compromiso-campos.js'
+import type { LineaPagoPlanilla } from '../../agenda/domain/como-se-pago.js'
 import {
   acumuladoDePagos,
   pagadoLegacyCompleto,
@@ -54,6 +55,10 @@ export interface CompromisoParaPlanilla {
   pagos: PagoRegistradoVista[]
   /** Monto reservado en transferencias que todavía no se firmaron. */
   enFirmaCentavos?: number
+  chequeId?: string | null
+  cuentaId?: string | null
+  transferenciaConfeccionadaId?: string | null
+  pagosResumen?: LineaPagoPlanilla[]
 }
 
 export interface FilaPlanilla {
@@ -78,6 +83,7 @@ export interface FilaPlanilla {
   deMesAnterior: boolean
   /** Lo que sigue sin pagar de ese vencimiento anterior, en la moneda de la fila. Cero si es de este mes. */
   arrastreCentavos: number
+  pagosResumen: LineaPagoPlanilla[]
 }
 
 export interface GrupoPlanilla {
@@ -268,6 +274,7 @@ function filaDe(
     estado: completo ? 'pagado' : row.estado,
     deMesAnterior,
     arrastreCentavos: deMesAnterior ? diferenciaCentavos : 0,
+    pagosResumen: row.pagosResumen ?? [],
   }
 }
 

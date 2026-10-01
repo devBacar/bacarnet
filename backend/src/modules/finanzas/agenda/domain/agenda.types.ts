@@ -12,6 +12,14 @@ export interface PagoCompromisoRegistrado {
   referenciaId: string | null
   registradoPor: string
   registradoAt: Timestamp
+  /** Opcionales: los pagos viejos no los tienen. */
+  chequeId?: string | null
+  cajaId?: string | null
+  cuentaId?: string | null
+  transferenciaId?: string | null
+  movimientoId?: string | null
+  claseCheque?: 'cartera' | 'propio' | null
+  marcadoAMano?: boolean
 }
 
 export type CompromisoEstado =

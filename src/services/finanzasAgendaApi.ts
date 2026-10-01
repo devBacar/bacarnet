@@ -182,3 +182,25 @@ export async function fetchCobroHistorial(id: string): Promise<HistorialAgendaIt
   const data = (await res.json()) as { historial: HistorialAgendaItem[] }
   return data.historial
 }
+
+export interface PagoHechoItem {
+  compromisoId: string
+  fecha: string
+  proveedorONombre: string
+  concepto: string
+  cuota: string | null
+  montoCentavos: number
+  moneda: 'ARS' | 'USD'
+  medio: MedioPago
+  comoSePago: string
+  link: string | null
+}
+
+export async function fetchPagosHechos(mes: string): Promise<{ desde: string; hasta: string; pagos: PagoHechoItem[] }> {
+  const res = await agendaFetch(`/pagos-hechos?mes=${encodeURIComponent(mes)}`)
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(payload.error ?? 'No se pudieron cargar los pagos hechos')
+  }
+  return (await res.json()) as { desde: string; hasta: string; pagos: PagoHechoItem[] }
+}

@@ -230,6 +230,11 @@ export async function registrarPagoCompromiso(input: {
   referenciaId: string | null
   cuentaId: string | null
   chequeId: string | null
+  cajaId?: string | null
+  transferenciaId?: string | null
+  movimientoId?: string | null
+  claseCheque?: 'cartera' | 'propio' | null
+  marcadoAMano?: boolean
   nota: string | null
   aplicarCuenta: boolean
   siYaPagado: 'error' | 'silencio'
@@ -245,6 +250,13 @@ export async function registrarPagoCompromiso(input: {
       medio: input.medio,
       referenciaId: input.referenciaId,
       registradoPor: usuario,
+      chequeId: input.chequeId,
+      cajaId: input.cajaId ?? null,
+      cuentaId: input.cajaId ? null : input.cuentaId,
+      transferenciaId: input.transferenciaId ?? null,
+      movimientoId: input.movimientoId ?? null,
+      claseCheque: input.claseCheque ?? null,
+      marcadoAMano: input.marcadoAMano === true,
     },
     cuentaId: input.cuentaId,
     chequeId: input.chequeId,
@@ -303,6 +315,7 @@ export async function marcarCompromisoPagado(
     referenciaId: null,
     cuentaId: medioPago === 'cheque' ? current.cuentaId : cuentaId,
     chequeId: null,
+    marcadoAMano: true,
     nota: nota ?? `Pago vía ${medioPago}`,
     aplicarCuenta: true,
     siYaPagado: 'error',
@@ -360,6 +373,7 @@ export async function marcarCompromisoPagadoPorTransferenciaHecha(input: {
     fecha: new Date(),
     montoSolicitado,
     referenciaId: transferenciaId || null,
+    transferenciaId: transferenciaId || null,
     cuentaId: input.cuentaId ?? current.cuentaId,
     chequeId: null,
     nota: input.nota,
@@ -453,6 +467,9 @@ export async function marcarCompromisoYaPagado(
   const movimientoId = typeof body.movimientoId === 'string' ? body.movimientoId.trim() : ''
   const chequeId =
     typeof body.chequeId === 'string' && body.chequeId.trim() ? body.chequeId.trim() : null
+  const cajaId = typeof body.cajaId === 'string' && body.cajaId.trim() ? body.cajaId.trim() : null
+  const claseCheque = body.claseCheque === 'cartera' || body.claseCheque === 'propio' ? body.claseCheque : null
+  const marcadoAMano = body.marcadoAMano === true
   if (medioPago === 'transferencia' && !cuentaId) {
     throw new Error('Elegí el banco o el movimiento que coincide')
   }
@@ -473,6 +490,10 @@ export async function marcarCompromisoYaPagado(
     referenciaId,
     cuentaId: medioPago === 'cheque' ? current.cuentaId : cuentaId,
     chequeId,
+    cajaId,
+    movimientoId: movimientoId || null,
+    claseCheque,
+    marcadoAMano,
     nota,
     aplicarCuenta: true,
     siYaPagado: 'error',

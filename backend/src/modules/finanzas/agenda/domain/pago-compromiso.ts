@@ -1,5 +1,7 @@
 import type { CompromisoEstado, MedioPago } from './agenda.types.js'
 
+export type ClaseChequePago = 'cartera' | 'propio'
+
 export interface PagoRegistradoVista {
   fecha: string
   montoCentavos: number
@@ -7,6 +9,30 @@ export interface PagoRegistradoVista {
   referenciaId: string | null
   registradoPor: string
   registradoAt: unknown
+  /** Ausentes en pagos viejos. Si vienen mal tipeados, se ignoran y el pago sigue valiendo. */
+  chequeId?: string | null
+  cajaId?: string | null
+  cuentaId?: string | null
+  transferenciaId?: string | null
+  movimientoId?: string | null
+  claseCheque?: ClaseChequePago | null
+  marcadoAMano?: boolean
+}
+
+export interface DatosNuevoPago {
+  montoSolicitado: number | null
+  fecha: string
+  medio: MedioPago
+  referenciaId: string | null
+  registradoPor: string
+  registradoAt: unknown
+  chequeId?: string | null
+  cajaId?: string | null
+  cuentaId?: string | null
+  transferenciaId?: string | null
+  movimientoId?: string | null
+  claseCheque?: ClaseChequePago | null
+  marcadoAMano?: boolean
 }
 
 const MEDIOS: readonly MedioPago[] = ['transferencia', 'cheque', 'efectivo']
@@ -66,6 +92,29 @@ export function resolverMontoPago(restante: number, montoSolicitado: number | nu
   return monto
 }
 
+function idOpcional(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null
+  const texto = value.trim()
+  return texto || null
+}
+
+function detalleOpcionalPago(pago: DatosNuevoPago): Partial<PagoRegistradoVista> {
+  const extra: Partial<PagoRegistradoVista> = {}
+  const chequeId = idOpcional(pago.chequeId)
+  const cajaId = idOpcional(pago.cajaId)
+  const cuentaId = idOpcional(pago.cuentaId)
+  const transferenciaId = idOpcional(pago.transferenciaId)
+  const movimientoId = idOpcional(pago.movimientoId)
+  if (chequeId) extra.chequeId = chequeId
+  if (cajaId) extra.cajaId = cajaId
+  if (cuentaId) extra.cuentaId = cuentaId
+  if (transferenciaId) extra.transferenciaId = transferenciaId
+  if (movimientoId) extra.movimientoId = movimientoId
+  if (pago.claseCheque === 'cartera' || pago.claseCheque === 'propio') extra.claseCheque = pago.claseCheque
+  if (pago.marcadoAMano === true) extra.marcadoAMano = true
+  return extra
+}
+
 export function leerMontoSolicitado(value: unknown): number | null {
   if (value == null || value === '') return null
   if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
@@ -91,14 +140,7 @@ export function decidirPagoCompromiso(
     montoCentavos: number
     pagos: readonly PagoRegistradoVista[]
   },
-  pago: {
-    montoSolicitado: number | null
-    fecha: string
-    medio: MedioPago
-    referenciaId: string | null
-    registradoPor: string
-    registradoAt: unknown
-  },
+  pago: DatosNuevoPago,
 ): DecisionPago {
   const restante = restanteAPagarCentavos(actual)
   if (restante <= 0) return { tipo: 'ya_pagado' }
@@ -114,6 +156,7 @@ export function decidirPagoCompromiso(
       referenciaId: pago.referenciaId,
       registradoPor: pago.registradoPor,
       registradoAt: pago.registradoAt,
+      ...detalleOpcionalPago(pago),
     },
   ]
   const acumuladoCentavos = acumuladoDePagos(pagos)

@@ -101,6 +101,7 @@ export async function pagarCompromisoEnEfectivo(input: {
   await marcarCompromisoYaPagado(input.compromisoId, input.user.uid, {
     medioPago: 'efectivo',
     cuentaId: caja.id,
+    cajaId: caja.id,
     fechaPago: `${hoy}T12:00:00-03:00`,
     montoCentavos: monto,
     nota: `Pagado en efectivo desde ${caja.nombre}`,
@@ -140,6 +141,7 @@ export async function pagarCompromisoConChequeDeCartera(input: {
   await marcarCompromisoYaPagado(input.compromisoId, input.user.uid, {
     medioPago: 'cheque',
     chequeId: cheque.id,
+    claseCheque: 'cartera',
     fechaPago: hoy,
     montoCentavos: monto,
     nota: `Endosado el cheque N.º ${cheque.numero} a ${parche.destinatario}.`,
@@ -286,6 +288,7 @@ async function pagarConChequePropio(input: {
     await marcarCompromisoYaPagado(input.compromisoId, input.user.uid, {
       medioPago: 'cheque',
       chequeId: creado.id,
+      claseCheque: 'propio',
       fechaPago: hoy,
       montoCentavos: input.montoCentavos,
       nota: `Cheque propio N.º ${creado.numero} de ${input.cheque.banco} para ${input.destinatario}.`,
@@ -320,6 +323,7 @@ export async function yaPagueCompromiso(input: {
     montoCentavos: monto,
     cuentaId: cuentaId || undefined,
     movimientoId: movimientoId || undefined,
+    marcadoAMano: true,
   })
   return { mensaje: 'Listo. Quedó marcado como pagado.' }
 }

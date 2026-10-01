@@ -9,6 +9,7 @@ import {
 } from '../../components/finanzas/VencimientoAlert'
 import { FinanzasFormField, finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
+import { PagosHechos } from '../../components/finanzas/agenda/PagosHechos'
 import { CompromisosMes } from '../../components/finanzas/hoy/CompromisosMes'
 import { parseMontoEsArACentavos } from '../../components/finanzas/montoEsAr'
 import { useAuth } from '../../context'
@@ -39,9 +40,14 @@ import {
 } from '../../services/finanzasTransferenciasApi'
 
 type Tab = 'pagos' | 'cobros' | 'planilla'
+type VistaPagos = 'pendientes' | 'hechos'
 
 function tabInicial(valor: string | null): Tab {
   return valor === 'cobros' || valor === 'planilla' ? valor : 'pagos'
+}
+
+function vistaPagosDe(valor: string | null): VistaPagos {
+  return valor === 'hechos' || valor === 'pagados' ? 'hechos' : 'pendientes'
 }
 
 const URGENCIA_LABEL: Record<PrioridadUrgencia, string> = {
@@ -89,9 +95,9 @@ const MEDIO_LABEL: Record<MedioPago, string> = {
 
 export function FinanzasAgendaPage() {
   const { user } = useAuth()
-  const [searchParams] = useSearchParams()
-  const [tab, setTab] = useState<Tab>(() => tabInicial(searchParams.get('tab')))
-  const [vistaPagos, setVistaPagos] = useState<CompromisosAgendaVista>('pendientes')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = tabInicial(searchParams.get('tab'))
+  const vistaPagos = vistaPagosDe(searchParams.get('vista'))
   const [vistaCobros, setVistaCobros] = useState<CobrosAgendaVista>('esperados')
   const [showAlta, setShowAlta] = useState(false)
   const [editando, setEditando] = useState<CompromisoAgendaItem | null>(null)
@@ -107,9 +113,9 @@ export function FinanzasAgendaPage() {
   })
 
   const { data: compromisosRaw = [], isLoading: loadingPagos } = useQuery({
-    queryKey: ['finanzas', 'agenda', 'compromisos', vistaPagos],
-    queryFn: () => fetchCompromisosAgenda(vistaPagos),
-    enabled: Boolean(user) && tab === 'pagos',
+    queryKey: ['finanzas', 'agenda', 'compromisos', 'pendientes'],
+    queryFn: () => fetchCompromisosAgenda('pendientes'),
+    enabled: Boolean(user) && tab === 'pagos' && vistaPagos === 'pendientes',
   })
 
   const { data: cobrosRaw = [], isLoading: loadingCobros } = useQuery({
@@ -119,8 +125,8 @@ export function FinanzasAgendaPage() {
   })
 
   const compromisos = useMemo(
-    () => filterCompromisosForVista(compromisosRaw, vistaPagos),
-    [compromisosRaw, vistaPagos],
+    () => filterCompromisosForVista(compromisosRaw, 'pendientes'),
+    [compromisosRaw],
   )
   const cobros = useMemo(
     () => filterCobrosForVista(cobrosRaw, vistaCobros),
@@ -143,10 +149,20 @@ export function FinanzasAgendaPage() {
     void queryClient.invalidateQueries({ queryKey: ['finanzas', 'hoy'] })
   }
 
+  const ir = (cambios: { tab?: Tab; vista?: VistaPagos }) => {
+    const next = new URLSearchParams(searchParams)
+    const tabNuevo = cambios.tab ?? tab
+    const vistaNueva = cambios.vista ?? vistaPagos
+    next.set('tab', tabNuevo)
+    if (tabNuevo === 'pagos' && vistaNueva === 'hechos') next.set('vista', 'hechos')
+    else next.delete('vista')
+    setSearchParams(next, { replace: true })
+  }
+
   const botonTab = (id: Tab, texto: string) => (
     <button
       type="button"
-      onClick={() => setTab(id)}
+      onClick={() => ir({ tab: id })}
       className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === id ? 'bg-brand-primary text-white' : 'text-body-muted'}`}
     >
       {texto}
@@ -194,17 +210,19 @@ export function FinanzasAgendaPage() {
           <SubVistaTabs
             options={[
               { id: 'pendientes', label: 'Pendientes' },
-              { id: 'pagados', label: 'Pagados' },
+              { id: 'hechos', label: 'Pagos hechos' },
             ]}
             value={vistaPagos}
-            onChange={(id) => setVistaPagos(id as CompromisosAgendaVista)}
+            onChange={(id) => ir({ tab: 'pagos', vista: id === 'hechos' ? 'hechos' : 'pendientes' })}
           />
-          {loadingPagos ? (
+          {vistaPagos === 'hechos' ? (
+            <PagosHechos />
+          ) : loadingPagos ? (
             <LoadingBlock />
           ) : (
             <CompromisosTable
               rows={compromisos}
-              vista={vistaPagos}
+              vista="pendientes"
               cuentas={cuentas}
               onUrgenciaChange={async (id, urgenciaManual) => {
                 await patchCompromisoUrgencia(id, urgenciaManual)

@@ -148,6 +148,31 @@ describe('planificado, acumulado y totales', () => {
     expect(fila?.porDia['2026-09-11']?.pagadoCentavos).toBe(8_000)
   })
 
+  it('copia a la fila el texto de cómo se pagó', () => {
+    const linea = {
+      fecha: '2026-09-11',
+      texto: 'Cheque N.º 90002 · Galicia · endosado',
+      linea: 'Pagado el 11/09 con cheque N.º 90002 · Galicia · endosado',
+    }
+    const planilla = armarPlanillaMes({
+      mes: '2026-09',
+      hoy: '2026-09-01',
+      tipoCambio: null,
+      feriados,
+      compromisos: [
+        compromiso({
+          id: 'con-texto',
+          estado: 'pagado',
+          fechaVencimiento: '2026-09-10',
+          fechaPago: '2026-09-11',
+          pagosResumen: [linea],
+        }),
+      ],
+    })
+    const fila = planilla.grupos.find((grupo) => grupo.grupo === 'Otros egresos')?.filas[0]
+    expect(fila?.pagosResumen).toEqual([linea])
+  })
+
   it('convierte el subtotal en dólares con el tipo de cambio y separa las monedas', () => {
     expect(arsConvertido(10_000, 100, 1550)).toBe(10_000 + 155_000)
     const planilla = armarPlanillaMes({

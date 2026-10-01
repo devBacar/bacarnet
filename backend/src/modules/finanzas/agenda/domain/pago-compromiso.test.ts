@@ -40,6 +40,26 @@ describe('pago parcial de un compromiso', () => {
     expect(restanteAPagarCentavos({ ...actual, pagos: decision.pagos })).toBe(6_000)
   })
 
+  it('guarda el cheque o la caja en el pago y no los pierde en el siguiente', () => {
+    const primero = decidirPagoCompromiso(actual, {
+      ...pago,
+      montoSolicitado: 4_000,
+      medio: 'cheque',
+      chequeId: 'ch-1',
+      claseCheque: 'cartera',
+    })
+    if (primero.tipo !== 'aplicado') throw new Error('esperado aplicado')
+    expect(primero.pagos[0]).toMatchObject({ chequeId: 'ch-1', claseCheque: 'cartera' })
+    const segundo = decidirPagoCompromiso(
+      { ...actual, pagos: primero.pagos },
+      { ...pago, fecha: '2026-09-20', montoSolicitado: null, cajaId: 'caja-1' },
+    )
+    if (segundo.tipo !== 'aplicado') throw new Error('esperado aplicado')
+    expect(segundo.pagos[0]).toMatchObject({ chequeId: 'ch-1', claseCheque: 'cartera' })
+    expect(segundo.pagos[1]).toMatchObject({ cajaId: 'caja-1', medio: 'efectivo' })
+    expect(segundo.pagos[1]).not.toHaveProperty('chequeId')
+  })
+
   it('el segundo pago cierra cuando llega al importe', () => {
     const primero = decidirPagoCompromiso(actual, { ...pago, montoSolicitado: 4_000 })
     if (primero.tipo !== 'aplicado') throw new Error('esperado aplicado')

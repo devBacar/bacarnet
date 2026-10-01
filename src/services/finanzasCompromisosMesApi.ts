@@ -61,6 +61,8 @@ export interface FilaCompromisoMes {
   deMesAnterior: boolean
   /** Lo que sigue sin pagar de ese vencimiento anterior, en la moneda de la fila. */
   arrastreCentavos: number
+  /** Una línea por pago, ya escrita para mostrar. */
+  pagosResumen?: Array<{ fecha: string; texto: string; linea: string }>
 }
 
 export interface GrupoCompromisoMes {

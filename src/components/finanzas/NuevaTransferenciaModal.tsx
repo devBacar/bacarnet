@@ -88,6 +88,39 @@ function etiqueta(cuenta: FinanzasCuenta): string {
   return `${cuenta.bancoNombre} CC`
 }
 
+export interface PrecargaTransferenciaHoy {
+  compromisoPagoId: string
+  montoCentavos: number
+  concepto: string
+  destinatarioNombre: string
+  destinatarioCuit: string | null
+}
+
+function centavosACampo(centavos: number): string {
+  return (centavos / 100).toLocaleString('es-AR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function digitosCuit(value: string | null | undefined): string {
+  return (value ?? '').replace(/\D/g, '')
+}
+
+function elegirDestinatario(
+  items: DestinatarioItem[],
+  nombre: string,
+  cuit: string | null,
+): DestinatarioItem | null {
+  const cuitBuscado = digitosCuit(cuit)
+  if (cuitBuscado) {
+    const porCuit = items.find((item) => digitosCuit(item.cuit) === cuitBuscado)
+    if (porCuit) return porCuit
+  }
+  const nombreNorm = nombre.trim().toLocaleLowerCase('es')
+  return items.find((item) => item.nombre.trim().toLocaleLowerCase('es') === nombreNorm) ?? null
+}
+
 function useDebounced(value: string, ms = 250): string {
   const [debounced, setDebounced] = useState(value)
   useEffect(() => {
@@ -100,25 +133,29 @@ function useDebounced(value: string, ms = 250): string {
 export function NuevaTransferenciaModal({
   onClose,
   cuentaOrigenId,
+  precarga,
 }: {
   onClose: () => void
   cuentaOrigenId?: string
+  precarga?: PrecargaTransferenciaHoy
 }) {
   const queryClient = useQueryClient()
   const [idempotencyKey] = useState(() => crypto.randomUUID())
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1)
   const [cuentaDebitoId, setCuentaDebitoId] = useState(cuentaOrigenId ?? '')
-  const [tipo, setTipo] = useState<TransferenciaDirectaTipo>('terceros')
+  const [tipo, setTipo] = useState<TransferenciaDirectaTipo>(precarga ? 'proveedores' : 'terceros')
   const [cuentaDestinoId, setCuentaDestinoId] = useState('')
-  const [busqueda, setBusqueda] = useState('')
+  const [busqueda, setBusqueda] = useState(precarga?.destinatarioNombre ?? '')
   const [elegido, setElegido] = useState<DestinatarioItem | null>(null)
   const [modoNuevo, setModoNuevo] = useState(false)
   const [cbu, setCbu] = useState('')
-  const [nombre, setNombre] = useState('')
-  const [cuit, setCuit] = useState('')
+  const [nombre, setNombre] = useState(precarga?.destinatarioNombre ?? '')
+  const [cuit, setCuit] = useState(precarga?.destinatarioCuit ?? '')
   const [tipoCuenta, setTipoCuenta] = useState<TipoCuentaDestinatario | null>(null)
-  const [monto, setMonto] = useState('')
-  const [concepto, setConcepto] = useState('')
+  const [monto, setMonto] = useState(precarga ? centavosACampo(precarga.montoCentavos) : '')
+  const [concepto, setConcepto] = useState(
+    precarga ? precarga.concepto.slice(0, MAX_OBSERVACION_INTERBANKING) : '',
+  )
   const [codigoConcepto, setCodigoConcepto] = useState(CONCEPTO_TERCEROS_DEFAULT)
   const [disclaimerAceptado, setDisclaimerAceptado] = useState(false)
   const [referencia, setReferencia] = useState('')
@@ -128,6 +165,7 @@ export function NuevaTransferenciaModal({
   const enviandoRef = useRef(false)
 
   const busquedaDebounced = useDebounced(busqueda)
+  const precargaAplicada = useRef(false)
   const { data: cuentasData, isLoading: cargandoCuentas } = useQuery({
     queryKey: ['finanzas', 'cuentas'],
     queryFn: fetchFinanzasCuentas,
@@ -142,6 +180,41 @@ export function NuevaTransferenciaModal({
     queryFn: () => fetchDestinatarios({ q: busquedaDebounced, tipo: tipo as DestinatarioTipo }),
     enabled: step === 2 && tipo !== 'cuentas_propias',
   })
+  const { data: candidatosPrecarga = [], isFetched: precargaBuscada, isFetching: buscandoPrecarga } = useQuery({
+    queryKey: ['finanzas', 'destinatarios', 'precarga', precarga?.destinatarioNombre, precarga?.destinatarioCuit],
+    enabled: Boolean(precarga),
+    queryFn: async () => {
+      const nombreBuscado = precarga?.destinatarioNombre?.trim() ?? ''
+      const cuitBuscado = precarga?.destinatarioCuit?.trim() ?? ''
+      const listas = await Promise.all([
+        nombreBuscado ? fetchDestinatarios({ q: nombreBuscado }) : Promise.resolve([]),
+        cuitBuscado ? fetchDestinatarios({ q: cuitBuscado }) : Promise.resolve([]),
+      ])
+      const porId = new Map<string, DestinatarioItem>()
+      for (const item of listas.flat()) porId.set(item.id, item)
+      return [...porId.values()]
+    },
+  })
+
+  useEffect(() => {
+    if (!precarga || precargaAplicada.current || !precargaBuscada || buscandoPrecarga) return
+    precargaAplicada.current = true
+    const match = elegirDestinatario(
+      candidatosPrecarga,
+      precarga.destinatarioNombre,
+      precarga.destinatarioCuit,
+    )
+    if (match) {
+      setElegido(match)
+      setTipo(match.tipo)
+      setTipoCuenta(match.tipoCuenta)
+      setModoNuevo(false)
+      return
+    }
+    setModoNuevo(true)
+    setNombre(precarga.destinatarioNombre)
+    setCuit(precarga.destinatarioCuit ?? '')
+  }, [precarga, precargaBuscada, buscandoPrecarga, candidatosPrecarga])
 
   const cbuNuevo = validarCbu(cbu)
   const cuitNuevo = validarCuitOpcional(cuit)
@@ -273,10 +346,19 @@ export function NuevaTransferenciaModal({
           : {}),
         idempotencyKey,
         confirmarSinFondos,
+        ...(precarga ? { compromisoPagoId: precarga.compromisoPagoId } : {}),
       })
-      toast.success('Transferencia confeccionada. Queda pendiente de aprobación en Interbanking.')
+      toast.success(
+        precarga
+          ? 'Listo. La transferencia quedó armada. Falta que la firmen.'
+          : 'Transferencia confeccionada. Queda pendiente de aprobación en Interbanking.',
+      )
       await queryClient.invalidateQueries({ queryKey: ['finanzas', 'transferencias'] })
       await queryClient.invalidateQueries({ queryKey: ['finanzas', 'destinatarios'] })
+      if (precarga) {
+        await queryClient.invalidateQueries({ queryKey: ['finanzas', 'hoy'] })
+        await queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
+      }
       onClose()
     } catch (err) {
       if (err instanceof TransferenciaDirectaError && err.requiereConfirmacion) {
@@ -302,8 +384,13 @@ export function NuevaTransferenciaModal({
       >
         <p className="text-body-muted text-xs">Paso {step} de 4</p>
         <h2 id="nueva-transferencia-titulo" className="text-heading text-lg font-semibold">
-          Nueva transferencia
+          {precarga ? 'Pagar por banco' : 'Nueva transferencia'}
         </h2>
+        {precarga ? (
+          <p className="text-body-muted mt-1 text-sm">
+            Para {precarga.destinatarioNombre}. {precarga.concepto}
+          </p>
+        ) : null}
 
         {step === 1 ? (
           <div className="mt-4 space-y-4">
@@ -448,6 +535,11 @@ export function NuevaTransferenciaModal({
                 >
                   Nuevo destinatario
                 </button>
+                {precarga && modoNuevo && !elegido ? (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                    No está en la agenda. Cargá el CBU para poder pagarle.
+                  </p>
+                ) : null}
                 {modoNuevo ? (
                   <div className="space-y-3">
                     <FinanzasFormField label="CBU">

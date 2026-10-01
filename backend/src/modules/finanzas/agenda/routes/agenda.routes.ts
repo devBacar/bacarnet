@@ -13,12 +13,32 @@ import {
   getCompromisoHistorialApi,
   listCompromisosAgenda,
   marcarCompromisoPagado,
+  patchCompromisoAgenda,
   patchCompromisoUrgencia,
 } from '../services/compromisos.service.js'
+import { listarPagosHechos, PagosHechosError } from '../services/pagos-hechos.service.js'
 
 export const finanzasAgendaRouter = Router()
 
 finanzasAgendaRouter.use(requireWorkspaceUser, requireViewFinanzas)
+
+finanzasAgendaRouter.get('/pagos-hechos', async (req, res) => {
+  try {
+    const data = await listarPagosHechos({
+      mes: req.query.mes,
+      desde: req.query.desde,
+      hasta: req.query.hasta,
+    })
+    res.json(data)
+  } catch (err) {
+    if (err instanceof PagosHechosError) {
+      res.status(err.status).json({ error: err.message })
+      return
+    }
+    console.error('[finanzas/agenda] pagos hechos', err)
+    res.status(500).json({ error: 'No se pudieron listar los pagos hechos' })
+  }
+})
 
 finanzasAgendaRouter.get('/compromisos', async (req, res) => {
   try {
@@ -41,6 +61,21 @@ finanzasAgendaRouter.post('/compromisos', async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error al crear compromiso'
     res.status(400).json({ error: message })
+  }
+})
+
+finanzasAgendaRouter.patch('/compromisos/:id', async (req, res) => {
+  try {
+    const compromiso = await patchCompromisoAgenda(
+      req.params.id,
+      req.authedUser!.uid,
+      req.body as Record<string, unknown>,
+    )
+    res.json({ compromiso })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo editar el compromiso'
+    const status = /no encontr/i.test(message) ? 404 : 400
+    res.status(status).json({ error: message })
   }
 })
 

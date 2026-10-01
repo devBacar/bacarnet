@@ -158,7 +158,8 @@ export function FinanzasCuentasPage() {
         </div>
       ) : data ? (
         <div className="space-y-4">
-          <div className="grid items-start gap-4 lg:grid-cols-2">
+          <div className="grid items-start gap-4">
+            {/* La posición va a lo ancho: la tabla por banco no entra en media columna. */}
             {data.cuentas.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6 text-center dark:border-zinc-700 dark:bg-zinc-950/50">
                 <p className="text-sm font-medium text-neutral-700 dark:text-gray-300">

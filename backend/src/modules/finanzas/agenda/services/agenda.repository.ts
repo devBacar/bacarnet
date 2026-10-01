@@ -2,6 +2,13 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { buildAgendaHistorialEntry } from '../domain/agenda.historial.js'
 import type { PrioridadUrgencia } from '../domain/agenda.prioridad.js'
+import { GRUPO_COMPROMISO_DEFAULT } from '../domain/grupos-compromiso.js'
+import {
+  decidirPagoCompromiso,
+  listarPagos,
+  type DatosNuevoPago,
+  type DecisionPago,
+} from '../domain/pago-compromiso.js'
 import type {
   CobroEsperadoDocument,
   CompromisoPagoDocument,
@@ -33,6 +40,13 @@ function defaultCompromisoFields(): Pick<
   | 'esViatico'
   | 'beneficiarioEmpleado'
   | 'transferenciaConfeccionadaId'
+  | 'grupo'
+  | 'moneda'
+  | 'deudaTotalCentavos'
+  | 'cuotaNumero'
+  | 'cuotaTotal'
+  | 'observacion'
+  | 'pagos'
 > {
   return {
     cuentaId: null,
@@ -43,6 +57,13 @@ function defaultCompromisoFields(): Pick<
     esViatico: false,
     beneficiarioEmpleado: null,
     transferenciaConfeccionadaId: null,
+    grupo: GRUPO_COMPROMISO_DEFAULT,
+    moneda: 'ARS',
+    deudaTotalCentavos: null,
+    cuotaNumero: null,
+    cuotaTotal: null,
+    observacion: null,
+    pagos: [],
   }
 }
 
@@ -289,6 +310,64 @@ export async function listCompromisosPendientes(): Promise<
       concepto: data.concepto,
       proveedorONombre: data.proveedorONombre,
     }))
+}
+
+function timestampDiaArgentina(ymd: string): Timestamp {
+  return Timestamp.fromDate(new Date(`${ymd}T12:00:00-03:00`))
+}
+
+/**
+ * Anota el pago adentro de la transacción, con el documento recién leído.
+ * Así dos pagos seguidos no se pisan el array.
+ */
+export async function commitPagoCompromiso(input: {
+  compromisoId: string
+  usuario: string
+  nota: string | null
+  pago: Omit<DatosNuevoPago, 'registradoAt'>
+  cuentaId: string | null
+  chequeId: string | null
+  aplicarCuenta: boolean
+}): Promise<DecisionPago> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.pago.fecha)) throw new Error('Elegí el día')
+  const ref = adminDb().collection(COMPROMISOS_COLLECTION).doc(input.compromisoId)
+  const now = FieldValue.serverTimestamp()
+  const registradoAt = Timestamp.now()
+
+  return adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) throw new Error('Compromiso no encontrado')
+    const data = snap.data() as CompromisoPagoDocument
+    const decision = decidirPagoCompromiso(
+      {
+        estado: data.estado,
+        montoCentavos: data.montoCentavos,
+        pagos: listarPagos(data.pagos),
+      },
+      { ...input.pago, registradoAt },
+    )
+    if (decision.tipo === 'ya_pagado') return decision
+
+    const historial = buildAgendaHistorialEntry({
+      estadoAnterior: data.estado,
+      estadoNuevo: decision.estado,
+      usuario: input.usuario,
+      nota: input.nota,
+    })
+    tx.set(ref.collection(HISTORIAL_SUB).doc(), { ...historial, fecha: now })
+    tx.update(ref, {
+      medioPago: input.pago.medio,
+      pagos: decision.pagos,
+      estado: decision.estado,
+      ...(input.aplicarCuenta ? { cuentaId: input.cuentaId } : {}),
+      ...(input.chequeId ? { chequeId: input.chequeId } : {}),
+      ...(decision.completo
+        ? { fechaPago: timestampDiaArgentina(input.pago.fecha), pagadoPor: input.pago.registradoPor }
+        : {}),
+      updatedAt: now,
+    })
+    return decision
+  })
 }
 
 export async function listCobrosEsperadosSelect(): Promise<Array<{ id: string; clienteONombre: string }>> {

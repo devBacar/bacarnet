@@ -1,0 +1,321 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
+import toast from 'react-hot-toast'
+import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
+import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
+import { CompromisosSemana, type PagoDesdePlanilla } from '../../components/finanzas/hoy/CompromisosSemana'
+import {
+  ComoLoPagasModal,
+  EfectivoModal,
+  ReclamarModal,
+  ReprogramarModal,
+  YaLoPagueModal,
+} from '../../components/finanzas/hoy/ModalesHoy'
+import { CobrosHoy, PagosHoy } from '../../components/finanzas/hoy/PagosCobrosHoy'
+import {
+  CuatroNumeros,
+  EncabezadoHoy,
+  FranjaDemo,
+  TarjetaBancos,
+  TarjetaOjo,
+  TarjetaSemanaGrafico,
+} from '../../components/finanzas/hoy/TarjetasHoy'
+import { NuevaTransferenciaModal, type PrecargaTransferenciaHoy } from '../../components/finanzas/NuevaTransferenciaModal'
+import { useAuth } from '../../context'
+import { fetchFinanzasCuentas, patchFinanzasDescubierto, type FinanzasCuenta } from '../../services/finanzasApi'
+import {
+  borrarDatosDemoHoy,
+  cobrarHoyEnEfectivo,
+  confirmarCobroHoy,
+  fetchHoy,
+  pagarHoyCombinado,
+  reprogramarCobroHoy,
+  reprogramarPagoHoy,
+  yaPagueHoy,
+  type IngresoHoy,
+  type PagoHoy,
+} from '../../services/finanzasHoyApi'
+import { isSuperAdmin } from '../../services/userService'
+
+type Reclamo = Pick<IngresoHoy, 'cliente' | 'textoReclamo' | 'email' | 'concepto'>
+
+export function FinanzasHoyPage() {
+  const { user, userProfile } = useAuth()
+  const queryClient = useQueryClient()
+  const { data, isLoading, isError, error, refetch } = useQuery({
+    queryKey: ['finanzas', 'hoy'],
+    queryFn: fetchHoy,
+    enabled: Boolean(user),
+  })
+  const cuentasQuery = useQuery({
+    queryKey: ['finanzas', 'cuentas'],
+    queryFn: fetchFinanzasCuentas,
+    enabled: Boolean(user),
+  })
+  const cuentas = cuentasQuery.data?.cuentas ?? []
+  /** Líder de Finanzas (permiso manage_finanzas_caja) o super admin; el backend valida lo mismo. */
+  const canEditDescubierto =
+    isSuperAdmin(userProfile) || userProfile?.permissions.manage_finanzas_caja === true
+
+  const [pagoModo, setPagoModo] = useState<PagoHoy | null>(null)
+  const [yaPague, setYaPague] = useState<PagoHoy | null>(null)
+  const [reprogramarPago, setReprogramarPago] = useState<PagoHoy | null>(null)
+  const [transferencia, setTransferencia] = useState<PrecargaTransferenciaHoy | null>(null)
+  const [ingresoEfectivo, setIngresoEfectivo] = useState<IngresoHoy | null>(null)
+  const [reprogramarIngreso, setReprogramarIngreso] = useState<IngresoHoy | null>(null)
+  const [reclamo, setReclamo] = useState<Reclamo | null>(null)
+  const [detalleBanco, setDetalleBanco] = useState<string | null>(null)
+  const [descubiertoCuenta, setDescubiertoCuenta] = useState<FinanzasCuenta | null>(null)
+  const [savingDescubierto, setSavingDescubierto] = useState(false)
+  const [guardando, setGuardando] = useState(false)
+  const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
+  const [borrandoDemo, setBorrandoDemo] = useState(false)
+
+  async function recargar(mensaje: string) {
+    toast.success(mensaje)
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'hoy'] })
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cajas'] })
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques'] })
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'compromisos-mes'] })
+    await queryClient.invalidateQueries({ queryKey: ['finanzas', 'caja-dia'] })
+  }
+
+  /** "Pagar" desde la lista de la semana abre la misma ventana que los pagos de hoy. */
+  function pagarDesdePlanilla(origen: PagoDesdePlanilla) {
+    const pago = data?.pagos.filas.find((fila) => fila.id === origen.id)
+    setPagoModo({
+      id: origen.id,
+      urgencia: pago?.urgencia ?? 'Normal',
+      vencido: pago?.vencido ?? origen.montoCentavos > 0,
+      vencidoTexto: pago?.vencidoTexto ?? null,
+      aQuien: origen.aQuien,
+      concepto: origen.concepto,
+      montoCentavos: origen.montoCentavos,
+      comoPagar: pago?.comoPagar ?? '',
+      medioPago: origen.medioPago,
+      proveedorONombre: origen.proveedorONombre,
+      sugerenciasBanco: pago?.sugerenciasBanco ?? [],
+      moneda: origen.moneda,
+    })
+  }
+
+  async function correr(tarea: () => Promise<string>, cerrar: () => void) {
+    setGuardando(true)
+    try {
+      const mensaje = await tarea()
+      cerrar()
+      await recargar(mensaje)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function borrarDemo() {
+    if (!window.confirm('¿Borramos los datos de ejemplo? Solo se borran los marcados como DEMO.')) return
+    setBorrandoDemo(true)
+    try {
+      const mensaje = await borrarDatosDemoHoy()
+      await recargar(mensaje)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudieron borrar los datos de ejemplo')
+    } finally {
+      setBorrandoDemo(false)
+    }
+  }
+
+  async function guardarDescubierto(body: { descubiertoCentavos: number | null; vigenteDesde: string | null }) {
+    if (!descubiertoCuenta) return
+    setSavingDescubierto(true)
+    try {
+      await patchFinanzasDescubierto(descubiertoCuenta.id, body)
+      setDescubiertoCuenta(null)
+      await recargar(body.descubiertoCentavos == null ? 'Descubierto quitado' : 'Descubierto guardado')
+      await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cuentas'] })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar el descubierto')
+    } finally {
+      setSavingDescubierto(false)
+    }
+  }
+
+  return (
+    <div className="-mx-[var(--layout-padding-x)] bg-neutral-100 px-[var(--layout-padding-x)] py-4 dark:bg-zinc-950">
+    <div className="mx-auto grid min-w-0 max-w-7xl gap-4">
+      {isLoading ? <p className="text-body-muted text-[15px]">Armando el día…</p> : null}
+      {isError ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">
+          <p className="text-[15px] font-medium text-red-800 dark:text-red-200">
+            {error instanceof Error ? error.message : 'No se pudo cargar el día.'}
+          </p>
+          <button
+            type="button"
+            className="mt-2 rounded-lg border border-red-300 px-3 py-1.5 text-[13px] font-medium text-red-800 transition hover:bg-red-100 dark:border-red-800 dark:text-red-200 dark:hover:bg-red-900/40"
+            onClick={() => void refetch()}
+          >
+            Probar de nuevo
+          </button>
+        </div>
+      ) : null}
+      {data ? (
+        <>
+          {data.hayDatosDemo ? <FranjaDemo borrando={borrandoDemo} onBorrar={() => void borrarDemo()} /> : null}
+          <EncabezadoHoy fecha={data.fecha} />
+          <CuatroNumeros data={data} />
+          {data.vacio ? (
+            <p className="text-[13px] text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>
+          ) : null}
+          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
+            <PagosHoy pagos={data.pagos} onPagar={setPagoModo} onYaPague={setYaPague} onReprogramar={setReprogramarPago} />
+            <CobrosHoy
+              ingresos={data.ingresos.filas}
+              atrasados={data.prevision.cobrosAtrasados}
+              confirmandoId={confirmandoId}
+              onConfirmar={(ingreso) => {
+                if (!ingreso.movimientoId) return
+                setConfirmandoId(ingreso.id)
+                void confirmarCobroHoy(ingreso.id, ingreso.movimientoId)
+                  .then((mensaje) => recargar(mensaje))
+                  .catch((err: unknown) => {
+                    toast.error(err instanceof Error ? err.message : 'No se pudo confirmar')
+                  })
+                  .finally(() => setConfirmandoId(null))
+              }}
+              onEfectivo={setIngresoEfectivo}
+              onReprogramar={setReprogramarIngreso}
+              onReclamar={setReclamo}
+              onReclamarAtrasado={setReclamo}
+            />
+          </div>
+          <CompromisosSemana onPagar={pagarDesdePlanilla} />
+          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-3">
+            <TarjetaBancos dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
+            <TarjetaSemanaGrafico prevision={data.prevision} />
+            <TarjetaOjo prevision={data.prevision} />
+          </div>
+        </>
+      ) : null}
+
+      {pagoModo ? (
+        <ComoLoPagasModal
+          pago={pagoModo}
+          guardando={guardando}
+          onClose={() => setPagoModo(null)}
+          onConfirmar={(resultado) => {
+            const pago = pagoModo
+            const abrirTransferencia = () => {
+              if (!resultado.transferencia) return
+              setTransferencia(resultado.transferencia)
+              setPagoModo(null)
+            }
+            if (resultado.partes.length === 0) {
+              abrirTransferencia()
+              return
+            }
+            setGuardando(true)
+            void pagarHoyCombinado(pago.id, resultado.partes, resultado.comprobantes)
+              .then(async (mensaje) => {
+                if (resultado.transferencia) {
+                  toast.success(mensaje)
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'hoy'] })
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cajas'] })
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques'] })
+                  await queryClient.invalidateQueries({ queryKey: ['finanzas', 'compromisos-mes'] })
+                  abrirTransferencia()
+                  return
+                }
+                setPagoModo(null)
+                await recargar(mensaje)
+              })
+              .catch((err: unknown) => {
+                toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
+              })
+              .finally(() => setGuardando(false))
+          }}
+        />
+      ) : null}
+      {transferencia ? (
+        <NuevaTransferenciaModal precarga={transferencia} onClose={() => setTransferencia(null)} />
+      ) : null}
+      {yaPague ? (
+        <YaLoPagueModal
+          pago={yaPague}
+          guardando={guardando}
+          onClose={() => setYaPague(null)}
+          onConfirmar={(body) => {
+            const pago = yaPague
+            void correr(() => yaPagueHoy(pago.id, body), () => setYaPague(null))
+          }}
+        />
+      ) : null}
+      {reprogramarPago ? (
+        <ReprogramarModal
+          titulo="Cambiar la fecha del pago"
+          detalle={`${reprogramarPago.aQuien} · ${reprogramarPago.concepto}`}
+          guardando={guardando}
+          onClose={() => setReprogramarPago(null)}
+          onConfirmar={(fecha) => {
+            const pago = reprogramarPago
+            void correr(() => reprogramarPagoHoy(pago.id, fecha), () => setReprogramarPago(null))
+          }}
+        />
+      ) : null}
+      {ingresoEfectivo ? (
+        <EfectivoModal
+          titulo="Llegó en efectivo"
+          detalle={`${ingresoEfectivo.cliente} · ${ingresoEfectivo.concepto}`}
+          montoCentavos={ingresoEfectivo.montoCentavos}
+          esIngreso
+          guardando={guardando}
+          onClose={() => setIngresoEfectivo(null)}
+          onConfirmar={(cajaId, comprobante) => {
+            const ingreso = ingresoEfectivo
+            void correr(
+              () => cobrarHoyEnEfectivo(ingreso.id, { cajaId, comprobante }),
+              () => setIngresoEfectivo(null),
+            )
+          }}
+        />
+      ) : null}
+      {reprogramarIngreso ? (
+        <ReprogramarModal
+          titulo="Cambiar la fecha del cobro"
+          detalle={`${reprogramarIngreso.cliente} · ${reprogramarIngreso.concepto}`}
+          guardando={guardando}
+          onClose={() => setReprogramarIngreso(null)}
+          onConfirmar={(fecha) => {
+            const ingreso = reprogramarIngreso
+            void correr(() => reprogramarCobroHoy(ingreso.id, fecha), () => setReprogramarIngreso(null))
+          }}
+        />
+      ) : null}
+      {reclamo ? <ReclamarModal ingreso={reclamo} onClose={() => setReclamo(null)} /> : null}
+
+      <AccountsDetailModal
+        open={detalleBanco != null}
+        cuentas={cuentas}
+        moneda="ARS"
+        bancoNombre={detalleBanco}
+        canEditManual={false}
+        canEditDescubierto={canEditDescubierto}
+        onClose={() => setDetalleBanco(null)}
+        onEditManual={() => undefined}
+        onEditDescubierto={(cuenta) => {
+          setDetalleBanco(null)
+          setDescubiertoCuenta(cuenta)
+        }}
+      />
+      <DescubiertoModal
+        cuenta={descubiertoCuenta}
+        open={descubiertoCuenta != null}
+        saving={savingDescubierto}
+        onClose={() => setDescubiertoCuenta(null)}
+        onSave={(body) => void guardarDescubierto(body)}
+      />
+    </div>
+    </div>
+  )
+}

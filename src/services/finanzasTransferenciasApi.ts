@@ -225,6 +225,7 @@ export interface ConfeccionDirectaBody {
   disclaimerAceptado?: boolean
   idempotencyKey: string
   confirmarSinFondos?: boolean
+  compromisoPagoId?: string
 }
 
 export async function confeccionarTransferenciaDirecta(

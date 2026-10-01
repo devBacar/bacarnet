@@ -5,6 +5,7 @@ const ETIQUETA: Record<ContraparteOrigen, string> = {
   banco: 'según el banco',
   transferencia: 'transferencia hecha desde BacarNet',
   agenda: 'según la Agenda',
+  cheque: 'según Cheques',
   interbanking: 'según Interbanking',
   directorio: 'conocido por su CUIT',
   categoria: 'cargo del banco',

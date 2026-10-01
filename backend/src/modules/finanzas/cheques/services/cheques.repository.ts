@@ -198,6 +198,24 @@ export async function updateChequeEstado(input: {
   })
 }
 
+/**
+ * Endoso desde Hoy: el cheque recibido se usó para pagarle a otra persona.
+ * Escribe solo `utilizado`, `destinatario` y `updatedAt`.
+ * No toca endosante, estado ni ningún otro campo.
+ */
+export async function marcarChequeEndosado(input: {
+  id: string
+  destinatario: string
+}): Promise<void> {
+  const destinatario = input.destinatario.trim()
+  if (!destinatario) throw new Error('Falta a quién se endosa el cheque')
+  await collection().doc(input.id).update({
+    utilizado: true,
+    destinatario,
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+}
+
 export async function resumenDiario(fecha: string): Promise<{
   cantidadACobrar: number
   totalACobrarCentavos: number

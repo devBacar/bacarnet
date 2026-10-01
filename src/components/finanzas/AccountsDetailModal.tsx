@@ -38,6 +38,11 @@ export function AccountsDetailModal({
     [bancoNombre, cuentas, moneda],
   )
   const grupos = useMemo(() => groupCuentasByBanco(filtradas), [filtradas])
+  // El ancho sigue a la cantidad de cuentas por banco: con una sola cuenta no sobra espacio a la derecha.
+  const maxPorBanco = grupos.reduce((max, grupo) => Math.max(max, grupo.cuentas.length), 0)
+  const anchoVentana = maxPorBanco <= 1 ? 'max-w-md' : maxPorBanco === 2 ? 'max-w-3xl' : 'max-w-6xl'
+  const columnasCuentas =
+    maxPorBanco <= 1 ? 'grid-cols-1' : maxPorBanco === 2 ? 'md:grid-cols-2' : 'md:grid-cols-2 xl:grid-cols-3'
   const total = useMemo(
     () => filtradas.reduce((acc, cuenta) => acc + cuenta.saldoActualCentavos, 0),
     [filtradas],
@@ -76,7 +81,7 @@ export function AccountsDetailModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="cuentas-detail-title"
-        className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl dark:bg-zinc-900"
+        className={`relative flex max-h-[92vh] w-full ${anchoVentana} flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl dark:bg-zinc-900`}
       >
         <header className="flex items-start justify-between gap-5 border-b border-neutral-200 px-6 py-5 dark:border-zinc-800">
           <div className="flex min-w-0 items-start gap-3">
@@ -124,7 +129,7 @@ export function AccountsDetailModal({
                       {grupo.bancoNombre}
                     </h3>
                   ) : null}
-                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className={`grid gap-4 ${columnasCuentas}`}>
                     {grupo.cuentas.map((cuenta) => (
                       <AccountCard
                         key={cuenta.id}

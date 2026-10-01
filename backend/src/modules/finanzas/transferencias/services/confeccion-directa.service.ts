@@ -116,11 +116,46 @@ async function resolverDestino(parsed: ConfeccionDirectaParseada): Promise<{
   }
 }
 
+async function leerCompromisoParaTransferir(compromisoPagoId: string | null) {
+  if (!compromisoPagoId) return null
+  const { estadoCompromisoParaTransferencia } = await import('./vincular-compromiso-confeccion.js')
+  try {
+    return await estadoCompromisoParaTransferencia(compromisoPagoId)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo usar ese pago'
+    throw new TransferenciaHttpError(400, { error: message })
+  }
+}
+
+async function vincularSiCorresponde(input: {
+  compromisoPagoId: string | null
+  transferenciaId: string
+  actorUid: string
+  cuentaDebitoId: string
+  montoCentavos: number
+}) {
+  if (!input.compromisoPagoId) return
+  const { vincularCompromisoATransferenciaDirecta } = await import('./vincular-compromiso-confeccion.js')
+  try {
+    await vincularCompromisoATransferenciaDirecta({
+      compromisoId: input.compromisoPagoId,
+      transferenciaId: input.transferenciaId,
+      actorUid: input.actorUid,
+      cuentaDebitoId: input.cuentaDebitoId,
+      montoCentavos: input.montoCentavos,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'No se pudo vincular el pago'
+    throw new TransferenciaHttpError(400, { error: message })
+  }
+}
+
 export async function confeccionarTransferenciaDirecta(input: {
   actorUid: string
   body: Record<string, unknown>
 }) {
   const parsed = parseConfeccionDirectaBody(input.body)
+  const compromisoParaTransferir = await leerCompromisoParaTransferir(parsed.compromisoPagoId)
   const debito = await getCuentaDocument(parsed.cuentaDebitoId)
   if (!debito) throw new TransferenciaHttpError(400, { error: 'Cuenta de débito no encontrada' })
   if (debito.data.tipo !== 'CC' || debito.data.moneda !== 'ARS') {
@@ -166,11 +201,34 @@ export async function confeccionarTransferenciaDirecta(input: {
         idempotente: true,
       }
     }
+    await vincularSiCorresponde({
+      compromisoPagoId: parsed.compromisoPagoId,
+      transferenciaId: existente.id,
+      actorUid: input.actorUid,
+      cuentaDebitoId: existente.data.cuentaDebitoId,
+      montoCentavos: existente.data.montoCentavos,
+    })
     return {
       ok: true as const,
       transferencia: serializar(existente.id, existente.data),
       provider: resolveFinanzasTransferenciasProviderMode(),
       idempotente: true,
+    }
+  }
+
+  if (compromisoParaTransferir === 'confeccionada') {
+    await abortIdempotentConfeccion(parsed.idempotencyKey)
+    throw new TransferenciaHttpError(400, { error: 'Ese pago ya tiene una transferencia armada' })
+  }
+
+  if (parsed.compromisoPagoId) {
+    const { assertMontoTransferenciaCabe } = await import('./vincular-compromiso-confeccion.js')
+    try {
+      await assertMontoTransferenciaCabe(parsed.compromisoPagoId, parsed.montoCentavos)
+    } catch (err) {
+      await abortIdempotentConfeccion(parsed.idempotencyKey)
+      const message = err instanceof Error ? err.message : 'El monto supera lo que falta pagar'
+      throw new TransferenciaHttpError(400, { error: message })
     }
   }
 
@@ -278,6 +336,7 @@ export async function confeccionarTransferenciaDirecta(input: {
 
   const docOk: TransferenciaDoc = {
     ...baseDoc,
+    compromisoPagoId: parsed.compromisoPagoId,
     operationId: operationId || '',
     estado,
     erroresInterbanking: null,
@@ -302,6 +361,14 @@ export async function confeccionarTransferenciaDirecta(input: {
       console.error('[finanzas/transferencias] agenda destinatario', err)
     }
   }
+
+  await vincularSiCorresponde({
+    compromisoPagoId: parsed.compromisoPagoId,
+    transferenciaId,
+    actorUid: input.actorUid,
+    cuentaDebitoId: parsed.cuentaDebitoId,
+    montoCentavos: parsed.montoCentavos,
+  })
 
   return {
     ok: true as const,

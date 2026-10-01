@@ -78,6 +78,15 @@ export interface FinanzasPosicionCierre {
     arsCentavos: number
     usdCentavos: number
   }>
+  /** Foto de cada cuenta en el cierre (incluye el descubierto acordado de ese día). */
+  cuentas?: Array<{
+    cuentaId: string
+    bancoNombre: string
+    tipo: FinanzasTipoCuenta
+    moneda: FinanzasMoneda
+    saldoCentavos: number
+    descubiertoCentavos: number | null
+  }>
   syncProveedor: {
     intentado: boolean
     ok: boolean
@@ -171,7 +180,7 @@ export async function fetchCashflowDiario(
   const res = await finanzasFetch(`/cashflow?${params.toString()}`)
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string }
-    throw new Error(body.error ?? 'No se pudo calcular el cashflow')
+    throw new Error(body.error ?? 'No se pudieron calcular las entradas y salidas del día')
   }
   return res.json() as Promise<CashflowDiario>
 }

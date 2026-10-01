@@ -57,6 +57,13 @@ export interface MovimientoBancarioDocument {
   categoriaId?: string | null
   /** Texto libre del usuario. También se reaplica junto con la categoría. */
   nota?: string | null
+  /**
+   * Palabra corta de la planilla de caja (cliente, arca, julio…).
+   * `manual` se reaplica si un sync reemplaza el día. `sugerido` no se guarda:
+   * se calcula al armar la caja.
+   */
+  detalleCaja?: string | null
+  detalleCajaOrigen?: 'manual' | 'sugerido' | null
   /** A quién o de quién es el movimiento. `manual` no se pisa en un sync. */
   contraparteNombre?: string | null
   contraparteCuit?: string | null

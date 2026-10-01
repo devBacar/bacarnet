@@ -9,6 +9,9 @@ import {
 } from '../../components/finanzas/VencimientoAlert'
 import { FinanzasFormField, finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
+import { PagosHechos } from '../../components/finanzas/agenda/PagosHechos'
+import { CompromisosMes } from '../../components/finanzas/hoy/CompromisosMes'
+import { parseMontoEsArACentavos } from '../../components/finanzas/montoEsAr'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas, type FinanzasCuenta } from '../../services/finanzasApi'
 import {
@@ -21,6 +24,7 @@ import {
   fetchCompromisosAgenda,
   marcarCompromisoPagado,
   patchCobroUrgencia,
+  patchCompromisoAgenda,
   patchCompromisoUrgencia,
   type CobroAgendaItem,
   type CobrosAgendaVista,
@@ -29,12 +33,22 @@ import {
   type MedioPago,
   type PrioridadUrgencia,
 } from '../../services/finanzasAgendaApi'
+import { COMPROMISOS_MES_QUERY_KEY, GRUPOS_COMPROMISO } from '../../services/finanzasCompromisosMesApi'
 import {
   cancelarTransferenciaConfeccionada,
   confeccionarTransferencia,
 } from '../../services/finanzasTransferenciasApi'
 
-type Tab = 'pagos' | 'cobros'
+type Tab = 'pagos' | 'cobros' | 'planilla'
+type VistaPagos = 'pendientes' | 'hechos'
+
+function tabInicial(valor: string | null): Tab {
+  return valor === 'cobros' || valor === 'planilla' ? valor : 'pagos'
+}
+
+function vistaPagosDe(valor: string | null): VistaPagos {
+  return valor === 'hechos' || valor === 'pagados' ? 'hechos' : 'pendientes'
+}
 
 const URGENCIA_LABEL: Record<PrioridadUrgencia, string> = {
   alta: 'Alta',
@@ -81,18 +95,27 @@ const MEDIO_LABEL: Record<MedioPago, string> = {
 
 export function FinanzasAgendaPage() {
   const { user } = useAuth()
-  const [tab, setTab] = useState<Tab>('pagos')
-  const [vistaPagos, setVistaPagos] = useState<CompromisosAgendaVista>('pendientes')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = tabInicial(searchParams.get('tab'))
+  const vistaPagos = vistaPagosDe(searchParams.get('vista'))
   const [vistaCobros, setVistaCobros] = useState<CobrosAgendaVista>('esperados')
   const [showAlta, setShowAlta] = useState(false)
-  const [searchParams] = useSearchParams()
+  const [editando, setEditando] = useState<CompromisoAgendaItem | null>(null)
+  const [pagarDesdePlanilla, setPagarDesdePlanilla] = useState<CompromisoAgendaItem | null>(null)
   const compromisoDestacado = searchParams.get('compromiso')
   const queryClient = useQueryClient()
 
+  /** Pendientes para que "Pagar" en la planilla del mes abra la misma ventana que la lista de pagos. */
+  const { data: pendientesPlanilla = [] } = useQuery({
+    queryKey: ['finanzas', 'agenda', 'compromisos', 'pendientes'],
+    queryFn: () => fetchCompromisosAgenda('pendientes'),
+    enabled: Boolean(user) && tab === 'planilla',
+  })
+
   const { data: compromisosRaw = [], isLoading: loadingPagos } = useQuery({
-    queryKey: ['finanzas', 'agenda', 'compromisos', vistaPagos],
-    queryFn: () => fetchCompromisosAgenda(vistaPagos),
-    enabled: Boolean(user) && tab === 'pagos',
+    queryKey: ['finanzas', 'agenda', 'compromisos', 'pendientes'],
+    queryFn: () => fetchCompromisosAgenda('pendientes'),
+    enabled: Boolean(user) && tab === 'pagos' && vistaPagos === 'pendientes',
   })
 
   const { data: cobrosRaw = [], isLoading: loadingCobros } = useQuery({
@@ -102,8 +125,8 @@ export function FinanzasAgendaPage() {
   })
 
   const compromisos = useMemo(
-    () => filterCompromisosForVista(compromisosRaw, vistaPagos),
-    [compromisosRaw, vistaPagos],
+    () => filterCompromisosForVista(compromisosRaw, 'pendientes'),
+    [compromisosRaw],
   )
   const cobros = useMemo(
     () => filterCobrosForVista(cobrosRaw, vistaCobros),
@@ -122,7 +145,29 @@ export function FinanzasAgendaPage() {
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
+    void queryClient.invalidateQueries({ queryKey: COMPROMISOS_MES_QUERY_KEY })
+    void queryClient.invalidateQueries({ queryKey: ['finanzas', 'hoy'] })
   }
+
+  const ir = (cambios: { tab?: Tab; vista?: VistaPagos }) => {
+    const next = new URLSearchParams(searchParams)
+    const tabNuevo = cambios.tab ?? tab
+    const vistaNueva = cambios.vista ?? vistaPagos
+    next.set('tab', tabNuevo)
+    if (tabNuevo === 'pagos' && vistaNueva === 'hechos') next.set('vista', 'hechos')
+    else next.delete('vista')
+    setSearchParams(next, { replace: true })
+  }
+
+  const botonTab = (id: Tab, texto: string) => (
+    <button
+      type="button"
+      onClick={() => ir({ tab: id })}
+      className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === id ? 'bg-brand-primary text-white' : 'text-body-muted'}`}
+    >
+      {texto}
+    </button>
+  )
 
   return (
     <>
@@ -135,25 +180,10 @@ export function FinanzasAgendaPage() {
       </header>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
-          <button
-            type="button"
-            onClick={() => setTab('pagos')}
-            className={`rounded-lg px-4 py-2 text-sm font-medium ${
-              tab === 'pagos' ? 'bg-brand-primary text-white' : 'text-body-muted'
-            }`}
-          >
-            Compromisos de pago
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('cobros')}
-            className={`rounded-lg px-4 py-2 text-sm font-medium ${
-              tab === 'cobros' ? 'bg-brand-primary text-white' : 'text-body-muted'
-            }`}
-          >
-            Cobros esperados
-          </button>
+        <div className="inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
+          {botonTab('pagos', 'Compromisos de pago')}
+          {botonTab('cobros', 'Cobros esperados')}
+          {botonTab('planilla', 'Planilla del mes')}
         </div>
         {puedeAlta ? (
           <button
@@ -167,22 +197,32 @@ export function FinanzasAgendaPage() {
         ) : null}
       </div>
 
-      {tab === 'pagos' ? (
+      {tab === 'planilla' ? (
+        <CompromisosMes
+          onPagar={(compromisoId) => {
+            const row = pendientesPlanilla.find((item) => item.id === compromisoId)
+            if (row) setPagarDesdePlanilla(row)
+            else toast('Ese compromiso no está pendiente. Buscalo en Compromisos de pago.')
+          }}
+        />
+      ) : tab === 'pagos' ? (
         <>
           <SubVistaTabs
             options={[
               { id: 'pendientes', label: 'Pendientes' },
-              { id: 'pagados', label: 'Pagados' },
+              { id: 'hechos', label: 'Pagos hechos' },
             ]}
             value={vistaPagos}
-            onChange={(id) => setVistaPagos(id as CompromisosAgendaVista)}
+            onChange={(id) => ir({ tab: 'pagos', vista: id === 'hechos' ? 'hechos' : 'pendientes' })}
           />
-          {loadingPagos ? (
+          {vistaPagos === 'hechos' ? (
+            <PagosHechos />
+          ) : loadingPagos ? (
             <LoadingBlock />
           ) : (
             <CompromisosTable
               rows={compromisos}
-              vista={vistaPagos}
+              vista="pendientes"
               cuentas={cuentas}
               onUrgenciaChange={async (id, urgenciaManual) => {
                 await patchCompromisoUrgencia(id, urgenciaManual)
@@ -204,6 +244,7 @@ export function FinanzasAgendaPage() {
                 invalidate()
               }}
               compromisoDestacado={compromisoDestacado}
+              onEditar={setEditando}
               onCancelarTransferencia={async (transferenciaId) => {
                 await cancelarTransferenciaConfeccionada(transferenciaId)
                 toast.success('Marcada como cancelada en BacarNet. Interbanking no se modificó.')
@@ -243,16 +284,36 @@ export function FinanzasAgendaPage() {
         </>
       )}
 
-      {showAlta ? (
+      {pagarDesdePlanilla ? (
+        <MarcarPagadoModal
+          row={pagarDesdePlanilla}
+          cuentas={cuentas}
+          onClose={() => setPagarDesdePlanilla(null)}
+          onSubmit={async (body) => {
+            await marcarCompromisoPagado(pagarDesdePlanilla.id, body)
+            toast.success('Marcado como pagado')
+            setPagarDesdePlanilla(null)
+            invalidate()
+          }}
+        />
+      ) : null}
+
+      {showAlta || editando ? (
         <AltaAgendaModal
-          tab={tab}
-          onClose={() => setShowAlta(false)}
+          tab={editando || tab === 'planilla' ? 'pagos' : tab}
+          compromiso={editando}
+          onClose={() => {
+            setShowAlta(false)
+            setEditando(null)
+          }}
           onSave={async (body) => {
-            if (tab === 'pagos') await createCompromisoAgenda(body)
+            if (editando) await patchCompromisoAgenda(editando.id, body)
+            else if (tab === 'pagos') await createCompromisoAgenda(body)
             else await createCobroAgenda(body)
-            toast.success('Registro creado')
+            toast.success(editando ? 'Compromiso actualizado' : 'Registro creado')
             invalidate()
             setShowAlta(false)
+            setEditando(null)
           }}
         />
       ) : null}
@@ -332,6 +393,7 @@ function CompromisosTable({
   onMarcarPagado,
   onConfeccionar,
   onCancelarTransferencia,
+  onEditar,
   compromisoDestacado,
 }: {
   rows: CompromisoAgendaItem[]
@@ -344,6 +406,7 @@ function CompromisosTable({
     body: { cuentaCreditoCbu: string; cuentaDebitoId: string; tipo?: 'cuentas_propias' },
   ) => Promise<void>
   onCancelarTransferencia: (transferenciaId: string) => Promise<void>
+  onEditar: (row: CompromisoAgendaItem) => void
   compromisoDestacado: string | null
 }) {
   const [historialId, setHistorialId] = useState<string | null>(null)
@@ -414,7 +477,18 @@ function CompromisosTable({
                     <div className="text-body-muted mt-1 text-xs">Urgencia: {URGENCIA_LABEL[row.urgenciaManual]}</div>
                   ) : null}
                 </td>
-                <td className="px-3 py-3 tabular-nums">{formatMoneyCentavos(row.montoCentavos, 'ARS')}</td>
+                <td className="px-3 py-3 tabular-nums">
+                  {formatMoneyCentavos(row.montoCentavos, row.moneda === 'USD' ? 'USD' : 'ARS')}
+                  {typeof row.acumuladoCentavos === 'number' &&
+                  typeof row.restanteCentavos === 'number' &&
+                  row.acumuladoCentavos > 0 &&
+                  row.restanteCentavos > 0 ? (
+                    <div className="text-body-muted text-xs">
+                      Pagado {formatMoneyCentavos(row.acumuladoCentavos, row.moneda === 'USD' ? 'USD' : 'ARS')} de{' '}
+                      {formatMoneyCentavos(row.montoCentavos, row.moneda === 'USD' ? 'USD' : 'ARS')}
+                    </div>
+                  ) : null}
+                </td>
                 <td className="px-3 py-3">
                   {formatFecha(
                     vista === 'pagados'
@@ -451,6 +525,13 @@ function CompromisosTable({
                       onClick={() => setHistorialId(row.id)}
                     >
                       Historial
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded border px-2 py-1 text-xs font-medium"
+                      onClick={() => onEditar(row)}
+                    >
+                      Editar
                     </button>
                     {vista === 'pendientes' &&
                     row.medioPago === 'transferencia' &&
@@ -565,7 +646,7 @@ function ConfeccionarTransferenciaModal({
         </p>
         <p className="text-body-muted mt-2 text-sm">
           <span className="text-heading font-medium">{row.concepto}</span> —{' '}
-          {formatMoneyCentavos(row.montoCentavos, 'ARS')}
+          {formatMoneyCentavos(row.montoCentavos, row.moneda === 'USD' ? 'USD' : 'ARS')}
         </p>
         <div className="mt-4 space-y-3">
           <FinanzasFormField label="Cuenta de débito (CC)" htmlFor="conf-debito">
@@ -635,7 +716,7 @@ function CancelarTransferenciaModal({
         <h2 className="text-heading text-lg font-semibold">Marcar como cancelada</h2>
         <p className="text-body-muted mt-2 text-sm">
           <span className="text-heading font-medium">{row.concepto}</span> —{' '}
-          {formatMoneyCentavos(row.montoCentavos, 'ARS')}
+          {formatMoneyCentavos(row.montoCentavos, row.moneda === 'USD' ? 'USD' : 'ARS')}
         </p>
         <p className="mt-4 rounded-xl border-2 border-amber-600 bg-amber-50 px-4 py-4 text-base font-semibold leading-relaxed text-amber-950 dark:border-amber-400 dark:bg-amber-950/50 dark:text-amber-50">
           {CANCELAR_TRANSFERENCIA_AVISO}
@@ -821,38 +902,86 @@ function HistorialModal({
   )
 }
 
+function ymdArgentina(iso: string | null | undefined): string {
+  if (!iso) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
+  const fecha = new Date(iso)
+  if (Number.isNaN(fecha.getTime())) return ''
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(fecha)
+}
+
+function centavosCampo(centavos: number | null | undefined): string {
+  if (centavos == null || centavos <= 0) return ''
+  return (centavos / 100).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 function AltaAgendaModal({
   tab,
+  compromiso,
   onClose,
   onSave,
 }: {
   tab: Tab
+  compromiso?: CompromisoAgendaItem | null
   onClose: () => void
   onSave: (body: Record<string, unknown>) => Promise<void>
 }) {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
-    concepto: '',
-    proveedorONombre: '',
+    concepto: compromiso?.concepto ?? '',
+    proveedorONombre: compromiso?.proveedorONombre ?? '',
     clienteONombre: '',
-    montoPesos: '',
-    fecha: '',
-    urgenciaManual: '' as '' | PrioridadUrgencia,
-    medioPago: 'transferencia' as MedioPago,
-    esViatico: false,
-    beneficiarioEmpleado: '',
+    montoPesos: compromiso ? centavosCampo(compromiso.montoCentavos) : '',
+    fecha: ymdArgentina(compromiso?.fechaVencimiento),
+    urgenciaManual: (compromiso?.urgenciaManual ?? '') as '' | PrioridadUrgencia,
+    medioPago: compromiso?.medioPago ?? ('transferencia' as MedioPago),
+    esViatico: compromiso?.esViatico === true,
+    beneficiarioEmpleado: compromiso?.beneficiarioEmpleado ?? '',
+    grupo: compromiso?.grupo && (GRUPOS_COMPROMISO as readonly string[]).includes(compromiso.grupo)
+      ? compromiso.grupo
+      : 'Otros egresos',
+    moneda: compromiso?.moneda === 'USD' ? 'USD' : 'ARS',
+    deuda: centavosCampo(compromiso?.deudaTotalCentavos),
+    cuotaNumero: compromiso?.cuotaNumero ? String(compromiso.cuotaNumero) : '',
+    cuotaTotal: compromiso?.cuotaTotal ? String(compromiso.cuotaTotal) : '',
+    observacion: compromiso?.observacion ?? '',
   })
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const monto = Number(form.montoPesos.replace(',', '.'))
-    if (!Number.isFinite(monto) || monto <= 0) {
+    const montoCentavos = parseMontoEsArACentavos(form.montoPesos)
+    if (montoCentavos == null) {
       toast.error('Monto inválido')
+      return
+    }
+    const numero = form.cuotaNumero.trim() ? Number(form.cuotaNumero) : null
+    const totalCuota = form.cuotaTotal.trim() ? Number(form.cuotaTotal) : null
+    if (
+      tab === 'pagos' &&
+      (numero != null || totalCuota != null) &&
+      (numero == null ||
+        totalCuota == null ||
+        !Number.isInteger(numero) ||
+        !Number.isInteger(totalCuota) ||
+        numero <= 0 ||
+        totalCuota <= 0 ||
+        numero > totalCuota)
+    ) {
+      toast.error('Completá la cuota como N de M')
+      return
+    }
+    const deudaTotalCentavos = form.deuda.trim() ? parseMontoEsArACentavos(form.deuda) : null
+    if (tab === 'pagos' && form.deuda.trim() && deudaTotalCentavos == null) {
+      toast.error('La deuda total no es válida')
       return
     }
     setSaving(true)
     try {
-      const montoCentavos = Math.round(monto * 100)
       const urgenciaManual = form.urgenciaManual === '' ? null : form.urgenciaManual
       if (tab === 'pagos') {
         await onSave({
@@ -867,6 +996,12 @@ function AltaAgendaModal({
             form.medioPago === 'transferencia' && form.esViatico
               ? form.beneficiarioEmpleado.trim()
               : null,
+          grupo: form.grupo,
+          moneda: form.moneda,
+          deudaTotalCentavos,
+          cuotaNumero: numero,
+          cuotaTotal: totalCuota,
+          observacion: form.observacion.trim() || null,
         })
       } else {
         await onSave({
@@ -886,9 +1021,9 @@ function AltaAgendaModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Cerrar" />
-      <form onSubmit={(e) => void submit(e)} className="relative w-full max-w-md rounded-2xl bg-white p-6 dark:bg-zinc-900">
+      <form onSubmit={(e) => void submit(e)} className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 dark:bg-zinc-900 sm:p-6">
         <h2 className="text-heading text-lg font-semibold">
-          {tab === 'pagos' ? 'Nuevo compromiso de pago' : 'Nuevo cobro esperado'}
+          {compromiso ? 'Editar compromiso' : tab === 'pagos' ? 'Nuevo compromiso de pago' : 'Nuevo cobro esperado'}
         </h2>
         <div className="mt-4 grid gap-3">
           {tab === 'pagos' ? (
@@ -910,6 +1045,31 @@ function AltaAgendaModal({
                   value={form.proveedorONombre}
                   onChange={(e) => setForm({ ...form, proveedorONombre: e.target.value })}
                 />
+              </FinanzasFormField>
+              <FinanzasFormField label="Grupo" htmlFor="agenda-alta-grupo">
+                <select
+                  id="agenda-alta-grupo"
+                  className={finanzasInputClass}
+                  value={form.grupo}
+                  onChange={(e) => setForm({ ...form, grupo: e.target.value })}
+                >
+                  {GRUPOS_COMPROMISO.map((grupo) => (
+                    <option key={grupo} value={grupo}>
+                      {grupo}
+                    </option>
+                  ))}
+                </select>
+              </FinanzasFormField>
+              <FinanzasFormField label="Moneda" htmlFor="agenda-alta-moneda">
+                <select
+                  id="agenda-alta-moneda"
+                  className={finanzasInputClass}
+                  value={form.moneda}
+                  onChange={(e) => setForm({ ...form, moneda: e.target.value })}
+                >
+                  <option value="ARS">Pesos</option>
+                  <option value="USD">Dólares</option>
+                </select>
               </FinanzasFormField>
               <FinanzasFormField label="Medio de pago previsto" htmlFor="agenda-alta-medio">
                 <select
@@ -964,11 +1124,52 @@ function AltaAgendaModal({
               required
               className={finanzasInputClass}
               inputMode="decimal"
-              placeholder="Ej. 150000,50 (ARS)"
+              placeholder={tab === 'pagos' && form.moneda === 'USD' ? 'Ej. 1500,50 (USD)' : 'Ej. 150000,50'}
               value={form.montoPesos}
               onChange={(e) => setForm({ ...form, montoPesos: e.target.value })}
             />
           </FinanzasFormField>
+          {tab === 'pagos' ? (
+            <>
+              <FinanzasFormField label="Deuda total" htmlFor="agenda-alta-deuda" optional>
+                <input
+                  id="agenda-alta-deuda"
+                  className={finanzasInputClass}
+                  inputMode="decimal"
+                  value={form.deuda}
+                  onChange={(e) => setForm({ ...form, deuda: e.target.value })}
+                />
+              </FinanzasFormField>
+              <div className="grid grid-cols-2 gap-3">
+                <FinanzasFormField label="Cuota N" htmlFor="agenda-alta-cuota-n" optional>
+                  <input
+                    id="agenda-alta-cuota-n"
+                    className={finanzasInputClass}
+                    inputMode="numeric"
+                    value={form.cuotaNumero}
+                    onChange={(e) => setForm({ ...form, cuotaNumero: e.target.value })}
+                  />
+                </FinanzasFormField>
+                <FinanzasFormField label="de M" htmlFor="agenda-alta-cuota-m" optional>
+                  <input
+                    id="agenda-alta-cuota-m"
+                    className={finanzasInputClass}
+                    inputMode="numeric"
+                    value={form.cuotaTotal}
+                    onChange={(e) => setForm({ ...form, cuotaTotal: e.target.value })}
+                  />
+                </FinanzasFormField>
+              </div>
+              <FinanzasFormField label="Observación" htmlFor="agenda-alta-obs" optional>
+                <input
+                  id="agenda-alta-obs"
+                  className={finanzasInputClass}
+                  value={form.observacion}
+                  onChange={(e) => setForm({ ...form, observacion: e.target.value })}
+                />
+              </FinanzasFormField>
+            </>
+          ) : null}
           <FinanzasFormField
             label={tab === 'pagos' ? 'Fecha de vencimiento' : 'Fecha esperada'}
             htmlFor="agenda-alta-fecha"
@@ -1025,20 +1226,29 @@ function MarcarPagadoModal({
   onClose: () => void
   onSubmit: (body: Record<string, unknown>) => Promise<void>
 }) {
+  const moneda = row.moneda === 'USD' ? 'USD' : 'ARS'
+  const restante = typeof row.restanteCentavos === 'number' ? row.restanteCentavos : row.montoCentavos
   const [saving, setSaving] = useState(false)
   const [medioPago, setMedioPago] = useState<MedioPago>(row.medioPago)
   const [cuentaId, setCuentaId] = useState('')
   const [fechaPago, setFechaPago] = useState(() => new Date().toISOString().slice(0, 10))
+  const [montoTexto, setMontoTexto] = useState(centavosCampo(restante))
 
   const needsCuenta = medioPago === 'transferencia' || medioPago === 'efectivo'
   const cuenta = needsCuenta && cuentaId ? cuentas.find((c) => c.id === cuentaId) : undefined
+  const montoCentavos = parseMontoEsArACentavos(montoTexto)
   const saldoInsuficiente =
     Boolean(cuenta) &&
     typeof cuenta!.saldoActualCentavos === 'number' &&
-    cuenta!.saldoActualCentavos < row.montoCentavos
+    montoCentavos != null &&
+    cuenta!.saldoActualCentavos < montoCentavos
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (montoCentavos == null) {
+      toast.error('Monto inválido')
+      return
+    }
     if (needsCuenta && !cuentaId) {
       toast.error('Seleccioná la cuenta de pago')
       return
@@ -1049,6 +1259,7 @@ function MarcarPagadoModal({
         medioPago,
         cuentaId: needsCuenta ? cuentaId : undefined,
         fechaPago,
+        montoCentavos,
       })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Error')
@@ -1063,7 +1274,7 @@ function MarcarPagadoModal({
       <form onSubmit={(e) => void submit(e)} className="relative w-full max-w-md rounded-2xl bg-white p-6 dark:bg-zinc-900">
         <h2 className="text-heading text-lg font-semibold">Marcar pagado</h2>
         <p className="text-body-muted mt-1 text-sm">
-          {row.concepto} — {row.proveedorONombre} · {formatMoneyCentavos(row.montoCentavos, 'ARS')}
+          {row.concepto} — {row.proveedorONombre} · {formatMoneyCentavos(row.montoCentavos, moneda)}
         </p>
         {saldoInsuficiente ? (
           <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
@@ -1071,6 +1282,17 @@ function MarcarPagadoModal({
           </p>
         ) : null}
         <div className="mt-4 grid gap-3">
+          <FinanzasFormField label="Monto de este pago" htmlFor="agenda-pagado-monto">
+            <input
+              id="agenda-pagado-monto"
+              required
+              inputMode="decimal"
+              className={finanzasInputClass}
+              value={montoTexto}
+              onChange={(e) => setMontoTexto(e.target.value)}
+            />
+          </FinanzasFormField>
+          <p className="text-body-muted text-xs">Si es menos de lo que falta, queda como pago parcial.</p>
           <FinanzasFormField label="Medio de pago real" htmlFor="agenda-pagado-medio">
             <select
               id="agenda-pagado-medio"

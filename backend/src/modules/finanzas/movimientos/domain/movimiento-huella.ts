@@ -1,4 +1,4 @@
-/** Campos que identifican una fila del banco para reaplicar categoría y nota tras un reemplazo. */
+/** Campos que identifican una fila del banco para reaplicar categoría, nota y detalle de caja tras un reemplazo. */
 export interface HuellaMovimientoInput {
   fechaProceso?: unknown
   tipo?: unknown
@@ -22,6 +22,12 @@ export interface AnotacionMovimiento {
   contraparteNombre?: string | null
   contraparteCuit?: string | null
   contraparteOrigen?: 'manual' | null
+  /**
+   * Palabra de la planilla de caja. Solo se conserva si la cargó una persona
+   * (`manual`). La sugerida se vuelve a calcular.
+   */
+  detalleCaja?: string | null
+  detalleCajaOrigen?: 'manual' | null
 }
 
 function parte(value: unknown): string {
@@ -69,6 +75,8 @@ export function emparejarAnotaciones<T extends HuellaMovimientoInput>(
     contraparteNombre: string | null
     contraparteCuit: string | null
     contraparteOrigen: 'manual' | null
+    detalleCaja: string | null
+    detalleCajaOrigen: 'manual' | null
   }
 > {
   const colas = new Map<string, AnotacionMovimiento[]>()
@@ -95,6 +103,10 @@ export function emparejarAnotaciones<T extends HuellaMovimientoInput>(
   return filas.map((fila, i) => {
     const anotacion = asignadas[i] ?? sobrantes.get(huellaMovimientoSinDescripcion(fila))?.shift()
     const manual = anotacion?.contraparteOrigen === 'manual'
+    const detalleManual =
+      anotacion?.detalleCajaOrigen === 'manual' && anotacion.detalleCaja?.trim()
+        ? anotacion.detalleCaja.trim()
+        : null
     return {
       ...fila,
       categoriaId: anotacion?.categoriaId ?? null,
@@ -102,6 +114,8 @@ export function emparejarAnotaciones<T extends HuellaMovimientoInput>(
       contraparteNombre: manual ? (anotacion?.contraparteNombre ?? null) : null,
       contraparteCuit: manual ? (anotacion?.contraparteCuit ?? null) : null,
       contraparteOrigen: manual ? 'manual' : null,
+      detalleCaja: detalleManual,
+      detalleCajaOrigen: detalleManual ? 'manual' : null,
     }
   })
 }

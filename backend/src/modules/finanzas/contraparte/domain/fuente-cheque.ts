@@ -1,0 +1,130 @@
+import type { ContraparteGuardada } from './contraparte.types.js'
+import { fechaEnRangoHabil } from './dias-habiles.js'
+import { claveTexto, nombreContraparteLimpio } from './normalizar.js'
+
+/**
+ * Textos del banco para cheques propios que se debitan (categoría Cheques pagados).
+ * La lista sale de la semilla de categorías; un texto nuevo se agrega acá.
+ */
+const TEXTOS_DEBITO_CHEQUE_PROPIO = [
+  'CHEQUE CAMARA LOCAL',
+  'ECHEQ CAMARA',
+  'CH CAMAR RECIB.ACH',
+  'CH DEP 72',
+  'ECHEQ PROPIO DEPOSIT',
+  'DEB AUT RECIB CAMARA',
+  'DEB.P/CANJE INTERNO',
+]
+
+/** Textos del banco para cheques depositados (categoría Cheques depositados). */
+const TEXTOS_CREDITO_CHEQUE_DEPOSITADO = ['DEPOSITO ECHEQ', 'DEP. VALORES CAMARA', 'CH DEP 48']
+
+export interface ChequeParaContraparte {
+  id: string
+  numero: string
+  direccion: 'recibido' | 'emitido'
+  montoCentavos: number
+  fechaPago: string
+  emisor: string | null
+  cliente: string | null
+  destinatario: string | null
+}
+
+export interface MovimientoCheque {
+  tipo: string
+  montoCentavos: number
+  fechaProceso: string
+  descripcion: string
+  codeDescriptionIb: string | null
+  voucherNumber: string | null
+  categoriaNombre: string | null
+}
+
+/** Solo dígitos, sin ceros a la izquierda. Vacío si no queda ningún dígito. */
+export function numeroComparable(raw: unknown): string | null {
+  const digits = String(raw ?? '').replace(/\D/g, '').replace(/^0+/, '')
+  return digits.length > 0 ? digits : null
+}
+
+function textoIncluye(
+  mov: { descripcion: string; codeDescriptionIb: string | null },
+  textos: readonly string[],
+): boolean {
+  const desc = claveTexto(mov.descripcion)
+  const code = claveTexto(mov.codeDescriptionIb)
+  return textos.some((texto) => {
+    const clave = claveTexto(texto)
+    if (!clave) return false
+    return desc.includes(clave) || code.includes(clave)
+  })
+}
+
+/** `emitido` = débito de cheque propio. `recibido` = crédito de cheque depositado. */
+export function claseMovimientoCheque(mov: {
+  tipo: string
+  descripcion: string
+  codeDescriptionIb: string | null
+  categoriaNombre: string | null
+}): 'emitido' | 'recibido' | null {
+  const categoria = claveTexto(mov.categoriaNombre)
+  if (
+    mov.tipo === 'debito' &&
+    (categoria === claveTexto('Cheques pagados') || textoIncluye(mov, TEXTOS_DEBITO_CHEQUE_PROPIO))
+  ) {
+    return 'emitido'
+  }
+  if (
+    mov.tipo === 'credito' &&
+    (categoria === claveTexto('Cheques depositados') || textoIncluye(mov, TEXTOS_CREDITO_CHEQUE_DEPOSITADO))
+  ) {
+    return 'recibido'
+  }
+  return null
+}
+
+function porMontoYFecha(mov: MovimientoCheque, cheques: readonly ChequeParaContraparte[]): ChequeParaContraparte[] {
+  return cheques.filter(
+    (cheque) =>
+      cheque.montoCentavos === mov.montoCentavos && fechaEnRangoHabil(mov.fechaProceso, cheque.fechaPago, 3, 3),
+  )
+}
+
+/**
+ * Primero por número (voucher contra `numero`, solo dígitos y sin ceros a la izquierda).
+ * Si eso no deja un único cheque, por monto exacto y fecha del movimiento a ±3 días hábiles de `fechaPago`.
+ */
+export function chequesCandidatos(
+  mov: MovimientoCheque,
+  cheques: readonly ChequeParaContraparte[],
+): ChequeParaContraparte[] {
+  const direccion = claseMovimientoCheque(mov)
+  if (!direccion) return []
+  const delLado = cheques.filter((cheque) => cheque.direccion === direccion)
+  const voucher = numeroComparable(mov.voucherNumber)
+  if (voucher) {
+    const porNumero = delLado.filter((cheque) => numeroComparable(cheque.numero) === voucher)
+    if (porNumero.length === 1) return porNumero
+  }
+  const porMonto = porMontoYFecha(mov, delLado)
+  return porMonto.length === 1 ? porMonto : []
+}
+
+export function nombreContraparteCheque(cheque: ChequeParaContraparte): string | null {
+  if (cheque.direccion === 'emitido') {
+    const numero = cheque.numero.trim()
+    if (!numero) return null
+    const destino = nombreContraparteLimpio(cheque.destinatario)
+    return destino ? `Cheque N.º ${numero} a ${destino}` : `Cheque N.º ${numero}`
+  }
+  const quien = nombreContraparteLimpio(cheque.cliente) ?? nombreContraparteLimpio(cheque.emisor)
+  if (!quien) return null
+  return `Cheque de ${quien}`
+}
+
+export function contraparteDeCheque(cheque: ChequeParaContraparte): ContraparteGuardada {
+  return {
+    nombre: nombreContraparteCheque(cheque),
+    cuit: null,
+    origen: 'cheque',
+  }
+}

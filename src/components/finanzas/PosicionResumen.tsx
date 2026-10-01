@@ -1,5 +1,6 @@
 import type { FinanzasCuenta, FinanzasMoneda, FinanzasSemaforo } from '../../services/finanzasApi'
-import { computeDisponibleTotal, type PosicionPorBancoRow } from './finanzasAggregates'
+import { ETIQUETA_ESTADO_CLASES, estadoDescubierto } from './estadoDescubierto'
+import type { PosicionPorBancoRow } from './finanzasAggregates'
 import { formatMoneyCentavos } from './formatMoney'
 import { PosicionMonto } from './PosicionMonto'
 import { ArrowRightLeft } from 'lucide-react'
@@ -31,6 +32,15 @@ function cuentaCcEnPesos(cuentas: FinanzasCuenta[], bancoNombre: string): Finanz
   )
 }
 
+/** Monto completo en pesos, alineado a la derecha; en rojo si es negativo. */
+function Monto({ centavos, moneda = 'ARS' }: { centavos: number; moneda?: FinanzasMoneda }) {
+  return (
+    <span className={`tabular-nums ${centavos < 0 ? 'text-red-600 dark:text-red-400' : 'text-heading'}`}>
+      {formatMoneyCentavos(centavos, moneda)}
+    </span>
+  )
+}
+
 /** Posición consolidada y por banco en una sola tarjeta. Cada monto abre el detalle de cuentas. */
 export function PosicionResumen({
   arsCentavos,
@@ -42,8 +52,17 @@ export function PosicionResumen({
 }: PosicionResumenProps) {
   const celda =
     '-mx-1.5 rounded-lg px-1.5 py-1 text-left transition hover:bg-neutral-100 dark:hover:bg-zinc-800'
-  const disponible = computeDisponibleTotal(bancos)
-  const hayDescubierto = disponible.descubiertoCentavos > 0
+  const celdaNumero = `${celda} text-right`
+  const th = 'py-1.5 pr-3 font-medium last:pr-0'
+  const td = 'py-1.5 pr-3 align-middle last:pr-0'
+
+  const filas = bancos.map((banco) => ({
+    banco,
+    estado: estadoDescubierto(banco.arsCentavos, banco.descubiertoCentavos),
+  }))
+  const totalDescubierto = filas.reduce((suma, fila) => suma + (fila.estado.descubiertoCentavos ?? 0), 0)
+  const totalLeQueda = filas.reduce((suma, fila) => suma + Math.max(0, fila.estado.leQuedaCentavos ?? 0), 0)
+  const pasados = filas.filter((fila) => fila.estado.clave === 'pasado')
 
   return (
     <section
@@ -65,125 +84,152 @@ export function PosicionResumen({
         </button>
       </div>
 
-      <div className="mt-2 rounded-xl border border-[#c5d4e4] bg-white/70 px-3 py-2 dark:border-[#5b8fd4]/30 dark:bg-zinc-900/60">
-        <p className="text-body-muted text-xs">Disponible en pesos con descubierto</p>
-        {hayDescubierto ? (
-          <>
-            <PosicionMonto centavos={disponible.disponibleCentavos} moneda="ARS" size="md" />
-            <p className="text-body-muted text-[11px] leading-snug">
-              Saldo {formatMoneyCentavos(arsCentavos, 'ARS')} + acuerdos{' '}
-              {formatMoneyCentavos(disponible.descubiertoCentavos, 'ARS')}
-              {disponible.bancosSinDescubierto.length > 0
-                ? ` · sin descubierto cargado: ${disponible.bancosSinDescubierto.join(', ')}`
-                : ''}
-            </p>
-          </>
-        ) : (
-          <p className="text-body-muted text-sm">
-            Todavía no hay descubiertos cargados. Tocá los pesos de un banco para cargarlo.
-          </p>
-        )}
-      </div>
-
       {bancos.length > 0 ? (
-        <table className="mt-3 w-full text-sm">
-          <thead>
-            <tr className="text-body-muted border-b border-neutral-100 text-left text-xs dark:border-zinc-800">
-              <th className="py-1.5 font-medium">Banco</th>
-              <th className="py-1.5 font-medium">Pesos</th>
-              <th className="py-1.5 font-medium" title="Saldo en pesos + descubierto acordado">
-                Disponible
-              </th>
-              <th className="py-1.5 font-medium">Dólares</th>
-              {onTransferir ? (
-                <th className="py-1.5">
-                  <span className="sr-only">Transferir</span>
+        <div className="-mx-4 mt-3 overflow-x-auto px-4">
+          <table className="w-full min-w-[46rem] text-sm">
+            <thead>
+              <tr className="text-body-muted border-b border-neutral-100 text-left text-xs dark:border-zinc-800">
+                <th className={th}>Banco</th>
+                <th className={`${th} text-right`}>Saldo</th>
+                <th className={`${th} text-right`} title="Descubierto acordado con el banco">
+                  Descubierto
                 </th>
-              ) : null}
-            </tr>
-          </thead>
-          <tbody>
-            {bancos.map((banco) => {
-              const cuentaCc = onTransferir ? cuentaCcEnPesos(cuentas, banco.bancoNombre) : undefined
-              return (
-              <tr
-                key={banco.bancoNombre}
-                className="border-b border-neutral-100 last:border-b-0 dark:border-zinc-800"
-              >
-                <td className="py-1.5 pr-2">
-                  <span className="inline-flex items-center gap-2 font-medium">
-                    <span
-                      className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                        banco.semaforoCc ? SEMAFORO_COLOR[banco.semaforoCc] : 'bg-neutral-200 dark:bg-zinc-700'
-                      }`}
-                      title={banco.semaforoCc ? SEMAFORO_TEXTO[banco.semaforoCc] : 'Sin descubierto cargado'}
-                      aria-label={banco.semaforoCc ? SEMAFORO_TEXTO[banco.semaforoCc] : 'Sin descubierto cargado'}
-                    />
-                    {banco.bancoNombre}
-                  </span>
-                </td>
-                <td className="py-1.5 pr-2">
-                  <button
-                    type="button"
-                    onClick={() => onSelect('ARS', banco.bancoNombre)}
-                    className={celda}
-                  >
-                    <PosicionMonto centavos={banco.arsCentavos} moneda="ARS" size="sm" />
-                  </button>
-                </td>
-                <td className="py-1.5 pr-2">
-                  {banco.disponibleCentavos != null && banco.descubiertoCentavos != null ? (
-                    <button
-                      type="button"
-                      onClick={() => onSelect('ARS', banco.bancoNombre)}
-                      className={celda}
-                    >
-                      <PosicionMonto centavos={banco.disponibleCentavos} moneda="ARS" size="sm" />
-                      <span className="text-body-muted block text-[11px]">
-                        de {formatMoneyCentavos(banco.descubiertoCentavos, 'ARS')}
-                      </span>
-                    </button>
-                  ) : (
-                    <span className="text-body-muted text-xs" title="Sin descubierto cargado">
-                      —
-                    </span>
-                  )}
-                </td>
-                <td className="py-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onSelect('USD', banco.bancoNombre)}
-                    className={celda}
-                  >
-                    <PosicionMonto centavos={banco.usdCentavos} moneda="USD" size="sm" />
-                  </button>
-                </td>
+                <th className={`${th} text-right`} title="Saldo + descubierto">
+                  Le queda para usar
+                </th>
+                <th className={th}>Estado</th>
+                <th className={`${th} text-right`}>Dólares</th>
                 {onTransferir ? (
-                  <td className="py-1.5 pl-2 text-right align-middle">
-                    {cuentaCc ? (
-                      <button
-                        type="button"
-                        aria-label={`Transferir desde ${banco.bancoNombre}`}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-[#c5d4e4] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1e3a5f] transition hover:bg-[#e8eef5] dark:border-[#5b8fd4]/40 dark:bg-zinc-900 dark:text-[#9dbde8] dark:hover:bg-zinc-800"
-                        onClick={() => onTransferir(cuentaCc.id)}
-                      >
-                        <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                        <span className="hidden sm:inline">Transferir</span>
-                      </button>
-                    ) : null}
-                  </td>
+                  <th className={th}>
+                    <span className="sr-only">Transferir</span>
+                  </th>
                 ) : null}
               </tr>
-              )
-            })}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filas.map(({ banco, estado }) => {
+                const cuentaCc = onTransferir ? cuentaCcEnPesos(cuentas, banco.bancoNombre) : undefined
+                return (
+                  <tr
+                    key={banco.bancoNombre}
+                    className="border-b border-neutral-100 last:border-b-0 dark:border-zinc-800"
+                  >
+                    <td className={td}>
+                      <span className="inline-flex items-center gap-2 font-medium">
+                        <span
+                          className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                            banco.semaforoCc ? SEMAFORO_COLOR[banco.semaforoCc] : 'bg-neutral-200 dark:bg-zinc-700'
+                          }`}
+                          title={banco.semaforoCc ? SEMAFORO_TEXTO[banco.semaforoCc] : 'Sin descubierto cargado'}
+                          aria-label={banco.semaforoCc ? SEMAFORO_TEXTO[banco.semaforoCc] : 'Sin descubierto cargado'}
+                        />
+                        {banco.bancoNombre}
+                      </span>
+                    </td>
+                    <td className={`${td} text-right`}>
+                      <button
+                        type="button"
+                        onClick={() => onSelect('ARS', banco.bancoNombre)}
+                        className={celdaNumero}
+                      >
+                        <Monto centavos={banco.arsCentavos} />
+                      </button>
+                    </td>
+                    <td className={`${td} text-right`}>
+                      {estado.descubiertoCentavos != null ? (
+                        <button
+                          type="button"
+                          onClick={() => onSelect('ARS', banco.bancoNombre)}
+                          className={celdaNumero}
+                        >
+                          <Monto centavos={estado.descubiertoCentavos} />
+                        </button>
+                      ) : (
+                        <span className="text-body-muted" title="Sin descubierto cargado">
+                          —
+                        </span>
+                      )}
+                    </td>
+                    <td className={`${td} text-right`}>
+                      {estado.leQuedaCentavos == null ? (
+                        <span className="text-body-muted" title="Sin descubierto cargado">
+                          —
+                        </span>
+                      ) : estado.leQuedaCentavos < 0 ? (
+                        <span className="font-medium text-red-600 tabular-nums dark:text-red-400">
+                          Pasado {formatMoneyCentavos(estado.excesoCentavos, 'ARS')}
+                        </span>
+                      ) : (
+                        <Monto centavos={estado.leQuedaCentavos} />
+                      )}
+                    </td>
+                    <td className={td}>
+                      <span
+                        className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${ETIQUETA_ESTADO_CLASES[estado.tono]}`}
+                      >
+                        {estado.etiqueta}
+                      </span>
+                    </td>
+                    <td className={`${td} text-right`}>
+                      <button
+                        type="button"
+                        onClick={() => onSelect('USD', banco.bancoNombre)}
+                        className={celdaNumero}
+                      >
+                        <Monto centavos={banco.usdCentavos} moneda="USD" />
+                      </button>
+                    </td>
+                    {onTransferir ? (
+                      <td className={`${td} text-right`}>
+                        {cuentaCc ? (
+                          <button
+                            type="button"
+                            aria-label={`Transferir desde ${banco.bancoNombre}`}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#c5d4e4] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1e3a5f] transition hover:bg-[#e8eef5] dark:border-[#5b8fd4]/40 dark:bg-zinc-900 dark:text-[#9dbde8] dark:hover:bg-zinc-800"
+                            onClick={() => onTransferir(cuentaCc.id)}
+                          >
+                            <ArrowRightLeft className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            Transferir
+                          </button>
+                        ) : null}
+                      </td>
+                    ) : null}
+                  </tr>
+                )
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-neutral-200 font-semibold dark:border-zinc-700">
+                <td className={td}>Total</td>
+                <td className={`${td} text-right`}>
+                  <Monto centavos={arsCentavos} />
+                </td>
+                <td className={`${td} text-right`}>
+                  {totalDescubierto > 0 ? <Monto centavos={totalDescubierto} /> : <span className="text-body-muted">—</span>}
+                </td>
+                <td className={`${td} text-right`} title="Suma solo lo que queda para usar en cada banco">
+                  {totalDescubierto > 0 ? <Monto centavos={totalLeQueda} /> : <span className="text-body-muted">—</span>}
+                </td>
+                <td className={td} />
+                <td className={`${td} text-right`}>
+                  <Monto centavos={usdCentavos} moneda="USD" />
+                </td>
+                {onTransferir ? <td className={td} /> : null}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       ) : null}
 
+      {pasados.map(({ banco, estado }) => (
+        <p key={banco.bancoNombre} className="mt-2 text-sm font-medium text-red-700 dark:text-red-300">
+          {banco.bancoNombre} está pasado {formatMoneyCentavos(estado.excesoCentavos, 'ARS')} de su descubierto.
+        </p>
+      ))}
+
       <p className="text-body-muted mt-2 text-[11px] leading-snug">
-        Tocá un monto para ver las cuentas, cargar saldos en dólares o el descubierto. «Disponible»
-        es el saldo más el descubierto acordado: lo que todavía se puede usar. El punto de color
-        indica cuánto descubierto queda: verde con margen, amarillo atención, rojo superado.
+        Tocá un monto para ver las cuentas, cargar saldos en dólares o el descubierto. «Le queda para usar»
+        es el saldo más el descubierto acordado.
       </p>
     </section>
   )

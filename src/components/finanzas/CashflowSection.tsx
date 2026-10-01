@@ -386,7 +386,7 @@ export function CashflowSection() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="finanzas-cashflow-heading" className="text-heading text-base font-semibold">
-            Cashflow del día
+            Entradas y salidas del día
           </h2>
           <p className="text-body-muted mt-0.5 text-xs">
             Todas las cuentas juntas. Pesos y dólares por separado.
@@ -413,7 +413,7 @@ export function CashflowSection() {
           </button>
           <input
             type="date"
-            aria-label="Fecha del cashflow"
+            aria-label="Fecha de entradas y salidas"
             value={fecha}
             min={minimo}
             max={maximo}
@@ -449,7 +449,9 @@ export function CashflowSection() {
         <div className="h-24 animate-pulse rounded-xl bg-neutral-100 dark:bg-zinc-800" />
       ) : query.isError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-          {query.error instanceof Error ? query.error.message : 'No se pudo calcular el cashflow'}
+          {query.error instanceof Error
+            ? query.error.message
+            : 'No se pudieron calcular las entradas y salidas del día'}
         </div>
       ) : data ? (
         <>

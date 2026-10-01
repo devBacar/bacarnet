@@ -30,6 +30,8 @@ export interface ConfeccionDirectaParseada {
   referencia: string | null
   idempotencyKey: string
   confirmarSinFondos: boolean
+  /** Si viene, la transferencia queda atada a ese pago de la agenda. */
+  compromisoPagoId: string | null
 }
 
 export class TransferenciaHttpError extends Error {
@@ -205,5 +207,6 @@ export function parseConfeccionDirectaBody(body: Record<string, unknown>): Confe
     referencia: referenciaRaw || null,
     idempotencyKey,
     confirmarSinFondos: body.confirmarSinFondos === true,
+    compromisoPagoId: texto(body.compromisoPagoId) || null,
   }
 }

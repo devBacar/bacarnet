@@ -98,4 +98,31 @@ describe('huella de movimiento', () => {
     expect(libre.contraparteNombre).toBeNull()
     expect(libre.contraparteOrigen).toBeNull()
   })
+
+  it('conserva el detalle de caja cargado a mano y no uno sugerido', () => {
+    const huella = huellaMovimiento(base)
+    const [conDetalle, libre] = emparejarAnotaciones(
+      [base, { ...base, descripcion: 'Otra' }],
+      [
+        {
+          huella,
+          categoriaId: null,
+          nota: null,
+          detalleCaja: 'arca',
+          detalleCajaOrigen: 'manual',
+        },
+        {
+          huella: huellaMovimiento({ ...base, descripcion: 'Otra' }),
+          categoriaId: null,
+          nota: null,
+          detalleCaja: 'cliente',
+          detalleCajaOrigen: null,
+        },
+      ],
+    )
+    expect(conDetalle.detalleCaja).toBe('arca')
+    expect(conDetalle.detalleCajaOrigen).toBe('manual')
+    expect(libre.detalleCaja).toBeNull()
+    expect(libre.detalleCajaOrigen).toBeNull()
+  })
 })

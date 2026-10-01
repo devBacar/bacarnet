@@ -5,6 +5,7 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
+import { CHEQUES_COLLECTION } from '../../cheques/services/cheques.repository.js'
 import {
   openInterbankingInfoSession,
   type InterbankingInfoSession,
@@ -13,6 +14,7 @@ import { listCategoriaMovimientoDocuments } from '../../movimientos/services/cat
 import { movimientosBancariosCollection } from '../../movimientos/services/movimientos.repository.js'
 import { transferenciasIbPorDia } from '../adapters/cache-transferencias-ib.js'
 import { fetchTransferenciasIb } from '../adapters/fetch-transferencias-ib.js'
+import type { ChequeParaContraparte } from '../domain/fuente-cheque.js'
 import type { ContraparteGuardada, ContraparteOrigen } from '../domain/contraparte.types.js'
 import { contraparteDesdeBanco } from '../domain/fuente-banco.js'
 import type { ItemAgenda } from '../domain/fuente-agenda.js'
@@ -41,6 +43,7 @@ const RANGO_ORIGEN: Record<ContraparteOrigen, number> = {
   banco: 4,
   transferencia: 3,
   agenda: 2,
+  cheque: 2,
   interbanking: 1,
   directorio: 0,
   categoria: 0,
@@ -234,7 +237,7 @@ async function cargarContexto(
   movimientos: MovimientoParaContraparte[],
   session: InterbankingInfoSession | undefined,
 ): Promise<ContextoContraparte> {
-  const [transferenciasRaw, destinatariosRaw, compromisosRaw, cobrosRaw, directorioRaw, categoriasRaw] =
+  const [transferenciasRaw, destinatariosRaw, compromisosRaw, cobrosRaw, directorioRaw, categoriasRaw, chequesRaw] =
     await Promise.all([
       adminDb().collection(TRANSFERENCIAS_COLLECTION).get(),
       adminDb().collection(DESTINATARIOS_COLLECTION).get(),
@@ -242,6 +245,7 @@ async function cargarContexto(
       adminDb().collection(COBROS_COLLECTION).get(),
       adminDb().collection(FINANZAS_CONTRAPARTES_COLLECTION).get(),
       listCategoriaMovimientoDocuments(),
+      adminDb().collection(CHEQUES_COLLECTION).get(),
     ])
 
   const transferencias: TransferenciaParaContraparte[] = []
@@ -292,11 +296,18 @@ async function cargarContexto(
     })
   }
 
+  const cheques: ChequeParaContraparte[] = []
+  for (const doc of chequesRaw.docs) {
+    const cheque = mapCheque(doc.id, doc.data())
+    if (cheque) cheques.push(cheque)
+  }
+
   return {
     transferencias,
     destinatariosPorCbu,
     proveedoresPorCompromiso,
     agenda,
+    cheques,
     transferenciasIb: await cargarInterbanking(movimientos, session),
     directorio,
     categorias,
@@ -336,6 +347,31 @@ async function cargarInterbanking(
   }
 }
 
+function voucherComoTexto(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(Math.trunc(Math.abs(value)))
+  if (typeof value === 'string' && value.trim()) return value.trim()
+  return null
+}
+
+function mapCheque(id: string, data: DocumentData): ChequeParaContraparte | null {
+  if (data.direccion !== 'emitido' && data.direccion !== 'recibido') return null
+  if (typeof data.montoCentavos !== 'number') return null
+  const fechaPago = typeof data.fechaPago === 'string' ? data.fechaPago : ''
+  if (!ISO_DATE.test(fechaPago)) return null
+  const numero = typeof data.numero === 'string' ? data.numero.trim() : String(data.numero ?? '').trim()
+  if (!numero) return null
+  return {
+    id,
+    numero,
+    direccion: data.direccion,
+    montoCentavos: data.montoCentavos,
+    fechaPago,
+    emisor: typeof data.emisor === 'string' ? data.emisor : null,
+    cliente: typeof data.cliente === 'string' ? data.cliente : null,
+    destinatario: typeof data.destinatario === 'string' ? data.destinatario : null,
+  }
+}
+
 function hoyArgentina(now = new Date()): string {
   return now.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
 }
@@ -346,6 +382,7 @@ function esOrigenGuardado(value: unknown): value is ContraparteOrigen {
     value === 'banco' ||
     value === 'transferencia' ||
     value === 'agenda' ||
+    value === 'cheque' ||
     value === 'interbanking' ||
     value === 'directorio' ||
     value === 'categoria'
@@ -365,6 +402,7 @@ function mapMovimiento(id: string, data: DocumentData): MovimientoParaContrapart
     fechaProceso: typeof data.fechaProceso === 'string' ? data.fechaProceso : '',
     descripcion: typeof data.descripcion === 'string' ? data.descripcion : '',
     codeDescriptionIb: typeof data.codeDescriptionIb === 'string' && data.codeDescriptionIb ? data.codeDescriptionIb : null,
+    voucherNumber: voucherComoTexto(data.voucherNumber),
     depositorDescription:
       typeof data.depositorDescription === 'string' && data.depositorDescription ? data.depositorDescription : null,
     customerCuit: typeof data.customerCuit === 'string' && data.customerCuit ? data.customerCuit : null,

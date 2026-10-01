@@ -131,4 +131,28 @@ describe('actualizarEstadosTransferencias', () => {
     expect(ambiguo.ambiguas).toBe(2)
     expect(guardar).not.toHaveBeenCalled()
   })
+
+  it('cuando el banco la marca hecha, cierra el pago vinculado', async () => {
+    const alQuedarHecha = vi.fn()
+    await actualizarEstadosTransferencias({
+      deps: {
+        now: new Date('2026-09-29T15:00:00.000Z'),
+        listar: async () => [
+          { id: 't1', data: doc({ compromisoPagoId: 'comp-1', cuentaDebitoId: 'patagonia-cc' }) },
+        ],
+        consultar: async () => [detalle('Ejecutada')],
+        guardar: vi.fn(),
+        cbuDebito: () => '0340070800700370037009',
+        numeroDebito: () => '20',
+        alQuedarHecha,
+      },
+    })
+    expect(alQuedarHecha).toHaveBeenCalledWith({
+      compromisoId: 'comp-1',
+      cuentaDebitoId: 'patagonia-cc',
+      nota: 'La transferencia quedó hecha en el banco.',
+      transferenciaId: 't1',
+      montoCentavos: 150050,
+    })
+  })
 })

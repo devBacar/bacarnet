@@ -485,6 +485,8 @@ export async function registerMovimiento(input: {
   cajaId: string
   body: Record<string, unknown>
   comprobante?: { fileName: string; mimeType: string; buffer: Buffer } | null
+  /** Referencia libre (compromiso o cobro de Hoy). La ruta de Cajas no la manda. */
+  operacionVinculadaId?: string | null
 }) {
   const caja = await getCajaDoc(input.cajaId)
   if (!caja) throw new Error('Caja no encontrada')
@@ -568,7 +570,7 @@ export async function registerMovimiento(input: {
     esViatico,
     beneficiarioEmpleado: esViatico ? beneficiarioEmpleado : null,
     fondeoVinculadoId: null,
-    operacionVinculadaId: null,
+    operacionVinculadaId: input.operacionVinculadaId?.trim() || null,
     cotizacionCentavosPorUsd: null,
     registradoPor: input.user.uid,
   }

@@ -16,6 +16,6 @@ finanzasCashflowRouter.get('/', requireWorkspaceUser, requireViewFinanzas, async
       return
     }
     console.error('[finanzas/cashflow]', err)
-    res.status(500).json({ error: 'No se pudo calcular el cashflow' })
+    res.status(500).json({ error: 'No se pudieron calcular las entradas y salidas del día' })
   }
 })

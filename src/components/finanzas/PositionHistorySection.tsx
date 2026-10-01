@@ -1,5 +1,5 @@
-import { ChevronDown, CircleAlert } from 'lucide-react'
-import { Fragment, useState } from 'react'
+import { CircleAlert } from 'lucide-react'
+import { Fragment, useState, type CSSProperties, type ReactNode } from 'react'
 import type { FinanzasPosicionCierre } from '../../services/finanzasApi'
 import { ETIQUETA_ESTADO_CLASES, estadoDescubierto, type EstadoDescubierto } from './estadoDescubierto'
 import { formatMoneyCentavos } from './formatMoney'
@@ -73,7 +73,7 @@ function resumenDelDia(bancos: BancoDelCierre[]) {
 function Etiqueta({ estado, detalle }: { estado: EstadoDescubierto; detalle?: string }) {
   return (
     <span
-      className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${ETIQUETA_ESTADO_CLASES[estado.tono]}`}
+      className={`inline-flex max-w-full whitespace-normal rounded-full px-2 py-0.5 text-left text-xs font-medium ${ETIQUETA_ESTADO_CLASES[estado.tono]}`}
     >
       {estado.etiqueta}
       {detalle ? ` · ${detalle}` : ''}
@@ -85,20 +85,173 @@ function LeQueda({ estado }: { estado: EstadoDescubierto }) {
   if (estado.leQuedaCentavos == null) return <span className="text-body-muted">—</span>
   if (estado.leQuedaCentavos < 0) {
     return (
-      <span className="font-medium whitespace-nowrap text-red-600 tabular-nums dark:text-red-400">
+      <span className="font-medium text-red-600 tabular-nums dark:text-red-400">
         Pasado {formatMoneyCentavos(estado.excesoCentavos, 'ARS')}
       </span>
     )
   }
-  return <span className="whitespace-nowrap tabular-nums">{formatMoneyCentavos(estado.leQuedaCentavos, 'ARS')}</span>
+  return <span className="tabular-nums">{formatMoneyCentavos(estado.leQuedaCentavos, 'ARS')}</span>
+}
+
+function CifraOGuion({ mostrar, centavos }: { mostrar: boolean; centavos: number }) {
+  if (!mostrar) return <span className="text-body-muted">—</span>
+  return <span className="tabular-nums">{formatMoneyCentavos(centavos, 'ARS')}</span>
+}
+
+function NombreDia({ row, abierto }: { row: FinanzasPosicionCierre; abierto: boolean }) {
+  return (
+    <span className={`capitalize ${abierto ? '' : 'text-heading font-medium'}`}>
+      {formatDay(row.fechaId)}
+      {!row.syncProveedor.ok ? (
+        <span
+          className="ml-1 text-amber-600 dark:text-amber-400"
+          title="Ese día no se pudo sincronizar: es el último saldo conocido"
+        >
+          <span aria-hidden>*</span>
+          <span className="sr-only">(sin sincronizar: último saldo conocido)</span>
+        </span>
+      ) : null}
+    </span>
+  )
+}
+
+function EstadoDia({ dia }: { dia: ReturnType<typeof resumenDelDia> }) {
+  if (!dia.peor) return null
+  return <Etiqueta estado={dia.peor} detalle={dia.pasados.length > 0 ? dia.pasados.join(', ') : undefined} />
+}
+
+function Flecha({ abierta }: { abierta: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={`inline-block w-4 text-center text-base leading-none ${
+        abierta ? '' : 'text-neutral-500 dark:text-zinc-400'
+      }`}
+    >
+      {abierta ? '▾' : '▸'}
+    </span>
+  )
+}
+
+function CampoBanco({ etiqueta, children }: { etiqueta: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-body-muted shrink-0">{etiqueta}</dt>
+      <dd className="min-w-0 text-right [&_span]:text-sm">{children}</dd>
+    </div>
+  )
+}
+
+const RECUADRO_DETALLE: CSSProperties = {
+  borderStyle: 'solid',
+  borderWidth: '1px 1px 1px 3px',
+  borderColor: 'var(--color-primary-muted)',
+  borderLeftColor: 'var(--color-primary)',
+}
+
+function DetalleBancos({
+  bancos,
+  syncError,
+  lista,
+}: {
+  bancos: BancoDelCierre[]
+  syncError: string | null
+  lista: boolean
+}) {
+  return (
+    <div className="rounded-none bg-white dark:bg-zinc-900" style={RECUADRO_DETALLE}>
+      {bancos.length === 0 ? (
+        <p className="text-body-muted px-2.5 py-2 text-xs">Este cierre no tiene bancos.</p>
+      ) : lista ? (
+        <ul className="divide-y divide-neutral-200 dark:divide-zinc-800">
+          {bancos.map((banco) => (
+            <li key={banco.bancoNombre} className="px-2.5 py-2">
+              <p className="text-heading text-sm font-medium">{banco.bancoNombre}</p>
+              <dl className="mt-1.5 space-y-1 text-xs">
+                <CampoBanco etiqueta="Pesos">
+                  <PosicionMonto centavos={banco.arsCentavos} moneda="ARS" size="sm" />
+                </CampoBanco>
+                <CampoBanco etiqueta="Descubierto">
+                  <CifraOGuion
+                    mostrar={banco.estado.descubiertoCentavos != null}
+                    centavos={banco.estado.descubiertoCentavos ?? 0}
+                  />
+                </CampoBanco>
+                <CampoBanco etiqueta="Le queda">
+                  <LeQueda estado={banco.estado} />
+                </CampoBanco>
+                <CampoBanco etiqueta="Estado">
+                  <Etiqueta estado={banco.estado} />
+                </CampoBanco>
+                <CampoBanco etiqueta="Dólares">
+                  <PosicionMonto centavos={banco.usdCentavos} moneda="USD" size="sm" />
+                </CampoBanco>
+              </dl>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <table className="w-full table-fixed text-xs">
+          <thead>
+            <tr className="text-body-muted border-b border-neutral-200 text-left dark:border-zinc-700">
+              <th className="w-[18%] px-2 py-1 font-medium">Banco</th>
+              <th className="w-[16%] px-2 py-1 text-right font-medium">Pesos</th>
+              <th className="w-[16%] px-2 py-1 text-right font-medium">Descubierto</th>
+              <th className="w-[18%] px-2 py-1 text-right font-medium">Le queda</th>
+              <th className="w-[16%] px-2 py-1 font-medium">Estado</th>
+              <th className="w-[16%] px-2 py-1 text-right font-medium">Dólares</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bancos.map((banco) => (
+              <tr key={banco.bancoNombre} className="border-b border-neutral-100 last:border-b-0 dark:border-zinc-800">
+                <td className="text-heading px-2 py-1 align-middle font-medium break-words">{banco.bancoNombre}</td>
+                <td className="px-2 py-1 text-right align-middle [&_span]:text-xs [&_span]:tracking-tight">
+                  <PosicionMonto centavos={banco.arsCentavos} moneda="ARS" size="sm" />
+                </td>
+                <td className="px-2 py-1 text-right align-middle tabular-nums">
+                  <CifraOGuion
+                    mostrar={banco.estado.descubiertoCentavos != null}
+                    centavos={banco.estado.descubiertoCentavos ?? 0}
+                  />
+                </td>
+                <td className="px-2 py-1 text-right align-middle">
+                  <LeQueda estado={banco.estado} />
+                </td>
+                <td className="px-2 py-1 align-middle">
+                  <Etiqueta estado={banco.estado} />
+                </td>
+                <td className="px-2 py-1 text-right align-middle [&_span]:text-xs [&_span]:tracking-tight">
+                  <PosicionMonto centavos={banco.usdCentavos} moneda="USD" size="sm" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {syncError ? (
+        <p className="border-t border-neutral-200 px-2.5 py-1.5 text-xs text-amber-700 dark:border-zinc-700 dark:text-amber-300">
+          La sincronización falló: {syncError}
+        </p>
+      ) : null}
+    </div>
+  )
 }
 
 export function PositionHistorySection({ rows, isLoading, error }: PositionHistorySectionProps) {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [verTodos, setVerTodos] = useState(false)
   const visibles = verTodos ? rows : rows.slice(0, FILAS_VISIBLES)
-  const th = 'py-1.5 pr-3 font-medium last:pr-0'
-  const td = 'py-1.5 pr-3 align-middle last:pr-0'
+  const preparados = visibles.map((row) => {
+    const bancos = bancosDelCierre(row)
+    const dia = resumenDelDia(bancos)
+    const syncError = !row.syncProveedor.ok && row.syncProveedor.error ? row.syncProveedor.error : null
+    return { row, bancos, dia, syncError }
+  })
+  const th = 'px-1 py-1.5 align-bottom text-xs font-medium leading-tight'
+  const tdBase = 'px-1 py-2 align-middle'
+  const tdAbierto = `${tdBase} bg-[var(--color-primary-light)] font-medium text-[var(--color-primary)]`
+  const tdCerrado = `${tdBase} border-b border-neutral-200 dark:border-zinc-700`
 
   return (
     <section
@@ -126,71 +279,116 @@ export function PositionHistorySection({ rows, isLoading, error }: PositionHisto
         </p>
       ) : (
         <>
-          <div className="-mx-4 mt-2 overflow-x-auto px-4">
-            <table className="w-full min-w-[44rem] text-sm">
+          <div className="mt-2 md:hidden">
+            {preparados.map(({ row, bancos, dia, syncError }) => {
+              const open = expanded === row.fechaId
+              const toggle = () => setExpanded(open ? null : row.fechaId)
+              return (
+                <div key={row.fechaId} className="border-b border-neutral-200 dark:border-zinc-700">
+                  <button
+                    type="button"
+                    onClick={toggle}
+                    aria-expanded={open}
+                    className={`w-full px-0.5 py-2.5 text-left text-sm ${
+                      open
+                        ? 'bg-[var(--color-primary-light)] font-medium text-[var(--color-primary)]'
+                        : 'hover:bg-neutral-50 dark:hover:bg-zinc-800/60'
+                    }`}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <NombreDia row={row} abierto={open} />
+                      <Flecha abierta={open} />
+                      <span className="sr-only">{open ? 'Ocultar bancos' : 'Ver por banco'}</span>
+                    </span>
+                    <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs font-normal">
+                      <div className="min-w-0">
+                        <dt className="text-body-muted">Pesos</dt>
+                        <dd className="mt-0.5 min-w-0 [&_span]:text-sm">
+                          <PosicionMonto centavos={row.totales.arsCentavos} moneda="ARS" size="sm" />
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-body-muted">Descubierto</dt>
+                        <dd className="mt-0.5">
+                          <CifraOGuion mostrar={dia.tieneDescubierto} centavos={dia.descubierto} />
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-body-muted">Le queda para usar</dt>
+                        <dd className="mt-0.5">
+                          <CifraOGuion mostrar={dia.tieneDescubierto} centavos={dia.leQueda} />
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-body-muted">Estado</dt>
+                        <dd className="mt-0.5">
+                          <EstadoDia dia={dia} />
+                        </dd>
+                      </div>
+                      <div className="min-w-0">
+                        <dt className="text-body-muted">Dólares</dt>
+                        <dd className="mt-0.5 min-w-0 [&_span]:text-sm">
+                          <PosicionMonto centavos={row.totales.usdCentavos} moneda="USD" size="sm" />
+                        </dd>
+                      </div>
+                    </dl>
+                  </button>
+                  {open ? (
+                    <div className="bg-[var(--color-primary-light)] px-[10px] pb-[10px]">
+                      <DetalleBancos bancos={bancos} syncError={syncError} lista />
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="mt-2 hidden md:block">
+            <table className="w-full table-fixed border-collapse text-left text-xs xl:text-sm">
               <thead>
-                <tr className="text-body-muted border-b border-neutral-100 text-left text-xs dark:border-zinc-800">
-                  <th className={th}>Día</th>
-                  <th className={`${th} text-right`}>Pesos</th>
-                  <th className={`${th} text-right`}>Descubierto</th>
-                  <th className={`${th} text-right`}>Le queda para usar</th>
-                  <th className={th}>Estado</th>
-                  <th className={`${th} text-right`}>Dólares</th>
-                  <th className={th}>
+                <tr className="text-body-muted border-b border-neutral-200 dark:border-zinc-700">
+                  <th className={`${th} w-[13%]`}>Día</th>
+                  <th className={`${th} w-[17%] text-right`}>Pesos</th>
+                  <th className={`${th} w-[16%] text-right`}>Descubierto</th>
+                  <th className={`${th} w-[17%] text-right`}>Le queda para usar</th>
+                  <th className={`${th} w-[15%]`}>Estado</th>
+                  <th className={`${th} w-[16%] text-right`}>Dólares</th>
+                  <th className={`${th} w-[6%]`}>
                     <span className="sr-only">Ver por banco</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {visibles.map((row) => {
+                {preparados.map(({ row, bancos, dia, syncError }) => {
                   const open = expanded === row.fechaId
-                  const bancos = bancosDelCierre(row)
-                  const dia = resumenDelDia(bancos)
                   const toggle = () => setExpanded(open ? null : row.fechaId)
+                  const td = open ? tdAbierto : tdCerrado
                   return (
                     <Fragment key={row.fechaId}>
                       <tr
                         onClick={toggle}
-                        className="cursor-pointer border-b border-neutral-100 transition hover:bg-neutral-50 dark:border-zinc-800 dark:hover:bg-zinc-800/70"
+                        className={
+                          open
+                            ? 'cursor-pointer'
+                            : 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-zinc-800/60'
+                        }
                       >
-                        <td className={`${td} text-heading font-medium capitalize whitespace-nowrap`}>
-                          {formatDay(row.fechaId)}
-                          {!row.syncProveedor.ok ? (
-                            <span
-                              className="ml-1 text-amber-600 dark:text-amber-400"
-                              title="Ese día no se pudo sincronizar: es el último saldo conocido"
-                            >
-                              <span aria-hidden>*</span>
-                              <span className="sr-only">(sin sincronizar: último saldo conocido)</span>
-                            </span>
-                          ) : null}
+                        <td className={td}>
+                          <NombreDia row={row} abierto={open} />
                         </td>
-                        <td className={`${td} text-right`}>
+                        <td className={`${td} text-right [&_span]:text-xs [&_span]:tracking-tight xl:[&_span]:text-sm`}>
                           <PosicionMonto centavos={row.totales.arsCentavos} moneda="ARS" size="sm" />
                         </td>
-                        <td className={`${td} text-right whitespace-nowrap tabular-nums`}>
-                          {dia.tieneDescubierto ? (
-                            formatMoneyCentavos(dia.descubierto, 'ARS')
-                          ) : (
-                            <span className="text-body-muted">—</span>
-                          )}
-                        </td>
-                        <td className={`${td} text-right whitespace-nowrap tabular-nums`}>
-                          {dia.tieneDescubierto ? (
-                            formatMoneyCentavos(dia.leQueda, 'ARS')
-                          ) : (
-                            <span className="text-body-muted">—</span>
-                          )}
-                        </td>
-                        <td className={td}>
-                          {dia.peor ? (
-                            <Etiqueta
-                              estado={dia.peor}
-                              detalle={dia.pasados.length > 0 ? dia.pasados.join(', ') : undefined}
-                            />
-                          ) : null}
+                        <td className={`${td} text-right`}>
+                          <CifraOGuion mostrar={dia.tieneDescubierto} centavos={dia.descubierto} />
                         </td>
                         <td className={`${td} text-right`}>
+                          <CifraOGuion mostrar={dia.tieneDescubierto} centavos={dia.leQueda} />
+                        </td>
+                        <td className={td}>
+                          <EstadoDia dia={dia} />
+                        </td>
+                        <td className={`${td} text-right [&_span]:tracking-tight [&_span]:text-xs xl:[&_span]:text-sm`}>
                           <PosicionMonto centavos={row.totales.usdCentavos} moneda="USD" size="sm" />
                         </td>
                         <td className={`${td} text-right`}>
@@ -202,49 +400,19 @@ export function PositionHistorySection({ rows, isLoading, error }: PositionHisto
                             }}
                             aria-expanded={open}
                             aria-label={open ? 'Ocultar bancos' : 'Ver por banco'}
-                            className="rounded p-0.5 hover:bg-neutral-100 dark:hover:bg-zinc-800"
+                            className="rounded px-0.5 leading-none"
                           >
-                            <ChevronDown
-                              className={`h-4 w-4 text-neutral-400 transition ${open ? 'rotate-180' : ''}`}
-                              aria-hidden
-                            />
+                            <Flecha abierta={open} />
                           </button>
                         </td>
                       </tr>
-                      {open
-                        ? bancos.map((banco) => (
-                            <tr
-                              key={`${row.fechaId}-${banco.bancoNombre}`}
-                              className="border-b border-neutral-100 bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-950/40"
-                            >
-                              <td className={`${td} text-body-muted pl-3`}>{banco.bancoNombre}</td>
-                              <td className={`${td} text-right`}>
-                                <PosicionMonto centavos={banco.arsCentavos} moneda="ARS" size="sm" />
-                              </td>
-                              <td className={`${td} text-right whitespace-nowrap tabular-nums`}>
-                                {banco.estado.descubiertoCentavos != null ? (
-                                  formatMoneyCentavos(banco.estado.descubiertoCentavos, 'ARS')
-                                ) : (
-                                  <span className="text-body-muted">—</span>
-                                )}
-                              </td>
-                              <td className={`${td} text-right`}>
-                                <LeQueda estado={banco.estado} />
-                              </td>
-                              <td className={td}>
-                                <Etiqueta estado={banco.estado} />
-                              </td>
-                              <td className={`${td} text-right`}>
-                                <PosicionMonto centavos={banco.usdCentavos} moneda="USD" size="sm" />
-                              </td>
-                              <td className={td} />
-                            </tr>
-                          ))
-                        : null}
-                      {open && !row.syncProveedor.ok && row.syncProveedor.error ? (
+                      {open ? (
                         <tr>
-                          <td colSpan={7} className="pb-2 text-xs text-amber-700 dark:text-amber-300">
-                            La sincronización falló: {row.syncProveedor.error}
+                          <td
+                            colSpan={7}
+                            className="border-b border-neutral-200 bg-[var(--color-primary-light)] px-[10px] pt-0 pb-[10px] dark:border-zinc-700"
+                          >
+                            <DetalleBancos bancos={bancos} syncError={syncError} lista={false} />
                           </td>
                         </tr>
                       ) : null}

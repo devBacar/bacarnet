@@ -180,7 +180,7 @@ export async function fetchCashflowDiario(
   const res = await finanzasFetch(`/cashflow?${params.toString()}`)
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as { error?: string }
-    throw new Error(body.error ?? 'No se pudo calcular el cashflow')
+    throw new Error(body.error ?? 'No se pudieron calcular las entradas y salidas del día')
   }
   return res.json() as Promise<CashflowDiario>
 }

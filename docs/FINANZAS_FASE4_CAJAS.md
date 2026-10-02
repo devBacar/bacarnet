@@ -64,6 +64,10 @@ cajaMovimientos (colección)
 
 **Fondeo (transferencia de principal a chica):** es una sola acción atómica que crea DOS movimientos vinculados por el mismo `fondeoVinculadoId` — un `fondeo_enviado` (egreso) en la principal, y un `fondeo_recibido` (ingreso) en la chica. Nunca se hace en dos pasos separados, para que los dos lados queden siempre consistentes entre sí.
 
+**Una caja siempre nace en $0.** No se puede fijar un saldo inicial al crearla — la única forma de que una caja chica reciba plata es un fondeo posterior desde su principal. El alta y el fondeo son siempre dos acciones separadas.
+
+**Una caja chica no tiene botón de "ingreso" libre.** Su único movimiento de tipo entrada es `fondeo_recibido`, y ese lo genera el sistema automáticamente cuando el líder de finanzas fondea desde la principal — el encargado nunca lo carga a mano, simplemente lo ve aparecer en su lista. (La principal sí puede tener ingresos genéricos — por ejemplo, registrar un retiro de efectivo del banco — porque es la fuente original del dinero en efectivo del sistema.)
+
 Cambiar de responsable **no borra ni reescribe nada** — solo agrega un evento a `historialCustodia` y actualiza `responsableUid`. Así, si alguna vez hay que preguntar "¿quién tenía la caja el 15 de marzo?", la respuesta está ahí, no depende de la memoria de nadie.
 
 Cada movimiento es un registro inmutable — no se edita ni se borra un movimiento ya cargado (si hay un error, se carga un movimiento de corrección, nunca se pisa el original). Esto es la trazabilidad de Caja Chica: no hace falta un historial aparte porque cada fila ya es el historial.
@@ -93,8 +97,7 @@ cajaCierres (colección)
     totalEgresos: number
     totalEgresosConComprobante: number
     totalEgresosSinComprobante: number
-    totalIngresos: number              // ingresos manuales en la chica (extensión operativa)
-    saldoTeorico: number                 // inicial + fondeos + ingresos - egresos
+    saldoTeorico: number                 // inicial + fondeos - egresos
     efectivoContado: number | null       // lo que el encargado cuenta a mano
     diferencia: number | null            // contado - teórico (idealmente 0)
     estado: "borrador" | "cerrada" | "aprobada"
@@ -106,23 +109,49 @@ Si `diferencia` no es 0, el cierre igual se puede confirmar — queda visible y 
 
 **Reposición:** cuando el líder de finanzas aprueba un cierre, esa es la señal para hacer un nuevo **fondeo** desde la principal correspondiente — no es un flujo aparte, es la misma acción de fondeo ya definida en el modelo de datos.
 
+**El ciclo completo del cierre, paso a paso (para no dejar huecos):**
+
+```mermaid
+flowchart TD
+  A[Encargado toca Cerrar caja] --> B[cajaCierres: estado = cerrada]
+  B --> C[Caja queda BLOQUEADA\npara nuevos movimientos]
+  C --> D[Aparece en la bandeja\nde la caja Principal correspondiente]
+  D --> E{Líder de finanzas revisa}
+  E -->|Aprueba| F[cajaCierres: estado = aprobada]
+  F --> G[Caja se DESBLOQUEA]
+  G --> H[Líder hace un nuevo fondeo\nsi corresponde reponer]
+```
+
+- **Mientras un cierre está en estado `cerrada` (esperando aprobación), esa caja chica queda bloqueada** — no se pueden cargar nuevos gastos ni ingresos hasta que el líder lo apruebe. Esto evita mezclar movimientos de un período ya cerrado con el siguiente.
+- **El cierre tiene que aparecer visible en algún lado para el líder, no quedar "perdido".** Se muestra como una bandeja ("Cierres pendientes de aprobar") visible desde la caja Principal correspondiente — no alcanza con que el estado quede guardado en la base si nadie lo ve en pantalla.
+- Al aprobar, la caja se desbloquea automáticamente y queda lista para operar de nuevo (con el saldo que le haya quedado, o esperando un nuevo fondeo).
+
+## Eliminación de cajas
+
+- **Solo el líder de finanzas puede eliminar una caja** — nunca el encargado de una caja chica.
+- **Baja lógica, no borrado físico** (mismo criterio que el resto del proyecto): la caja pasa a `estado: "inactiva"`, nunca se borra el documento ni sus movimientos históricos.
+- **Solo se puede dar de baja si `saldoActualCentavos = 0` y no tiene ningún cierre en estado `cerrada` esperando aprobación.** Si tiene plata, primero hay que vaciarla (gastarla o devolverla) antes de poder eliminarla — nunca se "pierde" saldo al borrar.
+- **Las 2 cajas principales nunca se pueden eliminar** — son fijas por diseño.
+
 ## Endpoints y pantalla
 
 `backend/src/modules/finanzas/cajachica/` (mismo patrón: domain / services / adapters / routes):
 
 - `GET/POST /api/finanzas/cajas` — listar/crear cajas (principal o chica); crear una caja es exclusivo del líder de finanzas
+- `DELETE /api/finanzas/cajas/:id` — baja lógica; valida saldo=0 y sin cierres pendientes; rechaza si es principal
 - `POST /api/finanzas/cajas/:principalId/fondear` — hace el fondeo (crea los dos movimientos vinculados, atómico)
-- `GET/POST /api/finanzas/cajas/:id/movimientos` — ingresos/egresos de una caja puntual
-- `POST /api/finanzas/cajas/:id/cerrar` — dispara el cierre con el resumen automático
-- `POST /api/finanzas/cajas/:id/cierres/:cid/aprobar` — solo líder de finanzas
+- `GET/POST /api/finanzas/cajas/:id/movimientos` — ingresos/egresos de una caja puntual; el backend rechaza si la caja está bloqueada por un cierre pendiente
+- `POST /api/finanzas/cajas/:id/cerrar` — dispara el cierre con el resumen automático, bloquea la caja
+- `GET /api/finanzas/cajas/cierres-pendientes` — la bandeja que ve el líder de finanzas
+- `POST /api/finanzas/cajas/:id/cierres/:cid/aprobar` — solo líder de finanzas; desbloquea la caja
 
-**Pantalla:** `/finanzas/cajas`. Un responsable de caja chica ve solo su(s) caja(s) — pantalla simple: saldo arriba, dos botones grandes ("Anotar un gasto" / "Anotar un ingreso"), lista de movimientos reciente, y un botón **"Cerrar caja"** que dispara el flujo de cierre paso a paso. El líder de finanzas ve, además, las 2 cajas principales, un selector para moverse entre todas las cajas chicas, la acción de fondear una chica desde su principal correspondiente, y la bandeja de cierres pendientes de aprobar.
+**Pantalla:** `/finanzas/cajas`. Un responsable de caja chica ve solo su(s) caja(s) — pantalla simple: saldo arriba, **un solo botón grande ("Anotar un gasto")** (sin "ingreso", eso solo lo genera un fondeo), lista de movimientos reciente, y el botón **"Cerrar caja"**. Si la caja está bloqueada por un cierre pendiente de aprobación, se ve claramente ("Esta caja está cerrada, esperando aprobación") y no deja cargar nada nuevo. El líder de finanzas ve, además, las 2 cajas principales, un selector para moverse entre todas las cajas chicas, la acción de fondear, la opción de eliminar una caja (con las validaciones ya descritas), y una **bandeja de "Cierres pendientes de aprobar"** bien visible — no un dato escondido en una tabla.
 
 ## Seguridad y permisos
 
 Esto sí necesita permisos más finos que `view_finanzas` a secas — a diferencia de Cheques/Agenda, acá un responsable no debería ver la caja de otro:
 
-- **Responsable de caja**: solo lectura/escritura de `cajaMovimientos` donde `cajaId` esté en su lista de cajas asignadas (campo `responsableUid` en `cajas`, o una lista si en el futuro una persona maneja más de una).
+- **Responsable de caja**: solo lectura/escritura de `cajaChicaMovimientos` donde `cajaId` esté en su lista de cajas asignadas (campo `responsableUid` en `cajasChicas`, o una lista si en el futuro una persona maneja más de una).
 - **Líder de Finanzas**: lectura y aprobación de todas las cajas, sin restricción.
 - Firestore Security Rules deben reflejar esta separación por caja — no alcanza con `view_finanzas` genérico como en los módulos anteriores.
 
@@ -130,12 +159,16 @@ Esto sí necesita permisos más finos que `view_finanzas` a secas — a diferenc
 
 ## Checklist de aceptación (Definition of Done)
 
-- [ ] Colección `cajas` con `tipo` (principal/chica) y `cajaPadreId`, reemplazando el modelo plano anterior
-- [ ] Regla: una sola caja principal por moneda; una chica hereda la moneda de su principal
-- [ ] Fondeo: crea los dos movimientos vinculados (`fondeo_enviado` + `fondeo_recibido`) en una sola operación atómica
-- [ ] Pantalla del encargado: "Anotar gasto" / "Anotar ingreso", lenguaje simple, sin jerga
-- [ ] Botón "Cerrar caja" con el resumen automático (teórico vs. efectivo contado, diferencia visible)
-- [ ] Cierre pendiente de aprobación del líder de finanzas
-- [ ] Firestore Security Rules: solo líder de finanzas crea cajas/fondea; responsable solo ve su(s) caja(s) chica(s) asignada(s)
-- [ ] Al menos un test unitario del cálculo de cierre (saldoInicial + fondeos − egresos)
-- [ ] Probado en staging: crear las 2 principales, una chica, fondearla, cargar movimientos, cerrarla
+- [ ] Colección `cajas` con `tipo` (principal/chica) y `cajaPadreId`
+- [ ] Regla: una sola caja principal por moneda; toda caja nace con saldo $0
+- [ ] Fondeo: crea los dos movimientos vinculados en una sola operación atómica
+- [ ] Caja chica sin botón de "ingreso" libre — solo egreso y fondeo\_recibido automático
+- [ ] Botón "Cerrar caja" con resumen automático (teórico vs. efectivo contado)
+- [ ] Caja bloqueada mientras su cierre esté "cerrada" (sin aprobar) — rechazo real del backend, no solo la UI
+- [ ] Bandeja "Cierres pendientes de aprobar" visible para el líder de finanzas
+- [ ] Aprobar un cierre desbloquea la caja
+- [ ] Eliminar caja: baja lógica, solo líder, solo si saldo=0 y sin cierres pendientes; principales nunca eliminables
+- [ ] Selector de personas (no UID) para responsable y reasignación
+- [ ] Firestore Security Rules: separación por caja, ya confirmada con test real
+- [ ] Al menos un test unitario del cálculo de cierre
+- [ ] Probado en staging de punta a punta: crear, fondear, gastar, cerrar, aprobar, y confirmar que la caja se desbloquea

@@ -113,14 +113,14 @@ export function RagPilotSistemas() {
         </p>
       </header>
 
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+      <div className="flex flex-wrap gap-2 border-b border-subtle pb-2">
         <button
           type="button"
           onClick={() => setMainTab('review')}
-          className={`rounded-lg px-3 py-2 text-sm font-medium ${
+          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
             mainTab === 'review'
               ? 'bg-brand-primary text-white'
-              : 'text-slate-700 hover:bg-slate-100'
+              : 'text-neutral-700 hover:bg-neutral-100 dark:text-gray-200 dark:hover:bg-zinc-800'
           }`}
         >
           Revisión
@@ -129,10 +129,10 @@ export function RagPilotSistemas() {
           <button
             type="button"
             onClick={() => setMainTab('usage')}
-            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
               mainTab === 'usage'
                 ? 'bg-brand-primary text-white'
-                : 'text-slate-700 hover:bg-slate-100'
+                : 'text-neutral-700 hover:bg-neutral-100 dark:text-gray-200 dark:hover:bg-zinc-800'
             }`}
           >
             <BarChart3 className="h-4 w-4" aria-hidden />
@@ -142,10 +142,10 @@ export function RagPilotSistemas() {
         <button
           type="button"
           onClick={() => setMainTab('pilot')}
-          className={`rounded-lg px-3 py-2 text-sm font-medium ${
+          className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
             mainTab === 'pilot'
               ? 'bg-brand-primary text-white'
-              : 'text-slate-700 hover:bg-slate-100'
+              : 'text-neutral-700 hover:bg-neutral-100 dark:text-gray-200 dark:hover:bg-zinc-800'
           }`}
         >
           Estado del piloto
@@ -158,27 +158,27 @@ export function RagPilotSistemas() {
 
       {mainTab === 'pilot' ? (
         <>
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+          <div className="rounded-xl border border-amber-300/80 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700/50 dark:bg-amber-950/35 dark:text-amber-50">
             <div className="flex gap-2">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
               <div className="space-y-1">
                 <p className="font-medium">Exclusiones regulatorias activas</p>
-                <p>
+                <p className="leading-relaxed text-amber-900 dark:text-amber-100/90">
                   Documentos <strong>RESTRINGIDO</strong> y todo el área de{' '}
                   <strong>{status?.excludedAreaLabels?.[status.excludedGoverningAreaIds[0] ?? ''] ?? 'Cumplimiento'}</strong>{' '}
                   quedan fuera del índice y de las respuestas.
                 </p>
                 {status?.regulatoryMessage ? (
-                  <p className="text-amber-900/90">{status.regulatoryMessage}</p>
+                  <p className="text-amber-800 dark:text-amber-200/90">{status.regulatoryMessage}</p>
                 ) : null}
               </div>
             </div>
           </div>
 
           {!status?.enabled ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              El flag global <code className="rounded bg-white px-1">rag.enabled</code> sigue en{' '}
-              <strong>false</strong>.
+            <div className="surface-muted rounded-xl border border-subtle p-4 text-sm leading-relaxed text-body-muted">
+              El flag global <code className="rounded bg-white px-1 dark:bg-zinc-800 dark:text-gray-100">rag.enabled</code> sigue en{' '}
+              <strong className="text-heading">false</strong>.
               {isSuperAdminUser
                 ? ' Solo super_admin puede probar consultas hasta activarlo; luego quedará habilitado para cuentas con permiso Asistente BacarNet.'
                 : ' El asistente estará disponible para tu cuenta cuando Sistemas active el piloto.'}
@@ -186,7 +186,7 @@ export function RagPilotSistemas() {
           ) : null}
 
           {regulatoryAlert ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+            <div className="rounded-xl border border-red-300/80 bg-red-50 p-4 text-sm text-red-900 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-100">
               {regulatoryAlert}
             </div>
           ) : null}
@@ -210,7 +210,7 @@ export function RagPilotSistemas() {
                   type="button"
                   onClick={() => void handleReindex()}
                   disabled={reindexing || status?.reindexInProgress}
-                  className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-lg border border-neutral-300 px-3 py-2 text-sm font-medium text-neutral-800 transition-colors hover:bg-neutral-50 disabled:opacity-50 dark:border-zinc-600 dark:text-gray-100 dark:hover:bg-zinc-800"
                 >
                   {reindexing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                   Actualizar índice
@@ -249,12 +249,12 @@ export function RagPilotSistemas() {
           </section>
 
           {answer ? (
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <section className="surface-card p-4 shadow-sm">
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-medium text-slate-900">Respuesta</h2>
-                <span className="text-xs text-slate-500">{answer.latencyMs} ms · como {answer.impersonatedAs}</span>
+                <h2 className="font-medium text-heading">Respuesta</h2>
+                <span className="text-xs text-body-muted">{answer.latencyMs} ms · como {answer.impersonatedAs}</span>
               </div>
-              <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800">
+              <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-800 dark:text-gray-200">
                 {answer.answer}
               </div>
             </section>

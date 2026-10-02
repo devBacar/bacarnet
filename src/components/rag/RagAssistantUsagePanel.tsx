@@ -48,7 +48,7 @@ export function RagAssistantUsagePanel() {
 
   if (!stats) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+      <div className="surface-card p-4 text-sm text-body-muted">
         No hay datos de consumo disponibles.
       </div>
     )
@@ -56,13 +56,13 @@ export function RagAssistantUsagePanel() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950">
+      <div className="rounded-xl border border-amber-300/80 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-700/50 dark:bg-amber-950/35 dark:text-amber-50">
         <div className="flex gap-2">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
           <div className="space-y-1">
             <p className="font-medium">Estimación interna — no es la factura de Google Cloud</p>
-            <p>{stats.disclaimer}</p>
-            <p className="text-xs text-amber-900/80">
+            <p className="leading-relaxed text-amber-900 dark:text-amber-100/90">{stats.disclaimer}</p>
+            <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200/80">
               Modelo: {stats.pricing.geminiModel} · Embeddings: {stats.pricing.embeddingModel}. Tarifas
               orientativas: entrada Gemini ${stats.pricing.geminiInputUsdPer1M}/1M tokens, salida $
               {stats.pricing.geminiOutputUsdPer1M}/1M, embeddings $

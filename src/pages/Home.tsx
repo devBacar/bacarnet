@@ -1,9 +1,11 @@
 import { ArrowRight, Loader2 } from 'lucide-react'
+import { signOut } from 'firebase/auth'
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { GoogleIcon } from '../components/GoogleIcon'
 import { useAuth } from '../context'
 import { usePublicAssignableAreasQuery } from '../hooks/queries/useCatalogQueries'
+import { auth } from '../services/firebase'
 import {
   isAccountPending,
   isAccountRejected,
@@ -12,6 +14,10 @@ import {
 } from '../services/userService'
 
 type AuthTab = 'login' | 'register'
+
+/** Una cuenta @bacarsa.com.ar con contraseña nunca queda verificada: se entra con Google. */
+const CORPORATIVO_CON_GOOGLE =
+  'Con tu correo @bacarsa.com.ar no hace falta registrarse: entrá con «Continuar con Google» usando ese mismo correo.'
 
 function authErrorMessage(code: string): string {
   switch (code) {
@@ -71,6 +77,11 @@ export function Home() {
 
     try {
       await login(loginEmail, loginPassword, rememberMe)
+      // Registrada con contraseña y nunca verificada: adentro todo falla por permisos. Mejor avisar y salir.
+      if (isCorporateEmail(loginEmail) && auth.currentUser && !auth.currentUser.emailVerified) {
+        await signOut(auth)
+        setError(CORPORATIVO_CON_GOOGLE)
+      }
     } catch (err) {
       const code = (err as { code?: string }).code ?? ''
       setError(authErrorMessage(code))
@@ -96,8 +107,12 @@ export function Home() {
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
-    setSubmitting(true)
     setRegisterSuccessExternal(false)
+    if (isCorporateEmail(registerEmail)) {
+      setError(CORPORATIVO_CON_GOOGLE)
+      return
+    }
+    setSubmitting(true)
 
     try {
       await registerUser(
@@ -424,17 +439,35 @@ export function Home() {
                     </select>
                   </div>
 
-                  <p className="text-xs leading-relaxed text-neutral-500">
-                    Emails fuera de @bacarsa.com.ar requieren aprobación manual antes de ingresar.
-                  </p>
+                  {isCorporateEmail(registerEmail) ? (
+                    <div className="space-y-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                      <p>{CORPORATIVO_CON_GOOGLE}</p>
+                      <button
+                        type="button"
+                        onClick={handleGoogleSignIn}
+                        disabled={submitting}
+                        className="flex w-full items-center justify-center gap-3 rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <GoogleIcon className="h-5 w-5" />
+                        Continuar con Google
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs leading-relaxed text-neutral-500">
+                        Si tu correo es @bacarsa.com.ar, no te registres: entrá con Google. Los demás correos
+                        requieren aprobación manual antes de ingresar.
+                      </p>
 
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="btn-primary w-full rounded-lg py-3 text-sm font-semibold"
-                  >
-                    {submitting ? 'Creando cuenta...' : 'Registrarse'}
-                  </button>
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="btn-primary w-full rounded-lg py-3 text-sm font-semibold"
+                      >
+                        {submitting ? 'Creando cuenta...' : 'Registrarse'}
+                      </button>
+                    </>
+                  )}
                 </form>
               )}
             </div>

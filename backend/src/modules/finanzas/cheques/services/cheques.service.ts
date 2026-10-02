@@ -154,7 +154,10 @@ const MESES_ES: Record<string, string> = {
 
 function parseSpanishDate(raw: string): string {
   if (!raw) return ''
-  const s = raw.trim()
+  let s = raw.trim()
+  if (ISO_DATE.test(s)) return s
+
+  s = s.replace(/^[A-Za-zÀ-ɏ]{2,4}\.\s+/, '')
   if (ISO_DATE.test(s)) return s
 
   if (s.includes('T')) {
@@ -181,6 +184,16 @@ function parseSpanishDate(raw: string): string {
 
 function formatExcelDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function parseDateMDY(raw: string): string {
+  if (!raw) return ''
+  const s = raw.trim()
+  if (ISO_DATE.test(s)) return s
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/)
+  if (!m) return parseSpanishDate(s)
+  const y = m[3].length === 2 ? `20${m[3]}` : m[3]
+  return `${y}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`
 }
 
 function inferEstadoRecibido(raw: string): ChequeEstado {
@@ -332,9 +345,26 @@ function cellToDate(val: unknown): string {
   return parseSpanishDate(String(val))
 }
 
+function cellToDateMDY(val: unknown): string {
+  if (val == null) return ''
+  if (val instanceof Date) return formatExcelDate(val)
+  if (typeof val === 'number') {
+    const d = XLSX.SSF.parse_date_code(val)
+    if (d) return `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`
+  }
+  return parseDateMDY(String(val))
+}
+
 // ── Detect format ────────────────────────────────────────────────────
 
-type ExcelFormato = 'recibidos' | 'emitidos-488' | 'desconocido'
+type ExcelFormato =
+  | 'recibidos'
+  | 'emitidos-488'
+  | 'emitidos-488-ext'
+  | 'emitidos-vientri'
+  | 'recibidos-32'
+  | 'recibidos-informe'
+  | 'desconocido'
 
 function detectarFormato(rows: unknown[][]): { formato: ExcelFormato; headerIdx: number } {
   for (let i = 0; i < Math.min(20, rows.length); i++) {
@@ -346,6 +376,18 @@ function detectarFormato(rows: unknown[][]): { formato: ExcelFormato; headerIdx:
     }
     if (cells.includes('nro') && cells.includes('destinatario')) {
       return { formato: 'emitidos-488', headerIdx: i }
+    }
+    if (cells.some((c) => c.includes('numero de cheque')) && cells.some((c) => c.includes('fecha op'))) {
+      return { formato: 'emitidos-vientri', headerIdx: i }
+    }
+    if (cells.some((c) => c.includes('n cheque')) && cells.some((c) => c.includes('emitido'))) {
+      return { formato: 'recibidos-32', headerIdx: i }
+    }
+    if (cells.includes('nro') && cells.includes('dmafecvto') && cells.some((c) => c.includes('bancodes'))) {
+      return { formato: 'emitidos-488-ext', headerIdx: i }
+    }
+    if (cells.includes('nro') && cells.includes('fecemision') && cells.some((c) => c.includes('bancodes'))) {
+      return { formato: 'recibidos-informe', headerIdx: i }
     }
   }
   return { formato: 'desconocido', headerIdx: -1 }
@@ -524,6 +566,282 @@ function parseEmitidos488Sheet(
   return { parsed, errores, ignorados }
 }
 
+// ── Parser: emitidos (Vientri grilla) ──────────────────────────────
+
+function inferEstadoEmitidoVientri(raw: string): ChequeEstado | null {
+  const norm = raw.toLowerCase().trim()
+  if (norm.includes('renovado')) return null
+  if (norm.includes('rechazado')) return 'rechazado'
+  if (norm.includes('pago confirmado') || norm.includes('resumen bancario')) return 'debitado'
+  if (norm.includes('abonado')) return 'debitado'
+  if (norm.includes('pago a proveedor')) return 'debitado'
+  if (!norm) return 'pendiente'
+  return 'debitado'
+}
+
+function parseEmitidosVientriSheet(
+  rows: unknown[][],
+  headerIdx: number,
+): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+  const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
+
+  const iDestinatario = header.findIndex((h) => h.includes('destinatario'))
+  const iNumero = header.findIndex((h) => h.includes('numero de cheque'))
+  const iFechaOP = header.findIndex((h) => h.includes('fecha op'))
+  const iFecVto = header.findIndex((h) => h === 'fecvto')
+  const iImporte = header.indexOf('importe')
+  const iBanco = header.indexOf('banco')
+  const iEstado = header.indexOf('estado')
+
+  const parsed: ChequeImportRow[] = []
+  const errores: string[] = []
+  let ignorados = 0
+
+  for (let ri = headerIdx + 1; ri < rows.length; ri++) {
+    const row = rows[ri]
+    if (!row) continue
+
+    const nroRaw = cellToStr(cellVal(row, iNumero))
+    if (!nroRaw) continue
+
+    const montoCentavos = parseMontoCentavos(cellVal(row, iImporte) as string | number | null)
+    if (montoCentavos <= 0) {
+      ignorados++
+      continue
+    }
+
+    const estadoRaw = cellToStr(cellVal(row, iEstado))
+    const estado = inferEstadoEmitidoVientri(estadoRaw)
+    if (estado === null) {
+      ignorados++
+      continue
+    }
+
+    parsed.push({
+      numero: nroRaw,
+      tipo: detectTipo(nroRaw),
+      direccion: 'emitido',
+      origen: 'propio',
+      montoCentavos,
+      fechaEmision: cellToDate(cellVal(row, iFechaOP)),
+      fechaPago: cellToDate(cellVal(row, iFecVto)),
+      fechaRecibido: null,
+      fechaEntregado: null,
+      emisor: '',
+      emisorCuit: '',
+      bancoEmisor: cellToStr(cellVal(row, iBanco)) || null,
+      cliente: null,
+      endosante: null,
+      destinatario: cellToStr(cellVal(row, iDestinatario)) || null,
+      estado,
+      utilizado: estado === 'debitado',
+      cmc7: null,
+      observaciones: null,
+    })
+  }
+
+  return { parsed, errores, ignorados }
+}
+
+// ── Parser: emitidos (reporte-488 extendido con banco) ─────────────
+
+function parseEmitidos488ExtSheet(
+  rows: unknown[][],
+  headerIdx: number,
+): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+  const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
+
+  const iDes = header.indexOf('des')
+  const iNro = header.indexOf('nro')
+  const iFecCmp = header.findIndex((h) => h === 'feccmp' || h === 'dmafeccmp')
+  const iFecVto = header.findIndex((h) => h === 'fecvto' || h === 'dmafecvto')
+  const iImporte = header.indexOf('importe')
+  const iBanco = header.findIndex((h) => h === 'bancodes')
+  const iEstado = header.findIndex((h) => h === 'estadochdes')
+  const iRechazado = header.indexOf('rechazado')
+
+  const parsed: ChequeImportRow[] = []
+  const errores: string[] = []
+  let ignorados = 0
+
+  for (let ri = headerIdx + 1; ri < rows.length; ri++) {
+    const row = rows[ri]
+    if (!row) continue
+
+    const nroRaw = cellToStr(cellVal(row, iNro))
+    if (!nroRaw) continue
+
+    const montoCentavos = parseMontoCentavos(cellVal(row, iImporte) as string | number | null)
+    if (montoCentavos <= 0) {
+      ignorados++
+      continue
+    }
+
+    const estadoRaw = cellToStr(cellVal(row, iEstado))
+    const rechazado = String(cellVal(row, iRechazado)).toLowerCase() === 'true'
+
+    const estado = rechazado ? 'rechazado' : inferEstadoEmitidoVientri(estadoRaw)
+    if (estado === null) {
+      ignorados++
+      continue
+    }
+
+    parsed.push({
+      numero: nroRaw,
+      tipo: detectTipo(nroRaw),
+      direccion: 'emitido',
+      origen: 'propio',
+      montoCentavos,
+      fechaEmision: cellToDate(cellVal(row, iFecCmp)),
+      fechaPago: cellToDate(cellVal(row, iFecVto)),
+      fechaRecibido: null,
+      fechaEntregado: null,
+      emisor: '',
+      emisorCuit: '',
+      bancoEmisor: cellToStr(cellVal(row, iBanco)) || null,
+      cliente: null,
+      endosante: null,
+      destinatario: cellToStr(cellVal(row, iDes)) || null,
+      estado,
+      utilizado: estado === 'debitado',
+      cmc7: null,
+      observaciones: null,
+    })
+  }
+
+  return { parsed, errores, ignorados }
+}
+
+// ── Parser: recibidos (reporte-32) ─────────────────────────────────
+
+function parseRecibidos32Sheet(
+  rows: unknown[][],
+  headerIdx: number,
+): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+  const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
+
+  const iBanco = header.indexOf('banco')
+  const iEmisor = header.findIndex((h) => h.includes('emisor') && h.includes('cheque'))
+  const iCuit = header.findIndex((h) => h.includes('cuit'))
+  const iNCheque = header.findIndex((h) => h.includes('n cheque'))
+  const iEmitido = header.findIndex((h) => h.includes('emitido'))
+  const iVto = header.findIndex((h) => h.includes('vencimiento'))
+  const iImporte = header.indexOf('importe')
+  const iEstado = header.indexOf('estado')
+
+  const parsed: ChequeImportRow[] = []
+  const errores: string[] = []
+  let ignorados = 0
+
+  for (let ri = headerIdx + 1; ri < rows.length; ri++) {
+    const row = rows[ri]
+    if (!row) continue
+
+    const nroRaw = cellToStr(cellVal(row, iNCheque))
+    if (!nroRaw) continue
+
+    const montoCentavos = parseMontoCentavos(cellVal(row, iImporte) as string | number | null)
+    if (montoCentavos <= 0) {
+      ignorados++
+      continue
+    }
+
+    const emisorRaw = cellToStr(cellVal(row, iEmisor))
+    const emisorParts = emisorRaw.split('/')
+    const emisor = emisorParts[0]?.trim() || emisorParts[1]?.trim() || emisorRaw
+
+    parsed.push({
+      numero: nroRaw,
+      tipo: detectTipo(nroRaw),
+      direccion: 'recibido',
+      origen: 'tercero',
+      montoCentavos,
+      fechaEmision: cellToDate(cellVal(row, iEmitido)),
+      fechaPago: cellToDateMDY(cellVal(row, iVto)),
+      fechaRecibido: null,
+      fechaEntregado: null,
+      emisor,
+      emisorCuit: cellToStr(cellVal(row, iCuit)),
+      bancoEmisor: cellToStr(cellVal(row, iBanco)) || null,
+      cliente: null,
+      endosante: null,
+      destinatario: null,
+      estado: iEstado >= 0 ? inferEstadoRecibido(cellToStr(cellVal(row, iEstado))) : 'en_cartera',
+      utilizado: null,
+      cmc7: null,
+      observaciones: null,
+    })
+  }
+
+  return { parsed, errores, ignorados }
+}
+
+// ── Parser: recibidos (informe) ────────────────────────────────────
+
+function parseRecibidosInformeSheet(
+  rows: unknown[][],
+  headerIdx: number,
+): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+  const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
+
+  const iNro = header.indexOf('nro')
+  const iFecEmision = header.indexOf('fecemision')
+  const iFecVto = header.indexOf('fecvto')
+  const iImporte = header.indexOf('importe')
+  const iBanco = header.findIndex((h) => h === 'bancodes')
+  const iCuit = header.findIndex((h) => h === 'peremicuit')
+  const iFirma = header.indexOf('firma')
+  const iEstado = header.findIndex((h) => h === 'estadochdes')
+
+  const parsed: ChequeImportRow[] = []
+  const errores: string[] = []
+  let ignorados = 0
+
+  for (let ri = headerIdx + 1; ri < rows.length; ri++) {
+    const row = rows[ri]
+    if (!row) continue
+
+    const nroRaw = cellToStr(cellVal(row, iNro))
+    if (!nroRaw) continue
+
+    const montoCentavos = parseMontoCentavos(cellVal(row, iImporte) as string | number | null)
+    if (montoCentavos <= 0) {
+      ignorados++
+      continue
+    }
+
+    const firmaRaw = cellToStr(cellVal(row, iFirma))
+    const firmaParts = firmaRaw.split('/')
+    const emisor = firmaParts[0]?.trim() || firmaParts[1]?.trim() || firmaRaw
+
+    const estadoRaw = cellToStr(cellVal(row, iEstado))
+
+    parsed.push({
+      numero: nroRaw,
+      tipo: detectTipo(nroRaw),
+      direccion: 'recibido',
+      origen: 'tercero',
+      montoCentavos,
+      fechaEmision: cellToDate(cellVal(row, iFecEmision)),
+      fechaPago: cellToDateMDY(cellVal(row, iFecVto)),
+      fechaRecibido: null,
+      fechaEntregado: null,
+      emisor,
+      emisorCuit: cellToStr(cellVal(row, iCuit)),
+      bancoEmisor: cellToStr(cellVal(row, iBanco)) || null,
+      cliente: null,
+      endosante: null,
+      destinatario: null,
+      estado: inferEstadoRecibido(estadoRaw),
+      utilizado: null,
+      cmc7: null,
+      observaciones: null,
+    })
+  }
+
+  return { parsed, errores, ignorados }
+}
+
 // ── Main Excel import ───────────────────────────────────────────────
 
 export async function importChequesExcel(input: {
@@ -543,18 +861,28 @@ export async function importChequesExcel(input: {
 
     const { formato, headerIdx } = detectarFormato(rawRows)
 
+    let result: { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } | null = null
+
     if (formato === 'recibidos') {
-      const result = parseRecibidosSheet(rawRows, headerIdx)
-      allRows.push(...result.parsed)
-      errores.push(...result.errores)
-      ignorados += result.ignorados
+      result = parseRecibidosSheet(rawRows, headerIdx)
     } else if (formato === 'emitidos-488') {
-      const result = parseEmitidos488Sheet(rawRows, headerIdx)
-      allRows.push(...result.parsed)
-      errores.push(...result.errores)
-      ignorados += result.ignorados
+      result = parseEmitidos488Sheet(rawRows, headerIdx)
+    } else if (formato === 'emitidos-vientri') {
+      result = parseEmitidosVientriSheet(rawRows, headerIdx)
+    } else if (formato === 'recibidos-32') {
+      result = parseRecibidos32Sheet(rawRows, headerIdx)
+    } else if (formato === 'emitidos-488-ext') {
+      result = parseEmitidos488ExtSheet(rawRows, headerIdx)
+    } else if (formato === 'recibidos-informe') {
+      result = parseRecibidosInformeSheet(rawRows, headerIdx)
     } else {
       errores.push(`Hoja "${sheetName}": formato no reconocido`)
+    }
+
+    if (result) {
+      allRows.push(...result.parsed)
+      errores.push(...result.errores)
+      ignorados += result.ignorados
     }
   }
 

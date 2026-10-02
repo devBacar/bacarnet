@@ -1,0 +1,619 @@
+openapi: 3.0.0
+info:
+  title: Movimientos
+  description: |-
+    Consultá los movimientos de tus cuentas en Interbanking. 
+    Esta API te permite obtener transacciones del día, diferidas o históricas.</br></br>
+
+    **Tipos de movimiento disponibles**
+
+    * **dia:** Movimientos efectuados en el día de la fecha.
+
+    * **diferidos:** Movimientos programados con fecha futura.
+
+    * **anteriores:** Movimientos históricos con fecha anterior a hoy.</br></br>
+
+    **Alcance**
+
+    La consulta aplica a todas las cuentas bancarias con las que operás en el sistema de Interbanking,
+    independientemente de la entidad bancaria.
+  contact:
+    name: Interbanking
+    url: https://interbanking.com.ar/
+    email: consultasapi@interbanking.com.ar
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.htmlmp.openapi.extensions.smallrye.openapi=3.0.0
+  version: v1.3.1
+  x-ibm-name: movimientos
+tags:
+  - name: Movimientos
+paths:
+  /v1/accounts/{account-number}/movements/{movement-type}:
+    get:
+      tags:
+        - Movimientos
+      summary: Obtener listado de movimientos de mis cuentas
+      description: |
+        * **Dia**: Podrá visualizar los movimientos efectuados en el día.  
+        * **Diferidos**: Podrá visualizar los movimientos que se efectuaron con fechas futuras.  
+        * **Anteriores**: Podrá visualizar los movimientos que se efectuaron con fechas anteriores al día de hoy.  
+        La información disponible se corresponde con cualquiera de las cuentas de los bancos con las que opera en el sistema de Interbanking.
+      parameters:
+        - name: account-number
+          in: path
+          description: Número de cuenta bancaria sobre la cual se requiere obtener los movimientos
+          required: true
+          schema:
+            type: string
+        - name: movement-type
+          in: path
+          description: |
+            Tipo de movimiento a consultar. Los valores posibles son:  
+            * dia  
+            * diferidos  
+            * anteriores  
+          required: true
+          schema:
+            type: string
+            enum:
+              - dia
+              - diferidos
+              - anteriores
+        - name: account-type
+          in: query
+          description: |
+            Tipo de cuenta.  
+            * CA -> Caja de Ahorro  
+            * CC -> Cuenta Corriente  
+          schema:
+            type: string
+            enum:
+              - CC
+              - CA
+            default: CC
+        - name: bank-number
+          in: query
+          description: Número de banco de 3 dígitos asignados por el Banco Central de la Republica Argentina (BCRA)
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9]{3}$
+        - name: currency
+          in: query
+          description: |
+            Moneda de la cuenta.  
+            * ARS -> Pesos
+            * USD -> Dolares
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+            default: ARS
+        - name: customer-id
+          in: query
+          description: Código de abonado asignado por Interbanking. Se obtiene desde Administración-> ABM | Configuración Datos -> Datos de Empresa.
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Z][0-9]{5}[A-Z]$
+        - name: date-since
+          in: query
+          description: 'Fecha inicial para la búsqueda de saldos históricos, en formato ISO 8601: yyyy-mm-dd'
+          schema:
+            type: string
+            format: date
+        - name: date-until
+          in: query
+          description: 'Fecha final para la búsqueda de saldos históricos, en formato ISO 8601: yyyy-mm-dd'
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          description: 'Cantidad de registros de saldos históricos a retornar. Default: 100'
+          schema:
+            type: string
+            default: 100
+        - name: page
+          in: query
+          description: 'Página sobre la cual retornar los "n" registros. Default: 0'
+          schema:
+            type: string
+            default: 0
+      responses:
+        '200':
+          description: Lista de movimientos encontrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovimientoRespuestaDTO'
+              example:
+                general_data:
+                  bank_number: string
+                  row_date: '2022-03-10T12:15:50'
+                  date_since: '2022-03-10'
+                  date_until: '2022-03-10'
+                  currency: USD
+                  account_number: string
+                  control_code: string
+                  limit: 0
+                  account_type: CC
+                  total_rows: 0
+                  page: 0
+                  denomination: string
+                movements_detail:
+                  - id: 0
+                    account_cbu: string
+                    depositor_code: string
+                    operation_code_ib: string
+                    operation_code_bank: string
+                    code_description_ib: string
+                    customer_cuit: string
+                    depositor_description: string
+                    code_description_bank: string
+                    amount: 0
+                    voucher_number: 0
+                    grouping_code_ib: string
+                    grouping_code_standard: string
+                    code_description_standard: string
+                    operation_code_standard: string
+                    branch_office_activity: string
+                    process_date: '2022-03-10T12:15:50'
+                    debit_credit_type: string
+        '400':
+          description: |-
+            Request inválido  
+            0101: Cliente o cuit obligatorio, o datos no actualizados  
+            0001: Dato obligatorio no ingresado  
+            1041: No se admiten caracteres especiales  
+            1044: El campo account-type no es válido  
+            0002: El campo currency no es válida  
+            1067: El tipo de reporte no es válido  
+            1040: La fecha no es válida  
+            1006: El campo debe ser de tipo numérico  
+            1038: El campo page debe ser mayor o igual a cero  
+            1022: El campo limit debe ser mayor a cero  
+            1048: Fecha final no puede ser anterior a la fecha inicial  
+            1051: Request param no esperado  
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+        '404':
+          description: |-
+            1043: Cuenta no encontrada  
+            1042: Cliente no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+        '500':
+          description: Error interno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+  /v2/accounts/{account-number}/movements/{movement-type}:
+    get:
+      tags:
+        - Movimientos - V2
+      summary: Obtener listado de movimientos de mis cuentas
+      description: |-
+        Tipos de movimiento disponibles:
+        * **dia:** Movimientos efectuados en el día de la fecha.
+        * **diferidos:** Movimientos programados con fecha futura.
+        * **anteriores:** Movimientos históricos con fecha anterior a hoy.
+        * **zughus:** Movimientos con fecha anterior con otra fecha valor.
+      parameters:
+        - name: accept
+          in: header
+          required: false
+          schema:
+            type: string
+            default: application/json
+        - name: account-number
+          in: path
+          description: Número de cuenta bancaria sobre la cual se requiere obtener los movimientos
+          required: true
+          schema:
+            type: string
+            example: '36198168106003'
+        - name: movement-type
+          in: path
+          description: |
+            Tipo de movimiento a consultar. Los valores posibles son:  
+            * dia  
+            * diferidos  
+            * anteriores  
+            * zughus
+          required: true
+          schema:
+            type: string
+            enum:
+              - dia
+              - diferidos
+              - anteriores
+              - zughus
+            example: anteriores
+        - name: account-type
+          in: query
+          description: |
+            Tipo de cuenta.  
+            * CA -> Caja de Ahorro  
+            * CC -> Cuenta Corriente  
+          schema:
+            type: string
+            enum:
+              - CC
+              - CA
+            default: CC
+        - name: bank-number
+          in: query
+          description: Número de banco de 3 dígitos asignados por el Banco Central de la Republica Argentina (BCRA)
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9]{3}$
+            example: '579'
+        - name: currency
+          in: query
+          description: |
+            Moneda de la cuenta.  
+            * ARS -> Pesos
+            * USD -> Dolares
+          schema:
+            type: string
+            enum:
+              - ARS
+              - USD
+            default: ARS
+        - name: customer-id
+          in: query
+          description: Código de abonado asignado por Interbanking. Se obtiene desde Administración-> ABM | Configuración Datos -> Datos de Empresa.
+          required: true
+          schema:
+            type: string
+            pattern: ^[A-Z][0-9]{5}[A-Z]$
+            example: S46451R
+        - name: date-since
+          in: query
+          description: 'Fecha inicial para la búsqueda de saldos históricos, en formato ISO 8601: yyyy-mm-dd'
+          schema:
+            type: string
+            format: date
+            example: '2017-11-13'
+        - name: date-until
+          in: query
+          description: 'Fecha final para la búsqueda de saldos históricos, en formato ISO 8601: yyyy-mm-dd'
+          schema:
+            type: string
+            format: date
+            example: '2015-02-22'
+        - name: limit
+          in: query
+          description: 'Cantidad de registros de saldos históricos a retornar. Default: 100'
+          schema:
+            type: string
+            default: 100
+            example: '100'
+        - name: page
+          in: query
+          description: 'Página sobre la cual retornar los "n" registros. Default: 0'
+          schema:
+            type: string
+            default: 0
+            example: '0'
+      responses:
+        '200':
+          description: Lista de movimientos encontrados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovimientoRespuestaDTOV2'
+              example:
+                general_data:
+                  bank_number: string
+                  row_date: '2022-03-10T12:15:50'
+                  date_since: '2022-03-10'
+                  date_until: '2022-03-10'
+                  currency: USD
+                  account_number: string
+                  control_code: string
+                  limit: 0
+                  account_type: CC
+                  total_rows: 0
+                  page: 0
+                  denomination: string
+                movements_detail:
+                  - id: 0
+                    account_cbu: string
+                    depositor_code: string
+                    operation_code_ib: string
+                    operation_code_bank: string
+                    code_description_ib: string
+                    customer_cuit: string
+                    depositor_description: string
+                    code_description_bank: string
+                    amount: 0
+                    voucher_number: 0
+                    grouping_code_ib: string
+                    grouping_code_standard: string
+                    code_description_standard: string
+                    operation_code_standard: string
+                    branch_office_activity: string
+                    process_date: '2022-03-10T12:15:50'
+                    debit_credit_type: string
+        '400':
+          description: |-
+            Request inválido  
+            0101: Cliente o cuit obligatorio, o datos no actualizados  
+            0001: Dato obligatorio no ingresado  
+            1041: No se admiten caracteres especiales  
+            1044: El campo account-type no es válido  
+            0002: El campo currency no es válida  
+            1067: El tipo de reporte no es válido  
+            1040: La fecha no es válida  
+            1006: El campo debe ser de tipo numérico  
+            1038: El campo page debe ser mayor o igual a cero  
+            1022: El campo limit debe ser mayor a cero  
+            1048: Fecha final no puede ser anterior a la fecha inicial  
+            1051: Request param no esperado  
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+        '404':
+          description: |-
+            1043: Cuenta no encontrada  
+            1042: Cliente no encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+        '500':
+          description: '0000: Error interno'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeError'
+components:
+  schemas:
+    DatosGeneralesDTO:
+      type: object
+      properties:
+        bank_number:
+          description: Código de Banco según el BCRA
+          type: string
+        row_date:
+          description: Formato AAAA-MM-DDTHH:MM:SS
+          $ref: '#/components/schemas/LocalDateTime'
+        date_since:
+          description: Formato AAAA-MM-DD
+          $ref: '#/components/schemas/LocalDate'
+        date_until:
+          description: Formato AAAA-MM-DD
+          $ref: '#/components/schemas/LocalDate'
+        currency:
+          description: Valores posible "$" ó "USD"
+          $ref: '#/components/schemas/ETipoMoneda'
+        account_number:
+          description: Número de cuenta en SIB
+          type: string
+        control_code:
+          description: Código interno de la consulta
+          type: string
+        page:
+          format: int32
+          description: Número de página de la consulta
+          type: integer
+        denomination:
+          type: string
+        limit:
+          format: int32
+          description: Cantidad de registros devuelto por página
+          type: integer
+        account_type:
+          description: |
+            Tipo de cuenta.
+             Valores posibles: "CC" o "CA"
+          $ref: '#/components/schemas/ETipoCuenta'
+        total_rows:
+          format: int64
+          description: Cantidad de total de registros de la consulta
+          type: integer
+    ETipoCuenta:
+      enum:
+        - CC
+        - CA
+      type: string
+    ETipoMoneda:
+      enum:
+        - USD
+        - ARS
+      type: string
+    LocalDate:
+      format: date
+      type: string
+      example: '2022-03-10'
+    LocalDateTime:
+      type: string
+      pattern: YYYY-MM-DDThh:mm:ss
+      format: date-time
+      example: '2022-03-10T12:15:50'
+    MensajeError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        status:
+          format: int32
+          type: integer
+        timestamp:
+          $ref: '#/components/schemas/LocalDateTime'
+    MovimientoDTOV2:
+      type: object
+      properties:
+        id:
+          format: int32
+          description: ID de movimiento
+          type: integer
+        account_cbu:
+          description: Clave bancaria uniforme
+          type: string
+        depositor_code:
+          description: Código de depositante
+          type: string
+        operation_code_ib:
+          description: Código de movimiento Interbanking
+          type: string
+        operation_code_bank:
+          description: Código de movimiento Banco
+          type: string
+        code_description_ib:
+          description: Descripción corta del movimiento Interbanking
+          type: string
+        customer_cuit:
+          description: CUIT del originante de la transferencia
+          type: string
+        depositor_description:
+          description: Denominacion del originante de la transferencia
+          type: string
+        code_description_bank:
+          description: Descripcion del movimiento
+          type: string
+        amount:
+          description: 'Maximo 2 decimales. Ej: 100000.50'
+          type: number
+        voucher_number:
+          format: int64
+          description: Comprobante asociado al movimiento
+          type: integer
+        grouping_code_ib:
+          description: 'Codigo de plan de cuenta contable Interbanking. Ej: 1 2 3'
+          type: string
+        grouping_code_standard:
+          description: Código de agrupamiento estándar
+          type: string
+        code_description_standard:
+          description: Descripción estándar del movimiento
+          type: string
+        operation_code_standard:
+          description: Código de operación estándar
+          type: string
+        branch_office_activity:
+          description: Sucursal de origen del movimiento
+          type: string
+        process_date:
+          description: Fecha de procesamiento. Formato AAAA-MM-DDTHH:MM:SS
+          $ref: '#/components/schemas/LocalDateTime'
+        debit_credit_type:
+          description: Tipo de movimiento. Credito 'C' o Debito 'D'
+          type: string
+    MovimientoDTO:
+      type: object
+      properties:
+        id:
+          format: int32
+          description: ID de movimiento
+          type: integer
+        account_cbu:
+          description: Clave bancaria uniforme
+          type: string
+        depositor_code:
+          description: Código de depositante
+          type: string
+        operation_code_ib:
+          description: Código de movimiento Interbanking
+          type: string
+        operation_code_bank:
+          description: Código de movimiento Banco
+          type: string
+        code_description_ib:
+          description: Descripción corta del movimiento Interbanking
+          type: string
+        customer_cuit:
+          description: CUIT del originante de la transferencia
+          type: string
+        depositor_description:
+          description: Denominacion del originante de la transferencia
+          type: string
+        code_description_bank:
+          description: Descripcion del movimiento
+          type: string
+        amount:
+          description: 'Maximo 2 decimales. Ej: 100000.50'
+          type: number
+        voucher_number:
+          format: int64
+          description: Comprobante asociado al movimiento
+          type: integer
+        grouping_code_ib:
+          description: 'Codigo de plan de cuenta contable Interbanking. Ej: 1 2 3'
+          type: string
+        branch_office_activity:
+          description: Sucursal de origen del movimiento
+          type: string
+        process_date:
+          description: Fecha de procesamiento. Formato AAAA-MM-DDTHH:MM:SS
+          $ref: '#/components/schemas/LocalDateTime'
+        debit_credit_type:
+          description: Tipo de movimiento. Credito 'C' o Debito 'D'
+          type: string
+    MovimientoRespuestaDTO:
+      type: object
+      properties:
+        general_data:
+          $ref: '#/components/schemas/DatosGeneralesDTO'
+        movements_detail:
+          type: array
+          items:
+            $ref: '#/components/schemas/MovimientoDTO'
+    MovimientoRespuestaDTOV2:
+      type: object
+      properties:
+        general_data:
+          $ref: '#/components/schemas/DatosGeneralesDTO'
+        movements_detail:
+          type: array
+          items:
+            $ref: '#/components/schemas/MovimientoDTOV2'
+  securitySchemes:
+    ClientID:
+      type: apiKey
+      name: client_id
+      x-key-type: client_id
+      in: header
+    Authorization:
+      type: oauth2
+      x-ibm-oauth-provider: cas
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.interbanking.com.ar/cas/oidc/accessToken
+          scopes:
+            info-financiera: Informacion Financiera
+x-ibm-configuration:
+  type: rest
+  phase: realized
+  enforced: true
+  testable: true
+  cors:
+    enabled: true
+  oauth-servers:
+    Authorization:
+      clientCredentials:
+        tokenUrls:
+          - https://auth.interbanking.com.ar/cas/oidc/accessToken
+        authorizationUrls: []
+        refreshUrls: []
+security:
+  - ClientID: []
+    Authorization:
+      - info-financiera
+servers:
+  - url: https://api-gw.interbanking.com.ar/api/prod
+x-ibm-endpoints:
+  - url: https://api-gw.interbanking.com.ar/api/prod

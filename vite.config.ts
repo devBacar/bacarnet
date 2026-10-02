@@ -20,6 +20,9 @@ export default defineConfig({
     },
   },
   server: {
+    watch: {
+      ignored: ['**/dist-build/**', '**/docs/**', '**/.emulator-data/**'],
+    },
     proxy: {
       '/api/me': {
         target: helpdeskTestPort

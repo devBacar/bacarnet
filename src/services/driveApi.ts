@@ -86,6 +86,7 @@ export interface DrivePermissionDto {
   role: DrivePermissionRole
   driveRole: string
   inherited: boolean
+  inheritedFromName?: string | null
 }
 
 export interface DriveDomainAccessDto {
@@ -102,6 +103,19 @@ export interface DriveAreaMemberDto {
   displayName: string | null
 }
 
+export interface DriveAreaShareGrantDto {
+  email: string
+  uid: string
+  permissionId: string
+}
+
+export interface DriveAreaShareDto {
+  areaId: string
+  areaName: string
+  role: DrivePermissionRole
+  grants: DriveAreaShareGrantDto[]
+}
+
 export interface ListDrivePermissionsResult {
   fileId: string
   fileName: string
@@ -110,6 +124,7 @@ export interface ListDrivePermissionsResult {
   governingAreaId: string | null
   governingAreaName: string | null
   areaMembers: DriveAreaMemberDto[]
+  areaShares?: DriveAreaShareDto[]
   permissions: DrivePermissionDto[]
   domainAccess: DriveDomainAccessDto | null
   createdByEmail: string | null
@@ -349,6 +364,7 @@ export async function grantDriveAreaPermission(
   role: DrivePermissionRole
   grantedCount: number
   failedCount: number
+  ruleSaved?: boolean
   granted: Array<{ uid: string; email: string; permissionId: string }>
   failures: Array<{ uid: string; email: string; error: string }>
 }> {
@@ -378,5 +394,33 @@ export async function revokeDrivePermission(
     },
   )
   return parseApiResponse(res)
+}
+
+export async function revokeDriveAreaShare(
+  fileId: string,
+  areaId: string,
+): Promise<{
+  deleted: boolean
+  areaId: string
+  areaName: string
+  removedCount: number
+  failedCount: number
+}> {
+  const res = await fetch(
+    `/api/drive/files/${encodeURIComponent(fileId)}/permissions/area/${encodeURIComponent(areaId)}`,
+    {
+      method: 'DELETE',
+      headers: await authHeaders(),
+    },
+  )
+  return parseApiResponse(res)
+}
+
+export async function syncDriveAreaShares(uid: string): Promise<void> {
+  const res = await fetch(`/api/drive/area-shares/sync/${encodeURIComponent(uid)}`, {
+    method: 'POST',
+    headers: await authHeaders(),
+  })
+  await parseApiResponse(res)
 }
 

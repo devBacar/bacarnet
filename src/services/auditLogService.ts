@@ -1,11 +1,9 @@
 import {
-  addDoc,
   collection,
   getDocs,
   limit,
   orderBy,
   query,
-  serverTimestamp,
   Timestamp,
   where,
   type QueryConstraint,
@@ -92,7 +90,7 @@ function mapDocToEntry(id: string, data: Record<string, unknown>): AuditLogEntry
   }
 }
 
-/** Escribe un log de auditoría. Falla en silencio — nunca bloquea la acción principal. */
+/** Escribe un log de auditoría vía backend. Falla en silencio — nunca bloquea la acción principal. */
 export async function logAction(input: LogActionInput): Promise<void> {
   try {
     const user = auth.currentUser
@@ -101,19 +99,28 @@ export async function logAction(input: LogActionInput): Promise<void> {
       return
     }
 
-    await addDoc(collection(db, AUDIT_LOGS_COLLECTION), {
-      userId: user.uid,
-      userEmail: user.email ?? '',
-      action: input.action,
-      targetType: input.targetType,
-      targetId: input.targetId,
-      targetName: input.targetName,
-      parentFolderId: input.parentFolderId ?? null,
-      mimeType: input.mimeType ?? null,
-      reason: input.reason ?? null,
-      metadata: input.metadata ?? {},
-      createdAt: serverTimestamp(),
+    const token = await user.getIdToken()
+    const res = await fetch('/api/audit/actions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: input.action,
+        targetType: input.targetType,
+        targetId: input.targetId,
+        targetName: input.targetName,
+        parentFolderId: input.parentFolderId ?? null,
+        mimeType: input.mimeType ?? null,
+        reason: input.reason ?? null,
+        metadata: input.metadata ?? {},
+      }),
     })
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      console.error('[auditLog] Error al registrar acción:', input.action, body.error ?? res.status)
+    }
   } catch (err) {
     console.error('[auditLog] Error al registrar acción:', input.action, err)
   }

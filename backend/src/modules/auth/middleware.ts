@@ -10,6 +10,7 @@ export interface AuthedUserPermissions {
   view_finanzas?: boolean
   /** Líder de caja chica: crear cajas, reasignar responsable, aprobar rendiciones. */
   manage_finanzas_caja?: boolean
+  manage_users?: boolean
   rag_assistant?: boolean
 }
 
@@ -25,6 +26,10 @@ export interface AuthedUser {
 
 export function isSuperAdminUser(user: Pick<AuthedUser, 'role' | 'permissions'>): boolean {
   return user.role === 'super_admin' || user.permissions.super_admin === true
+}
+
+export function canManageWorkspaceUsers(user: AuthedUser): boolean {
+  return isSuperAdminUser(user) || user.permissions.manage_users === true
 }
 
 export interface AuthBootstrapContext {
@@ -130,6 +135,7 @@ export async function requireWorkspaceUser(
             view_finanzas: (permissionsRaw as Record<string, unknown>).view_finanzas === true,
             manage_finanzas_caja:
               (permissionsRaw as Record<string, unknown>).manage_finanzas_caja === true,
+            manage_users: (permissionsRaw as Record<string, unknown>).manage_users === true,
             rag_assistant: (permissionsRaw as Record<string, unknown>).rag_assistant === true,
           }
         : {}

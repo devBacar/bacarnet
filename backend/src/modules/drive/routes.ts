@@ -3,6 +3,7 @@ import { requireViewDrive, requireWorkspaceUser } from '../auth/middleware.js'
 import { createAuthorizedCopy } from './authorizedCopy.js'
 import { createDriveFile } from './createFile.js'
 import { getDriveFile } from './getFile.js'
+import { deleteDriveAreaShare, syncDriveAreaSharesForUser } from './areaShareHandlers.js'
 import { grantDriveAreaPermission } from './grantAreaPermission.js'
 import { grantDrivePermission } from './grantPermission.js'
 import { listDriveFiles } from './listFiles.js'
@@ -30,6 +31,8 @@ import {
 
 export const driveRouter = Router()
 
+driveRouter.post('/area-shares/sync/:uid', requireWorkspaceUser, syncDriveAreaSharesForUser)
+
 driveRouter.use(requireWorkspaceUser, requireViewDrive)
 
 driveRouter.get('/files', listDriveFiles)
@@ -45,6 +48,7 @@ driveRouter.patch('/files/:fileId/classification', updateDriveFileClassification
 driveRouter.patch('/files/:fileId/status', updateDriveFileStatus)
 driveRouter.get('/files/:fileId/permissions', listDrivePermissions)
 driveRouter.post('/files/:fileId/permissions/area', grantDriveAreaPermission)
+driveRouter.delete('/files/:fileId/permissions/area/:areaId', deleteDriveAreaShare)
 driveRouter.post('/files/:fileId/permissions', grantDrivePermission)
 driveRouter.post('/files/:fileId/permissions/:permissionId/revoke', revokeDrivePermission)
 driveRouter.post('/files/:fileId/authorized-copy', createAuthorizedCopy)

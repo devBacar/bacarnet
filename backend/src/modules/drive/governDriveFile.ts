@@ -27,13 +27,13 @@ export function canGovernDriveFile(user: AuthedUser, governingAreaId: string | n
 
 export async function resolveFileGoverningAreaId(
   fileId: string,
-  parentFolderId?: string | null,
+  _parentFolderId?: string | null,
 ): Promise<string | null> {
-  let governingAreaId = await getStoredGoverningAreaId(fileId)
-  if (governingAreaId === undefined && parentFolderId) {
-    governingAreaId = await resolveGoverningAreaId(parentFolderId)
-  }
-  return governingAreaId ?? null
+  const stored = await getStoredGoverningAreaId(fileId)
+  if (stored !== undefined) return stored
+  // Sin área en driveFiles: caminar desde el propio archivo o carpeta.
+  // El padre de una carpeta raíz es la Unidad compartida y no tiene mapeo.
+  return (await resolveGoverningAreaId(fileId)) ?? null
 }
 
 export const GOVERN_DRIVE_FORBIDDEN =

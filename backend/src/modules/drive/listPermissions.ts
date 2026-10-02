@@ -24,7 +24,8 @@ function toApiRole(driveRole: string | null | undefined): ApiPermissionRole {
   return 'reader'
 }
 
-import { isInheritedPermission } from './driveUserPermission.js'
+import { inheritedFromPermission, isInheritedPermission } from './driveUserPermission.js'
+import { listAreaSharesForFile } from './areaShares.js'
 
 export async function listDrivePermissions(req: Request, res: Response): Promise<void> {
   const user = req.authedUser
@@ -74,6 +75,8 @@ export async function listDrivePermissions(req: Request, res: Response): Promise
       role: ApiPermissionRole
       driveRole: string
       inherited: boolean
+      inheritedFromName: string | null
+      inheritedFromId: string | null
     }> = []
 
     let domainAccess: {
@@ -109,6 +112,10 @@ export async function listDrivePermissions(req: Request, res: Response): Promise
             role: apiRole,
             driveRole: permission.role ?? apiRole,
             inherited,
+            inheritedFromName: null,
+            inheritedFromId: inherited
+              ? inheritedFromPermission(permission.permissionDetails ?? undefined)
+              : null,
           })
           continue
         }
@@ -127,7 +134,46 @@ export async function listDrivePermissions(req: Request, res: Response): Promise
       pageToken = listed.data.nextPageToken ?? undefined
     } while (pageToken)
 
+    const inheritedIds = [
+      ...new Set(
+        permissions
+          .map((row) => row.inheritedFromId)
+          .filter((id): id is string => typeof id === 'string' && id.length > 0),
+      ),
+    ]
+    const inheritedNames = new Map<string, string>()
+    await Promise.all(
+      inheritedIds.map(async (id) => {
+        try {
+          const meta = await drive.files.get({
+            fileId: id,
+            supportsAllDrives: true,
+            fields: 'id, name',
+          })
+          const name = meta.data.name?.trim()
+          if (name) inheritedNames.set(id, name)
+        } catch (err) {
+          logError('No se pudo leer el nombre de la carpeta heredada', err)
+        }
+      }),
+    )
+    for (const row of permissions) {
+      if (row.inheritedFromId) {
+        row.inheritedFromName = inheritedNames.get(row.inheritedFromId) ?? null
+      }
+    }
+
     permissions.sort((a, b) => a.emailAddress.localeCompare(b.emailAddress, 'es'))
+
+    const areaShares = await listAreaSharesForFile(fileId)
+    const areaShareDtos = await Promise.all(
+      areaShares.map(async (share) => ({
+        areaId: share.areaId,
+        areaName: (await getAreaDisplayName(share.areaId)) ?? share.areaId,
+        role: share.role,
+        grants: share.grants,
+      })),
+    )
 
     const privilegedEmails = await resolvePrivilegedPermissionEmails()
     const visiblePermissions = permissions.filter(
@@ -142,7 +188,8 @@ export async function listDrivePermissions(req: Request, res: Response): Promise
       governingAreaId,
       governingAreaName: areaName,
       areaMembers,
-      permissions: visiblePermissions,
+      permissions: visiblePermissions.map(({ inheritedFromId: _inheritedFromId, ...row }) => row),
+      areaShares: areaShareDtos,
       domainAccess,
       createdByEmail,
       createdByDisplayName,

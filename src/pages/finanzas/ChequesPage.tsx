@@ -40,6 +40,14 @@ function formatFecha(iso: string): string {
   return `${day}/${month}/${year}`
 }
 
+function calcDias(fechaEmision: string, fechaPago: string): number | null {
+  if (!fechaEmision || !fechaPago) return null
+  const a = new Date(fechaEmision + 'T00:00:00')
+  const b = new Date(fechaPago + 'T00:00:00')
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return null
+  return Math.round((b.getTime() - a.getTime()) / 86_400_000)
+}
+
 // ── Main page ───────────────────────────────────────────────────────
 
 function mesActual() {
@@ -333,6 +341,7 @@ export function FinanzasChequesPage() {
                 {direccion !== 'emitido' ? <th className="px-3 py-2">Cliente</th> : null}
                 <th className="px-3 py-2">Emisión</th>
                 <th className="px-3 py-2">Vencimiento</th>
+                <th className="px-3 py-2 text-center">Días</th>
                 <th className="px-3 py-2 text-right">Importe</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Estado</th>
@@ -359,6 +368,13 @@ export function FinanzasChequesPage() {
                   ) : null}
                   <td className="whitespace-nowrap px-3 py-2">{ch.fechaEmision ? formatFecha(ch.fechaEmision) : '—'}</td>
                   <td className="whitespace-nowrap px-3 py-2">{ch.fechaPago ? formatFecha(ch.fechaPago) : '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2 text-center text-xs">
+                    {(() => {
+                      const dias = calcDias(ch.fechaEmision, ch.fechaPago)
+                      if (dias == null) return '—'
+                      return <span className="text-body-muted">{dias}d</span>
+                    })()}
+                  </td>
                   <td className="text-brand-primary whitespace-nowrap px-3 py-2 text-right font-medium">
                     {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
                   </td>

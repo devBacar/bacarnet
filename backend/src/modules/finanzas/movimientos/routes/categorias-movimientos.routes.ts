@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import {
   actualizarCategoriaMovimientoApi,
   CategoriaMovimientoError,
@@ -24,7 +24,7 @@ finanzasCategoriasMovimientosRouter.get('/', async (_req, res) => {
   }
 })
 
-finanzasCategoriasMovimientosRouter.post('/', async (req, res) => {
+finanzasCategoriasMovimientosRouter.post('/', requireFinanzasPermiso('finanzas_categorias'), async (req, res) => {
   const actorUid = req.authedUser?.uid
   if (!actorUid) {
     res.status(401).json({ error: 'No autenticado' })
@@ -43,7 +43,7 @@ finanzasCategoriasMovimientosRouter.post('/', async (req, res) => {
   }
 })
 
-finanzasCategoriasMovimientosRouter.patch('/:id', async (req, res) => {
+finanzasCategoriasMovimientosRouter.patch('/:id', requireFinanzasPermiso('finanzas_categorias'), async (req, res) => {
   try {
     const id = req.params.id
     if (!id || Array.isArray(id)) {
@@ -66,7 +66,7 @@ finanzasCategoriasMovimientosRouter.patch('/:id', async (req, res) => {
   }
 })
 
-finanzasCategoriasMovimientosRouter.post('/:id/fusionar', async (req, res) => {
+finanzasCategoriasMovimientosRouter.post('/:id/fusionar', requireFinanzasPermiso('finanzas_categorias'), async (req, res) => {
   try {
     const id = req.params.id
     if (!id || Array.isArray(id)) {
@@ -91,7 +91,7 @@ finanzasCategoriasMovimientosRouter.post('/:id/fusionar', async (req, res) => {
   }
 })
 
-finanzasCategoriasMovimientosRouter.delete('/:id', async (req, res) => {
+finanzasCategoriasMovimientosRouter.delete('/:id', requireFinanzasPermiso('finanzas_categorias'), async (req, res) => {
   try {
     const id = req.params.id
     if (!id || Array.isArray(id)) {

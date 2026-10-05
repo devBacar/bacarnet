@@ -1,9 +1,9 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { CompromisoMesError, crearCompromisoMes, editarCompromisoMes, getPlanillaCompromisosMes, guardarTipoCambioMes, leerTipoCambioMes } from '../services/compromisos-mes.service.js'
 
 /**
- * No está montado. Hay que colgarlo en `/api/finanzas/compromisos-mes`.
+ * Montado en `/api/finanzas/compromisos-mes`.
  * GET /?mes=AAAA-MM arma la planilla. PUT /tipo-cambio guarda el dólar del mes.
  */
 export const finanzasCompromisosMesRouter = Router()
@@ -29,7 +29,7 @@ finanzasCompromisosMesRouter.get('/tipo-cambio', async (req, res) => {
   }
 })
 
-finanzasCompromisosMesRouter.put('/tipo-cambio', async (req, res) => {
+finanzasCompromisosMesRouter.put('/tipo-cambio', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>
   const mes = typeof body.mes === 'string' ? body.mes : ''
   try {
@@ -45,7 +45,7 @@ finanzasCompromisosMesRouter.put('/tipo-cambio', async (req, res) => {
   }
 })
 
-finanzasCompromisosMesRouter.post('/compromisos', async (req, res) => {
+finanzasCompromisosMesRouter.post('/compromisos', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const compromiso = await crearCompromisoMes({
       actorUid: req.authedUser!.uid,
@@ -58,7 +58,7 @@ finanzasCompromisosMesRouter.post('/compromisos', async (req, res) => {
   }
 })
 
-finanzasCompromisosMesRouter.patch('/compromisos/:id', async (req, res) => {
+finanzasCompromisosMesRouter.patch('/compromisos/:id', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const compromiso = await editarCompromisoMes({
       compromisoId: req.params.id,

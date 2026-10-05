@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { parsePrioridadUrgencia } from '../domain/agenda.prioridad.js'
 import {
   confirmarCobro,
@@ -51,7 +51,7 @@ finanzasAgendaRouter.get('/compromisos', async (req, res) => {
   }
 })
 
-finanzasAgendaRouter.post('/compromisos', async (req, res) => {
+finanzasAgendaRouter.post('/compromisos', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const compromiso = await createCompromisoAgenda({
       actorUid: req.authedUser!.uid,
@@ -64,7 +64,7 @@ finanzasAgendaRouter.post('/compromisos', async (req, res) => {
   }
 })
 
-finanzasAgendaRouter.patch('/compromisos/:id', async (req, res) => {
+finanzasAgendaRouter.patch('/compromisos/:id', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const compromiso = await patchCompromisoAgenda(
       req.params.id,
@@ -93,7 +93,7 @@ finanzasAgendaRouter.get('/compromisos/:id/historial', async (req, res) => {
   }
 })
 
-finanzasAgendaRouter.patch('/compromisos/:id/prioridad', async (req, res) => {
+finanzasAgendaRouter.patch('/compromisos/:id/prioridad', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const body = req.body as Record<string, unknown>
     if (!('urgenciaManual' in body)) {
@@ -116,7 +116,7 @@ finanzasAgendaRouter.patch('/compromisos/:id/prioridad', async (req, res) => {
   }
 })
 
-finanzasAgendaRouter.post('/compromisos/:id/marcar-pagado', async (req, res) => {
+finanzasAgendaRouter.post('/compromisos/:id/marcar-pagado', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const compromiso = await marcarCompromisoPagado(
       req.params.id,
@@ -141,7 +141,7 @@ finanzasAgendaRouter.get('/cobros', async (req, res) => {
   }
 })
 
-finanzasAgendaRouter.post('/cobros', async (req, res) => {
+finanzasAgendaRouter.post('/cobros', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const cobro = await createCobroAgenda({
       actorUid: req.authedUser!.uid,
@@ -168,7 +168,7 @@ finanzasAgendaRouter.get('/cobros/:id/historial', async (req, res) => {
   }
 })
 
-finanzasAgendaRouter.patch('/cobros/:id/prioridad', async (req, res) => {
+finanzasAgendaRouter.patch('/cobros/:id/prioridad', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const body = req.body as Record<string, unknown>
     if (!('urgenciaManual' in body)) {
@@ -191,7 +191,7 @@ finanzasAgendaRouter.patch('/cobros/:id/prioridad', async (req, res) => {
   }
 })
 
-finanzasAgendaRouter.post('/cobros/:id/confirmar', async (req, res) => {
+finanzasAgendaRouter.post('/cobros/:id/confirmar', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const cobro = await confirmarCobro(
       req.params.id,

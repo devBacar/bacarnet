@@ -1,37 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context'
 import { useGlobalSettings } from '../context/GlobalSettingsContext'
+import { queryKeys } from '../lib/queryKeys'
 import { fetchCajasAcceso } from '../services/finanzasCajasApi'
-import { hasFinanzasAccess, isSuperAdmin } from '../services/userService'
+import { permisosFinanzasDe } from '../services/userService'
 
-/** Acceso al módulo Finanzas: view_finanzas o responsable/líder de caja chica. */
+/** Acceso al módulo Finanzas: ver pantallas, líder de cajas o encargado de alguna caja. */
 export function FinanzasModuleGate() {
-  const { userProfile, profileLoading } = useAuth()
+  const { user, userProfile, profileLoading } = useAuth()
   const { settings, loading: settingsLoading } = useGlobalSettings()
-  const [cajaAcceso, setCajaAcceso] = useState<boolean | null>(null)
+  const permisos = permisosFinanzasDe(userProfile)
+  const finanzasAmplio = permisos.ver || permisos.liderCajas
+  const accesoCaja = useQuery({
+    queryKey: queryKeys.finanzas.cajasAcceso(user?.uid),
+    queryFn: fetchCajasAcceso,
+    enabled: !profileLoading && Boolean(user) && settings.finanzasEnabled && !finanzasAmplio,
+  })
 
-  const finanzasAmplio =
-    hasFinanzasAccess(userProfile) ||
-    userProfile?.permissions.manage_finanzas_caja === true ||
-    isSuperAdmin(userProfile)
+  const esperandoCaja = !finanzasAmplio && accesoCaja.isLoading
 
-  useEffect(() => {
-    if (profileLoading || finanzasAmplio) return
-    let cancelled = false
-    void fetchCajasAcceso()
-      .then((ok) => {
-        if (!cancelled) setCajaAcceso(ok)
-      })
-      .catch(() => {
-        if (!cancelled) setCajaAcceso(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [profileLoading, finanzasAmplio])
-
-  if (profileLoading || settingsLoading || (!finanzasAmplio && cajaAcceso === null)) {
+  if (profileLoading || settingsLoading || esperandoCaja) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
         <div className="flex flex-col items-center gap-3">
@@ -42,7 +31,7 @@ export function FinanzasModuleGate() {
     )
   }
 
-  if (!settings.finanzasEnabled || (!finanzasAmplio && !cajaAcceso)) {
+  if (!settings.finanzasEnabled || (!finanzasAmplio && accesoCaja.data !== true)) {
     return <Navigate to="/intranet" replace />
   }
 

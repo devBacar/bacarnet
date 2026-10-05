@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import Busboy from 'busboy'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import { MULTIPART_UPLOAD_MAX_BYTES } from '../../../drive/uploadLimits.js'
 import {
@@ -164,7 +164,7 @@ async function leerPagoCombinado(req: import('express').Request): Promise<{
   })
 }
 
-finanzasHoyRouter.post('/compromisos/:id/pago-combinado', async (req, res) => {
+finanzasHoyRouter.post('/compromisos/:id/pago-combinado', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const { partes, comprobantes } = await leerPagoCombinado(req)
     const resultado = await pagarCompromisoCombinado({
@@ -180,7 +180,7 @@ finanzasHoyRouter.post('/compromisos/:id/pago-combinado', async (req, res) => {
   }
 })
 
-finanzasHoyRouter.post('/compromisos/:id/cheque', async (req, res) => {
+finanzasHoyRouter.post('/compromisos/:id/cheque', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const chequeId = typeof req.body?.chequeId === 'string' ? req.body.chequeId.trim() : ''
     if (!chequeId) {
@@ -198,7 +198,7 @@ finanzasHoyRouter.post('/compromisos/:id/cheque', async (req, res) => {
   }
 })
 
-finanzasHoyRouter.post('/compromisos/:id/efectivo', async (req, res) => {
+finanzasHoyRouter.post('/compromisos/:id/efectivo', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const { body, comprobante } = await leerCuerpo(req)
     const cajaId = typeof body.cajaId === 'string' ? body.cajaId.trim() : ''
@@ -218,7 +218,7 @@ finanzasHoyRouter.post('/compromisos/:id/efectivo', async (req, res) => {
   }
 })
 
-finanzasHoyRouter.post('/compromisos/:id/ya-pague', async (req, res) => {
+finanzasHoyRouter.post('/compromisos/:id/ya-pague', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const resultado = await yaPagueCompromiso({
       user: req.authedUser!,
@@ -231,7 +231,7 @@ finanzasHoyRouter.post('/compromisos/:id/ya-pague', async (req, res) => {
   }
 })
 
-finanzasHoyRouter.post('/compromisos/:id/reprogramar', async (req, res) => {
+finanzasHoyRouter.post('/compromisos/:id/reprogramar', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const fecha = typeof req.body?.fecha === 'string' ? req.body.fecha.trim() : ''
     const resultado = await pasarCompromisoDeDia({
@@ -245,7 +245,7 @@ finanzasHoyRouter.post('/compromisos/:id/reprogramar', async (req, res) => {
   }
 })
 
-finanzasHoyRouter.post('/cobros/:id/confirmar', async (req, res) => {
+finanzasHoyRouter.post('/cobros/:id/confirmar', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const movimientoId = typeof req.body?.movimientoId === 'string' ? req.body.movimientoId.trim() : ''
     if (!movimientoId) {
@@ -263,7 +263,7 @@ finanzasHoyRouter.post('/cobros/:id/confirmar', async (req, res) => {
   }
 })
 
-finanzasHoyRouter.post('/cobros/:id/efectivo', async (req, res) => {
+finanzasHoyRouter.post('/cobros/:id/efectivo', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const { body, comprobante } = await leerCuerpo(req)
     const cajaId = typeof body.cajaId === 'string' ? body.cajaId.trim() : ''
@@ -283,7 +283,7 @@ finanzasHoyRouter.post('/cobros/:id/efectivo', async (req, res) => {
   }
 })
 
-finanzasHoyRouter.post('/cobros/:id/reprogramar', async (req, res) => {
+finanzasHoyRouter.post('/cobros/:id/reprogramar', requireFinanzasPermiso('finanzas_agenda'), async (req, res) => {
   try {
     const fecha = typeof req.body?.fecha === 'string' ? req.body.fecha.trim() : ''
     const resultado = await pasarCobroDeDia({

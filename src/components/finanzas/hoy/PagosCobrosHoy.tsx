@@ -74,11 +74,13 @@ export function PagosHoy({
   onPagar,
   onYaPague,
   onReprogramar,
+  puedeOperar = true,
 }: {
   pagos: HoyResponse['pagos']
   onPagar: (pago: PagoHoy) => void
   onYaPague: (pago: PagoHoy) => void
   onReprogramar: (pago: PagoHoy) => void
+  puedeOperar?: boolean
 }) {
   const filas = [...pagos.filas].sort((a, b) => Number(b.vencido) - Number(a.vencido))
   return (
@@ -105,14 +107,20 @@ export function PagosHoy({
               etiqueta={pago.vencido && pago.vencidoTexto ? <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta> : undefined}
               centavos={pago.montoCentavos}
               accion={
-                <button type="button" className={botonChico} onClick={() => onPagar(pago)}>
-                  Pagar
-                </button>
+                puedeOperar ? (
+                  <button type="button" className={botonChico} onClick={() => onPagar(pago)}>
+                    Pagar
+                  </button>
+                ) : undefined
               }
-              menu={[
-                { texto: 'Ya lo pagué', onClick: () => onYaPague(pago) },
-                { texto: 'Cambiar fecha', onClick: () => onReprogramar(pago) },
-              ]}
+              menu={
+                puedeOperar
+                  ? [
+                      { texto: 'Ya lo pagué', onClick: () => onYaPague(pago) },
+                      { texto: 'Cambiar fecha', onClick: () => onReprogramar(pago) },
+                    ]
+                  : undefined
+              }
             />
           )}
         />
@@ -134,6 +142,7 @@ export function CobrosHoy({
   onReprogramar,
   onReclamar,
   onReclamarAtrasado,
+  puedeOperar = true,
 }: {
   ingresos: IngresoHoy[]
   atrasados: CobroAtrasadoHoy[]
@@ -143,6 +152,7 @@ export function CobrosHoy({
   onReprogramar: (ingreso: IngresoHoy) => void
   onReclamar: (ingreso: IngresoHoy) => void
   onReclamarAtrasado: (cobro: CobroAtrasadoHoy) => void
+  puedeOperar?: boolean
 }) {
   const total = ingresos.reduce((suma, fila) => suma + fila.montoCentavos, 0)
   return (
@@ -174,7 +184,7 @@ export function CobrosHoy({
               centavos={ingreso.montoCentavos}
               accion={
                 ingreso.llego ? (
-                  ingreso.movimientoId ? (
+                  puedeOperar && ingreso.movimientoId ? (
                     <button
                       type="button"
                       className={botonChico}
@@ -191,7 +201,7 @@ export function CobrosHoy({
                 )
               }
               menu={
-                ingreso.llego
+                !puedeOperar || ingreso.llego
                   ? undefined
                   : [
                       { texto: 'Llegó en efectivo', onClick: () => onEfectivo(ingreso) },

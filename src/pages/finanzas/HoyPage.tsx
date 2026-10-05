@@ -21,6 +21,7 @@ import {
   TarjetaSemanaGrafico,
 } from '../../components/finanzas/hoy/TarjetasHoy'
 import { NuevaTransferenciaModal, type PrecargaTransferenciaHoy } from '../../components/finanzas/NuevaTransferenciaModal'
+import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas, patchFinanzasDescubierto, type FinanzasCuenta } from '../../services/finanzasApi'
 import {
@@ -35,12 +36,12 @@ import {
   type IngresoHoy,
   type PagoHoy,
 } from '../../services/finanzasHoyApi'
-import { isSuperAdmin } from '../../services/userService'
 
 type Reclamo = Pick<IngresoHoy, 'cliente' | 'textoReclamo' | 'email' | 'concepto'>
 
 export function FinanzasHoyPage() {
-  const { user, userProfile } = useAuth()
+  const { user } = useAuth()
+  const permisos = usePermisosFinanzas()
   const queryClient = useQueryClient()
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['finanzas', 'hoy'],
@@ -53,9 +54,7 @@ export function FinanzasHoyPage() {
     enabled: Boolean(user),
   })
   const cuentas = cuentasQuery.data?.cuentas ?? []
-  /** Líder de Finanzas (permiso manage_finanzas_caja) o super admin; el backend valida lo mismo. */
-  const canEditDescubierto =
-    isSuperAdmin(userProfile) || userProfile?.permissions.manage_finanzas_caja === true
+  const canEditDescubierto = permisos.saldos
 
   const [pagoModo, setPagoModo] = useState<PagoHoy | null>(null)
   const [yaPague, setYaPague] = useState<PagoHoy | null>(null)
@@ -168,7 +167,13 @@ export function FinanzasHoyPage() {
             <p className="text-[13px] text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>
           ) : null}
           <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
-            <PagosHoy pagos={data.pagos} onPagar={setPagoModo} onYaPague={setYaPague} onReprogramar={setReprogramarPago} />
+            <PagosHoy
+              pagos={data.pagos}
+              onPagar={setPagoModo}
+              onYaPague={setYaPague}
+              onReprogramar={setReprogramarPago}
+              puedeOperar={permisos.agenda}
+            />
             <CobrosHoy
               ingresos={data.ingresos.filas}
               atrasados={data.prevision.cobrosAtrasados}
@@ -187,6 +192,7 @@ export function FinanzasHoyPage() {
               onReprogramar={setReprogramarIngreso}
               onReclamar={setReclamo}
               onReclamarAtrasado={setReclamo}
+              puedeOperar={permisos.agenda}
             />
           </div>
           <CompromisosSemana onPagar={pagarDesdePlanilla} />

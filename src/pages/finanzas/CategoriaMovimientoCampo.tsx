@@ -35,22 +35,26 @@ export function CategoriaChip(props: { categoria: CategoriaMovimiento; className
 export function CategoriaMovimientoChip(props: {
   categoria: CategoriaMovimiento | null
   nota: string | null
-  onClick: () => void
+  onClick?: () => void
 }) {
   const { categoria, nota } = props
   return (
     <div className="flex min-w-0 flex-col items-start">
       {categoria ? (
-        <button
-          type="button"
-          className={`${CHIP_CLASS} cursor-pointer hover:opacity-75`}
-          style={estiloChip(categoria.color)}
-          title={nota ? `${categoria.nombre} — ${nota}` : categoria.nombre}
-          onClick={props.onClick}
-        >
-          <span className="truncate">{categoria.nombre}</span>
-        </button>
-      ) : (
+        props.onClick ? (
+          <button
+            type="button"
+            className={`${CHIP_CLASS} cursor-pointer hover:opacity-75`}
+            style={estiloChip(categoria.color)}
+            title={nota ? `${categoria.nombre} — ${nota}` : categoria.nombre}
+            onClick={props.onClick}
+          >
+            <span className="truncate">{categoria.nombre}</span>
+          </button>
+        ) : (
+          <CategoriaChip categoria={categoria} />
+        )
+      ) : props.onClick ? (
         <button
           type="button"
           className="inline-flex items-center gap-0.5 rounded-full border border-dashed border-neutral-300 px-2 py-px text-[11px] leading-4 text-neutral-400 hover:border-neutral-400 hover:text-neutral-700 dark:border-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-200"
@@ -59,6 +63,8 @@ export function CategoriaMovimientoChip(props: {
         >
           <span aria-hidden="true">+</span> Categorizar
         </button>
+      ) : (
+        <span className="text-[11px] text-neutral-400 dark:text-zinc-500">Sin categoría</span>
       )}
       {nota ? (
         <span className="text-body-muted mt-0.5 max-w-[11rem] truncate text-[11px] leading-4" title={nota}>

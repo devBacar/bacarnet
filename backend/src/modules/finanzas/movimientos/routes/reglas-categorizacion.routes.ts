@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import {
   ReglaCategorizacionError,
   aplicarReglasAMovimientosSinCategoria,
@@ -23,7 +23,7 @@ finanzasReglasCategorizacionRouter.get('/', async (_req, res) => {
 })
 
 /** Crea la regla y categoriza los movimientos que todavía no tienen categoría y matchean. */
-finanzasReglasCategorizacionRouter.post('/', async (req, res) => {
+finanzasReglasCategorizacionRouter.post('/', requireFinanzasPermiso('finanzas_categorias'), async (req, res) => {
   const actorUid = req.authedUser?.uid
   if (!actorUid) {
     res.status(401).json({ error: 'No autenticado' })
@@ -46,7 +46,7 @@ finanzasReglasCategorizacionRouter.post('/', async (req, res) => {
   }
 })
 
-finanzasReglasCategorizacionRouter.post('/aplicar', async (_req, res) => {
+finanzasReglasCategorizacionRouter.post('/aplicar', requireFinanzasPermiso('finanzas_categorias'), async (_req, res) => {
   try {
     const { revisados, categorizados, porCategoria } = await aplicarReglasAMovimientosSinCategoria()
     res.json({ revisados, categorizados, porCategoria })

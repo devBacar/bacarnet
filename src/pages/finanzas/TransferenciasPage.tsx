@@ -6,6 +6,7 @@ import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import { AgendaDestinatariosPanel } from '../../components/finanzas/AgendaDestinatariosPanel'
 import { NuevaTransferenciaModal } from '../../components/finanzas/NuevaTransferenciaModal'
+import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
@@ -77,6 +78,7 @@ function horaArgentina(iso: string): string {
 
 export function FinanzasTransferenciasPage() {
   const { user } = useAuth()
+  const permisos = usePermisosFinanzas()
   const queryClient = useQueryClient()
   const [estado, setEstado] = useState('')
   const [cuentaId, setCuentaId] = useState('')
@@ -154,13 +156,15 @@ export function FinanzasTransferenciasPage() {
           </p>
         </div>
         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
-          <button
-            type="button"
-            className="w-full rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white sm:w-auto"
-            onClick={() => setNuevaAbierta(true)}
-          >
-            Nueva transferencia
-          </button>
+          {permisos.transferencias ? (
+            <button
+              type="button"
+              className="w-full rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white sm:w-auto"
+              onClick={() => setNuevaAbierta(true)}
+            >
+              Nueva transferencia
+            </button>
+          ) : null}
           <button
             type="button"
             className="w-full rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800 sm:w-auto"
@@ -289,7 +293,7 @@ export function FinanzasTransferenciasPage() {
                       >
                         Ver historial
                       </button>
-                      {row.puedeCancelar ? (
+                      {permisos.transferencias && row.puedeCancelar ? (
                         <button
                           type="button"
                           className="rounded border border-amber-600 px-2 py-1 text-xs font-medium text-amber-900"
@@ -309,7 +313,7 @@ export function FinanzasTransferenciasPage() {
                     </div>
                   </td>
                 </tr>
-                {row.requiereConfirmacionManual ? (
+                {permisos.transferencias && row.requiereConfirmacionManual ? (
                   <tr className="bg-amber-50 dark:bg-amber-950/30">
                     <td colSpan={6} className="px-3 py-3">
                       <p className="font-medium text-amber-950 dark:text-amber-100">
@@ -378,7 +382,7 @@ export function FinanzasTransferenciasPage() {
           }}
         />
       ) : null}
-      {nuevaAbierta ? <NuevaTransferenciaModal onClose={() => setNuevaAbierta(false)} /> : null}
+      {permisos.transferencias && nuevaAbierta ? <NuevaTransferenciaModal onClose={() => setNuevaAbierta(false)} /> : null}
     </>
   )
 }

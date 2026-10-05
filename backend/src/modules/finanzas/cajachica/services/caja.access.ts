@@ -15,3 +15,9 @@ export function canAccessCaja(user: AuthedUser, responsableUid: string): boolean
   if (canBrowseAllCajas(user)) return true
   return user.uid === responsableUid
 }
+
+/** Cerrar la caja: el responsable, el líder de cajas o un super admin. Ver Finanzas no alcanza. */
+export function puedeCerrarCaja(user: AuthedUser, responsableUid: string): boolean {
+  if (isFinanzasCajaLider(user)) return true
+  return user.uid === responsableUid
+}

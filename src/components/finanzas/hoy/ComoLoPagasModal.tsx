@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 import { fetchFinanzasCuentas } from '../../../services/finanzasApi'
 import { fetchCajas } from '../../../services/finanzasCajasApi'
 import { fetchCarteraHoy, type ChequeCarteraHoy, type PagoHoy, type PartePagoCombinado } from '../../../services/finanzasHoyApi'
+import { usePermisosFinanzas } from '../permisosFinanzas'
 import { type PrecargaTransferenciaHoy } from '../NuevaTransferenciaModal'
 import { formatMoneyCentavos } from '../formatMoney'
 import { finanzasInputClass } from '../FinanzasFormField'
@@ -112,6 +113,7 @@ export function ComoLoPagasModal({
     transferencia: PrecargaTransferenciaHoy | null
   }) => void
 }) {
+  const puedeTransferir = usePermisosFinanzas().transferencias
   const moneda = pago.moneda ?? 'ARS'
   const falta = pago.montoCentavos
   const [paso, setPaso] = useState<'elegir' | 'armar'>('elegir')
@@ -273,7 +275,9 @@ export function ComoLoPagasModal({
           <div className="mt-3">{encabezado}</div>
           {paso === 'elegir' ? (
             <div className="mt-4 grid gap-2">
-              <Opcion icono={Landmark} titulo="Por transferencia" explicacion="Se arma y queda esperando la firma." onClick={() => elegir('transferencia')} />
+              {puedeTransferir ? (
+                <Opcion icono={Landmark} titulo="Por transferencia" explicacion="Se arma y queda esperando la firma." onClick={() => elegir('transferencia')} />
+              ) : null}
               <Opcion icono={Banknote} titulo="En efectivo" explicacion="Sale de una caja. Podés adjuntar el ticket." onClick={() => elegir('efectivo')} />
               <Opcion icono={FileText} titulo="Con cheque" explicacion="Endosás uno de la cartera o cargás uno propio." onClick={() => elegir('cheque_cartera')} />
             </div>
@@ -289,6 +293,7 @@ export function ComoLoPagasModal({
                   cuentas={cuentas}
                   cheques={cartera.data ?? []}
                   cargandoCheques={cartera.isLoading}
+                  puedeTransferir={puedeTransferir}
                   onChange={(parche) => actualizar(parte.clave, parche)}
                   onQuitar={() => {
                     const siguientes = partes.filter((item) => item.clave !== parte.clave)
@@ -357,6 +362,7 @@ function ParteEditor({
   cuentas,
   cheques,
   cargandoCheques,
+  puedeTransferir,
   onChange,
   onQuitar,
 }: {
@@ -367,6 +373,7 @@ function ParteEditor({
   cuentas: Array<{ id: string; bancoNombre: string; tipoLabel: string }>
   cheques: ChequeCarteraHoy[]
   cargandoCheques: boolean
+  puedeTransferir: boolean
   onChange: (parche: Partial<ParteUi>) => void
   onQuitar: () => void
 }) {
@@ -388,7 +395,7 @@ function ParteEditor({
           value={parte.medio}
           onChange={(event) => onChange({ medio: event.target.value as MedioParte })}
         >
-          {MEDIOS.map((medio) => (
+          {MEDIOS.filter((medio) => puedeTransferir || medio.id !== 'transferencia').map((medio) => (
             <option key={medio.id} value={medio.id}>
               {medio.texto}
             </option>

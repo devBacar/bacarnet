@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import {
   DestinatarioHttpError,
   actualizarDestinatarioApi,
@@ -38,7 +38,7 @@ finanzasDestinatariosRouter.get('/', async (req, res) => {
   }
 })
 
-finanzasDestinatariosRouter.post('/', async (req, res) => {
+finanzasDestinatariosRouter.post('/', requireFinanzasPermiso('finanzas_destinatarios'), async (req, res) => {
   try {
     const result = await crearDestinatarioApi({
       actorUid: req.authedUser!.uid,
@@ -50,7 +50,7 @@ finanzasDestinatariosRouter.post('/', async (req, res) => {
   }
 })
 
-finanzasDestinatariosRouter.patch('/:id', async (req, res) => {
+finanzasDestinatariosRouter.patch('/:id', requireFinanzasPermiso('finanzas_destinatarios'), async (req, res) => {
   try {
     const id = req.params.id
     if (!id || Array.isArray(id)) {
@@ -67,7 +67,7 @@ finanzasDestinatariosRouter.patch('/:id', async (req, res) => {
   }
 })
 
-finanzasDestinatariosRouter.delete('/:id', async (req, res) => {
+finanzasDestinatariosRouter.delete('/:id', requireFinanzasPermiso('finanzas_destinatarios'), async (req, res) => {
   try {
     const id = req.params.id
     if (!id || Array.isArray(id)) {

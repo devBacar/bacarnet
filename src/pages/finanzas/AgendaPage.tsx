@@ -12,6 +12,7 @@ import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import { PagosHechos } from '../../components/finanzas/agenda/PagosHechos'
 import { CompromisosMes } from '../../components/finanzas/hoy/CompromisosMes'
 import { parseMontoEsArACentavos } from '../../components/finanzas/montoEsAr'
+import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas, type FinanzasCuenta } from '../../services/finanzasApi'
 import {
@@ -140,8 +141,10 @@ export function FinanzasAgendaPage() {
   })
 
   const cuentas = cuentasData?.cuentas ?? []
+  const permisos = usePermisosFinanzas()
   const puedeAlta =
-    (tab === 'pagos' && vistaPagos === 'pendientes') || (tab === 'cobros' && vistaCobros === 'esperados')
+    permisos.agenda &&
+    ((tab === 'pagos' && vistaPagos === 'pendientes') || (tab === 'cobros' && vistaCobros === 'esperados'))
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['finanzas', 'agenda'] })
@@ -244,6 +247,8 @@ export function FinanzasAgendaPage() {
                 invalidate()
               }}
               compromisoDestacado={compromisoDestacado}
+              puedeAgenda={permisos.agenda}
+              puedeTransferencias={permisos.transferencias}
               onEditar={setEditando}
               onCancelarTransferencia={async (transferenciaId) => {
                 await cancelarTransferenciaConfeccionada(transferenciaId)
@@ -270,6 +275,7 @@ export function FinanzasAgendaPage() {
               rows={cobros}
               vista={vistaCobros}
               cuentas={cuentas}
+              puedeAgenda={permisos.agenda}
               onUrgenciaChange={async (id, urgenciaManual) => {
                 await patchCobroUrgencia(id, urgenciaManual)
                 invalidate()
@@ -395,6 +401,8 @@ function CompromisosTable({
   onCancelarTransferencia,
   onEditar,
   compromisoDestacado,
+  puedeAgenda,
+  puedeTransferencias,
 }: {
   rows: CompromisoAgendaItem[]
   vista: CompromisosAgendaVista
@@ -408,6 +416,8 @@ function CompromisosTable({
   onCancelarTransferencia: (transferenciaId: string) => Promise<void>
   onEditar: (row: CompromisoAgendaItem) => void
   compromisoDestacado: string | null
+  puedeAgenda: boolean
+  puedeTransferencias: boolean
 }) {
   const [historialId, setHistorialId] = useState<string | null>(null)
   const [marcarRow, setMarcarRow] = useState<CompromisoAgendaItem | null>(null)
@@ -455,10 +465,14 @@ function CompromisosTable({
               >
                 {vista === 'pendientes' ? (
                   <td className="px-3 py-3">
-                    <UrgenciaSelect
-                      value={row.urgenciaManual}
-                      onChange={(v) => void onUrgenciaChange(row.id, v)}
-                    />
+                    {puedeAgenda ? (
+                      <UrgenciaSelect
+                        value={row.urgenciaManual}
+                        onChange={(v) => void onUrgenciaChange(row.id, v)}
+                      />
+                    ) : (
+                      <span className="text-sm">{row.urgenciaManual ? URGENCIA_LABEL[row.urgenciaManual] : 'Por fecha'}</span>
+                    )}
                   </td>
                 ) : null}
                 <td className="px-3 py-3">
@@ -526,14 +540,17 @@ function CompromisosTable({
                     >
                       Historial
                     </button>
-                    <button
-                      type="button"
-                      className="rounded border px-2 py-1 text-xs font-medium"
-                      onClick={() => onEditar(row)}
-                    >
-                      Editar
-                    </button>
-                    {vista === 'pendientes' &&
+                    {puedeAgenda ? (
+                      <button
+                        type="button"
+                        className="rounded border px-2 py-1 text-xs font-medium"
+                        onClick={() => onEditar(row)}
+                      >
+                        Editar
+                      </button>
+                    ) : null}
+                    {puedeTransferencias &&
+                    vista === 'pendientes' &&
                     row.medioPago === 'transferencia' &&
                     (row.estado === 'pendiente' || row.estado === 'vencido') ? (
                       <button
@@ -544,7 +561,7 @@ function CompromisosTable({
                         Preparar transferencia
                       </button>
                     ) : null}
-                    {vista === 'pendientes' && row.estado === COMPROMISO_ESTADO_CONFECCIONADA ? (
+                    {puedeTransferencias && vista === 'pendientes' && row.estado === COMPROMISO_ESTADO_CONFECCIONADA ? (
                       <button
                         type="button"
                         className="rounded border border-amber-600 px-2 py-1 text-xs font-medium text-amber-900 dark:border-amber-400 dark:text-amber-100"
@@ -553,7 +570,8 @@ function CompromisosTable({
                         Marcar como cancelada
                       </button>
                     ) : null}
-                    {vista === 'pendientes' &&
+                    {puedeAgenda &&
+                    vista === 'pendientes' &&
                     row.estado !== COMPROMISO_ESTADO_CONFECCIONADA &&
                     !(row.medioPago === 'transferencia' && (row.estado === 'pendiente' || row.estado === 'vencido')) ? (
                       <button
@@ -752,10 +770,12 @@ function CobrosTable({
   cuentas,
   onUrgenciaChange,
   onConfirmar,
+  puedeAgenda,
 }: {
   rows: CobroAgendaItem[]
   vista: CobrosAgendaVista
   cuentas: FinanzasCuenta[]
+  puedeAgenda: boolean
   onUrgenciaChange: (id: string, urgenciaManual: PrioridadUrgencia | null) => Promise<void>
   onConfirmar: (id: string, body: Record<string, unknown>) => Promise<void>
 }) {
@@ -795,10 +815,14 @@ function CobrosTable({
               >
                 {vista === 'esperados' ? (
                   <td className="px-3 py-3">
-                    <UrgenciaSelect
-                      value={row.urgenciaManual}
-                      onChange={(v) => void onUrgenciaChange(row.id, v)}
-                    />
+                    {puedeAgenda ? (
+                      <UrgenciaSelect
+                        value={row.urgenciaManual}
+                        onChange={(v) => void onUrgenciaChange(row.id, v)}
+                      />
+                    ) : (
+                      <span className="text-sm">{row.urgenciaManual ? URGENCIA_LABEL[row.urgenciaManual] : 'Por fecha'}</span>
+                    )}
                   </td>
                 ) : null}
                 <td className="px-3 py-3">
@@ -839,7 +863,7 @@ function CobrosTable({
                     >
                       Historial
                     </button>
-                    {vista === 'esperados' ? (
+                    {puedeAgenda && vista === 'esperados' ? (
                       <button
                         type="button"
                         className="rounded bg-neutral-900 px-2 py-1 text-xs font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"

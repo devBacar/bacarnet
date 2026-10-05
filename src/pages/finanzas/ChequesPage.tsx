@@ -5,6 +5,7 @@ import { fetchMovimientoById, type MovimientoListItem } from '../../services/fin
 import toast from 'react-hot-toast'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
+import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
 import {
   CHEQUE_DIRECCION_LABELS,
@@ -61,6 +62,7 @@ function mesActual() {
 
 export function FinanzasChequesPage() {
   const { user } = useAuth()
+  const puedeCheques = usePermisosFinanzas().cheques
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [movDetalle, setMovDetalle] = useState<MovimientoListItem | null>(null)
@@ -154,7 +156,7 @@ export function FinanzasChequesPage() {
         <div>
           <h1 className="text-heading text-2xl font-semibold">Chequera Virtual</h1>
         </div>
-        <div className="flex gap-2">
+        {puedeCheques ? <div className="flex gap-2">
           <button
             type="button"
             className="btn-primary inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium"
@@ -179,7 +181,7 @@ export function FinanzasChequesPage() {
             <Upload className="h-4 w-4" />
             {importMutation.isPending ? 'Importando…' : 'Importar Excel'}
           </button>
-        </div>
+        </div> : null}
       </header>
 
       {resumen ? (
@@ -468,7 +470,7 @@ export function FinanzasChequesPage() {
         </div>
       ) : null}
 
-      {showPegar ? (
+      {puedeCheques && showPegar ? (
         <PegarChequesModal
           onClose={() => setShowPegar(false)}
           onSuccess={() => {

@@ -1,6 +1,5 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../auth/middleware.js'
-import { isFinanzasCajaLider } from '../cajachica/services/caja.access.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../auth/middleware.js'
 import { resetManualUsdAccountsNeverLoaded } from '../services/cuentas.repository.js'
 import {
   capturePosicionCierre,
@@ -28,6 +27,7 @@ finanzasCuentasRouter.post(
   '/manual-usd/reiniciar-sin-carga',
   requireWorkspaceUser,
   requireViewFinanzas,
+  requireFinanzasPermiso('finanzas_saldos'),
   async (_req, res) => {
     try {
       await resetManualUsdAccountsNeverLoaded()
@@ -60,6 +60,7 @@ finanzasCuentasRouter.post(
   '/historial/capturar',
   requireWorkspaceUser,
   requireViewFinanzas,
+  requireFinanzasPermiso('finanzas_saldos'),
   async (req, res) => {
     const actorUid = req.authedUser?.uid
     if (!actorUid) {
@@ -85,6 +86,7 @@ finanzasCuentasRouter.patch(
   '/:id/saldo-manual',
   requireWorkspaceUser,
   requireViewFinanzas,
+  requireFinanzasPermiso('finanzas_saldos'),
   async (req, res) => {
     const actorUid = req.authedUser?.uid
     const actorEmail = req.authedUser?.email?.trim()
@@ -115,22 +117,16 @@ finanzasCuentasRouter.patch(
   },
 )
 
-/** Acuerdo de descubierto por cuenta corriente: Interbanking no lo informa, se carga a mano. */
+/** Descubierto a mano. Lo cambia quien tiene finanzas_saldos; el super admin pasa por el middleware. */
 finanzasCuentasRouter.patch(
   '/:id/descubierto',
   requireWorkspaceUser,
   requireViewFinanzas,
+  requireFinanzasPermiso('finanzas_saldos'),
   async (req, res) => {
-    const user = req.authedUser
-    const actorEmail = user?.email?.trim()
-    if (!user || !actorEmail) {
+    const actorEmail = req.authedUser?.email?.trim()
+    if (!actorEmail) {
       res.status(401).json({ error: 'No autenticado' })
-      return
-    }
-    if (!isFinanzasCajaLider(user)) {
-      res
-        .status(403)
-        .json({ error: 'Solo el líder de Finanzas o un super admin pueden cambiar el descubierto' })
       return
     }
     try {

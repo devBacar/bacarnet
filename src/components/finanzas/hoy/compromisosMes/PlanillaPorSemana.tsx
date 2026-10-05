@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatMoneyCentavos } from '../../formatMoney'
 import { montoCorto } from '../montoCorto'
+import { usePermisosFinanzas } from '../../permisosFinanzas'
 import { botonChico, botonChicoSecundario } from '../TarjetasHoy'
 import type {
   FilaCompromisoMes,
@@ -230,6 +231,7 @@ function GrupoTabla({
   onAbrir: (fila: FilaCompromisoMes, semana: SemanaDelMes, boton: HTMLButtonElement) => void
   abierto: { fila: FilaCompromisoMes; semana: SemanaDelMes } | null
 }) {
+  const puedeEditar = usePermisosFinanzas().agenda
   const hayFilas = grupo.filas.length > 0
   return (
     <>
@@ -278,8 +280,8 @@ function GrupoTabla({
         : grupo.filas.map((fila) => (
             <tr
               key={fila.compromisoId}
-              className="group cursor-pointer"
-              onClick={() => onEditar(fila)}
+              className={puedeEditar ? 'group cursor-pointer' : 'group'}
+              onClick={puedeEditar ? () => onEditar(fila) : undefined}
             >
               <td className={`${GRILLA} overflow-hidden ${FONDO_FILA}`}>
                 <ConceptoFila fila={fila} onEditar={() => onEditar(fila)} />
@@ -354,6 +356,7 @@ function GrupoLista({
   onEditar: (fila: FilaCompromisoMes) => void
   onAbrir: (fila: FilaCompromisoMes, semana: SemanaDelMes, boton: HTMLButtonElement) => void
 }) {
+  const puedeEditar = usePermisosFinanzas().agenda
   const hayFilas = grupo.filas.length > 0
   return (
     <section className="border-b border-neutral-200 dark:border-zinc-700">
@@ -383,8 +386,12 @@ function GrupoLista({
         : grupo.filas.map((fila) => (
             <article
               key={fila.compromisoId}
-              className="cursor-pointer border-t border-neutral-200 px-3 py-2 hover:bg-neutral-50 dark:border-zinc-700 dark:hover:bg-zinc-800/70"
-              onClick={() => onEditar(fila)}
+              className={
+                puedeEditar
+                  ? 'cursor-pointer border-t border-neutral-200 px-3 py-2 hover:bg-neutral-50 dark:border-zinc-700 dark:hover:bg-zinc-800/70'
+                  : 'border-t border-neutral-200 px-3 py-2 dark:border-zinc-700'
+              }
+              onClick={puedeEditar ? () => onEditar(fila) : undefined}
             >
               <ConceptoFila fila={fila} onEditar={() => onEditar(fila)} />
               <div className="mt-1">
@@ -522,6 +529,7 @@ function PopoverSemana({
   onEditar: () => void
   onCerrar: () => void
 }) {
+  const puedeEditar = usePermisosFinanzas().agenda
   const panel = useRef<HTMLDivElement>(null)
   const cerrarRef = useRef(onCerrar)
   cerrarRef.current = onCerrar
@@ -595,6 +603,7 @@ function PopoverSemana({
         ))}
       </ul>
       <LineasPagosHechos pagos={fila.pagosResumen} />
+      {puedeEditar ? (
       <div className="mt-3 flex flex-wrap gap-2">
         {puedePagarFila(fila) ? (
           <button type="button" className={botonChico} onClick={onPagar}>
@@ -605,6 +614,7 @@ function PopoverSemana({
           Cambiar
         </button>
       </div>
+      ) : null}
     </div>
   )
 }

@@ -66,9 +66,21 @@ export interface UserPermissions {
   super_admin: boolean
   /** Acceso al asistente RAG (chat flotante). super_admin siempre. */
   rag_assistant: boolean
-  /** Módulo Finanzas (saldos bancarios). */
+  /** Ver todas las pantallas de Finanzas. */
   view_finanzas: boolean
-  /** Líder de cajas (crear cajas, aprobar cierres). */
+  /** Cargar, editar, pagar y reprogramar compromisos y cobros. */
+  finanzas_agenda: boolean
+  /** Importar, ingresar y cambiar el estado de cheques. */
+  finanzas_cheques: boolean
+  /** Categorías, reglas y anotaciones de movimientos. */
+  finanzas_categorias: boolean
+  /** Armar y cancelar transferencias. */
+  finanzas_transferencias: boolean
+  /** Alta, edición y baja de destinatarios. */
+  finanzas_destinatarios: boolean
+  /** Descubierto, saldo cargado a mano e historial de saldos. */
+  finanzas_saldos: boolean
+  /** Líder de cajas (crear cajas, fondear, aprobar cierres). */
   manage_finanzas_caja: boolean
 }
 
@@ -171,6 +183,12 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
   super_admin: false,
   rag_assistant: false,
   view_finanzas: false,
+  finanzas_agenda: false,
+  finanzas_cheques: false,
+  finanzas_categorias: false,
+  finanzas_transferencias: false,
+  finanzas_destinatarios: false,
+  finanzas_saldos: false,
   manage_finanzas_caja: false,
 }
 
@@ -190,6 +208,12 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   super_admin: true,
   rag_assistant: true,
   view_finanzas: true,
+  finanzas_agenda: true,
+  finanzas_cheques: true,
+  finanzas_categorias: true,
+  finanzas_transferencias: true,
+  finanzas_destinatarios: true,
+  finanzas_saldos: true,
   manage_finanzas_caja: true,
 }
 
@@ -203,6 +227,12 @@ export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
   super_admin: false,
   rag_assistant: false,
   view_finanzas: false,
+  finanzas_agenda: false,
+  finanzas_cheques: false,
+  finanzas_categorias: false,
+  finanzas_transferencias: false,
+  finanzas_destinatarios: false,
+  finanzas_saldos: false,
   manage_finanzas_caja: false,
 }
 
@@ -216,6 +246,12 @@ export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
   super_admin: false,
   rag_assistant: false,
   view_finanzas: false,
+  finanzas_agenda: false,
+  finanzas_cheques: false,
+  finanzas_categorias: false,
+  finanzas_transferencias: false,
+  finanzas_destinatarios: false,
+  finanzas_saldos: false,
   manage_finanzas_caja: false,
 }
 
@@ -333,6 +369,59 @@ export function hasFinanzasAccess(profile: UserProfile | null | undefined): bool
   return profile.permissions.view_finanzas === true
 }
 
+export interface PermisosFinanzasEfectivos {
+  ver: boolean
+  agenda: boolean
+  cheques: boolean
+  categorias: boolean
+  transferencias: boolean
+  destinatarios: boolean
+  saldos: boolean
+  liderCajas: boolean
+}
+
+const SIN_PERMISOS_FINANZAS: PermisosFinanzasEfectivos = {
+  ver: false,
+  agenda: false,
+  cheques: false,
+  categorias: false,
+  transferencias: false,
+  destinatarios: false,
+  saldos: false,
+  liderCajas: false,
+}
+
+/** Lo que esta persona puede hacer en Finanzas. El super admin puede todo. Sin ver pantallas, el resto (salvo líder de cajas) no cuenta. */
+export function permisosFinanzasDe(
+  profile: UserProfile | null | undefined,
+): PermisosFinanzasEfectivos {
+  if (!profile) return { ...SIN_PERMISOS_FINANZAS }
+  if (isSuperAdmin(profile)) {
+    return {
+      ver: true,
+      agenda: true,
+      cheques: true,
+      categorias: true,
+      transferencias: true,
+      destinatarios: true,
+      saldos: true,
+      liderCajas: true,
+    }
+  }
+  const flags = profile.permissions
+  const ver = flags.view_finanzas === true
+  return {
+    ver,
+    agenda: ver && flags.finanzas_agenda === true,
+    cheques: ver && flags.finanzas_cheques === true,
+    categorias: ver && flags.finanzas_categorias === true,
+    transferencias: ver && flags.finanzas_transferencias === true,
+    destinatarios: ver && flags.finanzas_destinatarios === true,
+    saldos: ver && flags.finanzas_saldos === true,
+    liderCajas: flags.manage_finanzas_caja === true,
+  }
+}
+
 export function isAdminOfArea(
   profile: UserProfile | null | undefined,
   areaId: string,
@@ -383,8 +472,14 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
       manage_users: permissions.manage_users ?? false,
       super_admin: permissions.super_admin ?? false,
       rag_assistant: permissions.rag_assistant ?? false,
-      view_finanzas: permissions.view_finanzas ?? false,
-      manage_finanzas_caja: permissions.manage_finanzas_caja ?? false,
+      view_finanzas: permissions.view_finanzas === true,
+      finanzas_agenda: permissions.finanzas_agenda === true,
+      finanzas_cheques: permissions.finanzas_cheques === true,
+      finanzas_categorias: permissions.finanzas_categorias === true,
+      finanzas_transferencias: permissions.finanzas_transferencias === true,
+      finanzas_destinatarios: permissions.finanzas_destinatarios === true,
+      finanzas_saldos: permissions.finanzas_saldos === true,
+      manage_finanzas_caja: permissions.manage_finanzas_caja === true,
     },
     favoriteApps: Array.isArray(data.favoriteApps)
       ? (data.favoriteApps as string[])
@@ -603,9 +698,29 @@ export async function updateUserPermissions(
   uid: string,
   newPermissions: UserPermissions,
 ): Promise<void> {
-  await updateDoc(doc(db, USERS_COLLECTION, uid), {
+  const ref = doc(db, USERS_COLLECTION, uid)
+  const snapshot = await getDoc(ref)
+  const antes = snapshot.exists() ? (snapshot.data().permissions ?? null) : null
+  const targetName =
+    (snapshot.exists() &&
+      typeof snapshot.data().displayName === 'string' &&
+      snapshot.data().displayName) ||
+    (snapshot.exists() && typeof snapshot.data().email === 'string' && snapshot.data().email) ||
+    uid
+
+  await updateDoc(ref, {
     permissions: newPermissions,
   })
+
+  if (JSON.stringify(antes) !== JSON.stringify(newPermissions)) {
+    await logAction({
+      action: 'permission_grant',
+      targetType: 'user',
+      targetId: uid,
+      targetName,
+      metadata: { antes, despues: newPermissions },
+    })
+  }
 }
 
 export async function updateUserBasicInfo(

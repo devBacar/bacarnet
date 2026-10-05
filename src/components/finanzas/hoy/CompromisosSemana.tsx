@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
+import { usePermisosFinanzas } from '../permisosFinanzas'
 import { useAuth } from '../../../context'
 import {
   COMPROMISOS_MES_QUERY_KEY,
@@ -113,7 +114,9 @@ function FilaCompromiso({
     .filter((parte) => parte.trim().length > 0)
     .join(' · ')
   const atraso = mostrarAtraso ? etiquetaAtraso(fila.fechaVencimiento, hoy) : null
-  const puedePagar = fila.faltaCentavos > 0 && fila.estado !== 'pagado' && fila.estado !== 'confeccionada_pendiente_autorizacion'
+  const puedeAgenda = usePermisosFinanzas().agenda
+  const puedePagar =
+    puedeAgenda && fila.faltaCentavos > 0 && fila.estado !== 'pagado' && fila.estado !== 'confeccionada_pendiente_autorizacion'
   const monto =
     fila.faltaCentavos > 0
       ? formatMoneyCentavos(fila.faltaCentavos, fila.moneda)

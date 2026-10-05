@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import {
   ReconciliacionError,
   confirmarMovimientoDeTransferencia,
@@ -43,7 +43,7 @@ finanzasTransferenciasRouter.get('/', async (req, res) => {
   }
 })
 
-finanzasTransferenciasRouter.post('/confeccionar', async (req, res) => {
+finanzasTransferenciasRouter.post('/confeccionar', requireFinanzasPermiso('finanzas_transferencias'), async (req, res) => {
   try {
     const result = await confeccionarTransferenciaDesdeCompromiso({
       actorUid: req.authedUser!.uid,
@@ -65,7 +65,7 @@ finanzasTransferenciasRouter.post('/confeccionar', async (req, res) => {
   }
 })
 
-finanzasTransferenciasRouter.post('/confeccionar-directa', async (req, res) => {
+finanzasTransferenciasRouter.post('/confeccionar-directa', requireFinanzasPermiso('finanzas_transferencias'), async (req, res) => {
   try {
     const result = await confeccionarTransferenciaDirecta({
       actorUid: req.authedUser!.uid,
@@ -106,7 +106,7 @@ finanzasTransferenciasRouter.post('/actualizar-estados', async (_req, res) => {
   }
 })
 
-finanzasTransferenciasRouter.post('/:id/confirmar-movimiento', async (req, res) => {
+finanzasTransferenciasRouter.post('/:id/confirmar-movimiento', requireFinanzasPermiso('finanzas_transferencias'), async (req, res) => {
   try {
     const id = req.params.id
     if (!id || Array.isArray(id)) {
@@ -142,7 +142,7 @@ finanzasTransferenciasRouter.post('/:id/confirmar-movimiento', async (req, res) 
   }
 })
 
-finanzasTransferenciasRouter.post('/:id/cancelar', async (req, res) => {
+finanzasTransferenciasRouter.post('/:id/cancelar', requireFinanzasPermiso('finanzas_transferencias'), async (req, res) => {
   try {
     const id = req.params.id
     if (!id || Array.isArray(id)) {

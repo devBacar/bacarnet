@@ -21,6 +21,8 @@ import {
   parseUsdInputToCentavos,
 } from '../../components/finanzas/ManualSaldoModal'
 
+import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
+
 import { useAuth } from '../../context'
 
 import {
@@ -33,10 +35,11 @@ import {
   type FinanzasMoneda,
 } from '../../services/finanzasApi'
 
-import { hasFinanzasAccess, isSuperAdmin } from '../../services/userService'
 
 export function FinanzasCuentasPage() {
-  const { user, userProfile } = useAuth()
+  const { user } = useAuth()
+
+  const permisos = usePermisosFinanzas()
   const queryClient = useQueryClient()
   const [manualCuenta, setManualCuenta] = useState<FinanzasCuenta | null>(null)
   const [savingManual, setSavingManual] = useState(false)
@@ -48,10 +51,9 @@ export function FinanzasCuentasPage() {
   } | null>(null)
   const [transferirCuentaId, setTransferirCuentaId] = useState<string | null>(null)
 
-  const canEditManual = hasFinanzasAccess(userProfile)
-  /** Líder de Finanzas (permiso manage_finanzas_caja) o super admin; el backend valida lo mismo. */
-  const canEditDescubierto =
-    isSuperAdmin(userProfile) || userProfile?.permissions.manage_finanzas_caja === true
+  const canEditManual = permisos.saldos
+  const canEditDescubierto = permisos.saldos
+  const puedeTransferir = permisos.transferencias
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['finanzas', 'cuentas'],
@@ -126,7 +128,7 @@ export function FinanzasCuentasPage() {
   }
 
   return (
-    <TransferirDesdeCuentaContext.Provider value={setTransferirCuentaId}>
+    <TransferirDesdeCuentaContext.Provider value={puedeTransferir ? setTransferirCuentaId : null}>
     <>
       <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
@@ -176,7 +178,7 @@ export function FinanzasCuentasPage() {
                 bancos={posicionPorBanco}
                 cuentas={data.cuentas}
                 onSelect={(moneda, bancoNombre) => setDetalle({ moneda, bancoNombre })}
-                onTransferir={setTransferirCuentaId}
+                onTransferir={puedeTransferir ? setTransferirCuentaId : undefined}
               />
             )}
             <PositionHistorySection
@@ -215,7 +217,7 @@ export function FinanzasCuentasPage() {
         onClose={() => setManualCuenta(null)}
         onSave={(input) => void handleSaveManualSaldo(input)}
       />
-      {transferirCuentaId ? (
+      {puedeTransferir && transferirCuentaId ? (
         <NuevaTransferenciaModal
           cuentaOrigenId={transferirCuentaId}
           onClose={() => setTransferirCuentaId(null)}

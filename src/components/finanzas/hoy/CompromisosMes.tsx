@@ -19,6 +19,7 @@ import { FormularioCompromiso } from './compromisosMes/FormularioCompromiso'
 import { LeyendaPlanilla } from './compromisosMes/planillaComun'
 import { PlanillaCompromisos } from './compromisosMes/PlanillaCompromisos'
 import { PlanillaPorSemana } from './compromisosMes/PlanillaPorSemana'
+import { usePermisosFinanzas } from '../permisosFinanzas'
 import { botonChico } from './TarjetasHoy'
 
 const CLAVE_VISTA = 'bacarnet.planilla-mes.vista'
@@ -83,6 +84,7 @@ function textoTipoCambio(valor: number): string {
 
 export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) => void }) {
   const { user } = useAuth()
+  const puedeEditar = usePermisosFinanzas().agenda
   const queryClient = useQueryClient()
   const [mes, setMes] = useState(mesActual)
   const [vista, setVista] = useState<VistaPlanilla>(vistaGuardada)
@@ -195,7 +197,7 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
               </button>
             ))}
           </div>
-          {editandoTc ? (
+          {puedeEditar && editandoTc ? (
             <div className="flex flex-wrap items-center gap-2">
               <label className="text-[13px] text-[var(--color-primary)]" htmlFor="mes-tc">
                 Dólar del mes
@@ -222,22 +224,26 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
               ) : (
                 <span className="text-[15px] font-medium tabular-nums">$ {textoTipoCambio(tipoCambio)}</span>
               )}
-              <button
-                type="button"
-                className="ml-2 text-[13px] font-medium underline-offset-2 hover:underline"
-                onClick={() => {
-                  setTcTexto(tipoCambio == null ? '' : textoTipoCambio(tipoCambio))
-                  setEditandoTc(true)
-                }}
-              >
-                {tipoCambio == null ? 'Cargar' : 'Cambiar'}
-              </button>
+              {puedeEditar ? (
+                <button
+                  type="button"
+                  className="ml-2 text-[13px] font-medium underline-offset-2 hover:underline"
+                  onClick={() => {
+                    setTcTexto(tipoCambio == null ? '' : textoTipoCambio(tipoCambio))
+                    setEditandoTc(true)
+                  }}
+                >
+                  {tipoCambio == null ? 'Cargar' : 'Cambiar'}
+                </button>
+              ) : null}
             </p>
           )}
-          <button type="button" className={`${botonChico} gap-1`} onClick={() => abrirAlta('Otros egresos')}>
-            <Plus className="h-4 w-4" aria-hidden />
-            Agregar
-          </button>
+          {puedeEditar ? (
+            <button type="button" className={`${botonChico} gap-1`} onClick={() => abrirAlta('Otros egresos')}>
+              <Plus className="h-4 w-4" aria-hidden />
+              Agregar
+            </button>
+          ) : null}
         </div>
       </header>
       {planilla.isLoading ? <p className="text-body-muted px-3 py-6 text-[15px]">Cargando la planilla…</p> : null}
@@ -272,7 +278,7 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
           )}
         </>
       ) : null}
-      {formulario ? (
+      {puedeEditar && formulario ? (
         <FormularioCompromiso
           titulo={formulario.modo === 'alta' ? 'Nuevo compromiso' : 'Editar compromiso'}
           grupos={planilla.data?.grupos.map((grupo) => grupo.grupo) ?? [...GRUPOS_COMPROMISO]}

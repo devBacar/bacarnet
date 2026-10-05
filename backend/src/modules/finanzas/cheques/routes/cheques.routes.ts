@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { listChequesApi, getResumenDiario, importChequesExcel, ingresarChequesPegados } from '../services/cheques.service.js'
 import { updateChequeEstado } from '../services/cheques.repository.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
@@ -40,7 +40,7 @@ finanzasChequesRouter.get('/resumen-diario', async (_req, res) => {
   }
 })
 
-finanzasChequesRouter.post('/import', async (req, res) => {
+finanzasChequesRouter.post('/import', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
   const actorUid = req.authedUser?.uid
   if (!actorUid) {
     res.status(401).json({ error: 'No autenticado' })
@@ -70,7 +70,7 @@ const VALID_DIRECCIONES: ChequeDireccion[] = ['recibido', 'emitido']
 const VALID_ORIGENES: ChequeOrigen[] = ['cliente', 'tercero', 'propio']
 const VALID_TIPOS: ChequeTipo[] = ['echeq', 'fisico']
 
-finanzasChequesRouter.post('/ingresar', async (req, res) => {
+finanzasChequesRouter.post('/ingresar', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
   const actorUid = req.authedUser?.uid
   if (!actorUid) {
     res.status(401).json({ error: 'No autenticado' })
@@ -121,7 +121,7 @@ const VALID_ESTADOS: ChequeEstado[] = [
 ]
 
 
-finanzasChequesRouter.patch('/:id/estado', async (req, res) => {
+finanzasChequesRouter.patch('/:id/estado', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
   try {
     const { estado } = req.body as { estado?: string }
     if (!estado || !VALID_ESTADOS.includes(estado as ChequeEstado)) {

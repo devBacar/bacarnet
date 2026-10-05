@@ -11,6 +11,7 @@ import {
   type TipoCuentaDestinatario,
 } from '../../services/finanzasTransferenciasApi'
 import { FinanzasFormField, finanzasInputClass } from './FinanzasFormField'
+import { usePermisosFinanzas } from './permisosFinanzas'
 import { soloDigitos, validarCbu, validarCuitOpcional } from './cbuCuit'
 
 const TIPO_LABEL: Record<DestinatarioTipo, string> = {
@@ -71,6 +72,7 @@ function useDebounced(value: string, ms = 250): string {
 }
 
 export function AgendaDestinatariosPanel() {
+  const puedeDestinatarios = usePermisosFinanzas().destinatarios
   const queryClient = useQueryClient()
   const [q, setQ] = useState('')
   const qDebounced = useDebounced(q)
@@ -101,13 +103,15 @@ export function AgendaDestinatariosPanel() {
             onChange={(event) => setQ(event.target.value)}
           />
         </label>
-        <button
-          type="button"
-          className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
-          onClick={() => setAltaAbierta(true)}
-        >
-          Agregar destinatario
-        </button>
+        {puedeDestinatarios ? (
+          <button
+            type="button"
+            className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
+            onClick={() => setAltaAbierta(true)}
+          >
+            Agregar destinatario
+          </button>
+        ) : null}
       </div>
 
       {haySugeridos ? (
@@ -151,7 +155,7 @@ export function AgendaDestinatariosPanel() {
                     {row.sugerido ? ' · Sugerido del historial' : ` · ${row.usos} usos`}
                   </p>
                 </div>
-                {row.sugerido ? null : (
+                {puedeDestinatarios && !row.sugerido ? (
                   <div className="flex gap-2">
                     <button
                       type="button"
@@ -168,7 +172,7 @@ export function AgendaDestinatariosPanel() {
                       Borrar
                     </button>
                   </div>
-                )}
+                ) : null}
               </div>
             </li>
           ))}

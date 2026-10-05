@@ -26,6 +26,7 @@ import {
   tonoFalta,
   useGruposPlanilla,
 } from './planillaModelo'
+import { usePermisosFinanzas } from '../../permisosFinanzas'
 import { montosPlanificados } from './semanasDelMes'
 
 const FONDO_HEAD = 'bg-neutral-50 dark:bg-zinc-950'
@@ -181,6 +182,7 @@ function GrupoDias({
   onEditar: (fila: FilaCompromisoMes) => void
   onPagar: (compromisoId: string) => void
 }) {
+  const puedeEditar = usePermisosFinanzas().agenda
   const hayFilas = grupo.filas.length > 0
   const plegar = hayFilas ? onToggle : undefined
   return (
@@ -222,7 +224,11 @@ function GrupoDias({
       {cerrado
         ? null
         : grupo.filas.map((fila) => (
-            <tr key={fila.compromisoId} className="group cursor-pointer" onClick={() => onEditar(fila)}>
+            <tr
+              key={fila.compromisoId}
+              className={puedeEditar ? 'group cursor-pointer' : 'group'}
+              onClick={puedeEditar ? () => onEditar(fila) : undefined}
+            >
               <td className={`${GRILLA} ${CONCEPTO} overflow-hidden ${FONDO_FILA}`}>
                 <ConceptoFila fila={fila} onEditar={() => onEditar(fila)} />
               </td>
@@ -259,13 +265,14 @@ function Celda({
   hoy: string
   onPagar: (compromisoId: string) => void
 }) {
+  const puedeEditar = usePermisosFinanzas().agenda
   const [ancla, setAncla] = useState<HTMLButtonElement | null>(null)
   const celda = fila.porDia[dia.fecha]
   if (!celda || (celda.planificadoCentavos <= 0 && celda.pagadoCentavos <= 0)) return null
   const pagoCompleto = estaPago(fila)
   const faltaEnElDia = celda.planificadoCentavos > celda.pagadoCentavos
   const tonoPlan = pagoCompleto ? 'pagado' : dia.fecha < hoy ? 'vencido' : 'aPagar'
-  const puedePagar = dia.esHoy && puedePagarFila(fila) && faltaEnElDia
+  const puedePagar = puedeEditar && dia.esHoy && puedePagarFila(fila) && faltaEnElDia
   const lineas = fila.pagosResumen ?? []
   const abrir = (boton: HTMLButtonElement) => setAncla(boton)
   const monto = (centavos: number, clase: string, conTilde: boolean) =>

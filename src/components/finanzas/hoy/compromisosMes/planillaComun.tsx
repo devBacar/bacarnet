@@ -6,9 +6,11 @@ import { formatMoneyCentavos } from '../../formatMoney'
 import { montoCorto } from '../montoCorto'
 import type { FilaCompromisoMes, MonedaCompromiso, MontosMoneda } from '../../../../services/finanzasCompromisosMesApi'
 import type { TonoMonto } from './semanasDelMes'
+import { usePermisosFinanzas } from '../../permisosFinanzas'
 import { claseTono, detalleCompromiso, montosVacios, tituloMontos } from './planillaModelo'
 
 export function LeyendaPlanilla() {
+  const puedeEditar = usePermisosFinanzas().agenda
   return (
     <p className="flex flex-wrap items-center gap-x-1.5 px-3 py-2 text-[13px] text-neutral-600 dark:text-neutral-300">
       <span className="font-medium text-red-600 dark:text-red-400">rojo</span>
@@ -23,10 +25,14 @@ export function LeyendaPlanilla() {
       </span>
       <span className="font-medium text-neutral-900 dark:text-gray-100">negro</span>
       <span>= a pagar</span>
-      <span aria-hidden className="text-neutral-400">
-        ·
-      </span>
-      <span>Tocá un compromiso para cambiarlo.</span>
+      {puedeEditar ? (
+        <>
+          <span aria-hidden className="text-neutral-400">
+            ·
+          </span>
+          <span>Tocá un compromiso para cambiarlo.</span>
+        </>
+      ) : null}
     </p>
   )
 }
@@ -49,6 +55,8 @@ export function PieGruposVacios({
 }
 
 export function BotonAgregar({ onClick }: { onClick: () => void }) {
+  const puedeEditar = usePermisosFinanzas().agenda
+  if (!puedeEditar) return null
   return (
     <button
       type="button"
@@ -64,6 +72,7 @@ export function BotonAgregar({ onClick }: { onClick: () => void }) {
 }
 
 export function ConceptoFila({ fila, onEditar }: { fila: FilaCompromisoMes; onEditar: () => void }) {
+  const puedeEditar = usePermisosFinanzas().agenda
   const detalle = detalleCompromiso(fila)
   const titulo = fila.observacion ? `${fila.concepto} — ${fila.observacion}` : fila.concepto
   return (
@@ -76,17 +85,19 @@ export function ConceptoFila({ fila, onEditar }: { fila: FilaCompromisoMes; onEd
           {detalle}
         </p>
       </div>
-      <button
-        type="button"
-        aria-label="Cambiar"
-        className="mt-0.5 shrink-0 rounded p-0.5 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-zinc-700 dark:hover:text-gray-100"
-        onClick={(event) => {
-          event.stopPropagation()
-          onEditar()
-        }}
-      >
-        <Pencil className="h-3.5 w-3.5" aria-hidden />
-      </button>
+      {puedeEditar ? (
+        <button
+          type="button"
+          aria-label="Cambiar"
+          className="mt-0.5 shrink-0 rounded p-0.5 text-neutral-500 hover:bg-neutral-200 hover:text-neutral-800 dark:text-neutral-400 dark:hover:bg-zinc-700 dark:hover:text-gray-100"
+          onClick={(event) => {
+            event.stopPropagation()
+            onEditar()
+          }}
+        >
+          <Pencil className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      ) : null}
     </div>
   )
 }

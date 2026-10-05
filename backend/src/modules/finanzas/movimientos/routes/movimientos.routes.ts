@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { enriquecerContrapartes } from '../../contraparte/services/enriquecer-contrapartes.js'
 import {
   MovimientoAnotacionError,
@@ -34,7 +34,7 @@ finanzasMovimientosRouter.get('/', async (req, res) => {
   }
 })
 
-finanzasMovimientosRouter.post('/contrapartes/completar', async (_req, res) => {
+finanzasMovimientosRouter.post('/contrapartes/completar', requireFinanzasPermiso('finanzas_categorias'), async (_req, res) => {
   try {
     const resultado = await enriquecerContrapartes()
     res.json(resultado)
@@ -45,7 +45,7 @@ finanzasMovimientosRouter.post('/contrapartes/completar', async (_req, res) => {
   }
 })
 
-finanzasMovimientosRouter.patch('/:id', async (req, res) => {
+finanzasMovimientosRouter.patch('/:id', requireFinanzasPermiso('finanzas_categorias'), async (req, res) => {
   try {
     const id = req.params.id
     if (!id || Array.isArray(id)) {

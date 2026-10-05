@@ -9,6 +9,7 @@ import {
   canAccessCaja,
   canBrowseAllCajas,
   isFinanzasCajaLider,
+  puedeCerrarCaja,
 } from './caja.access.js'
 import {
   cajaHasCierrePendienteAprobacion,
@@ -671,8 +672,8 @@ export async function cerrarCaja(user: AuthedUser, cajaId: string, body: Record<
   if (caja.tipo !== 'chica') {
     throw new Error('Solo las cajas chicas tienen cierre de caja')
   }
-  if (!canAccessCaja(user, caja.responsableUid)) {
-    throw new Error('No tenés acceso a esta caja')
+  if (!puedeCerrarCaja(user, caja.responsableUid)) {
+    throw new Error('Solo el encargado de esta caja o el líder pueden cerrarla')
   }
   if (await cajaHasCierrePendienteAprobacion(cajaId)) {
     throw new Error('Ya hay un cierre pendiente de aprobación para esta caja')

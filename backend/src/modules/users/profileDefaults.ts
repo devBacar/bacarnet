@@ -20,6 +20,13 @@ export const EXTERNAL_PENDING_PERMISSIONS = {
   super_admin: false,
   rag_assistant: false,
   view_finanzas: false,
+  finanzas_agenda: false,
+  finanzas_cheques: false,
+  finanzas_categorias: false,
+  finanzas_transferencias: false,
+  finanzas_destinatarios: false,
+  finanzas_saldos: false,
+  manage_finanzas_caja: false,
 } as const
 
 export const DEFAULT_PERMISSIONS = {
@@ -32,6 +39,13 @@ export const DEFAULT_PERMISSIONS = {
   super_admin: false,
   rag_assistant: false,
   view_finanzas: false,
+  finanzas_agenda: false,
+  finanzas_cheques: false,
+  finanzas_categorias: false,
+  finanzas_transferencias: false,
+  finanzas_destinatarios: false,
+  finanzas_saldos: false,
+  manage_finanzas_caja: false,
 } as const
 
 export const SUPER_ADMIN_PERMISSIONS = {
@@ -44,6 +58,12 @@ export const SUPER_ADMIN_PERMISSIONS = {
   super_admin: true,
   rag_assistant: true,
   view_finanzas: true,
+  finanzas_agenda: true,
+  finanzas_cheques: true,
+  finanzas_categorias: true,
+  finanzas_transferencias: true,
+  finanzas_destinatarios: true,
+  finanzas_saldos: true,
   manage_finanzas_caja: true,
 } as const
 

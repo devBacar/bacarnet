@@ -3,7 +3,7 @@ import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middlew
 import { CajaDiaError, getCajaDia, listarDetallesCaja } from '../services/caja-dia.service.js'
 
 /**
- * No está montado. Hay que colgarlo en `/api/finanzas/caja-dia`.
+ * Montado en `/api/finanzas/caja-dia`.
  * GET /?fecha=YYYY-MM-DD arma la planilla. GET /detalles lista las palabras.
  */
 export const finanzasCajaDiaRouter = Router()

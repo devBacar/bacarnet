@@ -18,4 +18,7 @@ export const queryKeys = {
   links: {
     list: () => ['links', 'list'] as const,
   },
+  finanzas: {
+    cajasAcceso: (uid: string | undefined) => ['finanzas', 'cajas', 'acceso', uid ?? 'anon'] as const,
+  },
 } as const

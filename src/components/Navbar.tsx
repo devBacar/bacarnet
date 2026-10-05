@@ -1,10 +1,13 @@
+import { useQuery } from '@tanstack/react-query'
 import { Menu } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { useAuth } from '../context'
 import { useGlobalSettings } from '../context/GlobalSettingsContext'
 import { useBoardsVisibility } from '../hooks/useBoardsVisibility'
-import { DEFAULT_PERMISSIONS, hasFinanzasAccess, isExternalAccount, isSuperAdmin } from '../services/userService'
+import { queryKeys } from '../lib/queryKeys'
+import { fetchCajasAcceso } from '../services/finanzasCajasApi'
+import { DEFAULT_PERMISSIONS, isExternalAccount, isSuperAdmin, permisosFinanzasDe } from '../services/userService'
 import { AppHeader } from './AppHeader'
 import { MobileNavDrawer } from './MobileNavDrawer'
 import { NavAccountActions } from './NavAccountActions'
@@ -35,7 +38,7 @@ function MainNavLink({ item, className }: { item: MainNavItem; className: string
 }
 
 export function Navbar() {
-  const { userProfile } = useAuth()
+  const { user, userProfile } = useAuth()
   const { settings } = useGlobalSettings()
   const logout = useLogout()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -45,6 +48,15 @@ export function Navbar() {
   const canAccessAudit = isSuperAdmin(userProfile)
   const boardsVisible = useBoardsVisibility()
   const canAccessBoards = boardsVisible === true
+  const permisosFinanzas = permisosFinanzasDe(userProfile)
+  const finanzasPorPermiso = permisosFinanzas.ver || permisosFinanzas.liderCajas
+  const cajasAcceso = useQuery({
+    queryKey: queryKeys.finanzas.cajasAcceso(user?.uid),
+    queryFn: fetchCajasAcceso,
+    enabled: Boolean(user) && settings.finanzasEnabled && !finanzasPorPermiso,
+    staleTime: 5 * 60_000,
+  })
+  const finanzasAccess = finanzasPorPermiso || cajasAcceso.data === true
 
   const items = useMemo(
     () =>
@@ -56,7 +68,7 @@ export function Navbar() {
         directoryEnabled: settings.directoryEnabled,
         resourcesEnabled: settings.resourcesEnabled,
         finanzasEnabled: settings.finanzasEnabled,
-        finanzasAccess: hasFinanzasAccess(userProfile),
+        finanzasAccess,
         canAccessBoards,
         canAccessAudit,
       }),
@@ -67,10 +79,10 @@ export function Navbar() {
       permissions.view_directory,
       permissions.view_drive,
       permissions.view_links,
+      finanzasAccess,
       settings.directoryEnabled,
       settings.finanzasEnabled,
       settings.resourcesEnabled,
-      userProfile,
     ],
   )
 

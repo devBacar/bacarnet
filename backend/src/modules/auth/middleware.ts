@@ -7,11 +7,72 @@ import { normalizeActionGrants, type ActionGrants } from '../drive/governanceAct
 export interface AuthedUserPermissions {
   super_admin?: boolean
   view_drive?: boolean
+  /** Ver todas las pantallas de Finanzas. */
   view_finanzas?: boolean
+  /** Cargar, editar, pagar y reprogramar compromisos y cobros. */
+  finanzas_agenda?: boolean
+  /** Importar, ingresar y cambiar el estado de cheques. */
+  finanzas_cheques?: boolean
+  /** Categorías, reglas y anotaciones de movimientos. */
+  finanzas_categorias?: boolean
+  /** Confeccionar, cancelar y confirmar el movimiento de una transferencia. */
+  finanzas_transferencias?: boolean
+  /** Alta, edición y baja de destinatarios. */
+  finanzas_destinatarios?: boolean
+  /** Descubierto, saldo manual, reinicio USD e historial de posición. */
+  finanzas_saldos?: boolean
   /** Líder de caja chica: crear cajas, reasignar responsable, aprobar rendiciones. */
   manage_finanzas_caja?: boolean
   manage_users?: boolean
   rag_assistant?: boolean
+}
+
+export type FinanzasPermisoClave =
+  | 'finanzas_agenda'
+  | 'finanzas_cheques'
+  | 'finanzas_categorias'
+  | 'finanzas_transferencias'
+  | 'finanzas_destinatarios'
+  | 'finanzas_saldos'
+
+export const MENSAJE_FINANZAS_PERMISO: Record<FinanzasPermisoClave, string> = {
+  finanzas_agenda:
+    'No tenés permiso para cargar o pagar compromisos y cobros. Pedíselo a quien administra los usuarios.',
+  finanzas_cheques:
+    'No tenés permiso para cargar o cambiar cheques. Pedíselo a quien administra los usuarios.',
+  finanzas_categorias:
+    'No tenés permiso para administrar categorías y reglas. Pedíselo a quien administra los usuarios.',
+  finanzas_transferencias:
+    'No tenés permiso para armar transferencias. Pedíselo a quien administra los usuarios.',
+  finanzas_destinatarios:
+    'No tenés permiso para administrar destinatarios. Pedíselo a quien administra los usuarios.',
+  finanzas_saldos:
+    'No tenés permiso para cambiar saldos y descubiertos. Pedíselo a quien administra los usuarios.',
+}
+
+function permisoVerdadero(raw: Record<string, unknown>, clave: string): boolean {
+  return raw[clave] === true
+}
+
+export function permisosDesdePerfil(permissionsRaw: unknown): AuthedUserPermissions {
+  if (!permissionsRaw || typeof permissionsRaw !== 'object' || Array.isArray(permissionsRaw)) {
+    return {}
+  }
+  const raw = permissionsRaw as Record<string, unknown>
+  return {
+    super_admin: permisoVerdadero(raw, 'super_admin'),
+    view_drive: permisoVerdadero(raw, 'view_drive'),
+    view_finanzas: permisoVerdadero(raw, 'view_finanzas'),
+    finanzas_agenda: permisoVerdadero(raw, 'finanzas_agenda'),
+    finanzas_cheques: permisoVerdadero(raw, 'finanzas_cheques'),
+    finanzas_categorias: permisoVerdadero(raw, 'finanzas_categorias'),
+    finanzas_transferencias: permisoVerdadero(raw, 'finanzas_transferencias'),
+    finanzas_destinatarios: permisoVerdadero(raw, 'finanzas_destinatarios'),
+    finanzas_saldos: permisoVerdadero(raw, 'finanzas_saldos'),
+    manage_finanzas_caja: permisoVerdadero(raw, 'manage_finanzas_caja'),
+    manage_users: permisoVerdadero(raw, 'manage_users'),
+    rag_assistant: permisoVerdadero(raw, 'rag_assistant'),
+  }
 }
 
 export interface AuthedUser {
@@ -125,20 +186,7 @@ export async function requireWorkspaceUser(
     }
 
     const role = profile.get('role')
-    const permissionsRaw = profile.get('permissions')
-    const permissions: AuthedUserPermissions =
-      permissionsRaw && typeof permissionsRaw === 'object' && !Array.isArray(permissionsRaw)
-        ? {
-            super_admin:
-              (permissionsRaw as Record<string, unknown>).super_admin === true,
-            view_drive: (permissionsRaw as Record<string, unknown>).view_drive === true,
-            view_finanzas: (permissionsRaw as Record<string, unknown>).view_finanzas === true,
-            manage_finanzas_caja:
-              (permissionsRaw as Record<string, unknown>).manage_finanzas_caja === true,
-            manage_users: (permissionsRaw as Record<string, unknown>).manage_users === true,
-            rag_assistant: (permissionsRaw as Record<string, unknown>).rag_assistant === true,
-          }
-        : {}
+    const permissions = permisosDesdePerfil(profile.get('permissions'))
     const managedRaw = profile.get('managedAreaIds')
     const managedAreaIds = Array.isArray(managedRaw)
       ? managedRaw.filter((id): id is string => typeof id === 'string' && id.length > 0)
@@ -273,6 +321,46 @@ export async function requireViewFinanzas(
   } catch (err) {
     logError('Fallo al verificar permiso view_finanzas', err)
     res.status(500).json({ error: 'No se pudo verificar el acceso a Finanzas' })
+  }
+}
+
+/**
+ * Acción de Finanzas: super admin pasa.
+ * El resto necesita el módulo habilitado, view_finanzas y la clave.
+ * Un líder de cajas sin view_finanzas no entra por acá: sigue solo en Cajas.
+ */
+export function requireFinanzasPermiso(clave: FinanzasPermisoClave) {
+  return async function requireFinanzasPermisoMiddleware(
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<void> {
+    const user = req.authedUser
+    if (!user) {
+      res.status(401).json({ error: 'No autenticado' })
+      return
+    }
+
+    if (isSuperAdminUser(user)) {
+      next()
+      return
+    }
+
+    try {
+      const moduleEnabled = await isFinanzasModuleEnabled()
+      if (!moduleEnabled) {
+        res.status(403).json({ error: 'Finanzas no está habilitado' })
+        return
+      }
+      if (user.permissions.view_finanzas !== true || user.permissions[clave] !== true) {
+        res.status(403).json({ error: MENSAJE_FINANZAS_PERMISO[clave] })
+        return
+      }
+      next()
+    } catch (err) {
+      logError(`Fallo al verificar permiso ${clave}`, err)
+      res.status(500).json({ error: 'No se pudo verificar el permiso' })
+    }
   }
 }
 

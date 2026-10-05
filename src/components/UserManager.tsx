@@ -24,6 +24,15 @@ import {
 } from '../services/userService'
 import { resetUserPassword } from '../services/usersApi'
 import { isValidReason, REASON_REQUIRED_ERROR, REASON_REQUIRED_LABEL } from '../utils/reasonValidation'
+import {
+  PERFILES_FINANZAS,
+  apagarFinanzasSinVista,
+  flagsFinanzasDe,
+  perfilDePermisos,
+  permisosDePerfil,
+  type FlagsPermisosFinanzas,
+  type PerfilFinanzas,
+} from './finanzas/permisosFinanzas'
 
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false
@@ -33,7 +42,7 @@ function arraysEqual(a: string[], b: string[]): boolean {
 }
 
 const PERMISSION_FIELDS: {
-  key: 'view_directory' | 'view_drive' | 'view_finanzas' | 'rag_assistant'
+  key: 'view_directory' | 'view_drive' | 'rag_assistant'
   label: string
   description: string
 }[] = [
@@ -48,14 +57,65 @@ const PERMISSION_FIELDS: {
     description: 'Muestra Archivos en la barra y permite /recursos',
   },
   {
-    key: 'view_finanzas',
-    label: 'Ver finanzas',
-    description: 'Permite acceder a /finanzas/cuentas cuando el módulo Finanzas está habilitado',
-  },
-  {
     key: 'rag_assistant',
     label: 'Asistente BacarNet',
     description: 'Muestra el chat del asistente RAG (piloto Sistemas)',
+  },
+]
+
+const INTERRUPTORES_FINANZAS: {
+  key: keyof FlagsPermisosFinanzas
+  label: string
+  description: string
+  pideVer: boolean
+}[] = [
+  {
+    key: 'view_finanzas',
+    label: 'Ver todas las pantallas',
+    description: 'Hoy, Saldos, Agenda, Cajas, Transferencias, Movimientos, Extractos y Cheques.',
+    pideVer: false,
+  },
+  {
+    key: 'finanzas_agenda',
+    label: 'Cargar y pagar la agenda',
+    description: 'Compromisos y cobros: cargarlos, pagarlos, marcarlos como pagados y cambiarles la fecha.',
+    pideVer: true,
+  },
+  {
+    key: 'finanzas_cheques',
+    label: 'Cheques',
+    description: 'Importar, ingresar y cambiar el estado de los cheques.',
+    pideVer: true,
+  },
+  {
+    key: 'finanzas_categorias',
+    label: 'Categorías y reglas',
+    description: 'Ordenar categorías, reglas y anotar los movimientos.',
+    pideVer: true,
+  },
+  {
+    key: 'finanzas_transferencias',
+    label: 'Armar y cancelar transferencias',
+    description: 'Igual se firman con token en Interbanking.',
+    pideVer: true,
+  },
+  {
+    key: 'finanzas_destinatarios',
+    label: 'Destinatarios',
+    description: 'Agregar, editar y borrar a quién se le transfiere.',
+    pideVer: true,
+  },
+  {
+    key: 'finanzas_saldos',
+    label: 'Saldos y descubierto',
+    description: 'Cambiar el descubierto, el saldo cargado a mano y guardar el historial.',
+    pideVer: true,
+  },
+  {
+    key: 'manage_finanzas_caja',
+    label: 'Líder de cajas',
+    description: 'Crear cajas, fondear, aprobar cierres.',
+    pideVer: false,
   },
 ]
 
@@ -74,14 +134,20 @@ function PermissionSwitch({
   onChange,
   label,
   description,
+  disabled = false,
 }: {
   checked: boolean
   onChange: (value: boolean) => void
   label: string
   description: string
+  disabled?: boolean
 }) {
   return (
-    <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-neutral-100 px-4 py-3 transition-colors hover:bg-neutral-50 dark:border-zinc-800 dark:hover:bg-zinc-950">
+    <label
+      className={`flex items-start justify-between gap-4 rounded-lg border border-neutral-100 px-4 py-3 transition-colors dark:border-zinc-800 ${
+        disabled ? 'opacity-60' : 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-zinc-950'
+      }`}
+    >
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-neutral-900 dark:text-gray-100">{label}</p>
         <p className="mt-0.5 text-xs text-neutral-500 dark:text-gray-400">{description}</p>
@@ -90,9 +156,10 @@ function PermissionSwitch({
         type="button"
         role="switch"
         aria-checked={checked}
+        disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-          checked ? 'bg-brand-primary' : 'bg-neutral-300'
+        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:cursor-not-allowed ${
+          checked ? 'bg-brand-primary' : 'bg-neutral-300 dark:bg-zinc-600'
         }`}
       >
         <span
@@ -112,8 +179,11 @@ interface UserPermissionsDrawerProps {
 }
 
 function UserPermissionsDrawer({ user, onClose, onSaved }: UserPermissionsDrawerProps) {
-  const [permissions, setPermissions] = useState<UserPermissions>({ ...user.permissions })
+  const [permissions, setPermissions] = useState<UserPermissions>(() =>
+    apagarFinanzasSinVista({ ...user.permissions, ...flagsFinanzasDe(user.permissions) }),
+  )
   const [saving, setSaving] = useState(false)
+  const perfil = perfilDePermisos(flagsFinanzasDe(permissions))
 
   useDrawerEscape(onClose)
 
@@ -133,10 +203,25 @@ function UserPermissionsDrawer({ user, onClose, onSaved }: UserPermissionsDrawer
   }
 
   const togglePermission = (
-    key: 'view_directory' | 'view_drive' | 'view_finanzas' | 'rag_assistant',
+    key: 'view_directory' | 'view_drive' | 'rag_assistant',
     value: boolean,
   ) => {
     setPermissions((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const elegirPerfil = (siguiente: PerfilFinanzas) => {
+    if (siguiente === 'personalizado') {
+      setPermissions((prev) => ({ ...prev }))
+      return
+    }
+    setPermissions((prev) => apagarFinanzasSinVista({ ...prev, ...permisosDePerfil(siguiente) }))
+  }
+
+  const toggleFinanzas = (key: keyof FlagsPermisosFinanzas, value: boolean) => {
+    setPermissions((prev) => {
+      const next = { ...prev, [key]: value }
+      return apagarFinanzasSinVista(next)
+    })
   }
 
   return (
@@ -183,6 +268,43 @@ function UserPermissionsDrawer({ user, onClose, onSaved }: UserPermissionsDrawer
                 description={field.description}
               />
             ))}
+          </div>
+
+          <div className="mt-6">
+            <p className="text-sm font-semibold text-neutral-900 dark:text-gray-100">Finanzas</p>
+            <label htmlFor="perfil-finanzas" className="mt-3 block text-xs text-neutral-500 dark:text-gray-400">
+              Perfil
+            </label>
+            <select
+              id="perfil-finanzas"
+              value={perfil}
+              onChange={(event) => elegirPerfil(event.target.value as PerfilFinanzas)}
+              className="input-brand-focus mt-1 w-full rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100"
+            >
+              {PERFILES_FINANZAS.map((opcion) => (
+                <option key={opcion.id} value={opcion.id}>
+                  {opcion.label}
+                </option>
+              ))}
+            </select>
+            <div className="mt-3 space-y-2">
+              {INTERRUPTORES_FINANZAS.map((field) => {
+                const apagado = field.pideVer && !permissions.view_finanzas
+                return (
+                  <PermissionSwitch
+                    key={field.key}
+                    checked={apagado ? false : permissions[field.key] === true}
+                    disabled={apagado}
+                    onChange={(value) => toggleFinanzas(field.key, value)}
+                    label={field.label}
+                    description={field.description}
+                  />
+                )
+              })}
+            </div>
+            <p className="mt-3 text-xs text-neutral-500 dark:text-gray-400">
+              El encargado de una caja chica se asigna desde Finanzas › Cajas.
+            </p>
           </div>
         </div>
 

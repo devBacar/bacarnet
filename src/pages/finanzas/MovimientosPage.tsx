@@ -7,6 +7,7 @@ import { CategoriasGestionModal } from '../../components/finanzas/CategoriasGest
 import { CeldaContraparte } from '../../components/finanzas/ContraparteMovimiento'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
+import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
@@ -24,7 +25,6 @@ import {
   type MovimientoListItem,
   type MovimientoTipo,
 } from '../../services/finanzasMovimientosApi'
-import { isSuperAdmin } from '../../services/userService'
 import {
   CategoriaMovimientoChip,
   CategoriaMovimientoModal,
@@ -61,9 +61,8 @@ function formatFecha(iso: string): string {
 }
 
 export function FinanzasMovimientosPage() {
-  const { user, userProfile } = useAuth()
-  const puedeCompletar =
-    isSuperAdmin(userProfile) || userProfile?.permissions.manage_finanzas_caja === true
+  const { user } = useAuth()
+  const puedeCategorias = usePermisosFinanzas().categorias
   const queryClient = useQueryClient()
   // El Cashflow manda acá con ?cuenta=&desde=&hasta=&q= para categorizar lo que falta.
   const [searchParams] = useSearchParams()
@@ -242,6 +241,7 @@ export function FinanzasMovimientosPage() {
             Todo lo que entró y salió de las cuentas corrientes, tal como lo informa el banco.
           </p>
         </div>
+        {puedeCategorias ? (
         <div className="sm:max-w-xs sm:text-right">
           <button
             type="button"
@@ -251,20 +251,19 @@ export function FinanzasMovimientosPage() {
             <Tags className="h-4 w-4" aria-hidden />
             Ordenar categorías
           </button>
-          {puedeCompletar ? (
-            <button
-              type="button"
-              className="mt-2 inline-flex rounded-lg border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              disabled={completando}
-              onClick={() => void completarAhora()}
-            >
-              {completando ? 'Completando…' : 'Completar contrapartes'}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="mt-2 inline-flex rounded-lg border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            disabled={completando}
+            onClick={() => void completarAhora()}
+          >
+            {completando ? 'Completando…' : 'Completar contrapartes'}
+          </button>
           <p className="text-body-muted mt-1.5 text-xs">
             Crear, agrupar o unir categorías y clasificar lo que quedó sin clasificar.
           </p>
         </div>
+        ) : null}
       </header>
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -395,7 +394,10 @@ export function FinanzasMovimientosPage() {
                     <td className="whitespace-nowrap px-3 py-2">{formatFecha(row.fechaProceso)}</td>
                     <td className="px-3 py-2">{row.descripcion}</td>
                     <td className="px-3 py-2">
-                      <CeldaContraparte contraparte={row.contraparte} onCompletar={() => setEditando(row)} />
+                      <CeldaContraparte
+                        contraparte={row.contraparte}
+                        onCompletar={puedeCategorias ? () => setEditando(row) : undefined}
+                      />
                     </td>
                     <td className="px-3 py-2">
                       <span
@@ -416,7 +418,7 @@ export function FinanzasMovimientosPage() {
                       <CategoriaMovimientoChip
                         categoria={categorias.find((categoria) => categoria.id === row.categoriaId) ?? null}
                         nota={row.nota}
-                        onClick={() => setEditando(row)}
+                        onClick={puedeCategorias ? () => setEditando(row) : undefined}
                       />
                     </td>
                   </tr>
@@ -455,7 +457,7 @@ export function FinanzasMovimientosPage() {
       ) : null}
 
       <CategoriaMovimientoModal
-        movimiento={editando}
+        movimiento={puedeCategorias ? editando : null}
         categorias={categorias}
         saving={guardando}
         onClose={() => setEditando(null)}
@@ -463,7 +465,7 @@ export function FinanzasMovimientosPage() {
         onCrear={crearYRecordar}
       />
       <CategoriasGestionModal
-        open={gestionAbierta}
+        open={puedeCategorias && gestionAbierta}
         categorias={categorias}
         onClose={() => setGestionAbierta(false)}
         onCrear={crearCategoriaConGrupo}

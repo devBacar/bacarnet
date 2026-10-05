@@ -240,7 +240,7 @@ export function FinanzasExtractosPage() {
       </header>
 
       <div className="mb-4 max-w-xl">
-        <label className="text-sm">
+        <label className="text-sm" data-tour="extractos-cuenta">
           <span className="text-body-muted mb-1 block font-medium">Cuenta</span>
           <select
             className={finanzasInputClass}
@@ -257,7 +257,7 @@ export function FinanzasExtractosPage() {
         </label>
       </div>
 
-      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3" data-tour="extractos-periodo">
         <button type="button" className={atajoClass(modo === 'mes-pasado')} aria-pressed={modo === 'mes-pasado'} onClick={() => elegirModo('mes-pasado')}>
           Mes pasado
         </button>
@@ -287,11 +287,12 @@ export function FinanzasExtractosPage() {
       ) : null}
 
       <div className="mb-4 flex flex-col gap-2 sm:flex-row">
-        <button type="button" className="btn-primary rounded-xl px-5 py-3 text-base font-semibold disabled:opacity-60" disabled={!puedePedir} onClick={() => void bajarExcel()}>
+        <button type="button" data-tour="extractos-bajar" className="btn-primary rounded-xl px-5 py-3 text-base font-semibold disabled:opacity-60" disabled={!puedePedir} onClick={() => void bajarExcel()}>
           {bajando ? 'Bajando…' : 'Bajar Excel'}
         </button>
         <button
           type="button"
+          data-tour="extractos-ver"
           className="rounded-xl border border-neutral-300 bg-white px-5 py-3 text-base font-semibold text-neutral-900 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100"
           disabled={!puedePedir}
           onClick={verEnPantalla}

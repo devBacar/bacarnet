@@ -281,13 +281,14 @@ export function PositionHistorySection({ rows, isLoading, error }: PositionHisto
       ) : (
         <>
           <div className="mt-2 md:hidden">
-            {preparados.map(({ row, bancos, dia, syncError }) => {
+            {preparados.map(({ row, bancos, dia, syncError }, indice) => {
               const open = expanded === row.fechaId
               const toggle = () => setExpanded(open ? null : row.fechaId)
               return (
                 <div key={row.fechaId} className="border-b border-neutral-200 dark:border-zinc-700">
                   <button
                     type="button"
+                    data-tour={indice === 0 ? 'saldos-historial-dia' : undefined}
                     onClick={toggle}
                     aria-expanded={open}
                     className={`w-full px-0.5 py-2.5 text-left text-sm ${
@@ -335,7 +336,7 @@ export function PositionHistorySection({ rows, isLoading, error }: PositionHisto
                     </dl>
                   </button>
                   {open ? (
-                    <div className="bg-[var(--color-primary-light)] px-[10px] pb-[10px]">
+                    <div className="bg-[var(--color-primary-light)] px-[10px] pb-[10px]" data-tour="saldos-historial-detalle">
                       <DetalleBancos bancos={bancos} syncError={syncError} lista />
                     </div>
                   ) : null}
@@ -360,13 +361,14 @@ export function PositionHistorySection({ rows, isLoading, error }: PositionHisto
                 </tr>
               </thead>
               <tbody>
-                {preparados.map(({ row, bancos, dia, syncError }) => {
+                {preparados.map(({ row, bancos, dia, syncError }, indice) => {
                   const open = expanded === row.fechaId
                   const toggle = () => setExpanded(open ? null : row.fechaId)
                   const td = open ? tdAbierto : tdCerrado
                   return (
                     <Fragment key={row.fechaId}>
                       <tr
+                        data-tour={indice === 0 ? 'saldos-historial-dia' : undefined}
                         onClick={toggle}
                         className={
                           open
@@ -411,6 +413,7 @@ export function PositionHistorySection({ rows, isLoading, error }: PositionHisto
                         <tr>
                           <td
                             colSpan={7}
+                            data-tour="saldos-historial-detalle"
                             className="border-b border-neutral-200 bg-[var(--color-primary-light)] px-[10px] pt-0 pb-[10px] dark:border-zinc-700"
                           >
                             <DetalleBancos bancos={bancos} syncError={syncError} lista={false} />

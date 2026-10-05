@@ -130,6 +130,7 @@ export function PosicionResumen({
                     <td className={`${td} text-right`}>
                       <button
                         type="button"
+                        data-tour="saldos-banco-saldo"
                         onClick={() => onSelect('ARS', banco.bancoNombre)}
                         className={celdaNumero}
                       >

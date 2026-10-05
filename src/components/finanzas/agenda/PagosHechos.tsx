@@ -156,7 +156,7 @@ export function PagosHechos() {
         <p className="px-4 py-6 text-[13px] text-neutral-500 dark:text-neutral-400">No hay pagos en este mes.</p>
       ) : (
         <>
-          <div className="hidden md:block">
+          <div className="hidden md:block" data-tour="agenda-hechos-lista">
             <table className="w-full table-fixed border-collapse text-left">
               <thead>
                 <tr className="border-b border-neutral-200 text-[13px] text-neutral-500 dark:border-zinc-700 dark:text-neutral-400">
@@ -219,7 +219,7 @@ export function PagosHechos() {
             </table>
           </div>
 
-          <div className="md:hidden">
+          <div className="md:hidden" data-tour="agenda-hechos-lista">
             {grupos.map((grupo) => (
               <div
                 key={grupo.compromisoId}

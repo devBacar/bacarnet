@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
+import { buscarElemento } from './recorridoDom'
 import {
   esCelular,
   posicionGlobo,
-  rectUtil,
   scrollDestino,
   type Caja,
   type PosicionGlobo,
@@ -19,10 +19,22 @@ interface RecorridoGloboProps {
   /** data-tour a recortar. Vacío: el globo queda centrado, sin recorte. */
   selector: string | null
   esFinal: boolean
+  /** Aviso ámbar: la guía pide un permiso que la persona no tiene. */
+  aviso?: string | null
+  /** Guías: la persona tiene que poder tocar la pantalla; el fondo oscuro no bloquea. */
+  dejarPasar?: boolean
+  /** Paso "tocar": esperamos a que la persona lo haga. */
+  esperando?: boolean
+  /** Pasaron ~8 s sin que aparezca lo esperado: ofrecer seguir solo explicando. */
+  ofrecerSalida?: boolean
+  /** No robar el foco (la persona está escribiendo en un campo). */
+  sinFoco?: boolean
   puedeAnterior: boolean
   puedeSiguiente: boolean
+  textoSalir?: string
   onAnterior: () => void
   onSiguiente: () => void
+  onVerComoSigue?: () => void
   onSalir: () => void
 }
 
@@ -33,10 +45,17 @@ export function RecorridoGlobo({
   total,
   selector,
   esFinal,
+  aviso = null,
+  dejarPasar = false,
+  esperando = false,
+  ofrecerSalida = false,
+  sinFoco = false,
   puedeAnterior,
   puedeSiguiente,
+  textoSalir = 'Salir del recorrido',
   onAnterior,
   onSiguiente,
+  onVerComoSigue,
   onSalir,
 }: RecorridoGloboProps) {
   const dialogo = useRef<HTMLDivElement>(null)
@@ -52,9 +71,9 @@ export function RecorridoGlobo({
     const celular = esCelular(viewport.width)
     const ancho = celular ? Math.max(160, viewport.width - 24) : Math.min(ANCHO_GLOBO, viewport.width - 24)
     if (nodo) nodo.style.width = `${ancho}px`
-    const el = selector ? document.querySelector<HTMLElement>(`[data-tour="${selector}"]`) : null
+    const el = selector ? buscarElemento(selector) : null
     const rect = el?.getBoundingClientRect()
-    const caja = rect && rectUtil(rect) ? inflar(rect, 8, viewport) : null
+    const caja = rect ? inflar(rect, 8, viewport) : null
     const alto = nodo?.offsetHeight ?? 180
     const puesto = posicionGlobo({
       objetivo: caja,
@@ -62,17 +81,17 @@ export function RecorridoGlobo({
       viewport,
       celular,
     })
-    setObjetivo(caja)
-    setPos(puesto)
+    setObjetivo((previo) => (mismaCaja(previo, caja) ? previo : caja))
+    setPos((previo) => (mismaPosicion(previo, puesto) ? previo : puesto))
   }, [selector])
 
   useLayoutEffect(() => {
     if (selector) {
-      const el = document.querySelector<HTMLElement>(`[data-tour="${selector}"]`)
+      const el = buscarElemento(selector)
       if (el) acercar(el)
     }
     medir()
-  }, [medir, selector, titulo, texto])
+  }, [medir, selector, titulo, texto, aviso, esperando, ofrecerSalida])
 
   useEffect(() => {
     const actualizar = () => medir()
@@ -82,41 +101,49 @@ export function RecorridoGlobo({
     }
     window.addEventListener('resize', actualizar)
     window.addEventListener('scroll', actualizar, true)
-    document.addEventListener('wheel', bloquear, { passive: false })
-    document.addEventListener('touchmove', bloquear, { passive: false })
-    const el = selector ? document.querySelector<HTMLElement>(`[data-tour="${selector}"]`) : null
+    if (!dejarPasar) {
+      document.addEventListener('wheel', bloquear, { passive: false })
+      document.addEventListener('touchmove', bloquear, { passive: false })
+    }
+    const el = selector ? buscarElemento(selector) : null
     const observer = el && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(actualizar) : null
     if (el && observer) observer.observe(el)
+    // Dentro de una ventana el contenido puede moverse sin disparar scroll/resize: remedimos de a ratos.
+    const pulso = dejarPasar ? window.setInterval(actualizar, 250) : 0
     return () => {
       window.removeEventListener('resize', actualizar)
       window.removeEventListener('scroll', actualizar, true)
       document.removeEventListener('wheel', bloquear)
       document.removeEventListener('touchmove', bloquear)
       observer?.disconnect()
+      if (pulso) window.clearInterval(pulso)
     }
-  }, [medir, selector])
+  }, [medir, selector, dejarPasar])
 
   useEffect(() => {
+    if (sinFoco) return
     dialogo.current?.focus()
-  }, [titulo, texto])
+  }, [titulo, texto, sinFoco])
+
+  const fondo = dejarPasar ? 'bg-neutral-950/40' : 'bg-neutral-950/55'
 
   return createPortal(
-    <div className="fixed inset-0 z-[110]">
-      <div className="absolute inset-0" aria-hidden />
+    <div className={`fixed inset-0 z-[110] ${dejarPasar ? 'pointer-events-none' : ''}`}>
+      {!dejarPasar ? <div className="absolute inset-0" aria-hidden /> : null}
       {objetivo ? (
-        <Recorte caja={objetivo} />
+        <Recorte caja={objetivo} fondo={fondo} />
       ) : (
-        <div className="pointer-events-none absolute inset-0 bg-neutral-950/55" aria-hidden />
+        <div className={`pointer-events-none absolute inset-0 ${fondo}`} aria-hidden />
       )}
       <div
         ref={dialogo}
         role="dialog"
-        aria-modal="true"
+        aria-modal={!dejarPasar}
         aria-labelledby="recorrido-titulo"
         aria-describedby="recorrido-texto"
         tabIndex={-1}
-        onKeyDown={encerrarTab}
-        className="absolute max-h-[min(70vh,calc(100dvh-1.5rem))] max-w-full overflow-y-auto rounded-2xl border border-neutral-200 bg-white shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] dark:border-zinc-700 dark:bg-zinc-900"
+        onKeyDown={dejarPasar ? undefined : encerrarTab}
+        className="pointer-events-auto absolute max-h-[min(70vh,calc(100dvh-1.5rem))] max-w-full overflow-y-auto rounded-2xl border border-neutral-200 bg-white shadow-2xl outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] dark:border-zinc-700 dark:bg-zinc-900"
         style={{
           top: pos?.top ?? 0,
           left: pos?.left ?? 12,
@@ -130,6 +157,11 @@ export function RecorridoGlobo({
           </p>
         </div>
         <div className="px-4 py-3">
+          {aviso && !esFinal ? (
+            <p className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs leading-snug text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
+              {aviso}
+            </p>
+          ) : null}
           <p id="recorrido-texto" aria-live="polite" className="text-[15px] leading-snug text-neutral-800 dark:text-gray-100">
             {texto}
           </p>
@@ -158,7 +190,16 @@ export function RecorridoGlobo({
             >
               ‹ Anterior
             </button>
-            {puedeSiguiente && !esFinal ? (
+            {puedeSiguiente && !esFinal && esperando ? (
+              <button
+                type="button"
+                disabled
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-primary px-3 text-sm font-medium text-white opacity-50"
+              >
+                Hacelo vos y sigo
+              </button>
+            ) : null}
+            {puedeSiguiente && !esFinal && !esperando ? (
               <button
                 type="button"
                 onClick={onSiguiente}
@@ -172,9 +213,18 @@ export function RecorridoGlobo({
               onClick={onSalir}
               className="inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-medium text-neutral-600 underline-offset-2 hover:underline dark:text-gray-300"
             >
-              Salir del recorrido
+              {textoSalir}
             </button>
           </div>
+          {esperando && ofrecerSalida && onVerComoSigue ? (
+            <button
+              type="button"
+              onClick={onVerComoSigue}
+              className="mt-2 inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-3 text-sm font-medium text-amber-900 transition hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100 dark:hover:bg-amber-950/60"
+            >
+              No lo encuentro: ver cómo sigue
+            </button>
+          ) : null}
         </div>
       </div>
     </div>,
@@ -182,16 +232,16 @@ export function RecorridoGlobo({
   )
 }
 
-function Recorte({ caja }: { caja: Caja }) {
-  const fondo = 'pointer-events-none absolute bg-neutral-950/55'
+function Recorte({ caja, fondo }: { caja: Caja; fondo: string }) {
+  const panel = `pointer-events-none absolute ${fondo}`
   const derecha = caja.left + caja.width
   const abajo = caja.top + caja.height
   return (
     <div className="pointer-events-none absolute inset-0" aria-hidden>
-      <div className={`${fondo} right-0 left-0 top-0`} style={{ height: Math.max(0, caja.top) }} />
-      <div className={`${fondo} left-0`} style={{ top: caja.top, height: caja.height, width: Math.max(0, caja.left) }} />
-      <div className={fondo} style={{ top: caja.top, left: derecha, height: caja.height, right: 0 }} />
-      <div className={`${fondo} right-0 bottom-0 left-0`} style={{ top: abajo }} />
+      <div className={`${panel} right-0 left-0 top-0`} style={{ height: Math.max(0, caja.top) }} />
+      <div className={`${panel} left-0`} style={{ top: caja.top, height: caja.height, width: Math.max(0, caja.left) }} />
+      <div className={panel} style={{ top: caja.top, left: derecha, height: caja.height, right: 0 }} />
+      <div className={`${panel} right-0 bottom-0 left-0`} style={{ top: abajo }} />
       <div
         className="absolute rounded-xl"
         style={{
@@ -204,6 +254,17 @@ function Recorte({ caja }: { caja: Caja }) {
       />
     </div>
   )
+}
+
+function mismaCaja(a: Caja | null, b: Caja | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height
+}
+
+function mismaPosicion(a: PosicionGlobo | null, b: PosicionGlobo): boolean {
+  if (!a) return false
+  return a.top === b.top && a.left === b.left && a.width === b.width && a.lado === b.lado
 }
 
 function inflar(rect: DOMRect, margen: number, viewport: { width: number; height: number }): Caja {
@@ -219,17 +280,35 @@ function inflar(rect: DOMRect, margen: number, viewport: { width: number; height
   }
 }
 
+function contenedorConScroll(el: HTMLElement): HTMLElement | null {
+  let padre = el.parentElement
+  while (padre && padre !== document.body) {
+    const estilo = getComputedStyle(padre)
+    if ((estilo.overflowY === 'auto' || estilo.overflowY === 'scroll') && padre.scrollHeight > padre.clientHeight + 1) {
+      return padre
+    }
+    padre = padre.parentElement
+  }
+  return null
+}
+
 function acercar(el: HTMLElement) {
-  const rect = el.getBoundingClientRect()
   const celular = esCelular(document.documentElement.clientWidth)
-  const destino = scrollDestino({
-    rectTop: rect.top,
-    rectHeight: rect.height,
-    viewportHeight: window.innerHeight,
-    scrollY: window.scrollY,
-    celular,
-  })
-  if (destino != null) window.scrollTo({ top: destino, behavior: 'smooth' })
+  const contenedor = contenedorConScroll(el)
+  if (contenedor) {
+    // Dentro de una ventana: la movemos a ella, no a la página.
+    el.scrollIntoView({ block: celular ? 'start' : 'center', behavior: 'smooth' })
+  } else {
+    const rect = el.getBoundingClientRect()
+    const destino = scrollDestino({
+      rectTop: rect.top,
+      rectHeight: rect.height,
+      viewportHeight: window.innerHeight,
+      scrollY: window.scrollY,
+      celular,
+    })
+    if (destino != null) window.scrollTo({ top: destino, behavior: 'smooth' })
+  }
 
   let padre = el.parentElement
   while (padre && padre !== document.body) {

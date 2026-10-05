@@ -109,7 +109,15 @@ export function Vacio({ texto }: { texto: string }) {
 }
 
 /** Menú ⋯ chico con las acciones secundarias de una fila. */
-export function MenuAcciones({ opciones, etiqueta = 'Más acciones' }: { opciones: Array<{ texto: string; onClick: () => void }>; etiqueta?: string }) {
+export function MenuAcciones({
+  opciones,
+  etiqueta = 'Más acciones',
+  tour,
+}: {
+  opciones: Array<{ texto: string; onClick: () => void; tour?: string }>
+  etiqueta?: string
+  tour?: string
+}) {
   const [abierto, setAbierto] = useState(false)
   const caja = useRef<HTMLDivElement>(null)
 
@@ -130,6 +138,7 @@ export function MenuAcciones({ opciones, etiqueta = 'Más acciones' }: { opcione
         aria-label={etiqueta}
         aria-haspopup="menu"
         aria-expanded={abierto}
+        data-tour={tour}
         onClick={() => setAbierto((actual) => !actual)}
         className="rounded-md p-1 text-neutral-600 transition hover:bg-neutral-100 dark:text-gray-300 dark:hover:bg-zinc-800"
       >
@@ -145,6 +154,7 @@ export function MenuAcciones({ opciones, etiqueta = 'Más acciones' }: { opcione
               key={opcion.texto}
               type="button"
               role="menuitem"
+              data-tour={opcion.tour}
               className="block w-full rounded px-2 py-2 text-left text-[13px] text-neutral-800 hover:bg-neutral-100 dark:text-gray-100 dark:hover:bg-zinc-800"
               onClick={() => {
                 setAbierto(false)

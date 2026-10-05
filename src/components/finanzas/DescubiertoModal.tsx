@@ -58,7 +58,10 @@ export function DescubiertoModal({ cuenta, open, saving, onClose, onSave }: Desc
       aria-modal="true"
       aria-labelledby="descubierto-title"
     >
-      <div className="surface-card w-full max-w-md rounded-2xl border border-neutral-200 p-6 shadow-xl dark:border-zinc-700">
+      <div
+        className="surface-card w-full max-w-md rounded-2xl border border-neutral-200 p-6 shadow-xl dark:border-zinc-700"
+        data-tour="saldos-descubierto-ventana"
+      >
         <h2 id="descubierto-title" className="text-heading text-lg font-semibold">
           Descubierto — {cuenta.bancoNombre} CC
         </h2>
@@ -67,7 +70,7 @@ export function DescubiertoModal({ cuenta, open, saving, onClose, onSave }: Desc
           semáforo lo compara con el saldo real de cada sincronización. Dejalo vacío si la cuenta no
           tiene acuerdo.
         </p>
-        <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200">
+        <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200" data-tour="saldos-descubierto-monto">
           Límite acordado (ARS)
           <input
             type="text"
@@ -82,7 +85,7 @@ export function DescubiertoModal({ cuenta, open, saving, onClose, onSave }: Desc
             disabled={saving}
           />
         </label>
-        <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200">
+        <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200" data-tour="saldos-descubierto-desde">
           Vigente desde (opcional)
           <input
             type="date"
@@ -106,6 +109,7 @@ export function DescubiertoModal({ cuenta, open, saving, onClose, onSave }: Desc
           <button
             type="button"
             className="rounded-xl bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+            data-tour="saldos-descubierto-guardar"
             onClick={handleSave}
             disabled={saving}
           >

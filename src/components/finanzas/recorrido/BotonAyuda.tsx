@@ -1,8 +1,8 @@
-import { Compass } from 'lucide-react'
+import { LifeBuoy } from 'lucide-react'
 import { useAbrirRecorrido } from './recorridoPuente'
 
-/** Ver recorrido: en la barra (escritorio) o dentro del menú (celular). */
-export function BotonRecorrido({
+/** Ayuda de Finanzas: en la barra (escritorio) o dentro del menú (celular). */
+export function BotonAyuda({
   variante,
   alAbrir,
 }: {
@@ -25,8 +25,8 @@ export function BotonRecorrido({
         abrir?.()
       }}
     >
-      <Compass className={variante === 'barra' ? 'h-4 w-4 shrink-0' : 'h-5 w-5 shrink-0'} aria-hidden />
-      Ver recorrido
+      <LifeBuoy className={variante === 'barra' ? 'h-4 w-4 shrink-0' : 'h-5 w-5 shrink-0'} aria-hidden />
+      Ayuda
     </button>
   )
 }

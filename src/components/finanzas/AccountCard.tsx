@@ -165,6 +165,7 @@ export function AccountCard({
             <button
               type="button"
               className="justify-self-start text-sm font-medium text-brand-primary hover:underline"
+              data-tour="saldos-cambiar-descubierto"
               onClick={onEditDescubierto}
             >
               {cuenta.descubiertoCentavos != null ? 'Cambiar descubierto' : 'Cargar descubierto'}

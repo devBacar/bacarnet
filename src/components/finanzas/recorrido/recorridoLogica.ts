@@ -1,5 +1,12 @@
 import type { PermisosFinanzasEfectivos } from '../../../services/userService'
-import type { PasoRecorrido } from './pasosRecorrido'
+import {
+  ETIQUETA_PERMISO,
+  PANTALLAS,
+  tienePermiso,
+  type Guia,
+  type Pantalla,
+  type PasoRecorrido,
+} from './pasosRecorrido'
 
 export type ModoRecorrido = 'completo' | 'pantalla'
 
@@ -88,10 +95,84 @@ export function presentarPaso(
   paso: PasoRecorrido,
   permisos: PermisosFinanzasEfectivos,
 ): { texto: string; señalar: boolean } {
-  if (paso.permiso && paso.etiquetaPermiso && !permisos[paso.permiso]) {
-    return { texto: textoSinPermiso(paso.etiquetaPermiso), señalar: false }
+  if (paso.permiso && !tienePermiso(permisos, paso.permiso)) {
+    return { texto: textoSinPermiso(ETIQUETA_PERMISO[paso.permiso]), señalar: false }
   }
   return { texto: paso.texto, señalar: true }
+}
+
+/** Aviso ámbar para una guía que pide un permiso que la persona no tiene. */
+export function avisoSinPermiso(guia: Guia, permisos: PermisosFinanzasEfectivos): string | null {
+  if (!guia.permiso || tienePermiso(permisos, guia.permiso)) return null
+  return `Pide permiso de ${ETIQUETA_PERMISO[guia.permiso]}. Te lo cuento sin señalar botones.`
+}
+
+// ── Guías paso a paso ──────────────────────────────────────────────
+
+/** Cuánto esperamos a que la persona toque antes de ofrecer "No lo encuentro". */
+export const ESPERA_TOQUE_MS = 8000
+
+/** Qué data-tour tiene que aparecer para dar por hecho un paso "tocar". */
+export function selectorEsperado(pasos: readonly PasoRecorrido[], indice: number): string | null {
+  const paso = pasos[indice]
+  if (!paso || paso.tipo !== 'tocar') return null
+  return paso.espera ?? pasos[indice + 1]?.selector ?? null
+}
+
+export type EstadoEspera = 'avanzar' | 'esperando' | 'ofrecer-salida'
+
+export function evaluarEspera(input: { aparecio: boolean; transcurridoMs: number; limiteMs: number }): EstadoEspera {
+  if (input.aparecio) return 'avanzar'
+  if (input.transcurridoMs >= input.limiteMs) return 'ofrecer-salida'
+  return 'esperando'
+}
+
+export type ReaccionVentana = { tipo: 'paso'; indice: number } | { tipo: 'final' } | { tipo: 'cerrada' }
+
+/**
+ * La persona cerró la ventana a mitad de la guía. Si era el último paso, terminó bien.
+ * Si hay un paso "tocar" anterior que abría esa ventana, volvemos ahí. Si no, la guía termina.
+ */
+export function pasoAlCerrarVentana(pasos: readonly PasoRecorrido[], indice: number): ReaccionVentana {
+  const paso = pasos[indice]
+  if (!paso?.ventana) return { tipo: 'cerrada' }
+  if (indice >= pasos.length - 1) return { tipo: 'final' }
+  for (let i = indice - 1; i >= 0; i--) {
+    if (selectorEsperado(pasos, i) === paso.ventana) return { tipo: 'paso', indice: i }
+  }
+  return { tipo: 'cerrada' }
+}
+
+export function pantallaDePathname(pathname: string): Pantalla | null {
+  return PANTALLAS.find((pantalla) => pantalla.pathname === pathname) ?? null
+}
+
+/** Sin ver el módulo, solo quedan las guías de Cajas. */
+export function guiasAccesibles(guias: readonly Guia[], puedeVerResto: boolean): Guia[] {
+  return puedeVerResto ? [...guias] : guias.filter((guia) => guia.pantalla === 'cajas')
+}
+
+export interface GrupoGuias {
+  pantalla: Pantalla
+  actual: boolean
+  guias: Guia[]
+}
+
+/** Agrupa por pantalla en el orden del menú, con la pantalla actual primero. */
+export function agruparGuias(guias: readonly Guia[], pathname: string): GrupoGuias[] {
+  const actual = pantallaDePathname(pathname)
+  const grupos = PANTALLAS.map((pantalla) => ({
+    pantalla,
+    actual: pantalla.id === actual?.id,
+    guias: guias.filter((guia) => guia.pantalla === pantalla.id),
+  })).filter((grupo) => grupo.guias.length > 0)
+  const primero = grupos.filter((grupo) => grupo.actual)
+  const resto = grupos.filter((grupo) => !grupo.actual)
+  return [...primero, ...resto]
+}
+
+export function etiquetaPasos(cantidad: number): string {
+  return cantidad === 1 ? '1 paso' : `${cantidad} pasos`
 }
 
 export type MovimientoPaso = { tipo: 'paso'; indice: number } | { tipo: 'final' } | { tipo: 'igual' }

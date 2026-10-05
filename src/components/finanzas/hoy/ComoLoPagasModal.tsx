@@ -75,15 +75,18 @@ function Opcion({
   titulo,
   explicacion,
   onClick,
+  tour,
 }: {
   icono: LucideIcon
   titulo: string
   explicacion: string
   onClick: () => void
+  tour?: string
 }) {
   return (
     <button
       type="button"
+      data-tour={tour}
       onClick={onClick}
       className="flex w-full items-center gap-3 rounded-xl border border-neutral-200 px-3 py-2.5 text-left transition hover:bg-neutral-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
     >
@@ -266,6 +269,7 @@ export function ComoLoPagasModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="como-lo-pagas-titulo"
+        data-tour="hoy-pagar-ventana"
         className="surface-card flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-neutral-200 shadow-xl dark:border-zinc-700"
       >
         <div className="overflow-y-auto p-5 sm:p-6">
@@ -274,12 +278,12 @@ export function ComoLoPagasModal({
           </h2>
           <div className="mt-3">{encabezado}</div>
           {paso === 'elegir' ? (
-            <div className="mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2" data-tour="hoy-pagar-opciones">
               {puedeTransferir ? (
-                <Opcion icono={Landmark} titulo="Por transferencia" explicacion="Se arma y queda esperando la firma." onClick={() => elegir('transferencia')} />
+                <Opcion icono={Landmark} titulo="Por transferencia" explicacion="Se arma y queda esperando la firma." onClick={() => elegir('transferencia')} tour="hoy-pagar-opcion-transferencia" />
               ) : null}
-              <Opcion icono={Banknote} titulo="En efectivo" explicacion="Sale de una caja. Podés adjuntar el ticket." onClick={() => elegir('efectivo')} />
-              <Opcion icono={FileText} titulo="Con cheque" explicacion="Endosás uno de la cartera o cargás uno propio." onClick={() => elegir('cheque_cartera')} />
+              <Opcion icono={Banknote} titulo="En efectivo" explicacion="Sale de una caja. Podés adjuntar el ticket." onClick={() => elegir('efectivo')} tour="hoy-pagar-opcion-efectivo" />
+              <Opcion icono={FileText} titulo="Con cheque" explicacion="Endosás uno de la cartera o cargás uno propio." onClick={() => elegir('cheque_cartera')} tour="hoy-pagar-opcion-cheque" />
             </div>
           ) : (
             <div className="mt-4 grid gap-3">
@@ -309,6 +313,7 @@ export function ComoLoPagasModal({
               ))}
               <button
                 type="button"
+                data-tour="hoy-pagar-agregar-forma"
                 className="inline-flex items-center gap-1 self-start rounded-lg px-1 py-1 text-[13px] font-medium text-brand-primary"
                 onClick={() => setPartes((actual) => [...actual, nuevaParte('efectivo', '')])}
               >
@@ -318,7 +323,7 @@ export function ComoLoPagasModal({
               {transferencias.length > 1 ? (
                 <p className="text-[13px] text-red-700 dark:text-red-300">Armá una transferencia por vez. Dejá una sola.</p>
               ) : null}
-              <div className="rounded-xl bg-neutral-50 px-3 py-2 text-[13px] dark:bg-zinc-800/60">
+              <div className="rounded-xl bg-neutral-50 px-3 py-2 text-[13px] dark:bg-zinc-800/60" data-tour="hoy-pagar-totales">
                 <p className="flex justify-between gap-2">
                   <span className="text-body-muted">Total asignado</span>
                   <span className="text-heading font-medium tabular-nums">{formatMoneyCentavos(Math.max(cuenta, 0), moneda)}</span>
@@ -340,7 +345,7 @@ export function ComoLoPagasModal({
             {paso === 'armar' ? 'Volver' : 'Cancelar'}
           </button>
           {paso === 'armar' ? (
-            <button type="button" className={botonPrimario} disabled={!puedeConfirmar} onClick={confirmar}>
+            <button type="button" className={botonPrimario} disabled={!puedeConfirmar} onClick={confirmar} data-tour="hoy-pagar-confirmar">
               {guardando ? 'Guardando…' : 'Confirmar pago'}
             </button>
           ) : null}
@@ -350,8 +355,12 @@ export function ComoLoPagasModal({
   )
 }
 
-function Campo({ children }: { children: ReactNode }) {
-  return <label className="mt-2 block text-[13px] font-medium text-neutral-800 dark:text-gray-200">{children}</label>
+function Campo({ children, tour }: { children: ReactNode; tour?: string }) {
+  return (
+    <label data-tour={tour} className="mt-2 block text-[13px] font-medium text-neutral-800 dark:text-gray-200">
+      {children}
+    </label>
+  )
 }
 
 function ParteEditor({
@@ -379,8 +388,11 @@ function ParteEditor({
 }) {
   const montoBloqueado = parte.medio === 'cheque_cartera'
   const cheque = cheques.find((item) => item.id === parte.chequeId)
+  // Marcas para las guías de Ayuda: solo la primera forma lleva las de caja/cheque/monto.
+  const tourForma = numero === 1 ? 'hoy-pagar-forma' : numero === 2 ? 'hoy-pagar-forma-2' : undefined
+  const tourCampo = (nombre: string) => (numero === 1 ? nombre : undefined)
   return (
-    <div className="rounded-xl border border-neutral-200 p-3 dark:border-zinc-700">
+    <div className="rounded-xl border border-neutral-200 p-3 dark:border-zinc-700" data-tour={tourForma}>
       <div className="flex items-center justify-between gap-2">
         <p className="text-heading text-[13px] font-medium">Forma {numero}</p>
         <button type="button" className="text-body-muted inline-flex items-center gap-1 text-[13px]" onClick={onQuitar}>
@@ -403,7 +415,7 @@ function ParteEditor({
         </select>
       </Campo>
       {parte.medio === 'cheque_cartera' ? (
-        <Campo>
+        <Campo tour={tourCampo('hoy-pagar-cheque')}>
           Cheque
           {cargandoCheques ? <p className="text-body-muted mt-1 font-normal">Buscando cheques…</p> : null}
           {!cargandoCheques && cheques.length === 0 ? <p className="text-body-muted mt-1 font-normal">No hay cheques en la cartera.</p> : null}
@@ -458,7 +470,7 @@ function ParteEditor({
       ) : null}
       {parte.medio === 'efectivo' ? (
         <>
-          <Campo>
+          <Campo tour={tourCampo('hoy-pagar-caja')}>
             Caja
             <div className="mt-1 grid gap-1">
               {cajas.length === 0 ? <p className="text-body-muted font-normal">No hay cajas en pesos.</p> : null}
@@ -500,7 +512,7 @@ function ParteEditor({
           </Campo>
         </>
       ) : null}
-      <Campo>
+      <Campo tour={tourCampo('hoy-pagar-monto')}>
         Monto
         <input
           inputMode="decimal"

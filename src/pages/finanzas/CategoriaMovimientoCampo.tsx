@@ -36,6 +36,7 @@ export function CategoriaMovimientoChip(props: {
   categoria: CategoriaMovimiento | null
   nota: string | null
   onClick?: () => void
+  tour?: string
 }) {
   const { categoria, nota } = props
   return (
@@ -44,6 +45,7 @@ export function CategoriaMovimientoChip(props: {
         props.onClick ? (
           <button
             type="button"
+            data-tour={props.tour}
             className={`${CHIP_CLASS} cursor-pointer hover:opacity-75`}
             style={estiloChip(categoria.color)}
             title={nota ? `${categoria.nombre} — ${nota}` : categoria.nombre}
@@ -57,6 +59,7 @@ export function CategoriaMovimientoChip(props: {
       ) : props.onClick ? (
         <button
           type="button"
+          data-tour={props.tour}
           className="inline-flex items-center gap-0.5 rounded-full border border-dashed border-neutral-300 px-2 py-px text-[11px] leading-4 text-neutral-400 hover:border-neutral-400 hover:text-neutral-700 dark:border-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-200"
           title={nota ? `Sin categoría — ${nota}` : 'Categorizar'}
           onClick={props.onClick}
@@ -314,6 +317,7 @@ function CategoriaMovimientoForm(props: {
   return (
     <ModalShell tituloId={tituloId} saving={props.saving} onClose={props.onClose}>
       <form
+        data-tour="movimientos-categoria-ventana"
         className="surface-card w-full max-w-md rounded-2xl border border-neutral-200 p-5 shadow-xl dark:border-zinc-700"
         onSubmit={(event) => {
           event.preventDefault()
@@ -372,7 +376,7 @@ function CategoriaMovimientoForm(props: {
           />
         </label>
 
-        <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200">
+        <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200" data-tour="movimientos-categoria-selector">
           Categoría
           <div className="mt-1.5">
             <CategoriaSelector
@@ -387,6 +391,7 @@ function CategoriaMovimientoForm(props: {
         </label>
 
         <label
+          data-tour="movimientos-categoria-regla"
           className={`mt-3 flex items-start gap-2 text-sm ${puedeAplicarATodos ? '' : 'opacity-50'}`}
           title={puedeAplicarATodos ? undefined : 'Elegí una categoría primero'}
         >
@@ -405,7 +410,7 @@ function CategoriaMovimientoForm(props: {
           </span>
         </label>
 
-        <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200">
+        <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200" data-tour="movimientos-categoria-nota">
           Nota <span className="text-body-muted font-normal">(opcional)</span>
           <textarea
             className="mt-1.5 w-full resize-y rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm dark:border-zinc-600 dark:bg-zinc-900"
@@ -429,6 +434,7 @@ function CategoriaMovimientoForm(props: {
           </button>
           <button
             type="submit"
+            data-tour="movimientos-categoria-guardar"
             className="rounded-xl bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
             disabled={props.saving || !puedeGuardar}
           >

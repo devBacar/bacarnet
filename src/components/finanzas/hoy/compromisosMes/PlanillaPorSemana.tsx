@@ -300,6 +300,7 @@ function GrupoTabla({
                     {tono === 'vacio' ? null : (
                       <button
                         type="button"
+                        data-tour="agenda-planilla-monto"
                         className={`block w-full truncate text-right tabular-nums underline-offset-2 hover:underline ${claseTono(tono)}`}
                         title={formatMoneyCentavos(suma.planificadoCentavos, fila.moneda)}
                         aria-haspopup="dialog"
@@ -408,6 +409,7 @@ function GrupoLista({
                     <Linea key={semana.numero} etiqueta={`Semana ${semana.numero} · ${etiquetaRango(semana.desde, semana.hasta)}`} destacado={semana.contieneHoy}>
                       <button
                         type="button"
+                        data-tour="agenda-planilla-monto"
                         className={`tabular-nums underline-offset-2 hover:underline ${claseTono(tono)}`}
                         onClick={(event) => {
                           event.stopPropagation()
@@ -571,6 +573,7 @@ function PopoverSemana({
     <div
       ref={panel}
       role="dialog"
+      data-tour="agenda-planilla-detalle"
       aria-label={`${fila.concepto}, semana ${semana.numero}`}
       className="fixed z-50 w-72 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
       style={{ top: arriba ? rect.top - 8 : rect.bottom + 6, left, transform: arriba ? 'translateY(-100%)' : undefined }}
@@ -604,7 +607,7 @@ function PopoverSemana({
       </ul>
       <LineasPagosHechos pagos={fila.pagosResumen} />
       {puedeEditar ? (
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-2" data-tour="agenda-planilla-detalle-acciones">
         {puedePagarFila(fila) ? (
           <button type="button" className={botonChico} onClick={onPagar}>
             Pagar

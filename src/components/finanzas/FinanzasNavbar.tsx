@@ -1,5 +1,5 @@
 import { ArrowLeft, Landmark, Menu } from 'lucide-react'
-import { BotonRecorrido } from './recorrido/BotonRecorrido'
+import { BotonAyuda } from './recorrido/BotonAyuda'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import { AppHeader } from '../AppHeader'
@@ -172,7 +172,7 @@ export function FinanzasNavbar() {
         >
           <Menu className="h-5 w-5" aria-hidden />
         </button>
-        <BotonRecorrido variante="barra" />
+        <BotonAyuda variante="barra" />
         <NavAccountActions />
       </div>
 
@@ -187,7 +187,7 @@ export function FinanzasNavbar() {
         title="Secciones"
         ariaLabel="Secciones de Finanzas"
         hideFrom="md"
-        extra={<BotonRecorrido variante="menu" alAbrir={closeMobileNav} />}
+        extra={<BotonAyuda variante="menu" alAbrir={closeMobileNav} />}
       />
     </AppHeader>
   )

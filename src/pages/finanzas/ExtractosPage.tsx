@@ -232,7 +232,7 @@ export function FinanzasExtractosPage() {
 
   return (
     <>
-      <header className="mb-6">
+      <header data-tour="extractos" className="mb-6">
         <h1 className="text-heading text-2xl font-semibold">Extractos</h1>
         <p className="text-body-muted mt-1 text-sm">
           Bajá el extracto oficial del banco, con la categoría de BacarNet, y fijate si falta algún movimiento.

@@ -190,7 +190,7 @@ export function FinanzasChequesPage() {
       ) : null}
 
       {/* Tabs: dirección */}
-      <div className="mb-4">
+      <div className="mb-4" data-tour="cheques">
         <div className="inline-flex rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
           {DIR_TABS.map(([val, label]) => (
             <button

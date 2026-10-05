@@ -380,6 +380,7 @@ export function CashflowSection() {
 
   return (
     <section
+      data-tour="saldos-dia"
       aria-labelledby="finanzas-cashflow-heading"
       className="surface-card space-y-3 rounded-2xl border border-t-4 border-teal-200 border-t-teal-500 bg-gradient-to-b from-teal-50/70 to-transparent to-25% p-4 dark:border-teal-900/50 dark:border-t-teal-500 dark:from-teal-950/25"
     >

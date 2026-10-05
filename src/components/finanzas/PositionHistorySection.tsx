@@ -255,6 +255,7 @@ export function PositionHistorySection({ rows, isLoading, error }: PositionHisto
 
   return (
     <section
+      data-tour="saldos-historial"
       aria-labelledby="finanzas-historial-heading"
       className="surface-card rounded-2xl border border-t-4 border-amber-200 border-t-amber-400 bg-gradient-to-b from-amber-50/80 to-transparent to-40% p-4 dark:border-amber-900/50 dark:border-t-amber-500 dark:from-amber-950/25"
     >

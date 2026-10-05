@@ -234,7 +234,7 @@ export function FinanzasMovimientosPage() {
 
   return (
     <>
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <header data-tour="movimientos" className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-heading text-2xl font-semibold">Movimientos</h1>
           <p className="text-body-muted mt-1 text-sm">

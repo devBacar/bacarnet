@@ -288,7 +288,7 @@ export function CajasWorkspace() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-5">
+    <div data-tour="cajas" className="mx-auto w-full max-w-7xl space-y-5">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-primary">

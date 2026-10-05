@@ -85,6 +85,7 @@ export function PagosHoy({
   const filas = [...pagos.filas].sort((a, b) => Number(b.vencido) - Number(a.vencido))
   return (
     <Tarjeta
+      tour="hoy-pagos"
       titulo="Pagos de hoy"
       derecha={filas.length > 0 ? <Total centavos={pagos.totalCentavos} /> : undefined}
       ayuda="Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá."
@@ -157,6 +158,7 @@ export function CobrosHoy({
   const total = ingresos.reduce((suma, fila) => suma + fila.montoCentavos, 0)
   return (
     <Tarjeta
+      tour="hoy-cobros"
       titulo="Cobros de hoy"
       derecha={ingresos.length > 0 ? <Total centavos={total} /> : undefined}
       ayuda="Se confirman solos cuando entra la plata. También los ves en Agenda › Cobros."

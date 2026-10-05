@@ -201,6 +201,7 @@ export function FinanzasAgendaPage() {
       </div>
 
       {tab === 'planilla' ? (
+        <div data-tour="agenda-planilla" className="min-w-0">
         <CompromisosMes
           onPagar={(compromisoId) => {
             const row = pendientesPlanilla.find((item) => item.id === compromisoId)
@@ -208,8 +209,9 @@ export function FinanzasAgendaPage() {
             else toast('Ese compromiso no está pendiente. Buscalo en Compromisos de pago.')
           }}
         />
+        </div>
       ) : tab === 'pagos' ? (
-        <>
+        <div data-tour={vistaPagos === 'hechos' ? 'agenda-hechos' : 'agenda-pagos'} className="min-w-0">
           <SubVistaTabs
             options={[
               { id: 'pendientes', label: 'Pendientes' },
@@ -257,9 +259,9 @@ export function FinanzasAgendaPage() {
               }}
             />
           )}
-        </>
+        </div>
       ) : (
-        <>
+        <div data-tour="agenda-cobros" className="min-w-0">
           <SubVistaTabs
             options={[
               { id: 'esperados', label: 'Esperados' },
@@ -287,7 +289,7 @@ export function FinanzasAgendaPage() {
               }}
             />
           )}
-        </>
+        </div>
       )}
 
       {pagarDesdePlanilla ? (

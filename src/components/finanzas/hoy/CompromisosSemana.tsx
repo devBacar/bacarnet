@@ -212,6 +212,7 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
 
   return (
     <Tarjeta
+      tour="hoy-semana"
       titulo={esEstaSemana ? 'Compromisos de esta semana' : 'Compromisos de la semana'}
       subtitulo={rangoSemana(dias)}
       claseTitulo="text-brand-primary text-base font-semibold"

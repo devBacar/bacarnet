@@ -200,7 +200,7 @@ export function FinanzasTransferenciasPage() {
       {pestana === 'agenda' ? <AgendaDestinatariosPanel /> : null}
 
       {pestana === 'historial' ? (
-      <>
+      <div data-tour="transferencias-lista" className="min-w-0">
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <label className="text-sm">
@@ -360,7 +360,7 @@ export function FinanzasTransferenciasPage() {
           ) : null}
         </div>
       )}
-      </>
+      </div>
       ) : null}
 
       {historialId ? (

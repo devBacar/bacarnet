@@ -1,5 +1,5 @@
 import { LogOut, X, type LucideIcon } from 'lucide-react'
-import { Fragment, useEffect } from 'react'
+import { Fragment, useEffect, type ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 
 export interface MobileNavItem {
@@ -21,6 +21,8 @@ interface MobileNavDrawerProps {
   ariaLabel?: string
   /** A partir de este ancho el panel se cierra y se oculta. */
   hideFrom?: 'md' | 'lg'
+  /** Contenido extra arriba de cerrar sesión. */
+  extra?: ReactNode
 }
 
 const drawerLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -39,6 +41,7 @@ export function MobileNavDrawer({
   title = 'Navegación',
   ariaLabel = 'Menú de navegación',
   hideFrom = 'lg',
+  extra,
 }: MobileNavDrawerProps) {
   useEffect(() => {
     if (!open) return
@@ -115,6 +118,7 @@ export function MobileNavDrawer({
         </nav>
 
         <div className="app-drawer-footer p-3">
+          {extra ? <div className="mb-2">{extra}</div> : null}
           <button
             type="button"
             onClick={() => {

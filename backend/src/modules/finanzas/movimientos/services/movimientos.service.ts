@@ -33,6 +33,7 @@ import {
   propagarContraparteManual,
 } from '../../contraparte/services/enriquecer-contrapartes.js'
 import { reconciliarTransferenciasConMovimientos } from '../../transferencias/services/reconciliar-movimientos.js'
+import { reconciliarChequesConMovimientos } from '../../cheques/services/reconciliar-cheques-movimientos.js'
 
 const TZ = 'America/Argentina/Buenos_Aires'
 const DIAS_HISTORIA_INICIAL = 90
@@ -74,6 +75,12 @@ export interface MovimientosSyncResult {
     sinCandidato: number
     requierenConfirmacion: number
     reservasReanudadas: number
+  }
+  reconciliacionCheques: {
+    revisados: number
+    vinculados: number
+    sinCandidato: number
+    multiples: number
   }
 }
 
@@ -291,6 +298,13 @@ async function syncMovimientosConTurno(input: { actorUid: string }): Promise<Mov
 
   const reconciliacion = await reconciliarTransferenciasConMovimientos({ actorUid: input.actorUid })
 
+  let reconciliacionCheques = { revisados: 0, vinculados: 0, sinCandidato: 0, multiples: 0 }
+  try {
+    reconciliacionCheques = await reconciliarChequesConMovimientos()
+  } catch (err) {
+    console.error('[finanzas/movimientos] No se pudieron reconciliar cheques con movimientos', err)
+  }
+
   for (const cuenta of porCuenta) {
     const desde = cuenta.modo === 'al_dia' || !cuenta.desde ? hoy : cuenta.desde
     try {
@@ -309,6 +323,7 @@ async function syncMovimientosConTurno(input: { actorUid: string }): Promise<Mov
     enFirestore: await countMovimientosBancarios(),
     cuentas: porCuenta,
     reconciliacion,
+    reconciliacionCheques,
   }
 }
 

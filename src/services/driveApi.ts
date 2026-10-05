@@ -169,8 +169,12 @@ export async function listDriveFiles(
   return parseApiResponse<ListDriveFilesResult>(res)
 }
 
-export async function getDriveFile(fileId: string): Promise<DriveFileDetailDto> {
-  const res = await fetch(`/api/drive/files/${encodeURIComponent(fileId)}`, {
+export async function getDriveFile(
+  fileId: string,
+  options?: { incluirCarpetas?: boolean },
+): Promise<DriveFileDetailDto> {
+  const query = options?.incluirCarpetas ? '?incluirCarpetas=1' : ''
+  const res = await fetch(`/api/drive/files/${encodeURIComponent(fileId)}${query}`, {
     headers: await authHeaders(),
   })
   return parseApiResponse<DriveFileDetailDto>(res)

@@ -378,10 +378,11 @@ export function AdminDriveLab() {
       await Promise.all(
         pending.map(async (crumb) => {
           try {
-            const detail = await getDriveFile(crumb.id)
+            const detail = await getDriveFile(crumb.id, { incluirCarpetas: true })
             names.set(crumb.id, detail.name)
           } catch {
-            names.set(crumb.id, crumb.id.slice(0, 12))
+            // Sin acceso o borrada: mejor un texto claro que un pedazo de ID.
+            names.set(crumb.id, 'Carpeta')
           }
         }),
       )

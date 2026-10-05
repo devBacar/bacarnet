@@ -1,5 +1,5 @@
-import { Loader2, MoreHorizontal, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { Building2, Loader2, MoreHorizontal, UserPlus, Users, X, type LucideIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import {
   grantDriveAreaPermission,
@@ -52,6 +52,52 @@ function initials(name: string): string {
   if (parts.length === 1) return first.slice(0, 2).toUpperCase()
   const last = parts[parts.length - 1] ?? ''
   return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase()
+}
+
+/** Color estable por persona, para distinguir las tarjetas de un vistazo. */
+const AVATAR_COLORS = [
+  'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-100',
+  'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-100',
+  'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-100',
+  'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-100',
+  'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-100',
+  'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-100',
+]
+
+function avatarColor(key: string): string {
+  let hash = 0
+  for (const char of key) hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length]!
+}
+
+const roleChipClass: Record<DrivePermissionRole, string> = {
+  reader: 'bg-neutral-100 text-neutral-700 dark:bg-zinc-800 dark:text-zinc-200',
+  commenter: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-100',
+  writer: 'bg-[var(--color-primary-light)] text-[var(--color-primary)]',
+}
+
+type OriginKind = 'directo' | 'area' | 'carpeta'
+
+function originKind(origin: string): OriginKind {
+  if (origin === 'acceso directo') return 'directo'
+  if (origin.startsWith('por el área')) return 'area'
+  return 'carpeta'
+}
+
+/** Borde izquierdo de la tarjeta según de dónde viene el acceso. */
+const originBorderClass: Record<OriginKind, string> = {
+  directo: 'border-l-[var(--color-primary)]',
+  area: 'border-l-emerald-500',
+  carpeta: 'border-l-neutral-300 dark:border-l-zinc-600',
+}
+
+function SectionHeader({ icon: Icon, children }: { icon: LucideIcon; children: ReactNode }) {
+  return (
+    <h3 className="flex items-center gap-2 border-y border-neutral-200 bg-neutral-50 px-4 py-2 text-sm font-semibold text-[var(--color-primary)] dark:border-zinc-800 dark:bg-zinc-950/60">
+      <Icon className="h-4 w-4 shrink-0" aria-hidden />
+      {children}
+    </h3>
+  )
 }
 
 function peopleLabel(count: number): string {
@@ -352,10 +398,18 @@ export function DrivePermissionsModal({
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <section className="px-4 py-4">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-gray-100">
+          <section>
+            <SectionHeader icon={Users}>
               Quién tiene acceso{loading ? '' : ` (${accessRows.length})`}
-            </h3>
+            </SectionHeader>
+            <div className="px-4 py-3">
+            {!loading && accessRows.length > 0 ? (
+              <p className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-neutral-500 dark:text-zinc-400">
+                <span className="flex items-center gap-1"><span className="h-2.5 w-1 rounded-sm bg-[var(--color-primary)]" />directo</span>
+                <span className="flex items-center gap-1"><span className="h-2.5 w-1 rounded-sm bg-emerald-500" />por el área</span>
+                <span className="flex items-center gap-1"><span className="h-2.5 w-1 rounded-sm bg-neutral-300 dark:bg-zinc-600" />por la carpeta de arriba</span>
+              </p>
+            ) : null}
             {loading ? (
               <div className="flex justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
@@ -366,10 +420,15 @@ export function DrivePermissionsModal({
               </p>
             ) : (
               <>
-                <ul className="mt-3 space-y-3">
+                <ul className="space-y-2">
                   {visibleAccess.map(({ row, origin, name, direct }) => (
-                    <li key={row.id} className="flex items-start gap-3">
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary-light)] text-xs font-semibold text-[var(--color-primary)]">
+                    <li
+                      key={row.id}
+                      className={`flex items-start gap-3 rounded-lg border border-l-4 border-neutral-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900 ${originBorderClass[originKind(origin)]}`}
+                    >
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatarColor(row.emailAddress || name)}`}
+                      >
                         {initials(name)}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -406,7 +465,7 @@ export function DrivePermissionsModal({
                         ) : null}
                       </div>
                       <div className="flex shrink-0 items-center gap-1">
-                        <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700 dark:bg-zinc-800 dark:text-zinc-200">
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${roleChipClass[row.role]}`}>
                           {roleLabel[row.role]}
                         </span>
                         {direct ? (
@@ -444,12 +503,12 @@ export function DrivePermissionsModal({
                 {domainAccess.inherited ? ', por la carpeta de arriba' : ''}.
               </p>
             ) : null}
+            </div>
           </section>
 
-          <section className="border-t border-neutral-200 px-4 py-4 dark:border-zinc-800">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-gray-100">
-              Agregar personas
-            </h3>
+          <section>
+            <SectionHeader icon={UserPlus}>Agregar personas</SectionHeader>
+            <div className="px-4 py-3">
             {isRestricted ? (
               <p className="mt-2 text-xs text-neutral-500 dark:text-zinc-400">
                 Solo podés sumar personas de @{ALLOWED_DOMAIN}.
@@ -485,7 +544,15 @@ export function DrivePermissionsModal({
               ) : (
                 <ul className="mt-3 space-y-2">
                   {searchResults.map((user) => (
-                    <li key={user.uid} className="flex items-center gap-2">
+                    <li
+                      key={user.uid}
+                      className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900"
+                    >
+                      <span
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${avatarColor(user.email || user.uid)}`}
+                      >
+                        {initials(user.displayName || user.email)}
+                      </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium text-neutral-900 dark:text-gray-100">
                           {user.displayName || user.email}
@@ -498,7 +565,7 @@ export function DrivePermissionsModal({
                         type="button"
                         disabled={acting}
                         onClick={() => void addPerson(user.email)}
-                        className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-light)] disabled:opacity-50"
+                        className="shrink-0 rounded-lg bg-[var(--color-primary-light)] px-2.5 py-1 text-sm font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary-muted)] disabled:opacity-50"
                       >
                         + Agregar
                       </button>
@@ -507,18 +574,18 @@ export function DrivePermissionsModal({
                 </ul>
               )
             ) : null}
+            </div>
           </section>
 
-          <section className="border-t border-neutral-200 px-4 py-4 dark:border-zinc-800">
-            <h3 className="text-sm font-semibold text-neutral-900 dark:text-gray-100">
-              Compartir con un área
-            </h3>
+          <section>
+            <SectionHeader icon={Building2}>Compartir con un área</SectionHeader>
+            <div className="px-4 py-3">
             {assignableAreas.length === 0 ? (
-              <p className="mt-3 text-sm text-neutral-500 dark:text-zinc-400">
+              <p className="text-sm text-neutral-500 dark:text-zinc-400">
                 No hay áreas para compartir.
               </p>
             ) : (
-              <form onSubmit={handleAreaGrant} className="mt-3">
+              <form onSubmit={handleAreaGrant}>
                 <div className="flex flex-wrap items-center gap-2">
                   <select
                     aria-label="Área"
@@ -563,10 +630,16 @@ export function DrivePermissionsModal({
                 {areaShares.map((share) => (
                   <li
                     key={share.areaId}
-                    className="rounded-lg border border-neutral-200 px-3 py-2 dark:border-zinc-800"
+                    className="rounded-lg border border-l-4 border-emerald-200 border-l-emerald-500 bg-emerald-50 px-3 py-2 dark:border-emerald-900 dark:bg-emerald-950/40"
                   >
-                    <p className="text-sm text-neutral-800 dark:text-gray-100">
-                      {share.areaName} · {roleLabel[share.role]} · se aplica a quien entre al área
+                    <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-emerald-900 dark:text-emerald-100">
+                      {share.areaName}
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${roleChipClass[share.role]}`}>
+                        {roleLabel[share.role]}
+                      </span>
+                    </p>
+                    <p className="text-xs text-emerald-800 dark:text-emerald-200">
+                      Se aplica también a quien entre al área después.
                     </p>
                     <button
                       type="button"
@@ -580,6 +653,7 @@ export function DrivePermissionsModal({
                 ))}
               </ul>
             ) : null}
+            </div>
           </section>
         </div>
       </div>

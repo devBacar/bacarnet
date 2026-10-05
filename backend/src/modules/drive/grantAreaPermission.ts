@@ -12,9 +12,12 @@ import {
 } from './governDriveFile.js'
 import {
   DrivePermissionAlreadyInheritedError,
+  findUserPermission,
   grantUserDrivePermission,
+  isInheritedPermission,
   isPermissionRole,
 } from './driveUserPermission.js'
+import { getDriveAreaShare, saveDriveAreaShare } from './areaShares.js'
 import { getMinReasonLength } from './policy.js'
 import { getAreaDisplayName, resolveAreaMembers } from './resolveAreaMembers.js'
 
@@ -77,18 +80,19 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
   const targetAreaId = targetAreaIdRaw || governingAreaId
 
   const members = await resolveAreaMembers(targetAreaId)
-  if (members.length === 0) {
-    res.status(409).json({
-      error: 'No hay usuarios registrados en el área seleccionada',
-      areaId: targetAreaId,
-    })
-    return
-  }
 
   const areaName = (await getAreaDisplayName(targetAreaId)) ?? targetAreaId
   const batchId = randomUUID()
   const drive = await getDrive()
   const trimmedReason = reason.trim()
+  const existingShare = await getDriveAreaShare(fileId, targetAreaId)
+  const grantByEmail = new Map<
+    string,
+    { email: string; uid: string; permissionId: string }
+  >()
+  for (const row of existingShare?.grants ?? []) {
+    grantByEmail.set(row.email, row)
+  }
 
   const granted: Array<{
     uid: string
@@ -106,6 +110,16 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
 
   for (const member of members) {
     try {
+      const previouslyTracked = grantByEmail.has(member.email)
+      let hadDirectBefore = false
+      if (!previouslyTracked) {
+        const existingPerm = await findUserPermission(drive, fileId, member.email)
+        hadDirectBefore = Boolean(
+          existingPerm?.id &&
+            !isInheritedPermission(existingPerm.permissionDetails ?? undefined),
+        )
+      }
+
       const result = await grantUserDrivePermission(drive, fileId, member.email, role, {
         sendNotificationEmail: true,
       })
@@ -135,6 +149,14 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
         },
       })
 
+      if (!hadDirectBefore || previouslyTracked) {
+        grantByEmail.set(member.email, {
+          email: member.email,
+          uid: member.uid,
+          permissionId: result.permissionId,
+        })
+      }
+
       granted.push({
         uid: member.uid,
         email: member.email,
@@ -160,30 +182,51 @@ export async function grantDriveAreaPermission(req: Request, res: Response): Pro
     }
   }
 
-  if (granted.length === 0) {
-    res.status(skipped.length > 0 && failures.length === 0 ? 409 : 502).json({
-      error:
-        skipped.length > 0 && failures.length === 0
-          ? 'Ningún miembro recibió un permiso puntual nuevo (acceso heredado preexistente)'
-          : 'No se pudo otorgar el permiso a ningún miembro del área',
-      governingAreaId,
-      areaName,
-      batchId,
-      grantedCount: 0,
-      skippedCount: skipped.length,
-      failedCount: failures.length,
-      skipped,
-      failures,
+  let ruleSaved = false
+  try {
+    await saveDriveAreaShare({
+      fileId,
+      areaId: targetAreaId,
+      role,
+      createdBy: user.uid,
+      grants: [...grantByEmail.values()],
     })
-    return
+    ruleSaved = true
+    await writeAuditLogBestEffort({
+      userId: user.uid,
+      userEmail: user.email,
+      action: 'permission_grant',
+      targetType: 'file',
+      targetId: fileId,
+      targetName: found.file.name,
+      parentFolderId: found.file.parentFolderId,
+      mimeType: found.file.mimeType,
+      reason: trimmedReason,
+      metadata: {
+        areaShare: true,
+        areaId: targetAreaId,
+        areaName,
+        role,
+        grantCount: grantByEmail.size,
+        batchId,
+      },
+    })
+  } catch (err) {
+    logError('No se pudo guardar la regla de área', err)
   }
 
-  const status = failures.length > 0 ? 207 : 201
+  const status =
+    failures.length === 0 && ruleSaved ? 201 : failures.length > 0 || ruleSaved ? 207 : 502
+
   res.status(status).json({
+    ...(status === 502
+      ? { error: 'No se pudo compartir con el área' }
+      : {}),
     batchId,
     governingAreaId,
     areaName,
     role,
+    ruleSaved,
     grantedCount: granted.length,
     skippedCount: skipped.length,
     failedCount: failures.length,

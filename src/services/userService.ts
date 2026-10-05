@@ -1,4 +1,5 @@
 import { createUserWithEmailAndPassword, updateProfile, type User } from 'firebase/auth'
+import toast from 'react-hot-toast'
 import {
   collection,
   deleteDoc,
@@ -12,6 +13,7 @@ import {
 } from 'firebase/firestore'
 import { auth, db } from './firebase'
 import { logAction } from './auditLogService'
+import { syncDriveAreaShares } from './driveApi'
 import { applyPendingUserSetupAfterRegister, bootstrapUserProfileAfterAuth, patchUserManagedAreas, patchUserMemberAreas } from './usersApi'
 import {
   resolveHomeWidgetPreferences,
@@ -816,6 +818,7 @@ export async function updateManagedAreaIds(
     .filter((id) => id.length > 0)
 
   await patchUserManagedAreas(uid, cleaned, reason.trim())
+  await syncAreaAccessAfterSave(uid)
 }
 
 /**
@@ -832,4 +835,14 @@ export async function updateMemberAreaIds(
     .filter((id) => id.length > 0)
 
   await patchUserMemberAreas(uid, cleaned, reason.trim())
+  await syncAreaAccessAfterSave(uid)
+}
+
+async function syncAreaAccessAfterSave(uid: string): Promise<void> {
+  try {
+    await syncDriveAreaShares(uid)
+  } catch (err) {
+    console.error('No se pudieron actualizar los accesos de Archivos', err)
+    toast('El usuario se guardó, pero no se pudieron actualizar sus accesos en Archivos.')
+  }
 }

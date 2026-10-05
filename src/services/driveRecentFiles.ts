@@ -8,6 +8,7 @@ export interface DriveRecentEntry {
   name: string
   mimeType: string
   openedAt: string
+  isFolder?: boolean
 }
 
 function storageKey(uid: string): string {
@@ -55,6 +56,7 @@ export function recordDriveRecentOpen(uid: string | undefined, file: Pick<DriveF
     name: file.name,
     mimeType: file.mimeType,
     openedAt: now,
+    isFolder: false,
   }
   const entries = readRaw(uid).filter((row) => row.id !== file.id)
   entries.unshift(next)

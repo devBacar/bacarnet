@@ -6,6 +6,12 @@ import {
   type DriveRecentEntry,
 } from '../services/driveRecentFiles'
 
+const FOLDER_MIME = 'application/vnd.google-apps.folder'
+
+function entryIsFolder(entry: DriveRecentEntry): boolean {
+  return entry.isFolder === true || entry.mimeType === FOLDER_MIME
+}
+
 export function useDriveRecentEntries(uid: string | undefined) {
   const [entries, setEntries] = useState<DriveRecentEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -24,6 +30,7 @@ export function useDriveRecentEntries(uid: string | undefined) {
     try {
       const checks = await Promise.all(
         local.map(async (entry) => {
+          if (entryIsFolder(entry)) return entry
           try {
             await getDriveFile(entry.id)
             return entry

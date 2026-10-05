@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { enriquecerContrapartes } from '../../contraparte/services/enriquecer-contrapartes.js'
+import { getMovimientoById } from '../services/movimientos.repository.js'
 import {
   MovimientoAnotacionError,
   MovimientosSyncEnCursoError,
@@ -42,6 +43,19 @@ finanzasMovimientosRouter.post('/contrapartes/completar', requireFinanzasPermiso
     console.error('[finanzas/movimientos] completar contrapartes', err)
     const message = err instanceof Error ? err.message : 'No se pudieron completar las contrapartes'
     res.status(500).json({ error: message })
+  }
+})
+
+finanzasMovimientosRouter.get('/:id', async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) { res.status(400).json({ error: 'Id inválido' }); return }
+    const movimiento = await getMovimientoById(id)
+    if (!movimiento) { res.status(404).json({ error: 'Movimiento no encontrado' }); return }
+    res.json({ movimiento })
+  } catch (err) {
+    console.error('[finanzas/movimientos] get by id', err)
+    res.status(500).json({ error: 'No se pudo obtener el movimiento' })
   }
 })
 

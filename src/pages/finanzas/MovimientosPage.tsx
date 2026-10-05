@@ -237,7 +237,7 @@ export function FinanzasMovimientosPage() {
 
   return (
     <>
-      <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <header data-tour="movimientos" className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-heading text-2xl font-semibold">Movimientos</h1>
           <p className="text-body-muted mt-1 text-sm">
@@ -248,6 +248,7 @@ export function FinanzasMovimientosPage() {
         <div className="sm:max-w-xs sm:text-right">
           <button
             type="button"
+            data-tour="movimientos-ordenar-categorias"
             onClick={() => setGestionAbierta(true)}
             className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800"
           >
@@ -391,7 +392,7 @@ export function FinanzasMovimientosPage() {
               </tr>
             </thead>
             <tbody>
-              {(data?.movimientos ?? []).map((row) => {
+              {(data?.movimientos ?? []).map((row, indice) => {
                 const entrada = row.tipo === 'credito'
                 return (
                   <tr key={row.id} className="border-t border-neutral-100 dark:border-zinc-800">
@@ -441,6 +442,7 @@ export function FinanzasMovimientosPage() {
                       <CategoriaMovimientoChip
                         categoria={categorias.find((categoria) => categoria.id === row.categoriaId) ?? null}
                         nota={row.nota}
+                        tour={indice === 0 ? 'movimientos-categorizar' : undefined}
                         onClick={puedeCategorias ? () => setEditando(row) : undefined}
                       />
                     </td>

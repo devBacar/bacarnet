@@ -179,7 +179,7 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <div role="group" aria-label="Cómo ver el mes" className="inline-flex rounded-lg border border-[var(--color-primary-muted)] bg-white/60 p-0.5 dark:bg-zinc-900/40">
+          <div role="group" aria-label="Cómo ver el mes" data-tour="agenda-planilla-vista" className="inline-flex rounded-lg border border-[var(--color-primary-muted)] bg-white/60 p-0.5 dark:bg-zinc-900/40">
             {(
               [
                 ['semana', 'Por semana'],
@@ -198,18 +198,19 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
             ))}
           </div>
           {puedeEditar && editandoTc ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2" data-tour="agenda-planilla-dolar-edicion">
               <label className="text-[13px] text-[var(--color-primary)]" htmlFor="mes-tc">
                 Dólar del mes
               </label>
               <input
                 id="mes-tc"
+                data-tour="agenda-planilla-dolar-campo"
                 inputMode="decimal"
                 className="w-28 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-[15px] tabular-nums dark:border-zinc-700 dark:bg-zinc-950"
                 value={tcTexto}
                 onChange={(event) => setTcTexto(event.target.value)}
               />
-              <button type="button" className="text-[13px] font-medium text-[var(--color-primary)]" disabled={guardandoTc} onClick={guardarTc}>
+              <button type="button" data-tour="agenda-planilla-dolar-guardar" className="text-[13px] font-medium text-[var(--color-primary)]" disabled={guardandoTc} onClick={guardarTc}>
                 {guardandoTc ? 'Guardando…' : 'Guardar'}
               </button>
               <button type="button" className="text-[13px] text-[var(--color-primary)]" onClick={() => setEditandoTc(false)}>
@@ -227,6 +228,7 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
               {puedeEditar ? (
                 <button
                   type="button"
+                  data-tour="agenda-planilla-dolar"
                   className="ml-2 text-[13px] font-medium underline-offset-2 hover:underline"
                   onClick={() => {
                     setTcTexto(tipoCambio == null ? '' : textoTipoCambio(tipoCambio))

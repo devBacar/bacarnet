@@ -26,12 +26,15 @@ function Ventana({
   textoCerrar = 'Cancelar',
   onClose,
   accion,
+  tour,
   children,
 }: {
   titulo: string
   textoCerrar?: string
   onClose: () => void
   accion?: ReactNode
+  /** Marca para las guías de Ayuda. */
+  tour?: string
   children: ReactNode
 }) {
   return (
@@ -40,6 +43,7 @@ function Ventana({
         role="dialog"
         aria-modal="true"
         aria-labelledby="hoy-dialogo-titulo"
+        data-tour={tour}
         className="surface-card max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-neutral-200 p-5 shadow-xl dark:border-zinc-700 sm:p-6"
       >
         <h2 id="hoy-dialogo-titulo" className="text-heading text-lg font-semibold">
@@ -111,8 +115,12 @@ function Encabezado({ detalle, montoCentavos }: { detalle: string; montoCentavos
   )
 }
 
-function Etiqueta({ children }: { children: ReactNode }) {
-  return <label className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200">{children}</label>
+function Etiqueta({ children, tour }: { children: ReactNode; tour?: string }) {
+  return (
+    <label data-tour={tour} className="mt-4 block text-sm font-medium text-neutral-800 dark:text-gray-200">
+      {children}
+    </label>
+  )
 }
 
 function hoyLocal(): string {
@@ -162,10 +170,12 @@ export function EfectivoModal({
     <Ventana
       titulo={titulo}
       onClose={onClose}
+      tour="hoy-efectivo-ventana"
       accion={
         <button
           type="button"
           className={botonPrimario}
+          data-tour="hoy-efectivo-confirmar"
           disabled={!elegida || noAlcanza || guardando}
           onClick={() => {
             if (elegida) onConfirmar(elegida.id, archivo)
@@ -181,7 +191,7 @@ export function EfectivoModal({
       {!isLoading && enPesos.length === 0 ? (
         <p className="text-body-muted mt-2 text-sm">No hay cajas en pesos para anotar esto.</p>
       ) : null}
-      <div className="mt-2 grid gap-2">
+      <div className="mt-2 grid gap-2" data-tour="hoy-efectivo-cajas">
         {enPesos.map((caja) => {
           const corta = !esIngreso && caja.saldoActualCentavos < montoCentavos
           return (
@@ -202,7 +212,7 @@ export function EfectivoModal({
       {noAlcanza ? (
         <p className="mt-3 text-sm text-red-700 dark:text-red-300">En esa caja no alcanza para este pago.</p>
       ) : null}
-      <Etiqueta>
+      <Etiqueta tour="hoy-efectivo-comprobante">
         Comprobante (opcional)
         <input
           type="file"
@@ -253,10 +263,12 @@ export function YaLoPagueModal({
     <Ventana
       titulo="Ya lo pagué"
       onClose={onClose}
+      tour="hoy-ya-pague-ventana"
       accion={
         <button
           type="button"
           className={botonPrimario}
+          data-tour="hoy-ya-pague-confirmar"
           disabled={
             guardando ||
             !fecha ||
@@ -281,7 +293,7 @@ export function YaLoPagueModal({
     >
       <Encabezado detalle={`${pago.aQuien} · ${pago.concepto}`} montoCentavos={pago.montoCentavos} />
       <p className="mt-4 text-sm font-medium">¿Cómo lo pagaste?</p>
-      <div className="mt-2 grid gap-2">
+      <div className="mt-2 grid gap-2" data-tour="hoy-ya-pague-medio">
         {(
           [
             ['transferencia', Landmark, 'Por banco', 'Salió por transferencia desde una de nuestras cuentas.'],
@@ -299,7 +311,7 @@ export function YaLoPagueModal({
           />
         ))}
       </div>
-      <Etiqueta>
+      <Etiqueta tour="hoy-ya-pague-fecha">
         ¿Qué día lo pagaste?
         <input
           type="date"
@@ -309,7 +321,7 @@ export function YaLoPagueModal({
         />
       </Etiqueta>
       {medio === 'transferencia' ? (
-        <div className="mt-4">
+        <div className="mt-4" data-tour="hoy-ya-pague-banco">
           <p className="text-sm font-medium">Si salió del banco, ¿es alguno de estos débitos?</p>
           {pago.sugerenciasBanco.length === 0 ? (
             <p className="text-body-muted mt-1 text-xs">
@@ -402,10 +414,12 @@ export function ReprogramarModal({
     <Ventana
       titulo={titulo}
       onClose={onClose}
+      tour="hoy-fecha-ventana"
       accion={
         <button
           type="button"
           className={botonPrimario}
+          data-tour="hoy-fecha-confirmar"
           disabled={guardando || !fecha}
           onClick={() => onConfirmar(fecha)}
         >
@@ -414,7 +428,7 @@ export function ReprogramarModal({
       }
     >
       <p className="text-body-muted text-sm">{detalle}</p>
-      <Etiqueta>
+      <Etiqueta tour="hoy-fecha-campo">
         Nueva fecha
         <input
           type="date"

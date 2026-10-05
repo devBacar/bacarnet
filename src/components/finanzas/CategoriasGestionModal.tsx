@@ -75,6 +75,7 @@ function GrupoCampo(props: {
   categoria: CategoriaMovimiento
   opcionesId: string
   disabled: boolean
+  tour?: string
   onGuardar: (grupo: string | null) => Promise<void>
 }) {
   const inputId = useId()
@@ -100,7 +101,7 @@ function GrupoCampo(props: {
   }
 
   return (
-    <div className="mt-2">
+    <div className="mt-2" data-tour={props.tour}>
       <label htmlFor={inputId} className="text-body-muted block text-xs">
         Grupo
       </label>
@@ -238,7 +239,7 @@ export function CategoriasGestionModal(props: {
         if (event.target === event.currentTarget && !ocupado) props.onClose()
       }}
     >
-      <div className="surface-card max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200 p-5 shadow-xl dark:border-zinc-700">
+      <div data-tour="movimientos-categorias-ventana" className="surface-card max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200 p-5 shadow-xl dark:border-zinc-700">
         <h2 id={tituloId} className="text-heading text-base font-semibold">
           Categorías de movimientos
         </h2>
@@ -298,7 +299,7 @@ export function CategoriasGestionModal(props: {
           ))}
         </datalist>
 
-        <div className="mt-4 space-y-4 text-sm">
+        <div className="mt-4 space-y-4 text-sm" data-tour="movimientos-categorias-lista">
           {props.categorias.length === 0 ? (
             <p className="text-body-muted">Todavía no hay categorías.</p>
           ) : null}
@@ -432,6 +433,7 @@ export function CategoriasGestionModal(props: {
                         categoria={categoria}
                         opcionesId={opcionesId}
                         disabled={ocupado}
+                        tour={categoria.id === grupos[0]?.items[0]?.id ? 'movimientos-categoria-grupo' : undefined}
                         onGuardar={(grupoElegido) => props.onGuardarGrupo(categoria, grupoElegido)}
                       />
                     </li>
@@ -445,6 +447,7 @@ export function CategoriasGestionModal(props: {
         <div className="mt-4 flex justify-end">
           <button
             type="button"
+            data-tour="movimientos-categorias-cerrar"
             className="rounded-xl px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-60 dark:text-gray-200 dark:hover:bg-zinc-800"
             onClick={props.onClose}
             disabled={ocupado}

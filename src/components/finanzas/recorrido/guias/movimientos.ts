@@ -1,0 +1,141 @@
+import type { Guia } from '../pasosRecorrido'
+
+const RUTA = '/finanzas/movimientos'
+const VENTANA_CATEGORIA = 'movimientos-categoria-ventana'
+const SIN_MOVIMIENTOS = 'No hay movimientos en la lista para practicar. Probá sacando filtros o cambiando el período. Te cuento cómo sigue.'
+
+export const GUIAS_MOVIMIENTOS: Guia[] = [
+  {
+    id: 'movimientos-categorizar',
+    pantalla: 'movimientos',
+    titulo: 'Ponerle categoría a un movimiento',
+    permiso: 'finanzas_categorias',
+    pasos: [
+      {
+        id: 'abrir',
+        ruta: RUTA,
+        selector: 'movimientos-categorizar',
+        tipo: 'tocar',
+        espera: VENTANA_CATEGORIA,
+        titulo: 'Elegí un movimiento',
+        texto: 'Tocá «Categorizar» (o la categoría que ya tiene) en el movimiento que querés clasificar.',
+        sinDatos: SIN_MOVIMIENTOS,
+      },
+      {
+        id: 'selector',
+        ruta: RUTA,
+        selector: 'movimientos-categoria-selector',
+        tipo: 'completar',
+        ventana: VENTANA_CATEGORIA,
+        titulo: 'La categoría',
+        texto: 'Elegí la categoría de la lista. Si no existe, escribí el nombre y la creás ahí mismo.',
+      },
+      {
+        id: 'nota',
+        ruta: RUTA,
+        selector: 'movimientos-categoria-nota',
+        tipo: 'completar',
+        ventana: VENTANA_CATEGORIA,
+        opcional: true,
+        titulo: 'Una nota',
+        texto: 'Si querés, dejá una nota para acordarte de qué fue. Es opcional.',
+      },
+      {
+        id: 'guardar',
+        ruta: RUTA,
+        selector: 'movimientos-categoria-guardar',
+        ventana: VENTANA_CATEGORIA,
+        titulo: 'Guardar',
+        texto: 'Acá lo guardarías. Para practicar, tocá «Cancelar»: no se guarda nada.',
+      },
+    ],
+  },
+  {
+    id: 'movimientos-regla',
+    pantalla: 'movimientos',
+    titulo: 'Hacer que se categorice solo la próxima vez (regla)',
+    permiso: 'finanzas_categorias',
+    pasos: [
+      {
+        id: 'abrir',
+        ruta: RUTA,
+        selector: 'movimientos-categorizar',
+        tipo: 'tocar',
+        espera: VENTANA_CATEGORIA,
+        titulo: 'Elegí un movimiento',
+        texto: 'Tocá «Categorizar» en un movimiento que se repite todos los meses (la luz, el alquiler, un cliente fijo).',
+        sinDatos: SIN_MOVIMIENTOS,
+      },
+      {
+        id: 'selector',
+        ruta: RUTA,
+        selector: 'movimientos-categoria-selector',
+        tipo: 'completar',
+        ventana: VENTANA_CATEGORIA,
+        titulo: 'La categoría',
+        texto: 'Elegí la categoría que le corresponde.',
+      },
+      {
+        id: 'regla',
+        ruta: RUTA,
+        selector: 'movimientos-categoria-regla',
+        tipo: 'completar',
+        ventana: VENTANA_CATEGORIA,
+        titulo: 'La regla',
+        texto:
+          'Marcá «Aplicar a todos los que digan…»: los que ya están y los que entren con esa misma descripción se categorizan solos.',
+      },
+      {
+        id: 'guardar',
+        ruta: RUTA,
+        selector: 'movimientos-categoria-guardar',
+        ventana: VENTANA_CATEGORIA,
+        titulo: 'Guardar',
+        texto: 'Acá lo guardarías. Para practicar, tocá «Cancelar»: no se guarda nada.',
+      },
+    ],
+  },
+  {
+    id: 'movimientos-palabra-planilla',
+    pantalla: 'movimientos',
+    titulo: 'Cambiar la palabra para la planilla',
+    permiso: 'finanzas_categorias',
+    pasos: [
+      {
+        id: 'abrir',
+        ruta: RUTA,
+        selector: 'movimientos-ordenar-categorias',
+        tipo: 'tocar',
+        espera: 'movimientos-categorias-ventana',
+        titulo: 'Ordenar categorías',
+        texto: 'Tocá «Ordenar categorías».',
+      },
+      {
+        id: 'lista',
+        ruta: RUTA,
+        selector: 'movimientos-categorias-lista',
+        ventana: 'movimientos-categorias-ventana',
+        titulo: 'Las categorías',
+        texto: 'Cada categoría tiene un «Grupo»: esa es la palabra con la que se agrupa en la planilla del mes.',
+      },
+      {
+        id: 'grupo',
+        ruta: RUTA,
+        selector: 'movimientos-categoria-grupo',
+        tipo: 'completar',
+        ventana: 'movimientos-categorias-ventana',
+        titulo: 'Cambiala',
+        texto: 'En la categoría que quieras, escribí la nueva palabra en «Grupo» y tocá «Guardar» al lado.',
+        sinDatos: 'Todavía no hay categorías para practicar: se crean al categorizar un movimiento. Te cuento cómo sigue.',
+      },
+      {
+        id: 'cerrar',
+        ruta: RUTA,
+        selector: 'movimientos-categorias-cerrar',
+        ventana: 'movimientos-categorias-ventana',
+        titulo: 'Listo',
+        texto: 'Para practicar sin cambiar nada, no escribas y tocá «Cerrar».',
+      },
+    ],
+  },
+]

@@ -66,6 +66,7 @@ export function PosicionResumen({
 
   return (
     <section
+      data-tour="saldos-bancos"
       aria-labelledby="finanzas-posicion-heading"
       className="surface-card rounded-2xl border border-t-4 border-[#c5d4e4] border-t-[#1e3a5f] bg-gradient-to-b from-[#e8eef5] to-transparent to-40% p-4 dark:border-[#5b8fd4]/30 dark:border-t-[#5b8fd4] dark:from-[#5b8fd4]/10"
     >
@@ -129,6 +130,7 @@ export function PosicionResumen({
                     <td className={`${td} text-right`}>
                       <button
                         type="button"
+                        data-tour="saldos-banco-saldo"
                         onClick={() => onSelect('ARS', banco.bancoNombre)}
                         className={celdaNumero}
                       >
@@ -184,6 +186,7 @@ export function PosicionResumen({
                         {cuentaCc ? (
                           <button
                             type="button"
+                            data-tour="saldos-transferir"
                             aria-label={`Transferir desde ${banco.bancoNombre}`}
                             className="inline-flex items-center gap-1.5 rounded-lg border border-[#c5d4e4] bg-white px-2.5 py-1.5 text-xs font-medium text-[#1e3a5f] transition hover:bg-[#e8eef5] dark:border-[#5b8fd4]/40 dark:bg-zinc-900 dark:text-[#9dbde8] dark:hover:bg-zinc-800"
                             onClick={() => onTransferir(cuentaCc.id)}

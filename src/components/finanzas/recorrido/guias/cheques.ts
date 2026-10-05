@@ -1,0 +1,165 @@
+// Actualizar cuando se cierre el módulo de cheques.
+import type { Guia } from '../pasosRecorrido'
+
+const RUTA = '/finanzas/cheques'
+const VENTANA_INGRESAR = 'cheques-ingresar-ventana'
+
+export const GUIAS_CHEQUES: Guia[] = [
+  {
+    id: 'cheques-desde-excel',
+    pantalla: 'cheques',
+    titulo: 'Cargar cheques desde el Excel',
+    permiso: 'finanzas_cheques',
+    pasos: [
+      {
+        id: 'ingresar',
+        ruta: RUTA,
+        selector: 'cheques-ingresar',
+        tipo: 'tocar',
+        espera: VENTANA_INGRESAR,
+        titulo: 'Ingresar cheques',
+        texto: 'Tocá «Ingresar cheques».',
+      },
+      {
+        id: 'direccion',
+        ruta: RUTA,
+        selector: 'cheques-ingresar-direccion',
+        tipo: 'completar',
+        ventana: VENTANA_INGRESAR,
+        titulo: 'Recibidos o emitidos',
+        texto: 'Elegí si son cheques que recibiste o que emitiste, y de quién vienen.',
+      },
+      {
+        id: 'pegar',
+        ruta: RUTA,
+        selector: 'cheques-ingresar-tabla',
+        tipo: 'completar',
+        ventana: VENTANA_INGRESAR,
+        titulo: 'Pegá desde el Excel',
+        texto: 'En el Excel, seleccioná las filas y copialas. Después hacé clic en esta tabla y pegá (Ctrl+V): cada fila se arma sola.',
+      },
+      {
+        id: 'revisar',
+        ruta: RUTA,
+        selector: 'cheques-ingresar-tabla',
+        ventana: VENTANA_INGRESAR,
+        titulo: 'Revisá',
+        texto: 'Las filas en rojo tienen algo que falta (número o importe). Podés corregir cualquier celda escribiendo encima.',
+      },
+      {
+        id: 'confirmar',
+        ruta: RUTA,
+        selector: 'cheques-ingresar-confirmar',
+        ventana: VENTANA_INGRESAR,
+        titulo: 'Confirmar',
+        texto: 'Acá confirmarías la carga. Para practicar, tocá «Cancelar»: no se guarda nada.',
+      },
+    ],
+  },
+  {
+    id: 'cheques-a-mano',
+    pantalla: 'cheques',
+    titulo: 'Cargar un cheque a mano',
+    permiso: 'finanzas_cheques',
+    pasos: [
+      {
+        id: 'ingresar',
+        ruta: RUTA,
+        selector: 'cheques-ingresar',
+        tipo: 'tocar',
+        espera: VENTANA_INGRESAR,
+        titulo: 'Ingresar cheques',
+        texto: 'Tocá «Ingresar cheques».',
+      },
+      {
+        id: 'agregar',
+        ruta: RUTA,
+        selector: 'cheques-ingresar-agregar-fila',
+        tipo: 'tocar',
+        espera: 'cheques-ingresar-fila',
+        ventana: VENTANA_INGRESAR,
+        titulo: 'Una fila vacía',
+        texto: 'Tocá «+ Agregar fila».',
+      },
+      {
+        id: 'fila',
+        ruta: RUTA,
+        selector: 'cheques-ingresar-fila',
+        tipo: 'completar',
+        ventana: VENTANA_INGRESAR,
+        titulo: 'Completá la fila',
+        texto: 'Escribí al menos el número y el importe. Fecha de pago, emisor y banco ayudan a encontrarlo después.',
+      },
+      {
+        id: 'confirmar',
+        ruta: RUTA,
+        selector: 'cheques-ingresar-confirmar',
+        ventana: VENTANA_INGRESAR,
+        titulo: 'Confirmar',
+        texto: 'Acá confirmarías la carga. Para practicar, tocá «Cancelar»: no se guarda nada.',
+      },
+    ],
+  },
+  {
+    id: 'cheques-estado',
+    pantalla: 'cheques',
+    titulo: 'Cambiar el estado de un cheque',
+    permiso: 'finanzas_cheques',
+    pasos: [
+      {
+        id: 'estado',
+        ruta: RUTA,
+        selector: 'cheques-filtro-estado',
+        titulo: 'Los estados',
+        texto: 'Un cheque recibido puede estar en cartera, depositado, vendido o rechazado. Uno emitido: pendiente, debitado o rechazado.',
+      },
+      {
+        id: 'como',
+        ruta: RUTA,
+        selector: 'cheques-lista',
+        titulo: 'Por ahora',
+        texto:
+          'Hoy el estado se carga al ingresar el cheque (columna «Estado»). Cuando se termine el módulo vas a poder cambiarlo desde esta lista, y esta guía se va a actualizar.',
+      },
+    ],
+  },
+  {
+    id: 'cheques-semana',
+    pantalla: 'cheques',
+    titulo: 'Ver cuáles se cobran esta semana',
+    pasos: [
+      {
+        id: 'resumen',
+        ruta: RUTA,
+        selector: 'cheques-resumen',
+        titulo: 'Lo de hoy',
+        texto: 'Arriba ves cuántos cheques vencen hoy y por cuánto.',
+        sinDatos: 'El resumen de hoy aparece cuando hay cheques cargados. Te cuento cómo sigue.',
+      },
+      {
+        id: 'recibidos',
+        ruta: RUTA,
+        selector: 'cheques-direccion',
+        tipo: 'completar',
+        titulo: 'Solo los recibidos',
+        texto: 'Tocá «Recibidos»: son los que cobrás vos.',
+      },
+      {
+        id: 'desde',
+        ruta: RUTA,
+        selector: 'cheques-filtro-desde',
+        tipo: 'completar',
+        titulo: 'Desde el lunes',
+        texto: 'En «Vencimiento desde», poné el lunes de esta semana.',
+      },
+      {
+        id: 'hasta',
+        ruta: RUTA,
+        selector: 'cheques-filtro-hasta',
+        tipo: 'completar',
+        titulo: 'Hasta el viernes',
+        texto: 'En «Vencimiento hasta», el viernes. La lista y el «Total en filtro» muestran lo que se cobra esta semana.',
+      },
+    ],
+  },
+]

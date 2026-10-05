@@ -288,7 +288,7 @@ export function CajasWorkspace() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-5">
+    <div data-tour="cajas" className="mx-auto w-full max-w-7xl space-y-5">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-primary">
@@ -348,7 +348,7 @@ export function CajasWorkspace() {
         <Tab active={vista === 'libro'} onClick={() => setVista('libro')}>
           Libro de caja
         </Tab>
-        <Tab active={vista === 'cierres'} onClick={() => setVista('cierres')}>
+        <Tab active={vista === 'cierres'} onClick={() => setVista('cierres')} tour="cajas-pestana-cierres">
           Cierres {pendientes.length > 0 ? `(${pendientes.length})` : ''}
         </Tab>
         {esLider ? (
@@ -489,7 +489,7 @@ function SaldosEnVivo({
   onSelect: (id: string) => void
 }) {
   return (
-    <section aria-label="Saldos actuales de las cajas">
+    <section aria-label="Saldos actuales de las cajas" data-tour="cajas-saldos">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-heading">Saldos que debería tener cada caja</h2>
         <span className="text-xs text-body-muted">{cajas.length} {cajas.length === 1 ? 'caja' : 'cajas'}</span>
@@ -532,15 +532,18 @@ function SaldosEnVivo({
 function Tab({
   active,
   onClick,
+  tour,
   children,
 }: {
   active: boolean
   onClick: () => void
+  tour?: string
   children: React.ReactNode
 }) {
   return (
     <button
       type="button"
+      data-tour={tour}
       onClick={onClick}
       className={`min-w-max flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
         active
@@ -673,6 +676,7 @@ function LibroCaja({
             {caja.tipo === 'chica' ? (
               <button
                 type="button"
+                data-tour="cajas-registrar-gasto"
                 disabled={bloqueada}
                 onClick={onGasto}
                 className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-neutral-300 sm:flex-none"
@@ -692,6 +696,7 @@ function LibroCaja({
                 </button>
                 <button
                   type="button"
+                  data-tour="cajas-registrar-gasto"
                   onClick={onGasto}
                   className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 font-semibold text-white shadow-sm hover:bg-red-700 sm:flex-none"
                 >
@@ -700,6 +705,7 @@ function LibroCaja({
                 </button>
                 <button
                   type="button"
+                  data-tour="cajas-fondear"
                   disabled={!chicasDisponibles}
                   onClick={onFondeo}
                   title={!chicasDisponibles ? 'No hay cajas chicas vinculadas a esta principal' : undefined}
@@ -900,7 +906,7 @@ function BandejaPendientes({
     }
   }
   return (
-    <section className="rounded-2xl border border-amber-300 bg-amber-50 p-6 dark:border-amber-700 dark:bg-amber-950/30">
+    <section className="rounded-2xl border border-amber-300 bg-amber-50 p-6 dark:border-amber-700 dark:bg-amber-950/30" data-tour="cajas-pendientes">
       <div className="flex items-center gap-3">
         <span className="rounded-xl bg-amber-500 p-2 text-white"><LockKeyhole className="h-5 w-5" /></span>
         <div>
@@ -914,7 +920,7 @@ function BandejaPendientes({
         </div>
       ) : (
         <ul className="mt-5 space-y-3">
-          {pendientes.map((cierre) => (
+          {pendientes.map((cierre, indice) => (
             <li key={cierre.id} className="rounded-xl border border-amber-200 bg-white p-4 dark:border-amber-800 dark:bg-zinc-900">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -931,6 +937,7 @@ function BandejaPendientes({
                 </div>
                 <button
                   type="button"
+                  data-tour={indice === 0 ? 'cajas-aprobar' : undefined}
                   disabled={busy === cierre.id}
                   onClick={() => void aprobar(cierre)}
                   className="bg-brand-primary text-white hover:opacity-90 rounded-xl px-5 py-2.5 font-semibold disabled:opacity-50"
@@ -982,7 +989,7 @@ function CerrarCajaCard({
     }
   }
   return (
-    <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
+    <section className="rounded-2xl border border-neutral-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900" data-tour="cajas-cerrar-tarjeta">
       <h2 className="text-lg font-semibold text-heading">Cerrar {caja.nombre}</h2>
       {bloqueada ? (
         <div className="mt-4 rounded-xl bg-amber-50 p-4 text-sm dark:bg-amber-950/40">
@@ -991,10 +998,10 @@ function CerrarCajaCard({
         </div>
       ) : (
         <div className="mt-4">
-          <FinanzasFormField label="Efectivo que conté" htmlFor="cierre-efectivo">
+          <FinanzasFormField label="Efectivo que conté" htmlFor="cierre-efectivo" tour="cajas-cerrar-efectivo">
             <input id="cierre-efectivo" inputMode="decimal" className={finanzasInputClass} value={efectivo} onChange={(event) => setEfectivo(event.target.value)} />
           </FinanzasFormField>
-          <button type="button" disabled={busy} onClick={() => void cerrar()} className="bg-brand-primary text-white hover:opacity-90 mt-4 w-full rounded-xl py-3 font-semibold disabled:opacity-50">
+          <button type="button" data-tour="cajas-cerrar-boton" disabled={busy} onClick={() => void cerrar()} className="bg-brand-primary text-white hover:opacity-90 mt-4 w-full rounded-xl py-3 font-semibold disabled:opacity-50">
             {busy ? 'Cerrando…' : 'Cerrar caja'}
           </button>
         </div>
@@ -1084,11 +1091,11 @@ function AdministracionView({
   )
 }
 
-function ModalShell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function ModalShell({ title, onClose, tour, children }: { title: string; onClose: () => void; tour?: string; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
       <button type="button" className="absolute inset-0 bg-black/45" onClick={onClose} aria-label="Cerrar" />
-      <section className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl dark:bg-zinc-900">
+      <section data-tour={tour} className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white p-6 shadow-xl sm:rounded-2xl dark:bg-zinc-900">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-xl font-semibold text-heading">{title}</h2>
           <button type="button" onClick={onClose} className="rounded-lg p-2 text-body-muted hover:bg-neutral-100 dark:hover:bg-zinc-800"><X className="h-5 w-5" /></button>
@@ -1161,7 +1168,7 @@ function MovimientoModal({ caja, cajas, tipo, onClose, onSaved }: { caja: CajaIt
     }
   }
   return (
-    <ModalShell title={tipo === 'ingreso' ? 'Registrar ingreso' : caja.tipo === 'principal' ? 'Registrar pago' : 'Anotar un gasto'} onClose={onClose}>
+    <ModalShell title={tipo === 'ingreso' ? 'Registrar ingreso' : caja.tipo === 'principal' ? 'Registrar pago' : 'Anotar un gasto'} onClose={onClose} tour="cajas-movimiento-ventana">
       <form onSubmit={(event) => void guardar(event)} className="mt-5 space-y-4">
         {tipo === 'egreso' && caja.tipo === 'principal' ? (
           <div>
@@ -1194,17 +1201,17 @@ function MovimientoModal({ caja, cajas, tipo, onClose, onSaved }: { caja: CajaIt
           </>
         ) : (
           <>
-            <FinanzasFormField label="Concepto" htmlFor="mov-concepto"><input id="mov-concepto" autoFocus className={finanzasInputClass} value={concepto} onChange={(event) => setConcepto(event.target.value)} /></FinanzasFormField>
-            <FinanzasFormField label={`Monto (${caja.moneda})`} htmlFor="mov-monto"><input id="mov-monto" inputMode="decimal" className={finanzasInputClass} value={monto} onChange={(event) => setMonto(event.target.value)} /></FinanzasFormField>
+            <FinanzasFormField label="Concepto" htmlFor="mov-concepto" tour="cajas-movimiento-concepto"><input id="mov-concepto" autoFocus className={finanzasInputClass} value={concepto} onChange={(event) => setConcepto(event.target.value)} /></FinanzasFormField>
+            <FinanzasFormField label={`Monto (${caja.moneda})`} htmlFor="mov-monto" tour="cajas-movimiento-monto"><input id="mov-monto" inputMode="decimal" className={finanzasInputClass} value={monto} onChange={(event) => setMonto(event.target.value)} /></FinanzasFormField>
           </>
         )}
         {tipo === 'egreso' ? (
           <div>
             <input ref={cameraRef} type="file" accept="image/*,application/pdf" capture="environment" className="hidden" onChange={(event) => setFoto(event.target.files?.[0] ?? null)} />
-            <button type="button" onClick={() => cameraRef.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 py-3 font-medium dark:border-zinc-600"><Camera className="h-5 w-5" /> {foto ? foto.name : 'Adjuntar comprobante'}</button>
+            <button type="button" data-tour="cajas-movimiento-comprobante" onClick={() => cameraRef.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 py-3 font-medium dark:border-zinc-600"><Camera className="h-5 w-5" /> {foto ? foto.name : 'Adjuntar comprobante'}</button>
           </div>
         ) : null}
-        <button type="submit" disabled={busy} className="bg-brand-primary text-white hover:opacity-90 w-full rounded-xl py-3 font-semibold disabled:opacity-50">{busy ? 'Guardando…' : modoEgreso === 'compra_usd' && tipo === 'egreso' ? 'Confirmar compra de USD' : 'Guardar'}</button>
+        <button type="submit" data-tour="cajas-movimiento-guardar" disabled={busy} className="bg-brand-primary text-white hover:opacity-90 w-full rounded-xl py-3 font-semibold disabled:opacity-50">{busy ? 'Guardando…' : modoEgreso === 'compra_usd' && tipo === 'egreso' ? 'Confirmar compra de USD' : 'Guardar'}</button>
       </form>
     </ModalShell>
   )
@@ -1232,12 +1239,12 @@ function FondeoModal({ principal, cajas, onClose, onSaved }: { principal: CajaIt
     }
   }
   return (
-    <ModalShell title="Fondear una caja" onClose={onClose}>
+    <ModalShell title="Fondear una caja" onClose={onClose} tour="cajas-fondeo-ventana">
       <form onSubmit={(event) => void guardar(event)} className="mt-5 space-y-4">
-        <FinanzasFormField label="Caja chica destino" htmlFor="fondeo-caja"><select id="fondeo-caja" className={finanzasInputClass} value={chicaId} onChange={(event) => setChicaId(event.target.value)}>{chicas.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select></FinanzasFormField>
-        <FinanzasFormField label={`Monto (${principal.moneda})`} htmlFor="fondeo-monto"><input id="fondeo-monto" inputMode="decimal" className={finanzasInputClass} value={monto} onChange={(event) => setMonto(event.target.value)} /></FinanzasFormField>
+        <FinanzasFormField label="Caja chica destino" htmlFor="fondeo-caja" tour="cajas-fondeo-caja"><select id="fondeo-caja" className={finanzasInputClass} value={chicaId} onChange={(event) => setChicaId(event.target.value)}>{chicas.map((item) => <option key={item.id} value={item.id}>{item.nombre}</option>)}</select></FinanzasFormField>
+        <FinanzasFormField label={`Monto (${principal.moneda})`} htmlFor="fondeo-monto" tour="cajas-fondeo-monto"><input id="fondeo-monto" inputMode="decimal" className={finanzasInputClass} value={monto} onChange={(event) => setMonto(event.target.value)} /></FinanzasFormField>
         <FinanzasFormField label="Concepto" htmlFor="fondeo-concepto"><input id="fondeo-concepto" className={finanzasInputClass} value={concepto} onChange={(event) => setConcepto(event.target.value)} /></FinanzasFormField>
-        <button type="submit" disabled={busy} className="bg-brand-primary text-white hover:opacity-90 w-full rounded-xl py-3 font-semibold disabled:opacity-50">{busy ? 'Fondeando…' : 'Confirmar fondeo'}</button>
+        <button type="submit" data-tour="cajas-fondeo-confirmar" disabled={busy} className="bg-brand-primary text-white hover:opacity-90 w-full rounded-xl py-3 font-semibold disabled:opacity-50">{busy ? 'Fondeando…' : 'Confirmar fondeo'}</button>
       </form>
     </ModalShell>
   )

@@ -75,6 +75,7 @@ export function Tarjeta({
   claseTitulo = 'text-brand-primary text-[15px] font-medium',
   claseSubtitulo = 'text-brand-primary text-[13px]',
   claseAyuda,
+  tour,
   children,
 }: {
   titulo: ReactNode
@@ -84,10 +85,11 @@ export function Tarjeta({
   claseTitulo?: string
   claseSubtitulo?: string
   claseAyuda?: string
+  tour?: string
   children: ReactNode
 }) {
   return (
-    <section className="min-w-0 overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+    <section data-tour={tour} className="min-w-0 overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
       <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
         <div className="min-w-0">
           <h2 className={claseTitulo}>{titulo}</h2>
@@ -107,7 +109,15 @@ export function Vacio({ texto }: { texto: string }) {
 }
 
 /** Menú ⋯ chico con las acciones secundarias de una fila. */
-export function MenuAcciones({ opciones, etiqueta = 'Más acciones' }: { opciones: Array<{ texto: string; onClick: () => void }>; etiqueta?: string }) {
+export function MenuAcciones({
+  opciones,
+  etiqueta = 'Más acciones',
+  tour,
+}: {
+  opciones: Array<{ texto: string; onClick: () => void; tour?: string }>
+  etiqueta?: string
+  tour?: string
+}) {
   const [abierto, setAbierto] = useState(false)
   const caja = useRef<HTMLDivElement>(null)
 
@@ -128,6 +138,7 @@ export function MenuAcciones({ opciones, etiqueta = 'Más acciones' }: { opcione
         aria-label={etiqueta}
         aria-haspopup="menu"
         aria-expanded={abierto}
+        data-tour={tour}
         onClick={() => setAbierto((actual) => !actual)}
         className="rounded-md p-1 text-neutral-600 transition hover:bg-neutral-100 dark:text-gray-300 dark:hover:bg-zinc-800"
       >
@@ -143,6 +154,7 @@ export function MenuAcciones({ opciones, etiqueta = 'Más acciones' }: { opcione
               key={opcion.texto}
               type="button"
               role="menuitem"
+              data-tour={opcion.tour}
               className="block w-full rounded px-2 py-2 text-left text-[13px] text-neutral-800 hover:bg-neutral-100 dark:text-gray-100 dark:hover:bg-zinc-800"
               onClick={() => {
                 setAbierto(false)
@@ -201,7 +213,7 @@ export function CuatroNumeros({ data }: { data: HoyResponse }) {
   const llegaron = cobros.filter((fila) => fila.llego).length
   const detalleCobros = cobros.length === 0 ? '' : ` (${cobros.length}${llegaron > 0 ? ` · ${llegaron} ${llegaron === 1 ? 'llegó' : 'llegaron'}` : ''})`
   return (
-    <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+    <div data-tour="hoy-numeros" className="grid grid-cols-2 gap-2 md:grid-cols-4">
       <Numero titulo="Arrancaste el día con" centavos={data.dia.saldoInicialCentavos} />
       <Numero titulo={`Hoy pagás${data.pagos.filas.length > 0 ? ` (${data.pagos.filas.length})` : ''}`} centavos={data.dia.pagosCentavos} />
       <Numero titulo={`Hoy cobrás${detalleCobros}`} centavos={totalCobros} tono="verde" />
@@ -360,7 +372,7 @@ function armarAvisos(prevision: HoyResponse['prevision']): Aviso[] {
 export function TarjetaOjo({ prevision }: { prevision: HoyResponse['prevision'] }) {
   const avisos = armarAvisos(prevision)
   return (
-    <Tarjeta titulo="Ojo con esto" ayuda="Cosas que conviene mirar hoy: cheques que se debitan, firmas pendientes y cobros atrasados.">
+    <Tarjeta tour="hoy-avisos" titulo="Ojo con esto" ayuda="Cosas que conviene mirar hoy: cheques que se debitan, firmas pendientes y cobros atrasados.">
       {avisos.length === 0 ? (
         <Vacio texto="Nada para revisar." />
       ) : (

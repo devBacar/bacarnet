@@ -21,13 +21,15 @@ function Fila({
   centavos,
   accion,
   menu,
+  tourMenu,
 }: {
   nombre: string
   detalle: ReactNode
   etiqueta?: ReactNode
   centavos: number
   accion?: ReactNode
-  menu?: Array<{ texto: string; onClick: () => void }>
+  menu?: Array<{ texto: string; onClick: () => void; tour?: string }>
+  tourMenu?: string
 }) {
   return (
     <div className="flex items-center gap-2 py-2 text-[15px]">
@@ -40,7 +42,7 @@ function Fila({
       </div>
       <Monto centavos={centavos} className="text-heading shrink-0" />
       {accion}
-      {menu ? <MenuAcciones opciones={menu} /> : null}
+      {menu ? <MenuAcciones opciones={menu} tour={tourMenu} /> : null}
     </div>
   )
 }
@@ -85,6 +87,7 @@ export function PagosHoy({
   const filas = [...pagos.filas].sort((a, b) => Number(b.vencido) - Number(a.vencido))
   return (
     <Tarjeta
+      tour="hoy-pagos"
       titulo="Pagos de hoy"
       derecha={filas.length > 0 ? <Total centavos={pagos.totalCentavos} /> : undefined}
       ayuda="Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá."
@@ -108,16 +111,17 @@ export function PagosHoy({
               centavos={pago.montoCentavos}
               accion={
                 puedeOperar ? (
-                  <button type="button" className={botonChico} onClick={() => onPagar(pago)}>
+                  <button type="button" className={botonChico} data-tour="hoy-pagar" onClick={() => onPagar(pago)}>
                     Pagar
                   </button>
                 ) : undefined
               }
+              tourMenu="hoy-pago-menu"
               menu={
                 puedeOperar
                   ? [
-                      { texto: 'Ya lo pagué', onClick: () => onYaPague(pago) },
-                      { texto: 'Cambiar fecha', onClick: () => onReprogramar(pago) },
+                      { texto: 'Ya lo pagué', onClick: () => onYaPague(pago), tour: 'hoy-pago-menu-ya-pague' },
+                      { texto: 'Cambiar fecha', onClick: () => onReprogramar(pago), tour: 'hoy-pago-menu-fecha' },
                     ]
                   : undefined
               }
@@ -157,6 +161,7 @@ export function CobrosHoy({
   const total = ingresos.reduce((suma, fila) => suma + fila.montoCentavos, 0)
   return (
     <Tarjeta
+      tour="hoy-cobros"
       titulo="Cobros de hoy"
       derecha={ingresos.length > 0 ? <Total centavos={total} /> : undefined}
       ayuda="Se confirman solos cuando entra la plata. También los ves en Agenda › Cobros."
@@ -200,12 +205,13 @@ export function CobrosHoy({
                   </button>
                 )
               }
+              tourMenu="hoy-cobro-menu"
               menu={
                 !puedeOperar || ingreso.llego
                   ? undefined
                   : [
-                      { texto: 'Llegó en efectivo', onClick: () => onEfectivo(ingreso) },
-                      { texto: 'Cambiar fecha', onClick: () => onReprogramar(ingreso) },
+                      { texto: 'Llegó en efectivo', onClick: () => onEfectivo(ingreso), tour: 'hoy-cobro-menu-efectivo' },
+                      { texto: 'Cambiar fecha', onClick: () => onReprogramar(ingreso), tour: 'hoy-cobro-menu-fecha' },
                     ]
               }
             />

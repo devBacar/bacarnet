@@ -159,6 +159,7 @@ export function FinanzasTransferenciasPage() {
           {permisos.transferencias ? (
             <button
               type="button"
+              data-tour="transferencias-nueva"
               className="w-full rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white sm:w-auto"
               onClick={() => setNuevaAbierta(true)}
             >
@@ -167,6 +168,7 @@ export function FinanzasTransferenciasPage() {
           ) : null}
           <button
             type="button"
+            data-tour="transferencias-actualizar"
             className="w-full rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800 sm:w-auto"
             disabled={actualizandoEstados}
             onClick={() => void actualizarEstados()}
@@ -188,6 +190,7 @@ export function FinanzasTransferenciasPage() {
         </button>
         <button
           type="button"
+          data-tour="transferencias-pestana-agenda"
           onClick={() => setPestana('agenda')}
           className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium sm:flex-none ${
             pestana === 'agenda' ? 'bg-brand-primary text-white' : 'text-body-muted'
@@ -200,10 +203,10 @@ export function FinanzasTransferenciasPage() {
       {pestana === 'agenda' ? <AgendaDestinatariosPanel /> : null}
 
       {pestana === 'historial' ? (
-      <>
+      <div data-tour="transferencias-lista" className="min-w-0">
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <label className="text-sm">
+        <label className="text-sm" data-tour="transferencias-filtro-estado">
           <span className="text-body-muted mb-1 block">Estado</span>
           <select className={finanzasInputClass} value={estado} onChange={(e) => setEstado(e.target.value)}>
             <option value="">Todos</option>
@@ -266,7 +269,7 @@ export function FinanzasTransferenciasPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100 dark:divide-zinc-800">
-              {rows.map((row) => (
+              {rows.map((row, indice) => (
                 <Fragment key={row.id}>
                 <tr className="bg-white dark:bg-zinc-900">
                   <td className="px-3 py-3 whitespace-nowrap">{formatFecha(row.fechaConfeccion)}</td>
@@ -278,7 +281,7 @@ export function FinanzasTransferenciasPage() {
                   </td>
                   <td className="px-3 py-3">{TIPO_LABEL[row.tipo] ?? row.tipo}</td>
                   <td className="px-3 py-3 tabular-nums">{formatMoneyCentavos(row.montoCentavos, 'ARS')}</td>
-                  <td className="px-3 py-3">
+                  <td className="px-3 py-3" data-tour={indice === 0 ? 'transferencias-estado' : undefined}>
                     <EstadoCelda row={row} />
                     {row.estado === 'rechazada' && row.erroresInterbanking?.length ? (
                       <p className="mt-1 max-w-xs text-xs text-red-800">{row.erroresInterbanking.join(' ')}</p>
@@ -296,6 +299,7 @@ export function FinanzasTransferenciasPage() {
                       {permisos.transferencias && row.puedeCancelar ? (
                         <button
                           type="button"
+                          data-tour="transferencias-cancelar"
                           className="rounded border border-amber-600 px-2 py-1 text-xs font-medium text-amber-900"
                           onClick={() => setCancelarRow(row)}
                         >
@@ -360,7 +364,7 @@ export function FinanzasTransferenciasPage() {
           ) : null}
         </div>
       )}
-      </>
+      </div>
       ) : null}
 
       {historialId ? (
@@ -475,10 +479,10 @@ function CancelarModal({
   const [saving, setSaving] = useState(false)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="surface-card w-full max-w-xl rounded-2xl border border-neutral-200 p-6 dark:border-zinc-700">
+      <div data-tour="transferencias-cancelar-ventana" className="surface-card w-full max-w-xl rounded-2xl border border-neutral-200 p-6 dark:border-zinc-700">
         <h2 className="text-heading text-lg font-semibold">Marcar como cancelada</h2>
         <p className="text-body-muted mt-2 text-sm">{row.direccion}</p>
-        <p className="mt-4 rounded-xl border-2 border-amber-600 bg-amber-50 px-4 py-4 text-base font-semibold leading-relaxed text-amber-950">
+        <p data-tour="transferencias-cancelar-aviso" className="mt-4 rounded-xl border-2 border-amber-600 bg-amber-50 px-4 py-4 text-base font-semibold leading-relaxed text-amber-950">
           {CANCELAR_AVISO}
         </p>
         <div className="mt-6 flex justify-end gap-2">
@@ -487,6 +491,7 @@ function CancelarModal({
           </button>
           <button
             type="button"
+            data-tour="transferencias-cancelar-confirmar"
             disabled={saving}
             className="rounded-lg bg-amber-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
             onClick={() => {

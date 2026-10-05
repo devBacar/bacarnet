@@ -31,12 +31,14 @@ function etiquetaTipoCuenta(tipo: TipoCuentaDestinatario | null | undefined): st
 function SelectorTipoCuenta({
   value,
   onChange,
+  tour,
 }: {
   value: TipoCuentaDestinatario | null
   onChange: (next: TipoCuentaDestinatario) => void
+  tour?: string
 }) {
   return (
-    <div>
+    <div data-tour={tour}>
       <p className="text-body-muted mb-1 text-sm font-medium">Tipo de cuenta</p>
       <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo de cuenta">
         {TIPOS_CUENTA.map((opcion) => {
@@ -106,6 +108,7 @@ export function AgendaDestinatariosPanel() {
         {puedeDestinatarios ? (
           <button
             type="button"
+            data-tour="transferencias-agregar-destinatario"
             className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
             onClick={() => setAltaAbierta(true)}
           >
@@ -230,6 +233,7 @@ function AltaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => P
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 sm:p-4">
       <form
+        data-tour="destinatario-ventana"
         className="surface-card max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200 p-4 dark:border-zinc-700 sm:p-6"
         onSubmit={(event) => {
           event.preventDefault()
@@ -254,10 +258,10 @@ function AltaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => P
       >
         <h2 className="text-heading text-lg font-semibold">Agregar destinatario</h2>
         <div className="mt-4 space-y-3">
-          <FinanzasFormField label="Nombre">
+          <FinanzasFormField label="Nombre" tour="destinatario-nombre">
             <input className={finanzasInputClass} value={nombre} onChange={(e) => setNombre(e.target.value)} />
           </FinanzasFormField>
-          <FinanzasFormField label="CBU">
+          <FinanzasFormField label="CBU" tour="destinatario-cbu">
             <input
               className={finanzasInputClass}
               inputMode="numeric"
@@ -286,7 +290,7 @@ function AltaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => P
               <option value="proveedores">Proveedores</option>
             </select>
           </FinanzasFormField>
-          <SelectorTipoCuenta value={tipoCuenta} onChange={setTipoCuenta} />
+          <SelectorTipoCuenta value={tipoCuenta} onChange={setTipoCuenta} tour="destinatario-tipo" />
         </div>
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button type="button" className="rounded-lg px-4 py-2 text-sm" onClick={onClose} disabled={saving}>
@@ -294,6 +298,7 @@ function AltaModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => P
           </button>
           <button
             type="submit"
+            data-tour="destinatario-guardar"
             disabled={saving}
             className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
           >

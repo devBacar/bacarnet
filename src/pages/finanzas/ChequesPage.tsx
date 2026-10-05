@@ -159,6 +159,7 @@ export function FinanzasChequesPage() {
         {puedeCheques ? <div className="flex gap-2">
           <button
             type="button"
+            data-tour="cheques-ingresar"
             className="btn-primary inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium"
             onClick={() => setShowPegar(true)}
           >
@@ -185,7 +186,7 @@ export function FinanzasChequesPage() {
       </header>
 
       {resumen ? (
-        <div className="card-minimal mb-6 px-5 py-4">
+        <div className="card-minimal mb-6 px-5 py-4" data-tour="cheques-resumen">
           <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">
             Hoy {formatFecha(resumen.fecha)}
           </p>
@@ -198,12 +199,13 @@ export function FinanzasChequesPage() {
       ) : null}
 
       {/* Tabs: dirección */}
-      <div className="mb-4">
+      <div className="mb-4" data-tour="cheques">
         <div className="inline-flex rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
           {DIR_TABS.map(([val, label]) => (
             <button
               key={val}
               type="button"
+              data-tour={val === 'recibido' ? 'cheques-direccion' : undefined}
               onClick={() => cambiarFiltro(() => { setDireccion(val); setEstado('') })}
               className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 direccion === val
@@ -270,7 +272,7 @@ export function FinanzasChequesPage() {
             ))}
           </div>
         </label>
-        <label className="text-sm">
+        <label className="text-sm" data-tour="cheques-filtro-estado">
           <span className="text-body-muted mb-1 block">Estado</span>
           <select
             className={finanzasInputClass}
@@ -310,7 +312,7 @@ export function FinanzasChequesPage() {
         </label>
       </div>
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="text-sm">
+        <label className="text-sm" data-tour="cheques-filtro-desde">
           <span className="text-body-muted mb-1 block">Vencimiento desde</span>
           <input
             type="date"
@@ -319,7 +321,7 @@ export function FinanzasChequesPage() {
             onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); try { sessionStorage.setItem('cheques_desde', e.target.value) } catch {} })}
           />
         </label>
-        <label className="text-sm">
+        <label className="text-sm" data-tour="cheques-filtro-hasta">
           <span className="text-body-muted mb-1 block">Vencimiento hasta</span>
           <input
             type="date"
@@ -353,7 +355,7 @@ export function FinanzasChequesPage() {
       {isLoading ? (
         <p className="text-body-muted text-sm">Cargando cheques…</p>
       ) : (
-        <div className={`surface-card overflow-x-auto ${isFetching ? 'opacity-70' : ''}`}>
+        <div className={`surface-card overflow-x-auto ${isFetching ? 'opacity-70' : ''}`} data-tour="cheques-lista">
           <table className="min-w-full text-sm">
             <thead className="surface-muted text-left text-xs uppercase tracking-wide">
               <tr className="text-body-muted">
@@ -745,7 +747,7 @@ function PegarChequesModal({ onClose, onSuccess }: { onClose: () => void; onSucc
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Cerrar" />
-      <section className="relative flex max-h-[95vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-zinc-900">
+      <section data-tour="cheques-ingresar-ventana" className="relative flex max-h-[95vh] w-full max-w-[95vw] flex-col overflow-hidden rounded-2xl bg-white shadow-xl dark:bg-zinc-900">
         <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-4 dark:border-zinc-700">
           <h2 className="text-heading text-lg font-semibold">Ingresar cheques</h2>
           <button type="button" className="text-body-muted hover:text-heading text-xl leading-none" onClick={onClose}>×</button>
@@ -753,7 +755,7 @@ function PegarChequesModal({ onClose, onSuccess }: { onClose: () => void; onSucc
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
           <div className="mb-4 flex flex-wrap items-end gap-4">
-            <div className="max-w-xs">
+            <div className="max-w-xs" data-tour="cheques-ingresar-direccion">
               <label className="text-sm">
                 <span className="text-body-muted mb-1 block">Dirección</span>
                 <select
@@ -788,6 +790,7 @@ function PegarChequesModal({ onClose, onSuccess }: { onClose: () => void; onSucc
             </div>
             <button
               type="button"
+              data-tour="cheques-ingresar-agregar-fila"
               className="border-subtle text-body-muted rounded-lg border px-3 py-2 text-sm font-medium"
               onClick={addRow}
             >
@@ -797,6 +800,7 @@ function PegarChequesModal({ onClose, onSuccess }: { onClose: () => void; onSucc
 
           <div
             className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-zinc-700"
+            data-tour="cheques-ingresar-tabla"
             onPaste={handlePaste}
           >
             <table className="min-w-[1400px] text-xs">
@@ -826,7 +830,7 @@ function PegarChequesModal({ onClose, onSuccess }: { onClose: () => void; onSucc
                   </tr>
                 ) : (
                   rows.map((row, idx) => (
-                    <tr key={idx} className={`border-t border-subtle ${row._valid ? '' : 'bg-red-50 dark:bg-red-900/20'}`}>
+                    <tr key={idx} data-tour={idx === 0 ? 'cheques-ingresar-fila' : undefined} className={`border-t border-subtle ${row._valid ? '' : 'bg-red-50 dark:bg-red-900/20'}`}>
                       <td className="text-body-muted px-2 py-1 text-center">{idx + 1}</td>
                       <td className="px-1 py-1">
                         <input className={`${INPUT_CLS} font-mono`} value={row.numero} onChange={(e) => updateRow(idx, 'numero', e.target.value)} />
@@ -884,6 +888,7 @@ function PegarChequesModal({ onClose, onSuccess }: { onClose: () => void; onSucc
             </button>
             <button
               type="button"
+              data-tour="cheques-ingresar-confirmar"
               className="btn-primary rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-40"
               disabled={saving || validCount === 0}
               onClick={handleConfirm}

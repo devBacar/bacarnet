@@ -81,6 +81,7 @@ export function AccountsDetailModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="cuentas-detail-title"
+        data-tour="saldos-detalle-ventana"
         className={`relative flex max-h-[92vh] w-full ${anchoVentana} flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl dark:bg-zinc-900`}
       >
         <header className="flex items-start justify-between gap-5 border-b border-neutral-200 px-6 py-5 dark:border-zinc-800">

@@ -191,6 +191,7 @@ export function FinanzasAgendaPage() {
         {puedeAlta ? (
           <button
             type="button"
+            data-tour="agenda-nuevo"
             onClick={() => setShowAlta(true)}
             className="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
           >
@@ -201,6 +202,7 @@ export function FinanzasAgendaPage() {
       </div>
 
       {tab === 'planilla' ? (
+        <div data-tour="agenda-planilla" className="min-w-0">
         <CompromisosMes
           onPagar={(compromisoId) => {
             const row = pendientesPlanilla.find((item) => item.id === compromisoId)
@@ -208,12 +210,13 @@ export function FinanzasAgendaPage() {
             else toast('Ese compromiso no está pendiente. Buscalo en Compromisos de pago.')
           }}
         />
+        </div>
       ) : tab === 'pagos' ? (
-        <>
+        <div data-tour={vistaPagos === 'hechos' ? 'agenda-hechos' : 'agenda-pagos'} className="min-w-0">
           <SubVistaTabs
             options={[
               { id: 'pendientes', label: 'Pendientes' },
-              { id: 'hechos', label: 'Pagos hechos' },
+              { id: 'hechos', label: 'Pagos hechos', tour: 'agenda-hechos-pestana' },
             ]}
             value={vistaPagos}
             onChange={(id) => ir({ tab: 'pagos', vista: id === 'hechos' ? 'hechos' : 'pendientes' })}
@@ -257,9 +260,9 @@ export function FinanzasAgendaPage() {
               }}
             />
           )}
-        </>
+        </div>
       ) : (
-        <>
+        <div data-tour="agenda-cobros" className="min-w-0">
           <SubVistaTabs
             options={[
               { id: 'esperados', label: 'Esperados' },
@@ -287,7 +290,7 @@ export function FinanzasAgendaPage() {
               }}
             />
           )}
-        </>
+        </div>
       )}
 
       {pagarDesdePlanilla ? (
@@ -332,7 +335,7 @@ function SubVistaTabs({
   value,
   onChange,
 }: {
-  options: Array<{ id: string; label: string }>
+  options: Array<{ id: string; label: string; tour?: string }>
   value: string
   onChange: (id: string) => void
 }) {
@@ -342,6 +345,7 @@ function SubVistaTabs({
         <button
           key={opt.id}
           type="button"
+          data-tour={opt.tour}
           onClick={() => onChange(opt.id)}
           className={`rounded-md px-3 py-1.5 text-sm font-medium ${
             value === opt.id
@@ -1045,14 +1049,14 @@ function AltaAgendaModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="Cerrar" />
-      <form onSubmit={(e) => void submit(e)} className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 dark:bg-zinc-900 sm:p-6">
+      <form onSubmit={(e) => void submit(e)} data-tour="agenda-alta-ventana" className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-4 dark:bg-zinc-900 sm:p-6">
         <h2 className="text-heading text-lg font-semibold">
           {compromiso ? 'Editar compromiso' : tab === 'pagos' ? 'Nuevo compromiso de pago' : 'Nuevo cobro esperado'}
         </h2>
         <div className="mt-4 grid gap-3">
           {tab === 'pagos' ? (
             <>
-              <FinanzasFormField label="Concepto" htmlFor="agenda-alta-concepto">
+              <FinanzasFormField label="Concepto" htmlFor="agenda-alta-concepto" tour="agenda-alta-concepto">
                 <input
                   id="agenda-alta-concepto"
                   required
@@ -1061,7 +1065,7 @@ function AltaAgendaModal({
                   onChange={(e) => setForm({ ...form, concepto: e.target.value })}
                 />
               </FinanzasFormField>
-              <FinanzasFormField label="Proveedor" htmlFor="agenda-alta-proveedor">
+              <FinanzasFormField label="Proveedor" htmlFor="agenda-alta-proveedor" tour="agenda-alta-proveedor">
                 <input
                   id="agenda-alta-proveedor"
                   required
@@ -1084,7 +1088,7 @@ function AltaAgendaModal({
                   ))}
                 </select>
               </FinanzasFormField>
-              <FinanzasFormField label="Moneda" htmlFor="agenda-alta-moneda">
+              <FinanzasFormField label="Moneda" htmlFor="agenda-alta-moneda" tour="agenda-alta-moneda">
                 <select
                   id="agenda-alta-moneda"
                   className={finanzasInputClass}
@@ -1132,7 +1136,7 @@ function AltaAgendaModal({
               ) : null}
             </>
           ) : (
-            <FinanzasFormField label="Cliente" htmlFor="agenda-alta-cliente">
+            <FinanzasFormField label="Cliente" htmlFor="agenda-alta-cliente" tour="agenda-alta-cliente">
               <input
                 id="agenda-alta-cliente"
                 required
@@ -1142,7 +1146,7 @@ function AltaAgendaModal({
               />
             </FinanzasFormField>
           )}
-          <FinanzasFormField label="Monto" htmlFor="agenda-alta-monto">
+          <FinanzasFormField label="Monto" htmlFor="agenda-alta-monto" tour="agenda-alta-monto">
             <input
               id="agenda-alta-monto"
               required
@@ -1164,7 +1168,7 @@ function AltaAgendaModal({
                   onChange={(e) => setForm({ ...form, deuda: e.target.value })}
                 />
               </FinanzasFormField>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3" data-tour="agenda-alta-cuotas">
                 <FinanzasFormField label="Cuota N" htmlFor="agenda-alta-cuota-n" optional>
                   <input
                     id="agenda-alta-cuota-n"
@@ -1197,6 +1201,7 @@ function AltaAgendaModal({
           <FinanzasFormField
             label={tab === 'pagos' ? 'Fecha de vencimiento' : 'Fecha esperada'}
             htmlFor="agenda-alta-fecha"
+            tour="agenda-alta-fecha"
           >
             <input
               id="agenda-alta-fecha"
@@ -1230,7 +1235,7 @@ function AltaAgendaModal({
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm">
             Cancelar
           </button>
-          <button type="submit" disabled={saving} className="rounded-lg bg-brand-primary px-4 py-2 text-sm text-white">
+          <button type="submit" disabled={saving} data-tour="agenda-alta-guardar" className="rounded-lg bg-brand-primary px-4 py-2 text-sm text-white">
             Guardar
           </button>
         </div>

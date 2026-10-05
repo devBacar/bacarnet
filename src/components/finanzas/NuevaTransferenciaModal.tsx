@@ -42,12 +42,14 @@ function etiquetaTipoCuenta(tipo: TipoCuentaDestinatario | null): string {
 function SelectorTipoCuenta({
   value,
   onChange,
+  tour,
 }: {
   value: TipoCuentaDestinatario | null
   onChange: (next: TipoCuentaDestinatario) => void
+  tour?: string
 }) {
   return (
-    <div>
+    <div data-tour={tour}>
       <p className="text-body-muted mb-1 text-sm font-medium">Tipo de cuenta</p>
       <div className="grid grid-cols-2 gap-2" role="group" aria-label="Tipo de cuenta">
         {TIPOS_CUENTA.map((opcion) => {
@@ -380,6 +382,7 @@ export function NuevaTransferenciaModal({
       <div
         role="dialog"
         aria-labelledby="nueva-transferencia-titulo"
+        data-tour="transferencia-ventana"
         className="surface-card max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200 p-4 dark:border-zinc-700 sm:p-6"
       >
         <p className="text-body-muted text-xs">Paso {step} de 4</p>
@@ -394,7 +397,7 @@ export function NuevaTransferenciaModal({
 
         {step === 1 ? (
           <div className="mt-4 space-y-4">
-            <FinanzasFormField label="Cuenta de origen">
+            <FinanzasFormField label="Cuenta de origen" tour="transferencia-origen">
               <select
                 className={finanzasInputClass}
                 value={cuentas.some((cuenta) => cuenta.id === cuentaDebitoId) ? cuentaDebitoId : ''}
@@ -422,7 +425,7 @@ export function NuevaTransferenciaModal({
                   : ''}
               </p>
             ) : null}
-            <FinanzasFormField label="Tipo">
+            <FinanzasFormField label="Tipo" tour="transferencia-tipo">
               <select
                 className={finanzasInputClass}
                 value={tipo}
@@ -440,7 +443,7 @@ export function NuevaTransferenciaModal({
 
         {step === 2 && tipo === 'cuentas_propias' ? (
           <div className="mt-4">
-            <FinanzasFormField label="Cuenta de destino">
+            <FinanzasFormField label="Cuenta de destino" tour="transferencia-destino">
               <select
                 className={finanzasInputClass}
                 value={cuentaDestinoId}
@@ -483,7 +486,7 @@ export function NuevaTransferenciaModal({
               </div>
             ) : (
               <>
-                <FinanzasFormField label="Buscar en la agenda" optional>
+                <FinanzasFormField label="Buscar en la agenda" optional tour="transferencia-buscar">
                   <input
                     className={finanzasInputClass}
                     value={busqueda}
@@ -580,6 +583,7 @@ export function NuevaTransferenciaModal({
               </>
             )}
             <SelectorTipoCuenta
+              tour="transferencia-tipo-cuenta"
               value={tipoCuenta}
               onChange={(next) => {
                 setTipoCuenta(next)
@@ -591,7 +595,7 @@ export function NuevaTransferenciaModal({
 
         {step === 3 ? (
           <div className="mt-4 space-y-4">
-            <FinanzasFormField label="Monto">
+            <FinanzasFormField label="Monto" tour="transferencia-monto">
               <input
                 className={finanzasInputClass}
                 inputMode="decimal"
@@ -648,7 +652,7 @@ export function NuevaTransferenciaModal({
                 ) : null}
               </div>
             ) : null}
-            <FinanzasFormField label="Concepto">
+            <FinanzasFormField label="Concepto" tour="transferencia-concepto">
               <input
                 className={finanzasInputClass}
                 maxLength={MAX_OBSERVACION_INTERBANKING}
@@ -671,7 +675,7 @@ export function NuevaTransferenciaModal({
         ) : null}
 
         {step === 4 && origen && centavos != null ? (
-          <div className="mt-4 space-y-3 text-sm">
+          <div className="mt-4 space-y-3 text-sm" data-tour="transferencia-resumen">
             <p>
               {tipo === 'cuentas_propias'
                 ? `Vas a confeccionar ${formatMoneyCentavos(centavos, 'ARS')} desde ${etiqueta(origen)} a ${destinoNombre}. Queda pendiente de aprobación en Interbanking.`
@@ -723,6 +727,7 @@ export function NuevaTransferenciaModal({
             <button
               type="button"
               className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+              data-tour="transferencia-siguiente"
               onClick={() => {
                 setError('')
                 if (!validarPaso()) return
@@ -735,6 +740,7 @@ export function NuevaTransferenciaModal({
             <button
               type="button"
               className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white disabled:opacity-60"
+              data-tour="transferencia-confirmar"
               disabled={enviando}
               onClick={() => void enviar(avisoFondos != null)}
             >

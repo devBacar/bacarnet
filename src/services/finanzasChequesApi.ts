@@ -48,6 +48,10 @@ export interface ChequeListItem {
   utilizado: boolean | null
   cmc7: string | null
   observaciones: string | null
+  movimientoBancarioId: string | null
+  movimientoCuentaId: string | null
+  movimientoFecha: string | null
+  fechaAcreditacion: string | null
 }
 
 export interface ChequesListResponse {
@@ -98,6 +102,15 @@ async function chequesFetch(path: string, init?: RequestInit): Promise<Response>
     ...init,
     headers: { Authorization: `Bearer ${token}`, ...init?.headers },
   })
+}
+
+export async function fetchChequeById(id: string): Promise<ChequeListItem> {
+  const res = await chequesFetch(`/${encodeURIComponent(id)}`)
+  const body = (await res.json().catch(() => null)) as { error?: string; cheque?: ChequeListItem } | null
+  if (!res.ok || !body?.cheque) {
+    throw new Error(body?.error ?? 'No se pudo obtener el cheque')
+  }
+  return body.cheque
 }
 
 export async function fetchCheques(filters: ChequesListFilters): Promise<ChequesListResponse> {

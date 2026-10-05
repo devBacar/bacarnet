@@ -53,6 +53,16 @@ export interface ChequeDocument {
 
   cmc7: string | null
   observaciones: string | null
+
+  /** ID del movimiento bancario vinculado (traza). */
+  movimientoBancarioId?: string | null
+  /** Cuenta bancaria donde impactó el movimiento. */
+  movimientoCuentaId?: string | null
+  /** Fecha del movimiento bancario (YYYY-MM-DD). */
+  movimientoFecha?: string | null
+  /** Fecha real de acreditación: del Excel en emitidos, del movimiento en recibidos. */
+  fechaAcreditacion?: string | null
+
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string
@@ -83,4 +93,6 @@ export interface ChequeImportRow {
 
   cmc7: string | null
   observaciones: string | null
+
+  fechaAcreditacion: string | null
 }

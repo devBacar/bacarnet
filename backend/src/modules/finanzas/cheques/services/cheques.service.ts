@@ -284,6 +284,7 @@ export async function ingresarChequesPegados(input: {
       bancoEmisor: r.bancoEmisor.trim() || null,
       cmc7: r.cmc7.trim() || null,
       observaciones: null,
+      fechaAcreditacion: null,
     })
   }
 
@@ -490,6 +491,7 @@ function parseRecibidosSheet(
       utilizado: prefixEstado === 'utilizado',
       cmc7: null,
       observaciones: detalle,
+      fechaAcreditacion: null,
     })
   }
 
@@ -560,6 +562,7 @@ function parseEmitidos488Sheet(
       utilizado,
       cmc7: null,
       observaciones: null,
+      fechaAcreditacion: null,
     })
   }
 
@@ -637,6 +640,7 @@ function parseEmitidosVientriSheet(
       utilizado: estado === 'debitado',
       cmc7: null,
       observaciones: null,
+      fechaAcreditacion: null,
     })
   }
 
@@ -659,6 +663,7 @@ function parseEmitidos488ExtSheet(
   const iBanco = header.findIndex((h) => h === 'bancodes')
   const iEstado = header.findIndex((h) => h === 'estadochdes')
   const iRechazado = header.indexOf('rechazado')
+  const iFecAcreditacion = header.findIndex((h) => h === 'fecteoacreditacion' || h === 'dmafecteoacreditacion')
 
   const parsed: ChequeImportRow[] = []
   const errores: string[] = []
@@ -706,6 +711,7 @@ function parseEmitidos488ExtSheet(
       utilizado: estado === 'debitado',
       cmc7: null,
       observaciones: null,
+      fechaAcreditacion: iFecAcreditacion >= 0 ? cellToDate(cellVal(row, iFecAcreditacion)) || null : null,
     })
   }
 
@@ -770,6 +776,7 @@ function parseRecibidos32Sheet(
       utilizado: null,
       cmc7: null,
       observaciones: null,
+      fechaAcreditacion: null,
     })
   }
 
@@ -836,6 +843,7 @@ function parseRecibidosInformeSheet(
       utilizado: null,
       cmc7: null,
       observaciones: null,
+      fechaAcreditacion: null,
     })
   }
 

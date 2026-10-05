@@ -555,7 +555,7 @@ function TicketFormModal({
             <button type="button" className="rounded-lg px-4 py-2.5 text-sm font-medium text-body transition-colors hover:bg-neutral-200/70 disabled:opacity-50 dark:hover:bg-zinc-800" disabled={submitting} onClick={onClose}>
               Cancelar
             </button>
-            <button type="submit" className="btn-primary inline-flex min-w-36 items-center justify-center gap-2 px-5 py-2.5" disabled={submitting}>
+            <button type="submit" className="btn-primary inline-flex min-w-36 items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium" disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               {submitting ? 'Enviando…' : 'Enviar pedido'}
             </button>
@@ -718,7 +718,7 @@ function TicketDetail({
         <FileDropzone files={uploadFiles} onFiles={setUploadFiles} compact testId="st-ticket-detail-attachments" />
         {uploadFiles.length > 0 ? (
           <div className="flex justify-end">
-            <button type="button" className="btn-secondary inline-flex items-center gap-2 px-4 py-2" disabled={uploadBusy} onClick={() => void upload()}>
+            <button type="button" className="btn-secondary inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium" disabled={uploadBusy} onClick={() => void upload()}>
               {uploadBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
               {uploadBusy ? 'Subiendo…' : 'Adjuntar archivos'}
             </button>
@@ -747,7 +747,7 @@ function TicketDetail({
             onChange={(event) => setCommentText(event.target.value)}
           />
           <div className="mt-2 flex justify-end">
-            <button className="btn-primary inline-flex items-center gap-2 px-4 py-2" disabled={commentBusy || !commentText.trim()} aria-label="Enviar comentario">
+            <button className="btn-primary inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium" disabled={commentBusy || !commentText.trim()} aria-label="Enviar comentario">
               {commentBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Enviar
             </button>
@@ -762,7 +762,7 @@ function TicketDetail({
             <p className="mt-0.5 text-xs text-emerald-800/75 dark:text-emerald-200/70">Reabrilo si necesitás continuar o cerralo para finalizar.</p>
           </div>
           <div className="flex gap-2">
-            <button type="button" className="btn-primary inline-flex items-center gap-2 px-4 py-2" disabled={statusBusy} onClick={() => void changeStatus('reabrir')}>
+            <button type="button" className="btn-primary inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium" disabled={statusBusy} onClick={() => void changeStatus('reabrir')}>
               <RefreshCcw className="h-4 w-4" /> Reabrir
             </button>
             <button
@@ -966,7 +966,7 @@ export function SoporteTi() {
         </div>
         <button
           type="button"
-          className="btn-primary inline-flex items-center gap-2 px-4 py-2.5 shadow-sm"
+          className="btn-primary inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium shadow-sm"
           onClick={() => setFormOpen(true)}
           disabled={!catalog}
         >
@@ -996,7 +996,7 @@ export function SoporteTi() {
           <Inbox className="mx-auto h-10 w-10 text-brand-primary/70" />
           <h2 className="mt-4 text-lg font-semibold text-heading">Todavía no tenés tickets</h2>
           <p className="mx-auto mt-1 max-w-md text-sm text-body-muted">Cuando necesites ayuda, creá un pedido y vas a poder seguir su avance acá.</p>
-          <button type="button" className="btn-primary mt-5 inline-flex items-center gap-2" onClick={() => setFormOpen(true)}>
+          <button type="button" className="btn-primary mt-5 inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium" onClick={() => setFormOpen(true)}>
             <Plus className="h-4 w-4" /> Crear mi primer pedido
           </button>
         </section>

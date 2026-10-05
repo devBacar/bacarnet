@@ -53,6 +53,8 @@ export interface MovimientoBancarioDocument {
    * si el débito reaparece como único candidato.
    */
   reservadoPorTransferenciaId?: string | null
+  /** Cheque que ya usó este movimiento (traza). Se re-vincula tras cada sync. */
+  reservadoPorChequeId?: string | null
   /** Categoría libre. Se reaplica si un sync reemplaza el día y la fila reaparece. */
   categoriaId?: string | null
   /** Texto libre del usuario. También se reaplica junto con la categoría. */

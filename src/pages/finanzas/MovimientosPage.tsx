@@ -9,6 +9,7 @@ import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
+import { fetchChequeById, CHEQUE_ESTADO_LABELS, type ChequeListItem } from '../../services/finanzasChequesApi'
 import { fetchFinanzasCuentas } from '../../services/finanzasApi'
 import {
   actualizarMovimiento,
@@ -83,6 +84,8 @@ export function FinanzasMovimientosPage() {
   const [guardando, setGuardando] = useState(false)
   const [gestionAbierta, setGestionAbierta] = useState(false)
   const [completando, setCompletando] = useState(false)
+  const [chequeDetalle, setChequeDetalle] = useState<ChequeListItem | null>(null)
+  const [chequeCargando, setChequeCargando] = useState(false)
   const categoriaFiltroId = useId()
 
   const { data: cuentasData } = useQuery({
@@ -383,6 +386,7 @@ export function FinanzasMovimientosPage() {
                 <th className="px-3 py-2">De / Para</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2 text-right">Monto</th>
+                <th className="px-3 py-2">Cheque</th>
                 <th className="px-3 py-2">Categoría</th>
               </tr>
             </thead>
@@ -413,6 +417,25 @@ export function FinanzasMovimientosPage() {
                     <td className={`whitespace-nowrap px-3 py-2 text-right font-medium ${entrada ? 'text-emerald-800' : 'text-red-800'}`}>
                       {entrada ? '' : '−'}
                       {formatMoneyCentavos(row.montoCentavos, 'ARS')}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
+                      {row.reservadoPorChequeId ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-blue-800 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:hover:bg-blue-900/50"
+                          title="Ver detalle del cheque"
+                          onClick={async () => {
+                            setChequeCargando(true)
+                            try {
+                              const ch = await fetchChequeById(row.reservadoPorChequeId!)
+                              setChequeDetalle(ch)
+                            } catch { toast.error('No se pudo cargar el cheque') }
+                            finally { setChequeCargando(false) }
+                          }}
+                        >
+                          {row.reservadoPorChequeId.replace(/^(recibido|emitido)_/, '')}
+                        </button>
+                      ) : null}
                     </td>
                     <td className="px-3 py-1.5">
                       <CategoriaMovimientoChip
@@ -474,6 +497,77 @@ export function FinanzasMovimientosPage() {
         onFusionar={fusionarCategoria}
         onAplicarReglas={aplicarReglas}
       />
+
+      {chequeDetalle ? (
+        <ChequeDetalleModal cheque={chequeDetalle} onClose={() => setChequeDetalle(null)} />
+      ) : null}
+      {chequeCargando ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="rounded-xl bg-white px-6 py-4 shadow-lg dark:bg-zinc-900">
+            <p className="text-sm text-neutral-500">Cargando cheque…</p>
+          </div>
+        </div>
+      ) : null}
     </>
+  )
+}
+
+function ChequeDetalleModal({ cheque, onClose }: { cheque: ChequeListItem; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-zinc-900" onClick={(e) => e.stopPropagation()}>
+        <h2 className="mb-4 text-lg font-semibold text-neutral-900 dark:text-gray-100">Detalle del cheque</h2>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+          <dt className="text-neutral-500">Número</dt>
+          <dd className="font-mono">{cheque.numero}</dd>
+
+          <dt className="text-neutral-500">Dirección</dt>
+          <dd>{cheque.direccion === 'emitido' ? 'Emitido' : 'Recibido'}</dd>
+
+          {cheque.emisor ? <>
+            <dt className="text-neutral-500">Emisor</dt>
+            <dd>{cheque.emisor}</dd>
+          </> : null}
+
+          {cheque.destinatario ? <>
+            <dt className="text-neutral-500">Destinatario</dt>
+            <dd>{cheque.destinatario}</dd>
+          </> : null}
+
+          {cheque.bancoEmisor ? <>
+            <dt className="text-neutral-500">Banco</dt>
+            <dd>{cheque.bancoEmisor}</dd>
+          </> : null}
+
+          <dt className="text-neutral-500">Vencimiento</dt>
+          <dd>{cheque.fechaPago ? formatFecha(cheque.fechaPago) : '—'}</dd>
+
+          <dt className="text-neutral-500">Monto</dt>
+          <dd className="font-medium text-neutral-900 dark:text-gray-100">
+            {formatMoneyCentavos(cheque.montoCentavos, 'ARS')}
+          </dd>
+
+          <dt className="text-neutral-500">Estado</dt>
+          <dd>{CHEQUE_ESTADO_LABELS[cheque.estado]}</dd>
+
+          <dt className="text-neutral-500">Tipo</dt>
+          <dd>{cheque.tipo === 'echeq' ? 'eCheq' : 'Físico'}</dd>
+
+          {cheque.fechaAcreditacion ? <>
+            <dt className="text-neutral-500">Acreditación</dt>
+            <dd>{formatFecha(cheque.fechaAcreditacion)}</dd>
+          </> : null}
+        </dl>
+        <div className="mt-5 text-right">
+          <button
+            type="button"
+            className="inline-flex rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100 dark:hover:bg-zinc-700"
+            onClick={onClose}
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -37,6 +37,10 @@ export interface ChequeListadoItem {
   utilizado: boolean | null
   cmc7: string | null
   observaciones: string | null
+  movimientoBancarioId: string | null
+  movimientoCuentaId: string | null
+  movimientoFecha: string | null
+  fechaAcreditacion: string | null
 }
 
 function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
@@ -61,6 +65,10 @@ function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
     utilizado: typeof data.utilizado === 'boolean' ? data.utilizado : null,
     cmc7: typeof data.cmc7 === 'string' ? data.cmc7 : null,
     observaciones: typeof data.observaciones === 'string' ? data.observaciones : null,
+    movimientoBancarioId: typeof data.movimientoBancarioId === 'string' ? data.movimientoBancarioId : null,
+    movimientoCuentaId: typeof data.movimientoCuentaId === 'string' ? data.movimientoCuentaId : null,
+    movimientoFecha: typeof data.movimientoFecha === 'string' ? data.movimientoFecha : null,
+    fechaAcreditacion: typeof data.fechaAcreditacion === 'string' ? data.fechaAcreditacion : null,
   }
 }
 
@@ -212,6 +220,48 @@ export async function marcarChequeEndosado(input: {
   await collection().doc(input.id).update({
     utilizado: true,
     destinatario,
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+}
+
+export async function listChequesSinVincular(
+  direccion: ChequeDireccion,
+): Promise<{ id: string; numero: string; montoCentavos: number; fechaPago: string; emisor: string; cliente: string | null; destinatario: string | null }[]> {
+  const snap = await collection()
+    .where('direccion', '==', direccion)
+    .get()
+
+  return snap.docs
+    .filter((doc) => {
+      const data = doc.data()
+      return !data.movimientoBancarioId
+    })
+    .map((doc) => {
+      const data = doc.data()
+      return {
+        id: doc.id,
+        numero: String(data.numero ?? ''),
+        montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
+        fechaPago: String(data.fechaPago ?? ''),
+        emisor: String(data.emisor ?? ''),
+        cliente: typeof data.cliente === 'string' ? data.cliente : null,
+        destinatario: typeof data.destinatario === 'string' ? data.destinatario : null,
+      }
+    })
+}
+
+export async function vincularChequeConMovimiento(input: {
+  chequeId: string
+  movimientoBancarioId: string
+  movimientoCuentaId: string
+  movimientoFecha: string
+  fechaAcreditacion: string | null
+}): Promise<void> {
+  await collection().doc(input.chequeId).update({
+    movimientoBancarioId: input.movimientoBancarioId,
+    movimientoCuentaId: input.movimientoCuentaId,
+    movimientoFecha: input.movimientoFecha,
+    ...(input.fechaAcreditacion != null ? { fechaAcreditacion: input.fechaAcreditacion } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   })
 }

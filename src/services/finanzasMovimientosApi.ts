@@ -32,6 +32,7 @@ export interface MovimientoListItem {
   montoCentavos: number
   categoriaId: string | null
   nota: string | null
+  reservadoPorChequeId: string | null
 }
 
 export interface MovimientosListResponse {
@@ -116,6 +117,15 @@ export async function syncMovimientosBancarios(): Promise<{ insertados: number; 
   }
   if (!res.ok) throw new Error(payload.error ?? 'No se pudieron traer los movimientos del banco')
   return { insertados: payload.insertados ?? 0, autoCategorizados: payload.autoCategorizados ?? 0 }
+}
+
+export async function fetchMovimientoById(id: string): Promise<MovimientoListItem> {
+  const res = await movimientosFetch(`/${encodeURIComponent(id)}`)
+  const body = (await res.json().catch(() => null)) as { error?: string; movimiento?: MovimientoListItem } | null
+  if (!res.ok || !body?.movimiento) {
+    throw new Error(body?.error ?? 'No se pudo obtener el movimiento')
+  }
+  return body.movimiento
 }
 
 export async function fetchMovimientos(filters: MovimientosListFilters): Promise<MovimientosListResponse> {

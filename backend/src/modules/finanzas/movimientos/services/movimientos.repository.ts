@@ -337,6 +337,7 @@ export interface MovimientoListadoItem {
   montoCentavos: number
   categoriaId: string | null
   nota: string | null
+  reservadoPorChequeId: string | null
 }
 
 export interface MovimientosListadoFiltro {
@@ -374,7 +375,14 @@ export function toListadoItem(id: string, data: DocumentData): MovimientoListado
     montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
     categoriaId: typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null,
     nota: typeof data.nota === 'string' && data.nota.trim() ? data.nota.trim() : null,
+    reservadoPorChequeId: typeof data.reservadoPorChequeId === 'string' && data.reservadoPorChequeId ? data.reservadoPorChequeId : null,
   }
+}
+
+export async function getMovimientoById(id: string): Promise<MovimientoListadoItem | null> {
+  const snap = await movimientosBancariosCollection().doc(id).get()
+  if (!snap.exists) return null
+  return toListadoItem(snap.id, snap.data()!)
 }
 
 export async function sumMovimientosCentavos(

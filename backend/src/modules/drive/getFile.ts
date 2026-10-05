@@ -44,7 +44,8 @@ export async function getDriveFile(req: Request, res: Response): Promise<void> {
       return
     }
 
-    if (meta.data.mimeType === FOLDER_MIME) {
+    // El visor no abre carpetas; la barra de ubicación sí necesita su nombre (?incluirCarpetas=1).
+    if (meta.data.mimeType === FOLDER_MIME && req.query.incluirCarpetas !== '1') {
       res.status(400).json({ error: 'No se puede abrir una carpeta embebida' })
       return
     }

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { listChequesApi, getResumenDiario, importChequesExcel, ingresarChequesPegados } from '../services/cheques.service.js'
-import { updateChequeEstado } from '../services/cheques.repository.js'
+import { getChequeById, updateChequeEstado } from '../services/cheques.repository.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import type { ChequeDireccion, ChequeEstado, ChequeOrigen, ChequeTipo } from '../domain/cheque.types.js'
 
@@ -120,6 +120,19 @@ const VALID_ESTADOS: ChequeEstado[] = [
   'pendiente', 'debitado',
 ]
 
+
+finanzasChequesRouter.get('/:id', async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) { res.status(400).json({ error: 'Id inválido' }); return }
+    const cheque = await getChequeById(id)
+    if (!cheque) { res.status(404).json({ error: 'Cheque no encontrado' }); return }
+    res.json({ cheque })
+  } catch (err) {
+    console.error('[finanzas/cheques] get by id', err)
+    res.status(500).json({ error: 'No se pudo obtener el cheque' })
+  }
+})
 
 finanzasChequesRouter.patch('/:id/estado', async (req, res) => {
   try {

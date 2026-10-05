@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDownLeft, ArrowUpRight, ClipboardPaste, Upload } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { fetchMovimientoById, type MovimientoListItem } from '../../services/finanzasMovimientosApi'
 import toast from 'react-hot-toast'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
@@ -62,14 +63,21 @@ export function FinanzasChequesPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
+  const [movDetalle, setMovDetalle] = useState<MovimientoListItem | null>(null)
+  const [movCargando, setMovCargando] = useState(false)
 
   const [direccion, setDireccion] = useState<ChequeDireccion | ''>('')
   const [origen, setOrigen] = useState<ChequeOrigen | ''>('')
   const [estado, setEstado] = useState<ChequeEstado | ''>('')
   const [tipo, setTipo] = useState<ChequeTipo | ''>('')
+  const [vinculacion, setVinculacion] = useState<'' | 'vinculado' | 'sin_vincular'>('')
   const { desde: mesDesde, hasta: mesHasta } = mesActual()
-  const [desde, setDesde] = useState(mesDesde)
-  const [hasta, setHasta] = useState(mesHasta)
+  const [desde, setDesde] = useState(() => {
+    try { return sessionStorage.getItem('cheques_desde') ?? mesDesde } catch { return mesDesde }
+  })
+  const [hasta, setHasta] = useState(() => {
+    try { return sessionStorage.getItem('cheques_hasta') ?? mesHasta } catch { return mesHasta }
+  })
   const [page, setPage] = useState(1)
   const [showPegar, setShowPegar] = useState(false)
 
@@ -240,7 +248,7 @@ export function FinanzasChequesPage() {
       ) : null}
 
       {/* Filtros */}
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-sm">
           <span className="text-body-muted mb-1 block">Tipo</span>
           <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
@@ -287,12 +295,26 @@ export function FinanzasChequesPage() {
           </select>
         </label>
         <label className="text-sm">
+          <span className="text-body-muted mb-1 block">Movimiento</span>
+          <select
+            className={finanzasInputClass}
+            value={vinculacion}
+            onChange={(e) => cambiarFiltro(() => setVinculacion(e.target.value as '' | 'vinculado' | 'sin_vincular'))}
+          >
+            <option value="">Todos</option>
+            <option value="vinculado">Con movimiento</option>
+            <option value="sin_vincular">Sin movimiento</option>
+          </select>
+        </label>
+      </div>
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="text-sm">
           <span className="text-body-muted mb-1 block">Vencimiento desde</span>
           <input
             type="date"
             className={finanzasInputClass}
             value={desde}
-            onChange={(e) => cambiarFiltro(() => setDesde(e.target.value))}
+            onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); try { sessionStorage.setItem('cheques_desde', e.target.value) } catch {} })}
           />
         </label>
         <label className="text-sm">
@@ -301,7 +323,7 @@ export function FinanzasChequesPage() {
             type="date"
             className={finanzasInputClass}
             value={hasta}
-            onChange={(e) => cambiarFiltro(() => setHasta(e.target.value))}
+            onChange={(e) => cambiarFiltro(() => { setHasta(e.target.value); try { sessionStorage.setItem('cheques_hasta', e.target.value) } catch {} })}
           />
         </label>
       </div>
@@ -345,18 +367,26 @@ export function FinanzasChequesPage() {
                 <th className="px-3 py-2 text-right">Importe</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Estado</th>
+                <th className="px-3 py-2">Mov.</th>
                 <th className="px-3 py-2">Obs.</th>
               </tr>
             </thead>
             <tbody>
-              {(data?.cheques ?? []).map((ch) => (
+              {(data?.cheques ?? []).filter((ch) =>
+                vinculacion === 'vinculado' ? Boolean(ch.movimientoBancarioId)
+                  : vinculacion === 'sin_vincular' ? !ch.movimientoBancarioId
+                  : true
+              ).map((ch) => (
                 <tr key={ch.id} className="border-t border-subtle">
                   {!direccion ? (
                     <td className="px-3 py-2">
                       <DireccionBadge direccion={ch.direccion} />
                     </td>
                   ) : null}
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{ch.numero}</td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
+                    {ch.numero}
+                    {ch.bancoEmisor ? <span className="text-body-muted block font-sans text-[11px]">{ch.bancoEmisor}</span> : null}
+                  </td>
                   <td className="px-3 py-2">
                     {ch.direccion === 'emitido'
                       ? (ch.destinatario || '—')
@@ -380,6 +410,27 @@ export function FinanzasChequesPage() {
                   </td>
                   <td className="px-3 py-2"><TipoBadge tipo={ch.tipo} /></td>
                   <td className="px-3 py-2"><CondicionBadge estado={ch.estado} /></td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs">
+                    {ch.movimientoBancarioId ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50"
+                        title={`Ver movimiento del ${ch.movimientoFecha ?? ''}`}
+                        onClick={async () => {
+                          setMovCargando(true)
+                          try {
+                            const mov = await fetchMovimientoById(ch.movimientoBancarioId!)
+                            setMovDetalle(mov)
+                          } catch { toast.error('No se pudo cargar el movimiento') }
+                          finally { setMovCargando(false) }
+                        }}
+                      >
+                        ✓ {ch.movimientoFecha ? formatFecha(ch.movimientoFecha) : 'Vinculado'}
+                      </button>
+                    ) : (
+                      <span className="text-body-muted">—</span>
+                    )}
+                  </td>
                   <td className="max-w-[200px] truncate px-3 py-2 text-xs" title={ch.observaciones ?? ''}>
                     {ch.observaciones || '—'}
                   </td>
@@ -425,6 +476,17 @@ export function FinanzasChequesPage() {
             queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques'] })
           }}
         />
+      ) : null}
+
+      {movDetalle ? (
+        <MovimientoDetalleModal movimiento={movDetalle} onClose={() => setMovDetalle(null)} />
+      ) : null}
+      {movCargando ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="surface-card rounded-xl px-6 py-4 shadow-lg">
+            <p className="text-body-muted text-sm">Cargando movimiento…</p>
+          </div>
+        </div>
       ) : null}
     </>
   )
@@ -552,6 +614,62 @@ function emptyRow(): ParsedRow {
 }
 
 const INPUT_CLS = 'w-full rounded border border-transparent bg-transparent px-1 py-0.5 focus:border-neutral-300 focus:outline-none dark:focus:border-zinc-600'
+
+function MovimientoDetalleModal({ movimiento, onClose }: { movimiento: MovimientoListItem; onClose: () => void }) {
+  const entrada = movimiento.tipo === 'credito'
+  const contraparte = typeof movimiento.contraparte === 'string'
+    ? movimiento.contraparte
+    : movimiento.contraparte?.nombre ?? null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="surface-card w-full max-w-md rounded-2xl p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-heading mb-4 text-lg font-semibold">Detalle del movimiento</h2>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+          <dt className="text-body-muted">Fecha</dt>
+          <dd>{formatFecha(movimiento.fechaProceso)}</dd>
+
+          <dt className="text-body-muted">Descripción</dt>
+          <dd>{movimiento.descripcion}</dd>
+
+          {contraparte ? <>
+            <dt className="text-body-muted">Contraparte</dt>
+            <dd>{contraparte}</dd>
+          </> : null}
+
+          <dt className="text-body-muted">Tipo</dt>
+          <dd>
+            <span className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${
+              entrada
+                ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
+                : 'border-red-300 bg-red-100 text-red-900'
+            }`}>
+              {entrada ? 'Entrada' : 'Salida'}
+            </span>
+          </dd>
+
+          <dt className="text-body-muted">Monto</dt>
+          <dd className={`font-medium ${entrada ? 'text-emerald-800' : 'text-red-800'}`}>
+            {entrada ? '' : '−'}{formatMoneyCentavos(movimiento.montoCentavos, 'ARS')}
+          </dd>
+
+          <dt className="text-body-muted">Cuenta</dt>
+          <dd>{movimiento.bancoNombre}</dd>
+
+          {movimiento.nota ? <>
+            <dt className="text-body-muted">Nota</dt>
+            <dd>{movimiento.nota}</dd>
+          </> : null}
+        </dl>
+        <div className="mt-5 text-right">
+          <button type="button" className="btn-primary rounded-lg px-4 py-2 text-sm font-medium" onClick={onClose}>
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function PegarChequesModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [direccionModal, setDireccionModal] = useState<ChequeDireccion>('recibido')

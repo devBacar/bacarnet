@@ -83,6 +83,11 @@ const MODULE_TOGGLES: {
     label: 'Mostrar Finanzas',
     description: 'Habilita el módulo Finanzas y la ruta /finanzas/cuentas para usuarios con permiso.',
   },
+  {
+    key: 'rrhhEnabled',
+    label: 'Mostrar RRHH',
+    description: 'Habilita el módulo RRHH (horas extra) y la ruta /rrhh/horas-extra para usuarios con permiso.',
+  },
 ]
 
 export function ModuleSettings() {

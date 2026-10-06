@@ -39,6 +39,7 @@ import {
   FinanzasChequesPage,
   FinanzasLayout,
   FinanzasIndexRedirect,
+  RrhhHorasExtraPage,
 } from '../pages'
 import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
 import { ProtectedRoute } from './ProtectedRoute'
@@ -97,6 +98,10 @@ export function AppRoutes() {
                 <Route path="cajas" element={<FinanzasCajasPage />} />
                 <Route path="cajachica" element={<Navigate to="/finanzas/cajas" replace />} />
               </Route>
+            </Route>
+            <Route element={<ModulePermissionRoute permission="view_rrhh" module="rrhhEnabled" />}>
+              <Route path="rrhh" element={<Navigate to="/rrhh/horas-extra" replace />} />
+              <Route path="rrhh/horas-extra" element={<RrhhHorasExtraPage />} />
             </Route>
             <Route element={<ModulePermissionRoute permission="view_drive" module="resourcesEnabled" />}>
               <Route path="recursos" element={<Resources />} />

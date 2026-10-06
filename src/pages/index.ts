@@ -39,3 +39,4 @@ export {
 } from './finanzas/CajasWorkspace'
 export { FinanzasChequesPage } from './finanzas/ChequesPage'
 export { FinanzasIndexRedirect } from './finanzas/FinanzasIndexRedirect'
+export { RrhhHorasExtraPage } from './rrhh/HorasExtraPage'

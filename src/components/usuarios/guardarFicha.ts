@@ -32,6 +32,8 @@ const CLAVES_PERMISO: (keyof UserPermissions)[] = [
   'finanzas_destinatarios',
   'finanzas_saldos',
   'manage_finanzas_caja',
+  'view_rrhh',
+  'rrhh_detalle',
 ]
 
 export interface OperacionPermisoEspecial {

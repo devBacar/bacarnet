@@ -64,6 +64,32 @@ export const MODULOS_USO: {
   },
 ]
 
+export type NivelRrhh = 'sin_acceso' | 'directorio' | 'rrhh'
+
+export const NIVELES_RRHH: { id: NivelRrhh; label: string; ayuda: string }[] = [
+  { id: 'sin_acceso', label: 'Sin acceso', ayuda: 'No entra a RRHH.' },
+  {
+    id: 'directorio',
+    label: 'Directorio',
+    ayuda: 'Ve horas extra, costos y proyección por área. Sin datos por persona.',
+  },
+  {
+    id: 'rrhh',
+    label: 'RRHH',
+    ayuda: 'Ve todo, incluido el detalle por legajo.',
+  },
+]
+
+export function nivelRrhhDe(permissions: { view_rrhh?: boolean; rrhh_detalle?: boolean }): NivelRrhh {
+  if (permissions.rrhh_detalle === true) return 'rrhh'
+  if (permissions.view_rrhh === true) return 'directorio'
+  return 'sin_acceso'
+}
+
+export function permisosDeNivelRrhh(nivel: NivelRrhh): { view_rrhh: boolean; rrhh_detalle: boolean } {
+  return { view_rrhh: nivel !== 'sin_acceso', rrhh_detalle: nivel === 'rrhh' }
+}
+
 export const INTERRUPTORES_FINANZAS: {
   clave: keyof FlagsPermisosFinanzas
   titulo: string
@@ -227,6 +253,15 @@ export function chipsDeUsuario(
     chips.push({
       id: 'finanzas',
       texto: `Finanzas · ${etiquetaPerfil(perfil)}`,
+      tono: 'modulo',
+    })
+  }
+
+  const nivelRrhh = nivelRrhhDe(user.permissions)
+  if (nivelRrhh !== 'sin_acceso') {
+    chips.push({
+      id: 'rrhh',
+      texto: `RRHH · ${NIVELES_RRHH.find((item) => item.id === nivelRrhh)?.label ?? ''}`,
       tono: 'modulo',
     })
   }

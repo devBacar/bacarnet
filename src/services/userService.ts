@@ -82,6 +82,10 @@ export interface UserPermissions {
   finanzas_saldos: boolean
   /** Líder de cajas (crear cajas, fondear, aprobar cierres). */
   manage_finanzas_caja: boolean
+  /** RRHH: ver horas extra agregadas por área y la proyección (perfil Directorio). */
+  view_rrhh: boolean
+  /** RRHH: ver el detalle por legajo (perfil RRHH). Implica view_rrhh. */
+  rrhh_detalle: boolean
 }
 
 export interface PersonalLink {
@@ -190,6 +194,8 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
   finanzas_destinatarios: false,
   finanzas_saldos: false,
   manage_finanzas_caja: false,
+  view_rrhh: false,
+  rrhh_detalle: false,
 }
 
 export const SUPER_ADMIN_EMAILS = [
@@ -215,6 +221,8 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   finanzas_destinatarios: true,
   finanzas_saldos: true,
   manage_finanzas_caja: true,
+  view_rrhh: true,
+  rrhh_detalle: true,
 }
 
 export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
@@ -234,6 +242,8 @@ export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
   finanzas_destinatarios: false,
   finanzas_saldos: false,
   manage_finanzas_caja: false,
+  view_rrhh: false,
+  rrhh_detalle: false,
 }
 
 export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
@@ -253,6 +263,8 @@ export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
   finanzas_destinatarios: false,
   finanzas_saldos: false,
   manage_finanzas_caja: false,
+  view_rrhh: false,
+  rrhh_detalle: false,
 }
 
 export {
@@ -369,6 +381,20 @@ export function hasFinanzasAccess(profile: UserProfile | null | undefined): bool
   return profile.permissions.view_finanzas === true
 }
 
+/** Módulo RRHH: super_admin siempre; resto con view_rrhh o rrhh_detalle (alineado con requireRrhh en API). */
+export function hasRrhhAccess(profile: UserProfile | null | undefined): boolean {
+  if (!profile) return false
+  if (isSuperAdmin(profile) || profile.permissions.super_admin === true) return true
+  return profile.permissions.view_rrhh === true || profile.permissions.rrhh_detalle === true
+}
+
+/** RRHH con detalle por legajo: super_admin o rrhh_detalle. */
+export function hasRrhhDetalle(profile: UserProfile | null | undefined): boolean {
+  if (!profile) return false
+  if (isSuperAdmin(profile) || profile.permissions.super_admin === true) return true
+  return profile.permissions.rrhh_detalle === true
+}
+
 export interface PermisosFinanzasEfectivos {
   ver: boolean
   agenda: boolean
@@ -480,6 +506,8 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
       finanzas_destinatarios: permissions.finanzas_destinatarios === true,
       finanzas_saldos: permissions.finanzas_saldos === true,
       manage_finanzas_caja: permissions.manage_finanzas_caja === true,
+      view_rrhh: permissions.view_rrhh === true || permissions.rrhh_detalle === true,
+      rrhh_detalle: permissions.rrhh_detalle === true,
     },
     favoriteApps: Array.isArray(data.favoriteApps)
       ? (data.favoriteApps as string[])

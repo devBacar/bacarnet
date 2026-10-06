@@ -10,6 +10,7 @@ import { catalogRouter } from './modules/areas/routes.js'
 import { helpdeskRouter } from './modules/helpdesk/routes.js'
 import { stTicketsRouter } from './modules/stTickets/routes.js'
 import { finanzasRouter } from './modules/finanzas/routes/index.js'
+import { rrhhRouter } from './modules/rrhh/routes/rrhh.routes.js'
 import {
   handleOfficeUploadStagingContentPreflight,
   serveOfficeUploadStagingContent,
@@ -73,6 +74,7 @@ app.use('/api/users', usersRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/approval-requests', approvalRequestsRouter)
 app.use('/api/finanzas', finanzasRouter)
+app.use('/api/rrhh', rrhhRouter)
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'No encontrado' })

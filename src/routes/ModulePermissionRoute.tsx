@@ -2,7 +2,7 @@ import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../context'
 import { useGlobalSettings } from '../context/GlobalSettingsContext'
 import type { GlobalModuleFlag } from '../services/configService'
-import { hasFinanzasAccess, type UserPermissions } from '../services/userService'
+import { hasFinanzasAccess, hasRrhhAccess, type UserPermissions } from '../services/userService'
 
 interface ModulePermissionRouteProps {
   permission: keyof UserPermissions
@@ -33,7 +33,9 @@ export function ModulePermissionRoute({
   const hasPermission =
     permission === 'view_finanzas'
       ? hasFinanzasAccess(userProfile)
-      : Boolean(userProfile?.permissions[permission])
+      : permission === 'view_rrhh'
+        ? hasRrhhAccess(userProfile)
+        : Boolean(userProfile?.permissions[permission])
 
   if (!moduleEnabled || !hasPermission) {
     return <Navigate to={redirectTo} replace />

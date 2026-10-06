@@ -20,6 +20,7 @@ export type GlobalModuleFlag =
   | 'boardsEnabled'
   | 'notificationsEnabled'
   | 'finanzasEnabled'
+  | 'rrhhEnabled'
 
 export interface GlobalSettings {
   resourcesEnabled: boolean
@@ -28,6 +29,7 @@ export interface GlobalSettings {
   boardsEnabled: boolean
   notificationsEnabled: boolean
   finanzasEnabled: boolean
+  rrhhEnabled: boolean
   departments: string[]
 }
 
@@ -38,6 +40,7 @@ export const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   boardsEnabled: true,
   notificationsEnabled: true,
   finanzasEnabled: false,
+  rrhhEnabled: false,
   departments: [...DEFAULT_DEPARTMENTS],
 }
 
@@ -73,6 +76,7 @@ function mapDocToGlobalSettings(data: DocumentData): GlobalSettings {
     notificationsEnabled:
       data.notificationsEnabled ?? DEFAULT_GLOBAL_SETTINGS.notificationsEnabled,
     finanzasEnabled: data.finanzasEnabled ?? DEFAULT_GLOBAL_SETTINGS.finanzasEnabled,
+    rrhhEnabled: data.rrhhEnabled ?? DEFAULT_GLOBAL_SETTINGS.rrhhEnabled,
     departments: normalizeDepartments(data.departments),
   }
 }
@@ -111,6 +115,7 @@ export async function updateGlobalSettings(settings: GlobalSettings): Promise<vo
       boardsEnabled: settings.boardsEnabled,
       notificationsEnabled: settings.notificationsEnabled,
       finanzasEnabled: settings.finanzasEnabled,
+      rrhhEnabled: settings.rrhhEnabled,
       departments: normalizeDepartments(settings.departments),
     },
     { merge: true },

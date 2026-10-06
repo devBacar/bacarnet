@@ -27,6 +27,8 @@ export const EXTERNAL_PENDING_PERMISSIONS = {
   finanzas_destinatarios: false,
   finanzas_saldos: false,
   manage_finanzas_caja: false,
+  view_rrhh: false,
+  rrhh_detalle: false,
 } as const
 
 export const DEFAULT_PERMISSIONS = {
@@ -46,6 +48,8 @@ export const DEFAULT_PERMISSIONS = {
   finanzas_destinatarios: false,
   finanzas_saldos: false,
   manage_finanzas_caja: false,
+  view_rrhh: false,
+  rrhh_detalle: false,
 } as const
 
 export const SUPER_ADMIN_PERMISSIONS = {
@@ -65,6 +69,8 @@ export const SUPER_ADMIN_PERMISSIONS = {
   finanzas_destinatarios: true,
   finanzas_saldos: true,
   manage_finanzas_caja: true,
+  view_rrhh: true,
+  rrhh_detalle: true,
 } as const
 
 export type BootstrapSource = 'register' | 'google'

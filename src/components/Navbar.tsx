@@ -7,7 +7,13 @@ import { useGlobalSettings } from '../context/GlobalSettingsContext'
 import { useBoardsVisibility } from '../hooks/useBoardsVisibility'
 import { queryKeys } from '../lib/queryKeys'
 import { fetchCajasAcceso } from '../services/finanzasCajasApi'
-import { DEFAULT_PERMISSIONS, isExternalAccount, isSuperAdmin, permisosFinanzasDe } from '../services/userService'
+import {
+  DEFAULT_PERMISSIONS,
+  hasRrhhAccess,
+  isExternalAccount,
+  isSuperAdmin,
+  permisosFinanzasDe,
+} from '../services/userService'
 import { AppHeader } from './AppHeader'
 import { MobileNavDrawer } from './MobileNavDrawer'
 import { NavAccountActions } from './NavAccountActions'
@@ -57,6 +63,7 @@ export function Navbar() {
     staleTime: 5 * 60_000,
   })
   const finanzasAccess = finanzasPorPermiso || cajasAcceso.data === true
+  const rrhhAccess = hasRrhhAccess(userProfile)
 
   const items = useMemo(
     () =>
@@ -69,6 +76,8 @@ export function Navbar() {
         resourcesEnabled: settings.resourcesEnabled,
         finanzasEnabled: settings.finanzasEnabled,
         finanzasAccess,
+        rrhhEnabled: settings.rrhhEnabled,
+        rrhhAccess,
         canAccessBoards,
         canAccessAudit,
       }),
@@ -80,9 +89,11 @@ export function Navbar() {
       permissions.view_drive,
       permissions.view_links,
       finanzasAccess,
+      rrhhAccess,
       settings.directoryEnabled,
       settings.finanzasEnabled,
       settings.resourcesEnabled,
+      settings.rrhhEnabled,
     ],
   )
 

@@ -206,5 +206,22 @@ export const sincronizarFinanzasCada30Min = onSchedule(
   },
 )
 
+/**
+ * RRHH: procesa el último backup de Salario (Drive, carpeta Backups_Salarios) y actualiza rrhh_*.
+ * Salario sube backups ~14:00 y ~20:30; corre 15:30 y 22:30. Idempotente: si el archivo ya se procesó, no hace nada.
+ */
+export const ingestarBackupSalarioRrhh = onSchedule(
+  {
+    schedule: '30 15,22 * * *',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    timeoutSeconds: 1800,
+    memory: '2GiB',
+  },
+  async () => {
+    const { runScheduledIngestaRrhh } = await import('./modules/rrhh/scheduledIngestaRrhh.js')
+    await runScheduledIngestaRrhh()
+  },
+)
+
 // Trigger Firestore pendiente de IAM Eventarc en prod; pendingUserSetup usa POST /api/users/apply-pending-setup.
 // export { applyPendingUserSetup } from './triggers/onUserCreated.js'

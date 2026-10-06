@@ -8,6 +8,8 @@ import type { ConteoEscritura, InfoIngestaGuardada } from './rrhh.repository.js'
 export const MESES_HISTORIA = 24
 /** Si el último backup tiene más de estas horas, se avisa: Salario sube uno a las 14 h y otro a las 20:30 h. */
 export const HORAS_ATRASO_BACKUP = 14
+/** Si una tabla de liquidaciones trae menos de esta proporción de las filas de la última ingesta buena, se aborta. */
+export const PROPORCION_MINIMA_FILAS = 0.8
 /** Una ingesta "en curso" más vieja que esto se considera caída y se puede volver a tomar. */
 export const VENCIMIENTO_EN_CURSO_MS = 40 * 60 * 1000
 
@@ -51,7 +53,14 @@ export interface RegistroIngestas {
   registrarSinBackup(datos: { origen: OrigenIngesta; actorUid: string; fecha: Date }): Promise<void>
 }
 
+export interface UltimaIngestaOk {
+  ultimoMes: string | null
+  filasPorTabla: Record<string, number>
+}
+
 export interface DependenciasIngesta {
+  /** Última ingesta guardada bien, para no pisar historia buena con un backup incompleto. */
+  ultimaIngestaOk(): Promise<UltimaIngestaOk | null>
   buscarUltimoBackup(): Promise<BackupSalario | null>
   abrirBackup(fileId: string): Promise<Readable>
   guardarResultado(resultado: ResultadoResumen, info: InfoIngestaGuardada): Promise<ConteoEscritura>
@@ -68,6 +77,39 @@ export interface ResultadoIngesta {
   ultimoMes?: string | null
   escritura?: ConteoEscritura
   mensaje?: string
+}
+
+const RE_TABLA_LIQ = /^liq(\d{4})$/
+
+/**
+ * Controles antes de escribir: el guardado reemplaza los datos y borra lo que no vino,
+ * así que un backup cortado o incompleto no puede pisar la historia buena.
+ * Devuelve el motivo para abortar, o null si se puede guardar.
+ */
+export function motivoParaNoGuardar(
+  actual: { completo: boolean; ultimoMes: string | null; filasPorTabla: Record<string, number> },
+  anterior: UltimaIngestaOk | null,
+  anioDesde: number,
+): string | null {
+  if (!actual.completo) {
+    return 'El backup está incompleto: no termina con "-- Dump completed". No se guardó nada.'
+  }
+  if (!actual.ultimoMes) {
+    return 'El backup no trae liquidaciones mensuales en el período esperado. No se guardó nada.'
+  }
+  if (!anterior) return null
+  if (anterior.ultimoMes && actual.ultimoMes < anterior.ultimoMes) {
+    return `El backup llega hasta ${actual.ultimoMes} y la última ingesta buena llegaba hasta ${anterior.ultimoMes}. No se guardó nada.`
+  }
+  for (const [tabla, filasAntes] of Object.entries(anterior.filasPorTabla)) {
+    const liq = RE_TABLA_LIQ.exec(tabla)
+    if (!liq || Number(liq[1]) < anioDesde || filasAntes <= 0) continue
+    const filasAhora = actual.filasPorTabla[tabla] ?? 0
+    if (filasAhora < filasAntes * PROPORCION_MINIMA_FILAS) {
+      return `La tabla ${tabla} trae ${filasAhora} filas y la última ingesta buena tenía ${filasAntes}. No se guardó nada.`
+    }
+  }
+  return null
 }
 
 /** Id estable por archivo y contenido: el mismo backup no se procesa dos veces. */
@@ -116,10 +158,11 @@ export async function ejecutarIngestaRrhh(
 
   try {
     const anio = inicio.getFullYear()
+    const anioDesde = anio - 2
     const acumulador = new AcumuladorSalario({
       mesesHistoria: MESES_HISTORIA,
-      anioDesde: anio - 2,
-      vacacionesDesde: `${anio - 2}-01-01`,
+      anioDesde,
+      vacacionesDesde: `${anioDesde}-01-01`,
     })
     const entrada = await deps.abrirBackup(backup.id)
     const lectura = await leerDumpMysql(entrada, {
@@ -127,13 +170,17 @@ export async function ejecutarIngestaRrhh(
       onFila: acumulador.onFila,
     })
     const resultado = acumulador.resultado()
-    if (!resultado.ultimoMes) {
-      throw new Error('El backup no trae liquidaciones mensuales en el período esperado')
-    }
+    const motivo = motivoParaNoGuardar(
+      { completo: lectura.completo, ultimoMes: resultado.ultimoMes, filasPorTabla: lectura.filasPorTabla },
+      await deps.ultimaIngestaOk(),
+      anioDesde,
+    )
+    if (motivo) throw new Error(motivo)
     const escritura = await deps.guardarResultado(resultado, {
       ingestaId: id,
       archivo: backup.nombre,
       backupCreado: backup.creado,
+      filasPorTabla: lectura.filasPorTabla,
     })
     const fin = deps.ahora()
     await deps.registro.terminar(id, {

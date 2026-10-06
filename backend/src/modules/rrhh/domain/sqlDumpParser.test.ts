@@ -61,6 +61,12 @@ describe('leerDumpMysql', () => {
     ])
     expect(res.filasPorTabla).toEqual({ uno: 3 })
     expect(res.encabezado).toBe('MySQL dump 10.13  Distrib 5.7.43, for Win64 (x86_64)')
+    expect(res.completo).toBe(false)
+  })
+
+  it('marca el dump como completo solo si trae la línea final de mysqldump', async () => {
+    const { res } = await leer([...DUMP, '-- Dump completed on 2026-10-05 20:30:01'].join('\n'), ['uno'])
+    expect(res.completo).toBe(true)
   })
 
   it('funciona igual con fin de línea CRLF', async () => {

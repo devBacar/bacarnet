@@ -1,4 +1,5 @@
-import { createReadStream } from 'node:fs'
+import { createReadStream, readFileSync } from 'node:fs'
+import { Readable } from 'node:stream'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ResultadoResumen } from '../domain/resumenMensual.js'
@@ -6,11 +7,13 @@ import type { BackupSalario } from './backupsDrive.js'
 import {
   ejecutarIngestaRrhh,
   idIngesta,
+  motivoParaNoGuardar,
   VENCIMIENTO_EN_CURSO_MS,
   type DatosFinIngesta,
   type DatosInicioIngesta,
   type DependenciasIngesta,
   type RegistroIngestas,
+  type UltimaIngestaOk,
 } from './ingesta.service.js'
 
 
@@ -61,6 +64,7 @@ function dependencias(overrides: Partial<DependenciasIngesta> = {}) {
       return { resumenes: resultado.centrosCosto.length, personas: resultado.personas.length, borrados: 0 }
     },
     registro,
+    ultimaIngestaOk: async () => null,
     ahora: () => AHORA,
     ...overrides,
   }
@@ -125,5 +129,67 @@ describe('ejecutarIngestaRrhh', () => {
     expect(r).toMatchObject({ estado: 'error', mensaje: 'Drive no respondió' })
     expect(guardados).toHaveLength(0)
     expect(registro.docs.get(idIngesta(BACKUP))!.estado).toBe('error')
+  })
+})
+
+describe('guardas contra backups incompletos', () => {
+  const contenido = readFileSync(MUESTRA, 'utf8')
+
+  it('no guarda nada si el dump llegó cortado (sin "-- Dump completed")', async () => {
+    const cortado = contenido.split('-- Dump completed')[0]
+    const { deps, registro, guardados } = dependencias({ abrirBackup: async () => Readable.from([cortado]) })
+    const r = await ejecutarIngestaRrhh(deps, MANUAL)
+    expect(r.estado).toBe('error')
+    expect(r.mensaje).toContain('incompleto')
+    expect(guardados).toHaveLength(0)
+    expect(registro.docs.get(idIngesta(BACKUP))!.estado).toBe('error')
+  })
+
+  it('no guarda nada si el backup llega hasta un mes anterior a la última ingesta buena', async () => {
+    const anterior: UltimaIngestaOk = { ultimoMes: '202610', filasPorTabla: {} }
+    const { deps, guardados } = dependencias({ ultimaIngestaOk: async () => anterior })
+    const r = await ejecutarIngestaRrhh(deps, MANUAL)
+    expect(r.estado).toBe('error')
+    expect(r.mensaje).toContain('202609')
+    expect(guardados).toHaveLength(0)
+  })
+
+  it('no guarda nada si una tabla de liquidaciones trae muchas menos filas', async () => {
+    const anterior: UltimaIngestaOk = { ultimoMes: '202609', filasPorTabla: { liq2026: 100 } }
+    const { deps, guardados } = dependencias({ ultimaIngestaOk: async () => anterior })
+    const r = await ejecutarIngestaRrhh(deps, MANUAL)
+    expect(r.estado).toBe('error')
+    expect(r.mensaje).toContain('liq2026')
+    expect(guardados).toHaveLength(0)
+  })
+
+  it('guarda si las filas se mantienen y pasa las filas por tabla al guardado', async () => {
+    const anterior: UltimaIngestaOk = { ultimoMes: '202608', filasPorTabla: { liq2026: 19, liq2023: 5000 } }
+    let filasGuardadas: Record<string, number> | undefined
+    const { deps } = dependencias({
+      ultimaIngestaOk: async () => anterior,
+      guardarResultado: async (resultado, info) => {
+        filasGuardadas = info.filasPorTabla
+        return { resumenes: resultado.centrosCosto.length, personas: resultado.personas.length, borrados: 0 }
+      },
+    })
+    expect((await ejecutarIngestaRrhh(deps, MANUAL)).estado).toBe('ok')
+    expect(filasGuardadas).toEqual({ empleado: 3, liq2026: 19, tablas: 7, vac: 3 })
+  })
+
+  it('ignora tablas de años que quedaron fuera de la ventana (cambio de año)', () => {
+    const motivo = motivoParaNoGuardar(
+      { completo: true, ultimoMes: '202701', filasPorTabla: { liq2026: 800000, liq2027: 60000 } },
+      { ultimoMes: '202612', filasPorTabla: { liq2024: 640000, liq2025: 830000, liq2026: 790000 } },
+      2025,
+    )
+    expect(motivo).toContain('liq2025')
+    expect(
+      motivoParaNoGuardar(
+        { completo: true, ultimoMes: '202701', filasPorTabla: { liq2025: 830000, liq2026: 800000 } },
+        { ultimoMes: '202612', filasPorTabla: { liq2024: 640000, liq2025: 830000, liq2026: 790000 } },
+        2025,
+      ),
+    ).toBeNull()
   })
 })

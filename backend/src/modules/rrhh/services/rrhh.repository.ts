@@ -24,6 +24,8 @@ export interface InfoIngestaGuardada {
   ingestaId: string
   archivo: string
   backupCreado: string
+  /** Filas leídas por tabla: la próxima ingesta las usa para detectar un backup incompleto. */
+  filasPorTabla: Record<string, number>
 }
 
 export interface ConteoEscritura {
@@ -66,6 +68,7 @@ export async function guardarResultado(
     ultimoMes: resultado.ultimoMes,
     archivo: info.archivo,
     backupCreado: info.backupCreado,
+    filasPorTabla: info.filasPorTabla,
     ...marca,
   })
 
@@ -87,6 +90,20 @@ export async function guardarResultado(
 
   await writer.close()
   return { resumenes: idsResumen.size, personas: idsPersona.size, borrados }
+}
+
+/** Datos de la última ingesta que se guardó bien (están en rrhh_catalogos/salario). */
+export async function leerUltimaIngestaOk(): Promise<{
+  ultimoMes: string | null
+  filasPorTabla: Record<string, number>
+} | null> {
+  const snap = await adminDb().collection(COLECCIONES_RRHH.catalogos).doc(DOC_CATALOGO_SALARIO).get()
+  if (!snap.exists) return null
+  const filas = snap.get('filasPorTabla')
+  return {
+    ultimoMes: typeof snap.get('ultimoMes') === 'string' ? (snap.get('ultimoMes') as string) : null,
+    filasPorTabla: filas && typeof filas === 'object' ? (filas as Record<string, number>) : {},
+  }
 }
 
 /** Registro de corridas en rrhh_ingestas. El id es el del archivo + su md5. */

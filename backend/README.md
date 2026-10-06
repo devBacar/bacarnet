@@ -187,3 +187,15 @@ Por eso es crítico mantener la lista de miembros de la Unidad compartida acotad
 ***REMOVED******REMOVED*** Próximo paso
 
 UI de Drive (crear / permisos / clasificación) sobre estos endpoints.
+
+## RRHH: ingesta del backup de Salario
+
+Módulo `src/modules/rrhh/`. Lee el último backup de Salario (dump de MySQL, ~333 MB) de la carpeta de Drive **Backups_Salarios** y guarda resúmenes mensuales en Firestore. El dump no se guarda: se lee en streaming y se descarta.
+
+- **Carpeta:** `1MxKOv51DzXaDSFsgOBL1c-dRaxe9M8Nc`, compartida con `datos@` (lectura). Se puede cambiar con la variable `RRHH_BACKUPS_FOLDER_ID` (no es un secreto).
+- **Tarea programada:** `ingestarBackupSalarioRrhh`, todos los días 15:30 y 22:30 (hora AR), 2 GiB, 1800 s. Salario sube backups ~14:20 y ~20:50. Solo corre con `global_settings/main.rrhhEnabled = true`.
+- **Idempotente:** cada corrida queda en `rrhh_ingestas/{fileId}_{md5}`; si el archivo ya se procesó bien, no hace nada.
+- **Guardas:** no guarda nada si el dump no termina con `-- Dump completed`, si llega hasta un mes anterior a la última ingesta buena o si una tabla `liqAAAA` trae menos del 80 % de las filas. El motivo queda en `rrhh_ingestas`.
+- **Colecciones:** `rrhh_resumen_mensual/{AAAAMM}_CC{n}`, `rrhh_personas/{legajo}`, `rrhh_catalogos/salario`, `rrhh_ingestas`. No tienen reglas en `firestore.rules`: el cliente no las puede leer (tienen sueldos y licencias médicas). Todo pasa por `/api/rrhh`.
+- **Endpoints (solo super admin):** `GET /api/rrhh/ingestas` (últimas corridas) y `POST /api/rrhh/ingestas/ejecutar` (body opcional `{ "forzar": true }` para reprocesar el mismo archivo). La ingesta manual funciona aunque el módulo esté apagado.
+- **Local:** `npm --prefix backend run build` y `node backend/scripts/rrhh-ingesta-local.mjs --sql <ruta al .sql>` muestra el resumen sin escribir. Con `--escribir` guarda en Firestore, y solo funciona con `FIRESTORE_EMULATOR_HOST`. Nunca copies backups reales dentro del repo.

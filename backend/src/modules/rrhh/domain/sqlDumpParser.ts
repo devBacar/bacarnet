@@ -19,6 +19,8 @@ export interface ResultadoLecturaDump {
   filasPorTabla: Record<string, number>
   /** Encabezado del dump (por ejemplo, la versión de MySQL), para el log de ingesta. */
   encabezado: string
+  /** true si el dump termina con la línea `-- Dump completed`: si falta, el archivo llegó cortado. */
+  completo: boolean
 }
 
 const RE_CREATE = /^CREATE TABLE `([^`]+)` \($/
@@ -41,11 +43,16 @@ export async function leerDumpMysql(
   let columnas: string[] = []
   let lineas = 0
   let encabezado = ''
+  let completo = false
 
   const lector = createInterface({ input: entrada, crlfDelay: Infinity })
   for await (const linea of lector) {
     lineas += 1
     if (lineas <= 3 && linea.startsWith('-- MySQL dump')) encabezado = linea.slice(3).trim()
+    if (linea.startsWith('-- Dump completed')) {
+      completo = true
+      continue
+    }
 
     if (tablaEnCreacion !== null) {
       if (linea.startsWith(')')) {
@@ -89,7 +96,7 @@ export async function leerDumpMysql(
     filasPorTabla[tabla] = (filasPorTabla[tabla] ?? 0) + n
   }
 
-  return { lineas, filasPorTabla, encabezado }
+  return { lineas, filasPorTabla, encabezado, completo }
 }
 
 const ESCAPES: Record<string, string> = {

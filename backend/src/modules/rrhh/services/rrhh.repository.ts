@@ -1,18 +1,57 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../lib/firebase/admin.js'
+import type { ConfigPactadas } from '../domain/horasPactadas.js'
 import type { ResultadoResumen } from '../domain/resumenMensual.js'
+import type { Informe, InformeAgregado, InformeDetalle } from '../domain/informeMensual.js'
 import type { RegistroIngestas } from './ingesta.service.js'
 
 /**
  * Colecciones del módulo RRHH. Sin reglas en firestore.rules: el cliente no puede leerlas
- * (tienen sueldos y licencias médicas). Todo pasa por /api/rrhh con requireRrhh.
+ * (tienen sueldos y licencias médicas). Todo pasa por /api/rrhh con requireTableroRrhh.
  */
 export const COLECCIONES_RRHH = {
   resumenMensual: 'rrhh_resumen_mensual',
   personas: 'rrhh_personas',
   catalogos: 'rrhh_catalogos',
   ingestas: 'rrhh_ingestas',
+  informe: 'rrhh_informe',
+  /** Un documento por mes (AAAAMM) con las personas y sus importes: solo perfil RRHH. */
+  costosPersonas: 'rrhh_costos_personas',
+  config: 'rrhh_config',
 } as const
+
+export const DOC_CONFIG_PACTADAS = 'pactadas'
+
+function legajos(x: unknown): number[] {
+  return Array.isArray(x) ? x.filter((n): n is number => Number.isInteger(n)) : []
+}
+
+/** Personas que RRHH confirmó o sacó de las horas pactadas (se aplica en la próxima ingesta). */
+export async function leerConfigPactadas(): Promise<ConfigPactadas> {
+  const snap = await adminDb().collection(COLECCIONES_RRHH.config).doc(DOC_CONFIG_PACTADAS).get()
+  const datos = snap.data() ?? {}
+  return { confirmadas: legajos(datos.confirmadas), descartadas: legajos(datos.descartadas) }
+}
+
+export type CambioPactada = 'confirmar' | 'descartar' | 'automatico'
+
+/** confirmar: queda en la lista aunque el sistema no la detecte. descartar: sale de la lista. automatico: vuelve a decidir el sistema. */
+export async function guardarCambioPactada(legajo: number, cambio: CambioPactada, actorUid: string): Promise<ConfigPactadas> {
+  const ref = adminDb().collection(COLECCIONES_RRHH.config).doc(DOC_CONFIG_PACTADAS)
+  await ref.set(
+    {
+      confirmadas: cambio === 'confirmar' ? FieldValue.arrayUnion(legajo) : FieldValue.arrayRemove(legajo),
+      descartadas: cambio === 'descartar' ? FieldValue.arrayUnion(legajo) : FieldValue.arrayRemove(legajo),
+      actualizadoPor: actorUid,
+      actualizadoAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  )
+  return leerConfigPactadas()
+}
+
+export const DOC_INFORME_AGREGADO = 'agregado'
+export const DOC_INFORME_DETALLE = 'detalle'
 
 export const DOC_CATALOGO_SALARIO = 'salario'
 
@@ -90,6 +129,78 @@ export async function guardarResultado(
 
   await writer.close()
   return { resumenes: idsResumen.size, personas: idsPersona.size, borrados }
+}
+
+/**
+ * Informe mensual en dos documentos: el agregado (perfil Directorio, sin nombres ni legajos)
+ * y el detalle por persona (perfil RRHH). Así cada endpoint lee un solo documento.
+ */
+export async function guardarInforme(informe: Informe, info: InfoIngestaGuardada): Promise<void> {
+  const db = adminDb()
+  const meta = {
+    ingestaId: info.ingestaId,
+    archivo: info.archivo,
+    backupCreado: info.backupCreado,
+    actualizadoAt: FieldValue.serverTimestamp(),
+  }
+  // Firestore no acepta campos undefined (por ejemplo, una recomendación sin impacto): se quitan.
+  const sinUndefined = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T
+  const batch = db.batch()
+  batch.set(db.collection(COLECCIONES_RRHH.informe).doc(DOC_INFORME_AGREGADO), {
+    ...sinUndefined(informe.agregado),
+    ...meta,
+  })
+  batch.set(db.collection(COLECCIONES_RRHH.informe).doc(DOC_INFORME_DETALLE), {
+    ...sinUndefined(informe.detalle),
+    ...meta,
+  })
+  await batch.commit()
+
+  // Personas con importes, un documento por mes; se borran los meses que ya no están en el informe.
+  const writer = db.bulkWriter()
+  const meses = new Set(Object.keys(informe.personasCostos ?? {}))
+  for (const [mes, personas] of Object.entries(informe.personasCostos ?? {})) {
+    void writer.set(db.collection(COLECCIONES_RRHH.costosPersonas).doc(mes), { mes, personas: sinUndefined(personas), ...meta })
+  }
+  const viejos = await db.collection(COLECCIONES_RRHH.costosPersonas).select().get()
+  for (const doc of viejos.docs) if (!meses.has(doc.id)) void writer.delete(doc.ref)
+  await writer.close()
+}
+
+/** Personas de un mes con sus importes (solo RRHH). */
+export async function leerCostosPersonas(mes: string): Promise<{ mes: string; personas: unknown[] } | null> {
+  const snap = await adminDb().collection(COLECCIONES_RRHH.costosPersonas).doc(mes).get()
+  if (!snap.exists) return null
+  const personas = snap.get('personas')
+  return { mes, personas: Array.isArray(personas) ? personas : [] }
+}
+
+export interface MetaInforme {
+  archivo: string | null
+  backupCreado: string | null
+  actualizado: string | null
+}
+
+async function leerDocInforme<T>(id: string): Promise<(T & { meta: MetaInforme }) | null> {
+  const snap = await adminDb().collection(COLECCIONES_RRHH.informe).doc(id).get()
+  if (!snap.exists) return null
+  const { ingestaId: _ingestaId, archivo, backupCreado, actualizadoAt, ...datos } = snap.data() ?? {}
+  return {
+    ...(datos as T),
+    meta: {
+      archivo: typeof archivo === 'string' ? archivo : null,
+      backupCreado: typeof backupCreado === 'string' ? backupCreado : null,
+      actualizado: actualizadoAt instanceof Timestamp ? actualizadoAt.toDate().toISOString() : null,
+    },
+  }
+}
+
+export function leerInformeAgregado() {
+  return leerDocInforme<InformeAgregado>(DOC_INFORME_AGREGADO)
+}
+
+export function leerInformeDetalle() {
+  return leerDocInforme<InformeDetalle>(DOC_INFORME_DETALLE)
 }
 
 /** Datos de la última ingesta que se guardó bien (están en rrhh_catalogos/salario). */

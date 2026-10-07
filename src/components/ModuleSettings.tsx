@@ -86,7 +86,7 @@ const MODULE_TOGGLES: {
   {
     key: 'rrhhEnabled',
     label: 'Mostrar RRHH',
-    description: 'Habilita el módulo RRHH (horas extra) y la ruta /rrhh/horas-extra para usuarios con permiso.',
+    description: 'Reservado para un futuro módulo RRHH. No afecta al Tablero de RRHH, que está en Tableros y se habilita con el botón Acceso.',
   },
 ]
 

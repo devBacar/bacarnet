@@ -1,23 +1,17 @@
-import { adminDb } from '../../lib/firebase/admin.js'
 import { logError, logInfo } from '../../lib/log.js'
+import { tableroRrhhConfigurado } from './boardRrhhConfig.js'
 import { ejecutarIngestaReal } from './services/ingestaRrhh.js'
 
 const ACTOR_PROGRAMADO = 'system:rrhh-ingesta'
 
-/** Mismo flag que usa el frontend y requireRrhh: global_settings/main.rrhhEnabled. */
-async function moduloRrhhHabilitado(): Promise<boolean> {
-  const snap = await adminDb().collection('global_settings').doc('main').get()
-  return snap.exists && snap.get('rrhhEnabled') === true
-}
-
 /**
  * Tarea programada: procesa el último backup de Salario si todavía no se procesó.
- * Con el módulo apagado no procesa nada (sueldos y licencias solo se leen con RRHH habilitado).
- * La ingesta manual del super admin funciona igual, para probar antes de habilitarlo.
+ * Depende solo de que el tablero de RRHH esté configurado (RRHH_BOARD_FOLDER_ID), no del interruptor rrhhEnabled,
+ * que queda reservado para un futuro módulo RRHH. Desde el tablero también se puede actualizar a mano.
  */
 export async function runScheduledIngestaRrhh(): Promise<void> {
-  if (!(await moduloRrhhHabilitado())) {
-    logInfo('[rrhh/ingesta] módulo RRHH apagado: no se procesa el backup')
+  if (!tableroRrhhConfigurado()) {
+    logInfo('[rrhh/ingesta] tablero de RRHH sin configurar (RRHH_BOARD_FOLDER_ID): no se procesa el backup')
     return
   }
   const resultado = await ejecutarIngestaReal({ origen: 'programada', actorUid: ACTOR_PROGRAMADO })

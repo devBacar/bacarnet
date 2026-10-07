@@ -8,7 +8,9 @@ export function isDesarrolloProyectosBoard(boardId: string): boolean {
   )
 }
 
-export function boardListHref(boardId: string): string {
+/** El tablero de RRHH lo marca el backend (tipo 'rrhh'): no hace falta configurar su ID en el frontend. */
+export function boardListHref(boardId: string, tipo?: 'rrhh'): string {
+  if (tipo === 'rrhh') return '/tableros/rrhh'
   if (isDesarrolloProyectosBoard(boardId)) return '/tableros/desarrollo-proyectos'
   return `/tableros/${boardId}`
 }

@@ -9,7 +9,6 @@ import { queryKeys } from '../lib/queryKeys'
 import { fetchCajasAcceso } from '../services/finanzasCajasApi'
 import {
   DEFAULT_PERMISSIONS,
-  hasRrhhAccess,
   isExternalAccount,
   isSuperAdmin,
   permisosFinanzasDe,
@@ -63,7 +62,6 @@ export function Navbar() {
     staleTime: 5 * 60_000,
   })
   const finanzasAccess = finanzasPorPermiso || cajasAcceso.data === true
-  const rrhhAccess = hasRrhhAccess(userProfile)
 
   const items = useMemo(
     () =>
@@ -76,8 +74,6 @@ export function Navbar() {
         resourcesEnabled: settings.resourcesEnabled,
         finanzasEnabled: settings.finanzasEnabled,
         finanzasAccess,
-        rrhhEnabled: settings.rrhhEnabled,
-        rrhhAccess,
         canAccessBoards,
         canAccessAudit,
       }),
@@ -89,11 +85,9 @@ export function Navbar() {
       permissions.view_drive,
       permissions.view_links,
       finanzasAccess,
-      rrhhAccess,
       settings.directoryEnabled,
       settings.finanzasEnabled,
       settings.resourcesEnabled,
-      settings.rrhhEnabled,
     ],
   )
 

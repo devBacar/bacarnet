@@ -4,6 +4,7 @@ import { logError } from '../../lib/log.js'
 import { googleStatus } from '../drive/assertInSharedDrive.js'
 import { getAccessibleBoardIds, isSuperAdminUser, syncBoardName } from './boardAccess.js'
 import { boardsFeatureConfigured } from './policy.js'
+import { getRrhhBoardFolderId } from '../rrhh/boardRrhhConfig.js'
 import { getBoardsConfig } from './policy.js'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
@@ -47,6 +48,8 @@ export async function listBoards(req: Request, res: Response): Promise<void> {
         name: file.name!,
         modifiedTime: file.modifiedTime ?? null,
         entryPath: 'index.html',
+        // Tableros React (no HTML de Drive): el frontend los abre en su propia ruta.
+        ...(file.id === getRrhhBoardFolderId() ? { tipo: 'rrhh' as const } : {}),
       }))
 
     await Promise.all(boards.map((board) => syncBoardName(board.id, board.name)))

@@ -1,6 +1,8 @@
 import type { Readable } from 'node:stream'
 import { leerDumpMysql } from '../domain/sqlDumpParser.js'
 import { AcumuladorSalario, type ResultadoResumen } from '../domain/resumenMensual.js'
+import type { ConfigPactadas } from '../domain/horasPactadas.js'
+import { construirInforme, type Informe } from '../domain/informeMensual.js'
 import type { BackupSalario } from './backupsDrive.js'
 import type { ConteoEscritura, InfoIngestaGuardada } from './rrhh.repository.js'
 
@@ -64,6 +66,10 @@ export interface DependenciasIngesta {
   buscarUltimoBackup(): Promise<BackupSalario | null>
   abrirBackup(fileId: string): Promise<Readable>
   guardarResultado(resultado: ResultadoResumen, info: InfoIngestaGuardada): Promise<ConteoEscritura>
+  /** Guarda el informe mensual (agregado para el Directorio y detalle por persona para RRHH). */
+  guardarInforme(informe: Informe, info: InfoIngestaGuardada): Promise<void>
+  /** Personas que RRHH confirmó o sacó de las horas pactadas. */
+  leerConfigPactadas?(): Promise<ConfigPactadas>
   registro: RegistroIngestas
   ahora(): Date
   log?: (mensaje: string, extra?: Record<string, unknown>) => void
@@ -107,6 +113,28 @@ export function motivoParaNoGuardar(
     const filasAhora = actual.filasPorTabla[tabla] ?? 0
     if (filasAhora < filasAntes * PROPORCION_MINIMA_FILAS) {
       return `La tabla ${tabla} trae ${filasAhora} filas y la última ingesta buena tenía ${filasAntes}. No se guardó nada.`
+    }
+  }
+  return null
+}
+
+/** Firestore corta en 1 MiB por documento: se deja margen para los metadatos y el cálculo de tamaño de Firestore. */
+export const MAX_BYTES_DOCUMENTO = 900 * 1024
+
+/**
+ * Control antes de escribir el informe: si algún documento pasaría el límite de Firestore, no se guarda nada
+ * (igual que las guardas de backups incompletos) y el motivo queda en rrhh_ingestas.
+ */
+export function motivoPorTamanio(informe: Informe): string | null {
+  const documentos: [string, unknown][] = [
+    ['rrhh_informe/agregado', informe.agregado],
+    ['rrhh_informe/detalle', informe.detalle],
+    ...Object.entries(informe.personasCostos ?? {}).map(([mes, personas]): [string, unknown] => [`rrhh_costos_personas/${mes}`, personas]),
+  ]
+  for (const [nombre, contenido] of documentos) {
+    const bytes = Buffer.byteLength(JSON.stringify(contenido) ?? '', 'utf8')
+    if (bytes > MAX_BYTES_DOCUMENTO) {
+      return `El documento ${nombre} pesaría ${Math.round(bytes / 1024)} KB y Firestore admite hasta 1 MiB (límite de seguridad ${Math.round(MAX_BYTES_DOCUMENTO / 1024)} KB). No se guardó nada: hay que partir el informe.`
     }
   }
   return null
@@ -176,12 +204,18 @@ export async function ejecutarIngestaRrhh(
       anioDesde,
     )
     if (motivo) throw new Error(motivo)
-    const escritura = await deps.guardarResultado(resultado, {
+    // El informe se arma antes de escribir: si falla, no queda nada a medias.
+    const informe = construirInforme(resultado, { pactadas: await deps.leerConfigPactadas?.() })
+    const motivoTamanio = motivoPorTamanio(informe)
+    if (motivoTamanio) throw new Error(motivoTamanio)
+    const info: InfoIngestaGuardada = {
       ingestaId: id,
       archivo: backup.nombre,
       backupCreado: backup.creado,
       filasPorTabla: lectura.filasPorTabla,
-    })
+    }
+    const escritura = await deps.guardarResultado(resultado, info)
+    await deps.guardarInforme(informe, info)
     const fin = deps.ahora()
     await deps.registro.terminar(id, {
       estado: 'ok',

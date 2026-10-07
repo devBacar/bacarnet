@@ -1,7 +1,6 @@
 import {
   BookOpen,
   BookUser,
-  BriefcaseBusiness,
   HardDrive,
   Headphones,
   Home,
@@ -33,8 +32,6 @@ export function buildMainNavItems(input: {
   resourcesEnabled: boolean
   finanzasEnabled: boolean
   finanzasAccess: boolean
-  rrhhEnabled: boolean
-  rrhhAccess: boolean
   canAccessBoards: boolean
   canAccessAudit: boolean
 }): MainNavItem[] {
@@ -44,9 +41,6 @@ export function buildMainNavItems(input: {
 
   if (input.finanzasEnabled && input.finanzasAccess) {
     items.push({ to: '/finanzas', label: 'Finanzas', icon: Landmark, group: 'principal' })
-  }
-  if (input.rrhhEnabled && input.rrhhAccess) {
-    items.push({ to: '/rrhh/horas-extra', label: 'RRHH', icon: BriefcaseBusiness, group: 'principal' })
   }
   if (input.directoryEnabled && input.viewDirectory) {
     items.push({ to: '/directorio', label: 'Contactos', icon: BookUser, group: 'principal' })

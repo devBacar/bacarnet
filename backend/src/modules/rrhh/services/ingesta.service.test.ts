@@ -3,11 +3,14 @@ import { Readable } from 'node:stream'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type { ResultadoResumen } from '../domain/resumenMensual.js'
+import type { Informe } from '../domain/informeMensual.js'
 import type { BackupSalario } from './backupsDrive.js'
 import {
   ejecutarIngestaRrhh,
   idIngesta,
+  MAX_BYTES_DOCUMENTO,
   motivoParaNoGuardar,
+  motivoPorTamanio,
   VENCIMIENTO_EN_CURSO_MS,
   type DatosFinIngesta,
   type DatosInicioIngesta,
@@ -56,6 +59,7 @@ class RegistroEnMemoria implements RegistroIngestas {
 function dependencias(overrides: Partial<DependenciasIngesta> = {}) {
   const registro = new RegistroEnMemoria()
   const guardados: ResultadoResumen[] = []
+  const informes: Informe[] = []
   const deps: DependenciasIngesta = {
     buscarUltimoBackup: async () => BACKUP,
     abrirBackup: async () => createReadStream(MUESTRA),
@@ -65,19 +69,24 @@ function dependencias(overrides: Partial<DependenciasIngesta> = {}) {
     },
     registro,
     ultimaIngestaOk: async () => null,
+    guardarInforme: async (informe) => {
+      informes.push(informe)
+    },
     ahora: () => AHORA,
     ...overrides,
   }
-  return { deps, registro, guardados }
+  return { deps, registro, guardados, informes }
 }
 
 const MANUAL = { origen: 'manual' as const, actorUid: 'uid-1' }
 
 describe('ejecutarIngestaRrhh', () => {
   it('procesa el último backup y deja registro ok', async () => {
-    const { deps, registro, guardados } = dependencias()
+    const { deps, registro, guardados, informes } = dependencias()
     const r = await ejecutarIngestaRrhh(deps, MANUAL)
     expect(r).toMatchObject({ estado: 'ok', ultimoMes: '202609', backupAtrasado: false })
+    expect(informes).toHaveLength(1)
+    expect(informes[0].agregado.actual).toBe('202610')
     expect(r.escritura).toEqual({ resumenes: 4, personas: 3, borrados: 0 })
     expect(guardados).toHaveLength(1)
     const doc = registro.docs.get(idIngesta(BACKUP))!
@@ -191,5 +200,25 @@ describe('guardas contra backups incompletos', () => {
         2025,
       ),
     ).toBeNull()
+  })
+})
+
+describe('guarda de tamaño del informe (límite de Firestore)', () => {
+  const informe = (relleno: number) =>
+    ({ agregado: { texto: 'x'.repeat(relleno) }, detalle: {}, personasCostos: { '202609': [] } }) as unknown as Informe
+
+  it('deja guardar un informe chico', () => {
+    expect(motivoPorTamanio(informe(1000))).toBeNull()
+  })
+
+  it('no guarda si un documento pasa el límite de seguridad', () => {
+    const motivo = motivoPorTamanio(informe(MAX_BYTES_DOCUMENTO + 1))
+    expect(motivo).toContain('rrhh_informe/agregado')
+    expect(motivo).toContain('No se guardó nada')
+  })
+
+  it('también controla los documentos de personas por mes', () => {
+    const grande = { agregado: {}, detalle: {}, personasCostos: { '202609': ['x'.repeat(MAX_BYTES_DOCUMENTO)] } } as unknown as Informe
+    expect(motivoPorTamanio(grande)).toContain('rrhh_costos_personas/202609')
   })
 })

@@ -28,8 +28,10 @@ export interface ChequeListadoItem {
   fechaPago: string
   montoCentavos: number
   estado: ChequeEstado
+  estadoBancario: string | null
   endosante: string | null
   bancoEmisor: string | null
+  bancoEmisorCodigo: number | null
   cliente: string | null
   destinatario: string | null
   fechaRecibido: string | null
@@ -56,8 +58,10 @@ function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
     fechaPago: String(data.fechaPago ?? ''),
     montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
     estado: data.estado ?? 'en_cartera',
+    estadoBancario: typeof data.estadoBancario === 'string' ? data.estadoBancario : null,
     endosante: typeof data.endosante === 'string' ? data.endosante : null,
     bancoEmisor: typeof data.bancoEmisor === 'string' ? data.bancoEmisor : null,
+    bancoEmisorCodigo: typeof data.bancoEmisorCodigo === 'number' ? data.bancoEmisorCodigo : null,
     cliente: typeof data.cliente === 'string' ? data.cliente : null,
     destinatario: typeof data.destinatario === 'string' ? data.destinatario : null,
     fechaRecibido: typeof data.fechaRecibido === 'string' ? data.fechaRecibido : null,
@@ -79,6 +83,8 @@ export interface ChequesFiltro {
   tipo: 'echeq' | 'fisico' | null
   desde: string | null
   hasta: string | null
+  vinculacion: 'vinculado' | 'sin_vincular' | null
+  q: string | null
 }
 
 function applyFiltro(base: FirebaseFirestore.Query, filtro: ChequesFiltro): FirebaseFirestore.Query {
@@ -92,7 +98,29 @@ function applyFiltro(base: FirebaseFirestore.Query, filtro: ChequesFiltro): Fire
   return query
 }
 
+function matchVinculacion(data: FirebaseFirestore.DocumentData, vinculacion: 'vinculado' | 'sin_vincular'): boolean {
+  return vinculacion === 'vinculado' ? Boolean(data.movimientoBancarioId) : !data.movimientoBancarioId
+}
+
+function matchBusqueda(data: FirebaseFirestore.DocumentData, q: string): boolean {
+  const norm = q.toLowerCase()
+  const fields = [data.numero, data.emisor, data.emisorCuit, data.cliente, data.destinatario]
+  return fields.some((f) => typeof f === 'string' && f.toLowerCase().includes(norm))
+}
+
+async function loadFiltradoInMemory(filtro: ChequesFiltro): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  const query = applyFiltro(collection(), filtro).orderBy('fechaPago', 'asc')
+  const snap = await query.get()
+  return snap.docs.filter((doc) => {
+    const data = doc.data()
+    if (filtro.vinculacion && !matchVinculacion(data, filtro.vinculacion)) return false
+    if (filtro.q && !matchBusqueda(data, filtro.q)) return false
+    return true
+  })
+}
+
 export async function countChequesFiltrados(filtro: ChequesFiltro): Promise<number> {
+  if (filtro.vinculacion || filtro.q) return (await loadFiltradoInMemory(filtro)).length
   const query = applyFiltro(collection(), filtro)
   const snap = await query.count().get()
   return snap.data().count
@@ -103,6 +131,10 @@ export async function pageCheques(input: {
   offset: number
   limit: number
 }): Promise<ChequeListadoItem[]> {
+  if (input.filtro.vinculacion || input.filtro.q) {
+    const docs = await loadFiltradoInMemory(input.filtro)
+    return docs.slice(input.offset, input.offset + input.limit).map((doc) => toListadoItem(doc.id, doc.data()))
+  }
   const query = applyFiltro(collection(), input.filtro)
     .orderBy('fechaPago', 'asc')
     .offset(input.offset)
@@ -112,6 +144,13 @@ export async function pageCheques(input: {
 }
 
 export async function sumChequesCentavos(filtro: ChequesFiltro): Promise<number> {
+  if (filtro.vinculacion || filtro.q) {
+    const docs = await loadFiltradoInMemory(filtro)
+    return docs.reduce((sum, doc) => {
+      const v = doc.data().montoCentavos
+      return sum + (typeof v === 'number' ? v : 0)
+    }, 0)
+  }
   const query = applyFiltro(collection(), filtro)
   const { AggregateField } = await import('firebase-admin/firestore')
   const snap = await query.aggregate({ total: AggregateField.sum('montoCentavos') }).get()
@@ -123,6 +162,15 @@ export async function sumChequesPorDireccion(filtro: Omit<ChequesFiltro, 'direcc
   recibidosCentavos: number
   emitidosCentavos: number
 }> {
+  if (filtro.vinculacion || filtro.q) {
+    const [recDocs, emDocs] = await Promise.all([
+      loadFiltradoInMemory({ ...filtro, direccion: 'recibido' }),
+      loadFiltradoInMemory({ ...filtro, direccion: 'emitido' }),
+    ])
+    const sumDocs = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) =>
+      docs.reduce((s, d) => { const v = d.data().montoCentavos; return s + (typeof v === 'number' ? v : 0) }, 0)
+    return { recibidosCentavos: sumDocs(recDocs), emitidosCentavos: sumDocs(emDocs) }
+  }
   const { AggregateField } = await import('firebase-admin/firestore')
   const [recSnap, emSnap] = await Promise.all([
     applyFiltro(collection(), { ...filtro, direccion: 'recibido' })
@@ -190,6 +238,31 @@ export async function insertCheques(input: {
   return insertados
 }
 
+export async function upsertCheques(input: {
+  rows: ChequeImportRow[]
+  createdBy: string
+}): Promise<number> {
+  const db = adminDb()
+  const col = collection()
+  let actualizados = 0
+  for (let i = 0; i < input.rows.length; i += WRITE_CHUNK) {
+    const slice = input.rows.slice(i, i + WRITE_CHUNK)
+    const batch = db.batch()
+    for (const row of slice) {
+      const { fechaAcreditacion, ...rest } = row
+      const data: Record<string, unknown> = {
+        ...rest,
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+      if (fechaAcreditacion) data.fechaAcreditacion = fechaAcreditacion
+      batch.set(col.doc(chequeDocId(row.direccion, row.numero)), data, { merge: true })
+    }
+    await batch.commit()
+    actualizados += slice.length
+  }
+  return actualizados
+}
+
 export async function getChequeById(id: string): Promise<ChequeListadoItem | null> {
   const snap = await collection().doc(id).get()
   if (!snap.exists) return null
@@ -226,7 +299,7 @@ export async function marcarChequeEndosado(input: {
 
 export async function listChequesSinVincular(
   direccion: ChequeDireccion,
-): Promise<{ id: string; numero: string; montoCentavos: number; fechaPago: string; emisor: string; cliente: string | null; destinatario: string | null }[]> {
+): Promise<{ id: string; numero: string; montoCentavos: number; fechaEmision: string; fechaPago: string; emisor: string; cliente: string | null; destinatario: string | null }[]> {
   const snap = await collection()
     .where('direccion', '==', direccion)
     .get()
@@ -242,6 +315,7 @@ export async function listChequesSinVincular(
         id: doc.id,
         numero: String(data.numero ?? ''),
         montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
+        fechaEmision: String(data.fechaEmision ?? ''),
         fechaPago: String(data.fechaPago ?? ''),
         emisor: String(data.emisor ?? ''),
         cliente: typeof data.cliente === 'string' ? data.cliente : null,
@@ -274,6 +348,23 @@ export async function resumenDiario(fecha: string): Promise<{
     .where('direccion', '==', 'recibido')
     .where('estado', '==', 'en_cartera')
     .where('fechaPago', '==', fecha)
+    .get()
+  let totalACobrarCentavos = 0
+  for (const doc of snap.docs) {
+    const data = doc.data()
+    if (typeof data.montoCentavos === 'number') totalACobrarCentavos += data.montoCentavos
+  }
+  return { cantidadACobrar: snap.size, totalACobrarCentavos }
+}
+
+export async function resumenProximos(desdeFecha: string): Promise<{
+  cantidadACobrar: number
+  totalACobrarCentavos: number
+}> {
+  const snap = await collection()
+    .where('direccion', '==', 'recibido')
+    .where('estado', '==', 'en_cartera')
+    .where('fechaPago', '>', desdeFecha)
     .get()
   let totalACobrarCentavos = 0
   for (const doc of snap.docs) {

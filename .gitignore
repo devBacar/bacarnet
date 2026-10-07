@@ -72,3 +72,18 @@ scripts/bin/*.log
 tmp/
 tmp-*.html
 mobile-audit-screenshots/
+
+# Credenciales locales sueltas
+sec/
+
+# Datos de emulador exportados
+movimientos-bancarios-emulador.json
+
+# Scripts de análisis one-shot
+scripts/analisis-*.mjs
+scripts/comparar-*.mjs
+scripts/sync-one-shot.mjs
+
+# Docs de análisis internos
+docs/analisis-*.md
+docs/plan-*.md

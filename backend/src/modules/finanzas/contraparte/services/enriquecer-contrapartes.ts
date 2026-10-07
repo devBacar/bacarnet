@@ -365,6 +365,7 @@ function mapCheque(id: string, data: DocumentData): ChequeParaContraparte | null
     numero,
     direccion: data.direccion,
     montoCentavos: data.montoCentavos,
+    fechaEmision: typeof data.fechaEmision === 'string' ? data.fechaEmision : '',
     fechaPago,
     emisor: typeof data.emisor === 'string' ? data.emisor : null,
     cliente: typeof data.cliente === 'string' ? data.cliente : null,

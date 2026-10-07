@@ -44,11 +44,13 @@ export interface ChequeDocument {
   emisor: string
   emisorCuit: string
   bancoEmisor: string | null
+  bancoEmisorCodigo: number | null
   cliente: string | null
   endosante: string | null
   destinatario: string | null
 
   estado: ChequeEstado
+  estadoBancario: string | null
   utilizado: boolean | null
 
   cmc7: string | null
@@ -84,11 +86,13 @@ export interface ChequeImportRow {
   emisor: string
   emisorCuit: string
   bancoEmisor: string | null
+  bancoEmisorCodigo: number | null
   cliente: string | null
   endosante: string | null
   destinatario: string | null
 
   estado: ChequeEstado
+  estadoBancario: string | null
   utilizado: boolean | null
 
   cmc7: string | null

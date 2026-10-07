@@ -204,6 +204,7 @@ describe('resolver el lote', () => {
       numero: '55',
       direccion: 'emitido' as const,
       montoCentavos: 150000,
+      fechaEmision: '2026-09-01',
       fechaPago: '2026-09-28',
       emisor: null,
       cliente: null,

@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { listChequesApi, getResumenDiario, importChequesExcel, ingresarChequesPegados } from '../services/cheques.service.js'
 import { getChequeById, updateChequeEstado } from '../services/cheques.repository.js'
+import { reconciliarChequesConMovimientos } from '../services/reconciliar-cheques-movimientos.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import type { ChequeDireccion, ChequeEstado, ChequeOrigen, ChequeTipo } from '../domain/cheque.types.js'
 
@@ -17,8 +18,10 @@ finanzasChequesRouter.get('/', async (req, res) => {
       origen: one(req.query.origen),
       estado: one(req.query.estado),
       tipo: one(req.query.tipo),
+      vinculacion: one(req.query.vinculacion),
       desde: one(req.query.desde),
       hasta: one(req.query.hasta),
+      q: one(req.query.q),
       page: one(req.query.page),
       limit: one(req.query.limit),
     })
@@ -120,6 +123,17 @@ const VALID_ESTADOS: ChequeEstado[] = [
   'pendiente', 'debitado',
 ]
 
+
+finanzasChequesRouter.post('/reconciliar', requireFinanzasPermiso('finanzas_cheques'), async (_req, res) => {
+  try {
+    const result = await reconciliarChequesConMovimientos()
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/cheques] reconciliar', err)
+    const message = err instanceof Error ? err.message : 'No se pudo reconciliar'
+    res.status(500).json({ error: message })
+  }
+})
 
 finanzasChequesRouter.get('/:id', async (req, res) => {
   try {

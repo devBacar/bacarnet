@@ -10,7 +10,7 @@ import { HomeCollapsibleSection } from './HomeCollapsibleSection'
 function BoardCompactCard({ board }: { board: BoardDto }) {
   return (
     <Link
-      to={boardListHref(board.id)}
+      to={boardListHref(board.id, board.tipo)}
       className="group flex min-w-0 items-center gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white p-3.5 transition-colors hover:border-brand-primary/35 dark:border-zinc-800 dark:bg-zinc-900 sm:gap-4 sm:p-4"
     >
       <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-neutral-100 text-brand-primary transition-colors group-hover:bg-brand-tint dark:bg-zinc-800 dark:group-hover:bg-brand-tint sm:h-12 sm:w-12">

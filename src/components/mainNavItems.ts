@@ -32,9 +32,6 @@ export function buildMainNavItems(input: {
   resourcesEnabled: boolean
   finanzasEnabled: boolean
   finanzasAccess: boolean
-  /** RRHH pasó a ser un tablero (/tableros/rrhh): ya no tiene entrada propia en el menú. */
-  rrhhEnabled: boolean
-  rrhhAccess: boolean
   canAccessBoards: boolean
   canAccessAudit: boolean
 }): MainNavItem[] {

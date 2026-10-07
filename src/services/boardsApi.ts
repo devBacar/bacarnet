@@ -5,6 +5,8 @@ export interface BoardDto {
   name: string
   modifiedTime: string | null
   entryPath: string
+  /** Tablero React con ruta propia (lo marca el backend). */
+  tipo?: 'rrhh'
 }
 
 export interface ListBoardsResult {

@@ -2,11 +2,7 @@ import type { NextFunction, Request, Response } from 'express'
 import { canViewBoard } from '../boards/boardAccess.js'
 import { isSuperAdminUser } from '../auth/middleware.js'
 import { logError } from '../../lib/log.js'
-
-/** Carpeta de Drive del tablero "RRHH" dentro de Tableros (placeholder: el tablero es React, como Desarrollo · Proyectos). */
-export function getRrhhBoardFolderId(): string {
-  return process.env.RRHH_BOARD_FOLDER_ID?.trim() || ''
-}
+import { getRrhhBoardFolderId } from './boardRrhhConfig.js'
 
 export type NivelTableroRrhh = 'ver' | 'detalle'
 

@@ -7,7 +7,7 @@ import type { RegistroIngestas } from './ingesta.service.js'
 
 /**
  * Colecciones del módulo RRHH. Sin reglas en firestore.rules: el cliente no puede leerlas
- * (tienen sueldos y licencias médicas). Todo pasa por /api/rrhh con requireRrhh.
+ * (tienen sueldos y licencias médicas). Todo pasa por /api/rrhh con requireTableroRrhh.
  */
 export const COLECCIONES_RRHH = {
   resumenMensual: 'rrhh_resumen_mensual',

@@ -25,9 +25,7 @@ export interface AuthedUserPermissions {
   manage_finanzas_caja?: boolean
   manage_users?: boolean
   rag_assistant?: boolean
-  /** RRHH: horas extra agregadas por área y proyección (perfil Directorio). */
-  view_rrhh?: boolean
-  /** RRHH: detalle por legajo (perfil RRHH). Implica view_rrhh. */
+  /** Tablero de RRHH: nombres, legajos y sueldos (además del acceso al tablero, ver rrhh/requireTableroRrhh). */
   rrhh_detalle?: boolean
 }
 
@@ -76,7 +74,6 @@ export function permisosDesdePerfil(permissionsRaw: unknown): AuthedUserPermissi
     manage_finanzas_caja: permisoVerdadero(raw, 'manage_finanzas_caja'),
     manage_users: permisoVerdadero(raw, 'manage_users'),
     rag_assistant: permisoVerdadero(raw, 'rag_assistant'),
-    view_rrhh: permisoVerdadero(raw, 'view_rrhh'),
     rrhh_detalle: permisoVerdadero(raw, 'rrhh_detalle'),
   }
 }
@@ -406,62 +403,6 @@ export async function requireFinanzasCajaModule(
   } catch (err) {
     logError('Fallo al verificar acceso caja chica', err)
     res.status(500).json({ error: 'No se pudo verificar el acceso' })
-  }
-}
-
-async function isRrhhModuleEnabled(): Promise<boolean> {
-  const snap = await adminDb().collection('global_settings').doc('main').get()
-  if (!snap.exists) return false
-  return snap.get('rrhhEnabled') === true
-}
-
-export type NivelRrhh = 'ver' | 'detalle'
-
-/**
- * Módulo RRHH. Super admin pasa siempre.
- * 'ver': view_rrhh o rrhh_detalle (perfil Directorio: agregados por área).
- * 'detalle': rrhh_detalle (perfil RRHH: datos por legajo).
- * Mismo criterio que ModulePermissionRoute(view_rrhh, rrhhEnabled) en el frontend.
- */
-export function requireRrhh(nivel: NivelRrhh) {
-  return async function requireRrhhMiddleware(
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<void> {
-    const user = req.authedUser
-    if (!user) {
-      res.status(401).json({ error: 'No autenticado' })
-      return
-    }
-
-    if (isSuperAdminUser(user)) {
-      next()
-      return
-    }
-
-    try {
-      const moduleEnabled = await isRrhhModuleEnabled()
-      if (!moduleEnabled) {
-        res.status(403).json({ error: 'RRHH no está habilitado' })
-        return
-      }
-      const detalle = user.permissions.rrhh_detalle === true
-      const ver = detalle || user.permissions.view_rrhh === true
-      if (nivel === 'detalle' ? !detalle : !ver) {
-        res.status(403).json({
-          error:
-            nivel === 'detalle'
-              ? 'No tenés permiso para ver el detalle por legajo de RRHH. Pedíselo a quien administra los usuarios.'
-              : 'No tenés permiso para acceder a RRHH. Pedíselo a quien administra los usuarios.',
-        })
-        return
-      }
-      next()
-    } catch (err) {
-      logError(`Fallo al verificar permiso RRHH (${nivel})`, err)
-      res.status(500).json({ error: 'No se pudo verificar el acceso a RRHH' })
-    }
   }
 }
 

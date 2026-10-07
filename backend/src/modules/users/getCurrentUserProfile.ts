@@ -63,7 +63,6 @@ export async function getCurrentUserProfile(req: Request, res: Response): Promis
         finanzas_destinatarios: permissionsRaw.finanzas_destinatarios === true,
         finanzas_saldos: permissionsRaw.finanzas_saldos === true,
         manage_finanzas_caja: permissionsRaw.manage_finanzas_caja === true,
-        view_rrhh: permissionsRaw.view_rrhh === true || permissionsRaw.rrhh_detalle === true,
         rrhh_detalle: permissionsRaw.rrhh_detalle === true,
       },
       managedAreaIds: Array.isArray(data.managedAreaIds)

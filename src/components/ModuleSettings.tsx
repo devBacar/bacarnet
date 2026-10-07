@@ -86,7 +86,7 @@ const MODULE_TOGGLES: {
   {
     key: 'rrhhEnabled',
     label: 'Mostrar RRHH',
-    description: 'Habilita la lectura automática de Salario para el tablero de RRHH (15:30 y 22:30). Quién lo ve se define con el botón Acceso del tablero en Tableros.',
+    description: 'Reservado para un futuro módulo RRHH. No afecta al Tablero de RRHH, que está en Tableros y se habilita con el botón Acceso.',
   },
 ]
 

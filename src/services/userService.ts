@@ -83,8 +83,7 @@ export interface UserPermissions {
   /** Líder de cajas (crear cajas, fondear, aprobar cierres). */
   manage_finanzas_caja: boolean
   /** RRHH: ver horas extra agregadas por área y la proyección (perfil Directorio). */
-  view_rrhh: boolean
-  /** RRHH: ver el detalle por legajo (perfil RRHH). Implica view_rrhh. */
+  /** Tablero de RRHH: ver nombres, legajos y sueldos. El acceso al tablero se da desde Tableros (botón Acceso). */
   rrhh_detalle: boolean
 }
 
@@ -194,7 +193,6 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
   finanzas_destinatarios: false,
   finanzas_saldos: false,
   manage_finanzas_caja: false,
-  view_rrhh: false,
   rrhh_detalle: false,
 }
 
@@ -221,7 +219,6 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   finanzas_destinatarios: true,
   finanzas_saldos: true,
   manage_finanzas_caja: true,
-  view_rrhh: true,
   rrhh_detalle: true,
 }
 
@@ -242,7 +239,6 @@ export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
   finanzas_destinatarios: false,
   finanzas_saldos: false,
   manage_finanzas_caja: false,
-  view_rrhh: false,
   rrhh_detalle: false,
 }
 
@@ -263,7 +259,6 @@ export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
   finanzas_destinatarios: false,
   finanzas_saldos: false,
   manage_finanzas_caja: false,
-  view_rrhh: false,
   rrhh_detalle: false,
 }
 
@@ -381,14 +376,10 @@ export function hasFinanzasAccess(profile: UserProfile | null | undefined): bool
   return profile.permissions.view_finanzas === true
 }
 
-/** Módulo RRHH: super_admin siempre; resto con view_rrhh o rrhh_detalle (alineado con requireRrhh en API). */
-export function hasRrhhAccess(profile: UserProfile | null | undefined): boolean {
-  if (!profile) return false
-  if (isSuperAdmin(profile) || profile.permissions.super_admin === true) return true
-  return profile.permissions.view_rrhh === true || profile.permissions.rrhh_detalle === true
-}
-
-/** RRHH con detalle por legajo: super_admin o rrhh_detalle. */
+/**
+ * Tablero de RRHH: nombres, legajos y sueldos (super_admin o rrhh_detalle). El acceso al tablero en sí se da desde
+ * Tableros (botón Acceso). Lo mismo se verifica en el servidor (requireTableroRrhh).
+ */
 export function hasRrhhDetalle(profile: UserProfile | null | undefined): boolean {
   if (!profile) return false
   if (isSuperAdmin(profile) || profile.permissions.super_admin === true) return true
@@ -506,7 +497,6 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
       finanzas_destinatarios: permissions.finanzas_destinatarios === true,
       finanzas_saldos: permissions.finanzas_saldos === true,
       manage_finanzas_caja: permissions.manage_finanzas_caja === true,
-      view_rrhh: permissions.view_rrhh === true || permissions.rrhh_detalle === true,
       rrhh_detalle: permissions.rrhh_detalle === true,
     },
     favoriteApps: Array.isArray(data.favoriteApps)

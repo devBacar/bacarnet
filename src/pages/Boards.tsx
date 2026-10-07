@@ -13,7 +13,7 @@ import {
   type BoardDto,
 } from '../services/boardsApi'
 import { isSuperAdmin } from '../services/userService'
-import { boardListHref, isDesarrolloProyectosBoard, isRrhhBoard } from '../constants/boardProyectos'
+import { boardListHref, isDesarrolloProyectosBoard } from '../constants/boardProyectos'
 
 export function BoardList() {
   const { user, userProfile } = useAuth()
@@ -83,7 +83,7 @@ export function BoardList() {
                   )}
                 </div>
                 <Link
-                  to={boardListHref(board.id)}
+                  to={boardListHref(board.id, board.tipo)}
                   className="mt-3 flex flex-1 flex-col transition-colors hover:text-brand-primary"
                 >
                   <h2 className="font-semibold">{board.name}</h2>
@@ -235,10 +235,6 @@ export function BoardViewerPage() {
 
   if (isDesarrolloProyectosBoard(boardId)) {
     return <Navigate to="/tableros/desarrollo-proyectos" replace />
-  }
-
-  if (isRrhhBoard(boardId)) {
-    return <Navigate to="/tableros/rrhh" replace />
   }
 
   return <BoardViewer boardId={boardId} />

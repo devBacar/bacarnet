@@ -26,6 +26,10 @@ const stTicketsApiKey = defineSecret('ST_INTEGRATION_API_KEY')
 const widgetsOAuthClientSecret = defineSecret('WIDGETS_OAUTH_CLIENT_SECRET')
 const widgetsOAuthTokenEncryptionKey = defineSecret('WIDGETS_OAUTH_TOKEN_ENCRYPTION_KEY')
 const widgetsOAuthStateSecret = defineSecret('WIDGETS_OAUTH_STATE_SECRET')
+/** Interbanking (Finanzas): en prod viven en Secret Manager; en local/emulador salen de backend/.env.local. */
+const interbankingClientSecret = defineSecret('INTERBANKING_CLIENT_SECRET')
+const interbankingTransferClave = defineSecret('INTERBANKING_TRANSFER_CLAVE')
+const secretosInterbanking = [interbankingClientSecret, interbankingTransferClave]
 const adminMode = initFirebaseAdmin()
 logCredentialDiagnostics(adminMode)
 
@@ -75,6 +79,7 @@ export const api = onRequest(
       helpdeskN8nWebhookAvisoInterno,
       helpdeskN8nWebhookAnalisisPendiente,
       stTicketsApiKey,
+      ...secretosInterbanking,
     ],
   },
   async (req, res) => {
@@ -155,6 +160,7 @@ export const cerrarPosicionBancariaDiaria = onSchedule(
     timeZone: 'America/Argentina/Buenos_Aires',
     timeoutSeconds: 540,
     memory: '512MiB',
+    secrets: secretosInterbanking,
   },
   async () => {
     const { runScheduledPosicionCierre } = await import(
@@ -170,6 +176,7 @@ export const sincronizarFinanzasCada30Min = onSchedule(
     timeZone: 'America/Argentina/Buenos_Aires',
     timeoutSeconds: 540,
     memory: '512MiB',
+    secrets: secretosInterbanking,
   },
   async () => {
     const actorUid = 'system:finanzas-sync-30min'

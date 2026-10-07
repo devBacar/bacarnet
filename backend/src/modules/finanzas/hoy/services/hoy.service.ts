@@ -116,6 +116,8 @@ const FILTRO_CHEQUE_VACIO: Omit<ChequesFiltro, 'direccion' | 'desde' | 'hasta'> 
   origen: null,
   estado: null,
   tipo: null,
+  vinculacion: null,
+  q: null,
 }
 
 async function listarCheques(filtro: ChequesFiltro): Promise<ChequeListadoItem[]> {

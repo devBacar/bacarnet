@@ -1,5 +1,4 @@
 import type { ContraparteGuardada } from './contraparte.types.js'
-import { fechaEnRangoHabil } from './dias-habiles.js'
 import { claveTexto, nombreContraparteLimpio } from './normalizar.js'
 
 /**
@@ -14,6 +13,9 @@ const TEXTOS_DEBITO_CHEQUE_PROPIO = [
   'ECHEQ PROPIO DEPOSIT',
   'DEB AUT RECIB CAMARA',
   'DEB.P/CANJE INTERNO',
+  'CH.RECH.DEP.CAM.INT.',
+  'CH.RECH.FORMA',
+  'DEB.VS./RECH.VALORES',
 ]
 
 /** Textos del banco para cheques depositados (categoría Cheques depositados). */
@@ -24,6 +26,7 @@ export interface ChequeParaContraparte {
   numero: string
   direccion: 'recibido' | 'emitido'
   montoCentavos: number
+  fechaEmision: string
   fechaPago: string
   emisor: string | null
   cliente: string | null
@@ -82,16 +85,32 @@ export function claseMovimientoCheque(mov: {
   return null
 }
 
+function fechaBaseDeposito(cheque: ChequeParaContraparte): string {
+  if (cheque.fechaPago && cheque.fechaEmision && cheque.fechaPago !== cheque.fechaEmision) return cheque.fechaPago
+  return cheque.fechaEmision || cheque.fechaPago
+}
+
+function diffDias(isoA: string, isoB: string): number {
+  const a = new Date(isoA + 'T00:00:00Z')
+  const b = new Date(isoB + 'T00:00:00Z')
+  return (a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24)
+}
+
 function porMontoYFecha(mov: MovimientoCheque, cheques: readonly ChequeParaContraparte[]): ChequeParaContraparte[] {
-  return cheques.filter(
-    (cheque) =>
-      cheque.montoCentavos === mov.montoCentavos && fechaEnRangoHabil(mov.fechaProceso, cheque.fechaPago, 3, 3),
-  )
+  return cheques.filter((cheque) => {
+    if (cheque.montoCentavos !== mov.montoCentavos) return false
+    const base = fechaBaseDeposito(cheque)
+    if (!base || !mov.fechaProceso) return false
+    const diff = diffDias(mov.fechaProceso, base)
+    return diff >= -5 && diff <= 30
+  })
 }
 
 /**
- * Primero por número (voucher contra `numero`, solo dígitos y sin ceros a la izquierda).
- * Si eso no deja un único cheque, por monto exacto y fecha del movimiento a ±3 días hábiles de `fechaPago`.
+ * Primero por número exacto (voucher contra `numero`, solo dígitos y sin ceros a la izquierda).
+ * Si no alcanza, por sufijo: cheques físicos usan número largo (ej. 305-001-5000-04142765)
+ * pero el banco reporta solo los últimos dígitos como voucher (ej. 4142765).
+ * Último recurso: monto exacto y fecha del movimiento dentro de la ventana -5/+30 días.
  */
 export function chequesCandidatos(
   mov: MovimientoCheque,
@@ -102,8 +121,18 @@ export function chequesCandidatos(
   const delLado = cheques.filter((cheque) => cheque.direccion === direccion)
   const voucher = numeroComparable(mov.voucherNumber)
   if (voucher) {
-    const porNumero = delLado.filter((cheque) => numeroComparable(cheque.numero) === voucher)
+    const porNumero = delLado.filter(
+      (cheque) => numeroComparable(cheque.numero) === voucher && cheque.montoCentavos === mov.montoCentavos,
+    )
     if (porNumero.length === 1) return porNumero
+
+    if (voucher.length >= 6) {
+      const porSufijo = delLado.filter((cheque) => {
+        const nd = numeroComparable(cheque.numero)
+        return nd !== null && nd.length > voucher.length && nd.endsWith(voucher) && cheque.montoCentavos === mov.montoCentavos
+      })
+      if (porSufijo.length === 1) return porSufijo
+    }
   }
   const porMonto = porMontoYFecha(mov, delLado)
   return porMonto.length === 1 ? porMonto : []

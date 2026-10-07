@@ -37,6 +37,7 @@ export async function reconciliarChequesConMovimientos(): Promise<Reconciliacion
       numero: c.numero,
       direccion: 'recibido' as const,
       montoCentavos: c.montoCentavos,
+      fechaEmision: c.fechaEmision,
       fechaPago: c.fechaPago,
       emisor: c.emisor,
       cliente: c.cliente,
@@ -47,6 +48,7 @@ export async function reconciliarChequesConMovimientos(): Promise<Reconciliacion
       numero: c.numero,
       direccion: 'emitido' as const,
       montoCentavos: c.montoCentavos,
+      fechaEmision: c.fechaEmision,
       fechaPago: c.fechaPago,
       emisor: c.emisor,
       cliente: c.cliente,
@@ -64,8 +66,8 @@ export async function reconciliarChequesConMovimientos(): Promise<Reconciliacion
   const hasta = fechasPago[fechasPago.length - 1]
 
   const movSnap = await movimientosBancariosCollection()
-    .where('fechaProceso', '>=', sumarDias(desde, -5))
-    .where('fechaProceso', '<=', sumarDias(hasta, 5))
+    .where('fechaProceso', '>=', sumarDias(desde, -10))
+    .where('fechaProceso', '<=', sumarDias(hasta, 35))
     .get()
 
   const movimientos: { id: string; data: MovimientoBancarioDocument }[] = []

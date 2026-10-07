@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownLeft, ArrowUpRight, ClipboardPaste, Upload } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { ArrowDownLeft, ArrowUpRight, ClipboardPaste, Search, Upload } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { fetchMovimientoById, type MovimientoListItem } from '../../services/finanzasMovimientosApi'
 import toast from 'react-hot-toast'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
@@ -82,17 +82,29 @@ export function FinanzasChequesPage() {
   })
   const [page, setPage] = useState(1)
   const [showPegar, setShowPegar] = useState(false)
+  const [busqueda, setBusqueda] = useState('')
+  const [q, setQ] = useState('')
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQ(busqueda.trim())
+      setPage(1)
+    }, 400)
+    return () => clearTimeout(t)
+  }, [busqueda])
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ['finanzas', 'cheques', direccion, origen, estado, tipo, desde, hasta, page],
+    queryKey: ['finanzas', 'cheques', direccion, origen, estado, tipo, vinculacion, desde, hasta, q, page],
     queryFn: () =>
       fetchCheques({
         direccion,
         origen,
         estado,
         tipo,
+        vinculacion,
         desde: desde || undefined,
         hasta: hasta || undefined,
+        q: q || undefined,
         page,
         limit: PAGE_SIZE,
       }),
@@ -110,12 +122,19 @@ export function FinanzasChequesPage() {
     mutationFn: importChequesExcel,
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques'] })
-      const parts: string[] = [`${result.insertados} cheques importados`]
+      const parts: string[] = [`${result.insertados} nuevos`]
+      if (result.actualizados > 0) parts.push(`${result.actualizados} actualizados`)
       if (result.duplicados > 0) parts.push(`${result.duplicados} duplicados`)
       if (result.ignorados > 0) parts.push(`${result.ignorados} ignorados`)
       toast.success(parts.join(', '))
       if (result.errores.length > 0) {
-        toast(result.errores.slice(0, 3).join('\n'), { duration: 8000 })
+        toast.error(result.errores.slice(0, 5).join('\n'), { duration: 8000 })
+      }
+      if (result.avisos.length > 0) {
+        const max = 5
+        const texto = result.avisos.slice(0, max).join('\n')
+        const extra = result.avisos.length > max ? `\n… y ${result.avisos.length - max} más` : ''
+        toast(texto + extra, { duration: 8000, icon: 'ℹ️' })
       }
     },
     onError: (err: Error) => toast.error(err.message),
@@ -186,15 +205,27 @@ export function FinanzasChequesPage() {
       </header>
 
       {resumen ? (
-        <div className="card-minimal mb-6 px-5 py-4" data-tour="cheques-resumen">
-          <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">
-            Hoy {formatFecha(resumen.fecha)}
-          </p>
-          <p className="text-brand-primary mt-1 text-lg font-semibold">
-            {resumen.cantidadACobrar === 0
-              ? 'No hay cheques que venzan hoy'
-              : `${resumen.cantidadACobrar} cheque${resumen.cantidadACobrar === 1 ? '' : 's'} a cobrar por ${formatMoneyCentavos(resumen.totalACobrarCentavos, 'ARS')}`}
-          </p>
+        <div className="mb-6 grid gap-3 sm:grid-cols-2">
+          <div className="card-minimal px-5 py-4" data-tour="cheques-resumen">
+            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">
+              Hoy {formatFecha(resumen.fecha)}
+            </p>
+            <p className="text-brand-primary mt-1 text-lg font-semibold">
+              {resumen.cantidadACobrar === 0
+                ? 'No hay cheques que venzan hoy'
+                : `${resumen.cantidadACobrar} cheque${resumen.cantidadACobrar === 1 ? '' : 's'} a cobrar por ${formatMoneyCentavos(resumen.totalACobrarCentavos, 'ARS')}`}
+            </p>
+          </div>
+          <div className="card-minimal px-5 py-4">
+            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">
+              Próximos vencimientos
+            </p>
+            <p className="text-brand-primary mt-1 text-lg font-semibold">
+              {resumen.proximos.cantidadACobrar === 0
+                ? 'No hay cheques próximos a vencer'
+                : `${resumen.proximos.cantidadACobrar} cheque${resumen.proximos.cantidadACobrar === 1 ? '' : 's'} por ${formatMoneyCentavos(resumen.proximos.totalACobrarCentavos, 'ARS')}`}
+            </p>
+          </div>
         </div>
       ) : null}
 
@@ -250,6 +281,27 @@ export function FinanzasChequesPage() {
           </div>
         </div>
       ) : null}
+
+      {/* Buscador */}
+      <div className="relative mb-4">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+        <input
+          type="text"
+          className={`${finanzasInputClass} pl-9`}
+          placeholder="Buscar por número, contraparte o cliente…"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
+        {busqueda ? (
+          <button
+            type="button"
+            className="text-body-muted hover:text-heading absolute right-2 top-1/2 -translate-y-1/2 px-1"
+            onClick={() => setBusqueda('')}
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
 
       {/* Filtros */}
       <div className="mb-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -376,11 +428,7 @@ export function FinanzasChequesPage() {
               </tr>
             </thead>
             <tbody>
-              {(data?.cheques ?? []).filter((ch) =>
-                vinculacion === 'vinculado' ? Boolean(ch.movimientoBancarioId)
-                  : vinculacion === 'sin_vincular' ? !ch.movimientoBancarioId
-                  : true
-              ).map((ch) => (
+              {(data?.cheques ?? []).map((ch) => (
                 <tr key={ch.id} className="border-t border-subtle">
                   {!direccion ? (
                     <td className="px-3 py-2">
@@ -413,7 +461,19 @@ export function FinanzasChequesPage() {
                     {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
                   </td>
                   <td className="px-3 py-2"><TipoBadge tipo={ch.tipo} /></td>
-                  <td className="px-3 py-2"><CondicionBadge estado={ch.estado} /></td>
+                  <td className="px-3 py-2">
+                    <CondicionBadge estado={ch.estado} />
+                    {ch.estado === 'rechazado' && ch.estadoBancario && /confirmado.*resumen/i.test(ch.estadoBancario) ? (
+                      <span
+                        className="group relative ml-1 inline-block cursor-help align-middle text-xs text-amber-600 dark:text-amber-400"
+                      >
+                        &#9432;
+                        <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-neutral-800 px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block dark:bg-zinc-700">
+                          Debitado
+                        </span>
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-2 text-xs">
                     {ch.movimientoBancarioId ? (
                       <button
@@ -727,12 +787,19 @@ function PegarChequesModal({ onClose, onSuccess }: { onClose: () => void; onSucc
     try {
       const payload = validRows.map(({ _valid: _, estadoVisual: __, ...r }) => r)
       const result = await ingresarChequesPegados({ direccion: direccionModal, origen: origenModal, rows: payload })
-      const parts: string[] = [`${result.insertados} cheques ingresados`]
+      const parts: string[] = [`${result.insertados} nuevos`]
+      if (result.actualizados > 0) parts.push(`${result.actualizados} actualizados`)
       if (result.duplicados > 0) parts.push(`${result.duplicados} duplicados`)
       if (result.ignorados > 0) parts.push(`${result.ignorados} ignorados`)
       toast.success(parts.join(', '))
       if (result.errores.length > 0) {
-        toast(result.errores.slice(0, 3).join('\n'), { duration: 8000 })
+        toast.error(result.errores.slice(0, 5).join('\n'), { duration: 8000 })
+      }
+      if (result.avisos?.length > 0) {
+        const max = 5
+        const texto = result.avisos.slice(0, max).join('\n')
+        const extra = result.avisos.length > max ? `\n… y ${result.avisos.length - max} más` : ''
+        toast(texto + extra, { duration: 8000, icon: 'ℹ️' })
       }
       onSuccess()
     } catch (err) {

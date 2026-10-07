@@ -6,12 +6,15 @@ import type {
   ChequeOrigen,
   ChequeTipo,
 } from '../domain/cheque.types.js'
+import { resolverBanco } from '../domain/banco-bcra.js'
 import {
   countChequesFiltrados,
   findExistingNumeros,
   insertCheques,
+  upsertCheques,
   pageCheques,
   resumenDiario,
+  resumenProximos,
   sumChequesCentavos,
   sumChequesPorDireccion,
   type ChequeListadoItem,
@@ -29,8 +32,10 @@ export interface ChequesListadoQuery {
   origen?: string
   estado?: string
   tipo?: string
+  vinculacion?: string
   desde?: string
   hasta?: string
+  q?: string
   page?: string
   limit?: string
 }
@@ -88,11 +93,19 @@ function validTipo(raw: string | undefined): ChequeTipo | null {
   return raw
 }
 
+function validVinculacion(raw: string | undefined): 'vinculado' | 'sin_vincular' | null {
+  if (!raw) return null
+  if (raw !== 'vinculado' && raw !== 'sin_vincular') throw new Error(`vinculacion inválida: ${raw}`)
+  return raw
+}
+
 export async function listChequesApi(query: ChequesListadoQuery): Promise<ChequesListadoResponse> {
   const direccion = validDireccion(query.direccion?.trim())
   const origen = validOrigen(query.origen?.trim())
   const estado = validEstado(query.estado?.trim())
   const tipo = validTipo(query.tipo?.trim())
+  const vinculacion = validVinculacion(query.vinculacion?.trim())
+  const q = query.q?.trim() || null
   const desde = query.desde?.trim() || null
   const hasta = query.hasta?.trim() || null
   if (desde && !ISO_DATE.test(desde)) throw new Error('desde debe tener formato AAAA-MM-DD')
@@ -102,8 +115,8 @@ export async function listChequesApi(query: ChequesListadoQuery): Promise<Cheque
   const page = parsePositiveInt(query.page, 1, 10_000)
   const limit = parsePositiveInt(query.limit, PAGE_DEFAULT, PAGE_MAX)
   const offset = (page - 1) * limit
-  const filtro: ChequesFiltro = { direccion, origen, estado, tipo, desde, hasta }
-  const baseFiltro = { origen, estado, tipo, desde, hasta }
+  const filtro: ChequesFiltro = { direccion, origen, estado, tipo, vinculacion, desde, hasta, q }
+  const baseFiltro = { origen, estado, tipo, vinculacion, desde, hasta, q }
 
   const [total, totalCentavos, porDireccion, cheques] = await Promise.all([
     countChequesFiltrados(filtro),
@@ -127,7 +140,11 @@ export function hoyArgentina(now = new Date()): string {
 
 export async function getResumenDiario() {
   const hoy = hoyArgentina()
-  return { fecha: hoy, ...(await resumenDiario(hoy)) }
+  const [resHoy, proximos] = await Promise.all([
+    resumenDiario(hoy),
+    resumenProximos(hoy),
+  ])
+  return { fecha: hoy, ...resHoy, proximos }
 }
 
 // ── Shared helpers ──────────────────────────────────────────────────
@@ -206,9 +223,11 @@ function inferEstadoRecibido(raw: string): ChequeEstado {
 
 export interface ImportResult {
   insertados: number
+  actualizados: number
   ignorados: number
   duplicados: number
   errores: string[]
+  avisos: string[]
 }
 
 // ── Paste import (JSON rows) ────────────────────────────────────────
@@ -234,6 +253,7 @@ export async function ingresarChequesPegados(input: {
 }): Promise<ImportResult> {
   const importRows: ChequeImportRow[] = []
   const errores: string[] = []
+  const avisos: string[] = []
   let ignorados = 0
 
   for (let i = 0; i < input.rows.length; i++) {
@@ -242,6 +262,7 @@ export async function ingresarChequesPegados(input: {
     const montoCentavos = parseMontoCentavos(r.montoPesos)
 
     if (!numero && montoCentavos === 0) {
+      avisos.push(`Fila ${i + 1}: vacía`)
       ignorados++
       continue
     }
@@ -264,6 +285,8 @@ export async function ingresarChequesPegados(input: {
     const emisorCuit = cuitMatch ? cuitMatch[1] : ''
     const emisorNombre = emisorRaw.replace(/\n?CUIT\s+[\d-]+/, '').trim()
 
+    const banco = resolverBanco({ numero, nombre: r.bancoEmisor.trim() || null })
+
     importRows.push({
       numero,
       tipo: r.tipo,
@@ -279,9 +302,11 @@ export async function ingresarChequesPegados(input: {
       cliente: null,
       destinatario: null,
       estado: inferEstadoRecibido(r.condicion),
+      estadoBancario: null,
       utilizado: null,
       endosante,
-      bancoEmisor: r.bancoEmisor.trim() || null,
+      bancoEmisor: banco.bancoEmisor,
+      bancoEmisorCodigo: banco.bancoEmisorCodigo,
       cmc7: r.cmc7.trim() || null,
       observaciones: null,
       fechaAcreditacion: null,
@@ -289,7 +314,7 @@ export async function ingresarChequesPegados(input: {
   }
 
   if (importRows.length === 0) {
-    return { insertados: 0, ignorados, duplicados: 0, errores: [...errores, 'No se encontraron cheques válidos'] }
+    return { insertados: 0, actualizados: 0, ignorados, duplicados: 0, errores: [...errores, 'No se encontraron cheques válidos'], avisos }
   }
 
   const existing = await findExistingNumeros(
@@ -297,14 +322,12 @@ export async function ingresarChequesPegados(input: {
     importRows.map((r) => r.numero),
   )
   const nuevos = importRows.filter((r) => !existing.has(r.numero))
-  const duplicados = importRows.length - nuevos.length
+  const existentes = importRows.filter((r) => existing.has(r.numero))
+  const duplicados = 0
 
-  if (nuevos.length === 0) {
-    return { insertados: 0, ignorados, duplicados, errores }
-  }
-
-  const insertados = await insertCheques({ rows: nuevos, createdBy: input.actorUid })
-  return { insertados, ignorados, duplicados, errores }
+  const insertados = nuevos.length > 0 ? await insertCheques({ rows: nuevos, createdBy: input.actorUid }) : 0
+  const actualizados = existentes.length > 0 ? await upsertCheques({ rows: existentes, createdBy: input.actorUid }) : 0
+  return { insertados, actualizados, ignorados, duplicados, errores, avisos }
 }
 
 // ── Excel import ────────────────────────────────────────────────────
@@ -411,7 +434,7 @@ function parseChequePrefix(blob: string): { prefixEstado: string | null; prefixF
 function parseRecibidosSheet(
   rows: unknown[][],
   headerIdx: number,
-): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+): { parsed: ChequeImportRow[]; errores: string[]; avisos: string[]; ignorados: number } {
   const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
   const col = (name: string) => header.indexOf(name)
 
@@ -425,6 +448,7 @@ function parseRecibidosSheet(
 
   const byNumero = new Map<string, ChequeImportRow>()
   const errores: string[] = []
+  const avisos: string[] = []
   let ignorados = 0
 
   for (let ri = headerIdx + 1; ri < rows.length; ri++) {
@@ -437,6 +461,7 @@ function parseRecibidosSheet(
     const importeRaw = cellVal(row, iImporte)
     const montoCentavos = parseMontoCentavos(importeRaw as string | number | null)
     if (montoCentavos <= 0) {
+      avisos.push(`Fila ${ri + 1}: importe cero o negativo`)
       ignorados++
       continue
     }
@@ -471,6 +496,8 @@ function parseRecibidosSheet(
       continue
     }
 
+    const banco = resolverBanco({ numero, nombre: bancoEmisor || null })
+
     byNumero.set(numero, {
       numero,
       tipo: detectTipo(numero),
@@ -483,11 +510,13 @@ function parseRecibidosSheet(
       fechaEntregado: parseSpanishDate(cellToStr(cellVal(row, iEntregado))) || null,
       emisor,
       emisorCuit: '',
-      bancoEmisor: bancoEmisor || null,
+      bancoEmisor: banco.bancoEmisor,
+      bancoEmisorCodigo: banco.bancoEmisorCodigo,
       cliente: cellToStr(cellVal(row, iCliente)) || null,
       endosante: null,
       destinatario: null,
       estado: inferEstadoRecibido(estadoRaw),
+      estadoBancario: null,
       utilizado: prefixEstado === 'utilizado',
       cmc7: null,
       observaciones: detalle,
@@ -495,7 +524,7 @@ function parseRecibidosSheet(
     })
   }
 
-  return { parsed: [...byNumero.values()], errores, ignorados }
+  return { parsed: [...byNumero.values()], errores, avisos, ignorados }
 }
 
 // ── Parser: emitidos (reporte 488) ──────────────────────────────────
@@ -503,7 +532,7 @@ function parseRecibidosSheet(
 function parseEmitidos488Sheet(
   rows: unknown[][],
   headerIdx: number,
-): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+): { parsed: ChequeImportRow[]; errores: string[]; avisos: string[]; ignorados: number } {
   const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
   const col = (name: string) => header.indexOf(name)
 
@@ -517,6 +546,7 @@ function parseEmitidos488Sheet(
 
   const parsed: ChequeImportRow[] = []
   const errores: string[] = []
+  const avisos: string[] = []
   let ignorados = 0
 
   for (let ri = headerIdx + 1; ri < rows.length; ri++) {
@@ -529,7 +559,7 @@ function parseEmitidos488Sheet(
     const importeRaw = cellVal(row, iImporte)
     const montoCentavos = parseMontoCentavos(importeRaw as string | number | null)
     if (montoCentavos <= 0) {
-      errores.push(`Fila ${ri + 1}: importe inválido`)
+      avisos.push(`Fila ${ri + 1} (${nroRaw}): importe cero o negativo`)
       ignorados++
       continue
     }
@@ -541,6 +571,8 @@ function parseEmitidos488Sheet(
     if (rechazado) estado = 'rechazado'
     else if (utilizado) estado = 'debitado'
     else estado = 'pendiente'
+
+    const banco = resolverBanco({ numero: nroRaw })
 
     parsed.push({
       numero: nroRaw,
@@ -554,11 +586,13 @@ function parseEmitidos488Sheet(
       fechaEntregado: null,
       emisor: '',
       emisorCuit: '',
-      bancoEmisor: null,
+      bancoEmisor: banco.bancoEmisor,
+      bancoEmisorCodigo: banco.bancoEmisorCodigo,
       cliente: null,
       endosante: null,
       destinatario: cellToStr(cellVal(row, iDestinatario)) || null,
       estado,
+      estadoBancario: null,
       utilizado,
       cmc7: null,
       observaciones: null,
@@ -566,7 +600,7 @@ function parseEmitidos488Sheet(
     })
   }
 
-  return { parsed, errores, ignorados }
+  return { parsed, errores, avisos, ignorados }
 }
 
 // ── Parser: emitidos (Vientri grilla) ──────────────────────────────
@@ -585,7 +619,7 @@ function inferEstadoEmitidoVientri(raw: string): ChequeEstado | null {
 function parseEmitidosVientriSheet(
   rows: unknown[][],
   headerIdx: number,
-): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+): { parsed: ChequeImportRow[]; errores: string[]; avisos: string[]; ignorados: number } {
   const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
 
   const iDestinatario = header.findIndex((h) => h.includes('destinatario'))
@@ -598,7 +632,9 @@ function parseEmitidosVientriSheet(
 
   const parsed: ChequeImportRow[] = []
   const errores: string[] = []
+  const avisos: string[] = []
   let ignorados = 0
+  let renovados = 0
 
   for (let ri = headerIdx + 1; ri < rows.length; ri++) {
     const row = rows[ri]
@@ -609,6 +645,7 @@ function parseEmitidosVientriSheet(
 
     const montoCentavos = parseMontoCentavos(cellVal(row, iImporte) as string | number | null)
     if (montoCentavos <= 0) {
+      avisos.push(`Fila ${ri + 1} (${nroRaw}): importe cero o negativo`)
       ignorados++
       continue
     }
@@ -616,9 +653,13 @@ function parseEmitidosVientriSheet(
     const estadoRaw = cellToStr(cellVal(row, iEstado))
     const estado = inferEstadoEmitidoVientri(estadoRaw)
     if (estado === null) {
+      renovados++
       ignorados++
       continue
     }
+
+    const bancoNombre = cellToStr(cellVal(row, iBanco)) || null
+    const banco = resolverBanco({ numero: nroRaw, nombre: bancoNombre })
 
     parsed.push({
       numero: nroRaw,
@@ -632,11 +673,13 @@ function parseEmitidosVientriSheet(
       fechaEntregado: null,
       emisor: '',
       emisorCuit: '',
-      bancoEmisor: cellToStr(cellVal(row, iBanco)) || null,
+      bancoEmisor: banco.bancoEmisor,
+      bancoEmisorCodigo: banco.bancoEmisorCodigo,
       cliente: null,
       endosante: null,
       destinatario: cellToStr(cellVal(row, iDestinatario)) || null,
       estado,
+      estadoBancario: estadoRaw || null,
       utilizado: estado === 'debitado',
       cmc7: null,
       observaciones: null,
@@ -644,7 +687,9 @@ function parseEmitidosVientriSheet(
     })
   }
 
-  return { parsed, errores, ignorados }
+  if (renovados > 0) avisos.push(`${renovados} cheques con estado "Renovado" ignorados`)
+
+  return { parsed, errores, avisos, ignorados }
 }
 
 // ── Parser: emitidos (reporte-488 extendido con banco) ─────────────
@@ -652,7 +697,7 @@ function parseEmitidosVientriSheet(
 function parseEmitidos488ExtSheet(
   rows: unknown[][],
   headerIdx: number,
-): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+): { parsed: ChequeImportRow[]; errores: string[]; avisos: string[]; ignorados: number } {
   const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
 
   const iDes = header.indexOf('des')
@@ -661,13 +706,16 @@ function parseEmitidos488ExtSheet(
   const iFecVto = header.findIndex((h) => h === 'fecvto' || h === 'dmafecvto')
   const iImporte = header.indexOf('importe')
   const iBanco = header.findIndex((h) => h === 'bancodes')
+  const iIdBanco = header.indexOf('idbanco')
   const iEstado = header.findIndex((h) => h === 'estadochdes')
   const iRechazado = header.indexOf('rechazado')
   const iFecAcreditacion = header.findIndex((h) => h === 'fecteoacreditacion' || h === 'dmafecteoacreditacion')
 
   const parsed: ChequeImportRow[] = []
   const errores: string[] = []
+  const avisos: string[] = []
   let ignorados = 0
+  let renovados = 0
 
   for (let ri = headerIdx + 1; ri < rows.length; ri++) {
     const row = rows[ri]
@@ -678,6 +726,7 @@ function parseEmitidos488ExtSheet(
 
     const montoCentavos = parseMontoCentavos(cellVal(row, iImporte) as string | number | null)
     if (montoCentavos <= 0) {
+      avisos.push(`Fila ${ri + 1} (${nroRaw}): importe cero o negativo`)
       ignorados++
       continue
     }
@@ -687,9 +736,15 @@ function parseEmitidos488ExtSheet(
 
     const estado = rechazado ? 'rechazado' : inferEstadoEmitidoVientri(estadoRaw)
     if (estado === null) {
+      renovados++
       ignorados++
       continue
     }
+
+    const idbancoRaw = iIdBanco >= 0 ? cellVal(row, iIdBanco) : null
+    const idbanco = typeof idbancoRaw === 'number' ? idbancoRaw : null
+    const bancoNombre = cellToStr(cellVal(row, iBanco)) || null
+    const banco = resolverBanco({ idbanco, numero: nroRaw, nombre: bancoNombre })
 
     parsed.push({
       numero: nroRaw,
@@ -703,11 +758,13 @@ function parseEmitidos488ExtSheet(
       fechaEntregado: null,
       emisor: '',
       emisorCuit: '',
-      bancoEmisor: cellToStr(cellVal(row, iBanco)) || null,
+      bancoEmisor: banco.bancoEmisor,
+      bancoEmisorCodigo: banco.bancoEmisorCodigo,
       cliente: null,
       endosante: null,
       destinatario: cellToStr(cellVal(row, iDes)) || null,
       estado,
+      estadoBancario: estadoRaw || null,
       utilizado: estado === 'debitado',
       cmc7: null,
       observaciones: null,
@@ -715,7 +772,9 @@ function parseEmitidos488ExtSheet(
     })
   }
 
-  return { parsed, errores, ignorados }
+  if (renovados > 0) avisos.push(`${renovados} cheques con estado "Renovado" ignorados`)
+
+  return { parsed, errores, avisos, ignorados }
 }
 
 // ── Parser: recibidos (reporte-32) ─────────────────────────────────
@@ -723,7 +782,7 @@ function parseEmitidos488ExtSheet(
 function parseRecibidos32Sheet(
   rows: unknown[][],
   headerIdx: number,
-): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+): { parsed: ChequeImportRow[]; errores: string[]; avisos: string[]; ignorados: number } {
   const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
 
   const iBanco = header.indexOf('banco')
@@ -737,6 +796,7 @@ function parseRecibidos32Sheet(
 
   const parsed: ChequeImportRow[] = []
   const errores: string[] = []
+  const avisos: string[] = []
   let ignorados = 0
 
   for (let ri = headerIdx + 1; ri < rows.length; ri++) {
@@ -748,6 +808,7 @@ function parseRecibidos32Sheet(
 
     const montoCentavos = parseMontoCentavos(cellVal(row, iImporte) as string | number | null)
     if (montoCentavos <= 0) {
+      avisos.push(`Fila ${ri + 1} (${nroRaw}): importe cero o negativo`)
       ignorados++
       continue
     }
@@ -755,6 +816,9 @@ function parseRecibidos32Sheet(
     const emisorRaw = cellToStr(cellVal(row, iEmisor))
     const emisorParts = emisorRaw.split('/')
     const emisor = emisorParts[0]?.trim() || emisorParts[1]?.trim() || emisorRaw
+
+    const bancoNombre = cellToStr(cellVal(row, iBanco)) || null
+    const banco = resolverBanco({ numero: nroRaw, nombre: bancoNombre })
 
     parsed.push({
       numero: nroRaw,
@@ -768,11 +832,13 @@ function parseRecibidos32Sheet(
       fechaEntregado: null,
       emisor,
       emisorCuit: cellToStr(cellVal(row, iCuit)),
-      bancoEmisor: cellToStr(cellVal(row, iBanco)) || null,
+      bancoEmisor: banco.bancoEmisor,
+      bancoEmisorCodigo: banco.bancoEmisorCodigo,
       cliente: null,
       endosante: null,
       destinatario: null,
       estado: iEstado >= 0 ? inferEstadoRecibido(cellToStr(cellVal(row, iEstado))) : 'en_cartera',
+      estadoBancario: null,
       utilizado: null,
       cmc7: null,
       observaciones: null,
@@ -780,7 +846,7 @@ function parseRecibidos32Sheet(
     })
   }
 
-  return { parsed, errores, ignorados }
+  return { parsed, errores, avisos, ignorados }
 }
 
 // ── Parser: recibidos (informe) ────────────────────────────────────
@@ -788,7 +854,7 @@ function parseRecibidos32Sheet(
 function parseRecibidosInformeSheet(
   rows: unknown[][],
   headerIdx: number,
-): { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } {
+): { parsed: ChequeImportRow[]; errores: string[]; avisos: string[]; ignorados: number } {
   const header = rows[headerIdx].map((c) => normalize(cellToStr(c)))
 
   const iNro = header.indexOf('nro')
@@ -802,6 +868,7 @@ function parseRecibidosInformeSheet(
 
   const parsed: ChequeImportRow[] = []
   const errores: string[] = []
+  const avisos: string[] = []
   let ignorados = 0
 
   for (let ri = headerIdx + 1; ri < rows.length; ri++) {
@@ -813,6 +880,7 @@ function parseRecibidosInformeSheet(
 
     const montoCentavos = parseMontoCentavos(cellVal(row, iImporte) as string | number | null)
     if (montoCentavos <= 0) {
+      avisos.push(`Fila ${ri + 1} (${nroRaw}): importe cero o negativo`)
       ignorados++
       continue
     }
@@ -822,6 +890,9 @@ function parseRecibidosInformeSheet(
     const emisor = firmaParts[0]?.trim() || firmaParts[1]?.trim() || firmaRaw
 
     const estadoRaw = cellToStr(cellVal(row, iEstado))
+
+    const bancoNombre = cellToStr(cellVal(row, iBanco)) || null
+    const banco = resolverBanco({ numero: nroRaw, nombre: bancoNombre })
 
     parsed.push({
       numero: nroRaw,
@@ -835,11 +906,13 @@ function parseRecibidosInformeSheet(
       fechaEntregado: null,
       emisor,
       emisorCuit: cellToStr(cellVal(row, iCuit)),
-      bancoEmisor: cellToStr(cellVal(row, iBanco)) || null,
+      bancoEmisor: banco.bancoEmisor,
+      bancoEmisorCodigo: banco.bancoEmisorCodigo,
       cliente: null,
       endosante: null,
       destinatario: null,
       estado: inferEstadoRecibido(estadoRaw),
+      estadoBancario: estadoRaw || null,
       utilizado: null,
       cmc7: null,
       observaciones: null,
@@ -847,7 +920,7 @@ function parseRecibidosInformeSheet(
     })
   }
 
-  return { parsed, errores, ignorados }
+  return { parsed, errores, avisos, ignorados }
 }
 
 // ── Main Excel import ───────────────────────────────────────────────
@@ -859,6 +932,7 @@ export async function importChequesExcel(input: {
   const workbook = XLSX.read(input.buffer, { type: 'buffer', cellDates: true })
   const allRows: ChequeImportRow[] = []
   const errores: string[] = []
+  const avisos: string[] = []
   let ignorados = 0
 
   for (const sheetName of workbook.SheetNames) {
@@ -869,7 +943,7 @@ export async function importChequesExcel(input: {
 
     const { formato, headerIdx } = detectarFormato(rawRows)
 
-    let result: { parsed: ChequeImportRow[]; errores: string[]; ignorados: number } | null = null
+    let result: { parsed: ChequeImportRow[]; errores: string[]; avisos: string[]; ignorados: number } | null = null
 
     if (formato === 'recibidos') {
       result = parseRecibidosSheet(rawRows, headerIdx)
@@ -890,12 +964,13 @@ export async function importChequesExcel(input: {
     if (result) {
       allRows.push(...result.parsed)
       errores.push(...result.errores)
+      avisos.push(...result.avisos)
       ignorados += result.ignorados
     }
   }
 
   if (allRows.length === 0) {
-    return { insertados: 0, ignorados, duplicados: 0, errores: [...errores, 'No se encontraron cheques válidos en el archivo'] }
+    return { insertados: 0, actualizados: 0, ignorados, duplicados: 0, errores: [...errores, 'No se encontraron cheques válidos en el archivo'], avisos }
   }
 
   const recibidos = allRows.filter((r) => r.direccion === 'recibido')
@@ -910,12 +985,13 @@ export async function importChequesExcel(input: {
     const existing = r.direccion === 'recibido' ? existRec : existEm
     return !existing.has(r.numero)
   })
-  const duplicados = allRows.length - nuevos.length
+  const existentes = allRows.filter((r) => {
+    const existing = r.direccion === 'recibido' ? existRec : existEm
+    return existing.has(r.numero)
+  })
+  const duplicados = 0
 
-  if (nuevos.length === 0) {
-    return { insertados: 0, ignorados, duplicados, errores }
-  }
-
-  const insertados = await insertCheques({ rows: nuevos, createdBy: input.actorUid })
-  return { insertados, ignorados, duplicados, errores }
+  const insertados = nuevos.length > 0 ? await insertCheques({ rows: nuevos, createdBy: input.actorUid }) : 0
+  const actualizados = existentes.length > 0 ? await upsertCheques({ rows: existentes, createdBy: input.actorUid }) : 0
+  return { insertados, actualizados, ignorados, duplicados, errores, avisos }
 }

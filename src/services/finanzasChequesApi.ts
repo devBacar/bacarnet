@@ -39,8 +39,10 @@ export interface ChequeListItem {
   fechaPago: string
   montoCentavos: number
   estado: ChequeEstado
+  estadoBancario: string | null
   endosante: string | null
   bancoEmisor: string | null
+  bancoEmisorCodigo: number | null
   cliente: string | null
   destinatario: string | null
   fechaRecibido: string | null
@@ -75,8 +77,10 @@ export interface ChequesListFilters {
   origen?: ChequeOrigen | ''
   estado?: ChequeEstado | ''
   tipo?: ChequeTipo | ''
+  vinculacion?: 'vinculado' | 'sin_vincular' | ''
   desde?: string
   hasta?: string
+  q?: string
   page?: number
   limit?: number
 }
@@ -85,13 +89,19 @@ export interface ResumenDiario {
   fecha: string
   cantidadACobrar: number
   totalACobrarCentavos: number
+  proximos: {
+    cantidadACobrar: number
+    totalACobrarCentavos: number
+  }
 }
 
 export interface ImportResult {
   insertados: number
+  actualizados: number
   ignorados: number
   duplicados: number
   errores: string[]
+  avisos: string[]
 }
 
 async function chequesFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -119,6 +129,8 @@ export async function fetchCheques(filters: ChequesListFilters): Promise<Cheques
   if (filters.origen) params.set('origen', filters.origen)
   if (filters.estado) params.set('estado', filters.estado)
   if (filters.tipo) params.set('tipo', filters.tipo)
+  if (filters.vinculacion) params.set('vinculacion', filters.vinculacion)
+  if (filters.q) params.set('q', filters.q)
   if (filters.desde) params.set('desde', filters.desde)
   if (filters.hasta) params.set('hasta', filters.hasta)
   if (filters.page) params.set('page', String(filters.page))

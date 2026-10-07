@@ -1,7 +1,6 @@
 import {
   BookOpen,
   BookUser,
-  BriefcaseBusiness,
   HardDrive,
   Headphones,
   Home,
@@ -33,6 +32,7 @@ export function buildMainNavItems(input: {
   resourcesEnabled: boolean
   finanzasEnabled: boolean
   finanzasAccess: boolean
+  /** RRHH pasó a ser un tablero (/tableros/rrhh): ya no tiene entrada propia en el menú. */
   rrhhEnabled: boolean
   rrhhAccess: boolean
   canAccessBoards: boolean
@@ -44,9 +44,6 @@ export function buildMainNavItems(input: {
 
   if (input.finanzasEnabled && input.finanzasAccess) {
     items.push({ to: '/finanzas', label: 'Finanzas', icon: Landmark, group: 'principal' })
-  }
-  if (input.rrhhEnabled && input.rrhhAccess) {
-    items.push({ to: '/rrhh/horas-extra', label: 'RRHH', icon: BriefcaseBusiness, group: 'principal' })
   }
   if (input.directoryEnabled && input.viewDirectory) {
     items.push({ to: '/directorio', label: 'Contactos', icon: BookUser, group: 'principal' })

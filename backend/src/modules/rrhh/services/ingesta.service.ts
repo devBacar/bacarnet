@@ -1,6 +1,8 @@
 import type { Readable } from 'node:stream'
 import { leerDumpMysql } from '../domain/sqlDumpParser.js'
 import { AcumuladorSalario, type ResultadoResumen } from '../domain/resumenMensual.js'
+import type { ConfigPactadas } from '../domain/horasPactadas.js'
+import { construirInforme, type Informe } from '../domain/informeMensual.js'
 import type { BackupSalario } from './backupsDrive.js'
 import type { ConteoEscritura, InfoIngestaGuardada } from './rrhh.repository.js'
 
@@ -64,6 +66,10 @@ export interface DependenciasIngesta {
   buscarUltimoBackup(): Promise<BackupSalario | null>
   abrirBackup(fileId: string): Promise<Readable>
   guardarResultado(resultado: ResultadoResumen, info: InfoIngestaGuardada): Promise<ConteoEscritura>
+  /** Guarda el informe mensual (agregado para el Directorio y detalle por persona para RRHH). */
+  guardarInforme(informe: Informe, info: InfoIngestaGuardada): Promise<void>
+  /** Personas que RRHH confirmó o sacó de las horas pactadas. */
+  leerConfigPactadas?(): Promise<ConfigPactadas>
   registro: RegistroIngestas
   ahora(): Date
   log?: (mensaje: string, extra?: Record<string, unknown>) => void
@@ -176,12 +182,16 @@ export async function ejecutarIngestaRrhh(
       anioDesde,
     )
     if (motivo) throw new Error(motivo)
-    const escritura = await deps.guardarResultado(resultado, {
+    // El informe se arma antes de escribir: si falla, no queda nada a medias.
+    const informe = construirInforme(resultado, { pactadas: await deps.leerConfigPactadas?.() })
+    const info: InfoIngestaGuardada = {
       ingestaId: id,
       archivo: backup.nombre,
       backupCreado: backup.creado,
       filasPorTabla: lectura.filasPorTabla,
-    })
+    }
+    const escritura = await deps.guardarResultado(resultado, info)
+    await deps.guardarInforme(informe, info)
     const fin = deps.ahora()
     await deps.registro.terminar(id, {
       estado: 'ok',

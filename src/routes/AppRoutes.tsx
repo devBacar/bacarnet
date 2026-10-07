@@ -99,10 +99,9 @@ export function AppRoutes() {
                 <Route path="cajachica" element={<Navigate to="/finanzas/cajas" replace />} />
               </Route>
             </Route>
-            <Route element={<ModulePermissionRoute permission="view_rrhh" module="rrhhEnabled" />}>
-              <Route path="rrhh" element={<Navigate to="/rrhh/horas-extra" replace />} />
-              <Route path="rrhh/horas-extra" element={<RrhhHorasExtraPage />} />
-            </Route>
+            {/* RRHH ahora es un tablero: las rutas viejas llevan al tablero. */}
+            <Route path="rrhh" element={<Navigate to="/tableros/rrhh" replace />} />
+            <Route path="rrhh/horas-extra" element={<Navigate to="/tableros/rrhh" replace />} />
             <Route element={<ModulePermissionRoute permission="view_drive" module="resourcesEnabled" />}>
               <Route path="recursos" element={<Resources />} />
               <Route path="recursos/office-preview/:requestId" element={<OfficeUploadPreviewPage />} />
@@ -114,6 +113,8 @@ export function AppRoutes() {
 
             <Route element={<BoardsRoute />}>
               <Route path="tableros" element={<BoardList />} />
+              {/* Tablero React de RRHH: el acceso lo controla la API (mismo esquema que los demás tableros). */}
+              <Route path="tableros/rrhh" element={<RrhhHorasExtraPage />} />
             </Route>
 
             <Route path="tableros/desarrollo-proyectos" element={<DesarrolloProyectosBoard />} />

@@ -13,7 +13,7 @@ import {
   type BoardDto,
 } from '../services/boardsApi'
 import { isSuperAdmin } from '../services/userService'
-import { boardListHref, isDesarrolloProyectosBoard } from '../constants/boardProyectos'
+import { boardListHref, isDesarrolloProyectosBoard, isRrhhBoard } from '../constants/boardProyectos'
 
 export function BoardList() {
   const { user, userProfile } = useAuth()
@@ -235,6 +235,10 @@ export function BoardViewerPage() {
 
   if (isDesarrolloProyectosBoard(boardId)) {
     return <Navigate to="/tableros/desarrollo-proyectos" replace />
+  }
+
+  if (isRrhhBoard(boardId)) {
+    return <Navigate to="/tableros/rrhh" replace />
   }
 
   return <BoardViewer boardId={boardId} />

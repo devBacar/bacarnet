@@ -4,7 +4,7 @@
  * En horas extra: CANT = horas y MONTO = pesos. En los conceptos "INT-Días…": MONTO = días.
  */
 
-export type GrupoHoras = 'he50' | 'he100' | 'fer' | 'noct' | 'comp'
+export type GrupoHoras = 'he50' | 'he100' | 'fer' | 'noct' | 'comp' | 'jornal'
 
 export const CONCEPTOS_HORAS: Record<GrupoHoras, readonly string[]> = {
   /** Horas extra al 50% y su ajuste. */
@@ -17,6 +17,8 @@ export const CONCEPTOS_HORAS: Record<GrupoHoras, readonly string[]> = {
   noct: ['HSNOCT', 'AHNOCT'],
   /** Horas compensatorias. */
   comp: ['HSCOMP'],
+  /** Horas de jornal (personal por hora, por ejemplo eventuales): mide cuánto se los usa. */
+  jornal: ['HSTRAB'],
 }
 
 /** Tipo de ausencia → concepto de días que liquida Salario. */
@@ -40,16 +42,31 @@ export const CONCEPTOS_AUSENCIA: Record<string, string> = {
   'Falta injustificada': 'DSINJU',
   Suspensión: 'DSSUSP',
   'No trabajados': 'DSNOTR',
+  'Citación judicial': 'DSJUDI',
 }
 
-export type TotalLiquidacion = 'rem' | 'contrib' | 'costo'
+export type TotalLiquidacion = 'rem' | 'norem' | 'contrib' | 'prov' | 'costo' | 'desc' | 'neto' | 'adelantos'
 
-/** Totales de la liquidación: remunerativo, contribuciones patronales y costo laboral (desde jun-26). */
+/**
+ * Totales de la liquidación: remunerativo, no remunerativo, contribuciones patronales,
+ * provisiones (aguinaldo y despidos) y costo laboral. COSTOS = remunerativo + no remunerativo
+ * + contribuciones; Salario lo calcula desde jun-26.
+ */
 export const CONCEPTOS_TOTALES: Record<string, TotalLiquidacion> = {
   '(TREM)': 'rem',
+  '(TNRM)': 'norem',
   '(TCTR)': 'contrib',
+  '(TPRV)': 'prov',
   COSTOS: 'costo',
+  '(TDES)': 'desc',
+  '(NETO)': 'neto',
+  // Adelantos de sueldo y de viáticos: se pagan durante el mes y se descuentan del neto.
+  ADE001: 'adelantos',
+  ADEVIA: 'adelantos',
 }
+
+/** Días del período liquidado (30 en un mes completo; menos si la persona entró o salió en el mes). */
+export const CONCEPTO_DIAS_LIQUIDADOS = 'DSTRAB'
 
 /** Art. 169 LCT: la cantidad liquidada es la cantidad de feriados del mes. */
 export const CONCEPTO_FERIADOS_MES = 'FERIAD'
@@ -86,6 +103,7 @@ export const CONCEPTOS_RELEVANTES = new Set<string>([
   ...AUSENCIA_POR_CONCEPTO.keys(),
   ...Object.keys(CONCEPTOS_TOTALES),
   CONCEPTO_FERIADOS_MES,
+  CONCEPTO_DIAS_LIQUIDADOS,
 ])
 
 /**
@@ -104,4 +122,5 @@ export const TABLAS_CODIGOS = {
   esquemaLiquidacion: 17,
   puesto: 22,
   tipoAusencia: 30,
+  motivoEgreso: 27,
 } as const

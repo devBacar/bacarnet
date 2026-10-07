@@ -1,5 +1,7 @@
 import type { FilaDump } from './sqlDumpParser.js'
+import { CONVENIOS, convenioDeEsquema } from './convenios.js'
 import {
+  CONCEPTO_DIAS_LIQUIDADOS,
   CONCEPTO_FERIADOS_MES,
   CONCEPTOS_RELEVANTES,
   TABLAS_CODIGOS,
@@ -33,6 +35,11 @@ export interface ResumenCentroCostoMes {
   totales: Totales
   /** Días liquidados por tipo de ausencia (incluye "Vacaciones"). */
   ausencias: Record<string, number>
+  /**
+   * Horas normales trabajadas (sin horas extra): días presentes × jornada del convenio, o las horas
+   * de jornal para el personal por hora. Estimación: Salario no tiene fichadas.
+   */
+  horasNormales: number
 }
 
 export interface MesPersona {
@@ -40,12 +47,20 @@ export interface MesPersona {
   horas: HorasPorGrupo
   totales: Totales
   ausencias: Record<string, number>
+  /** Ver ResumenCentroCostoMes.horasNormales. */
+  horasNormales: number
+  /** Empresa del recibo (tabla `empresa` de Salario). */
+  empresa?: number
+  /** Días liquidados del mes (DSTRAB, hasta 30). Incluye los días de vacaciones y licencias. */
+  dias?: number
 }
 
 export interface PeriodoVacaciones {
   desde: string
   hasta: string
   dias: number
+  /** Año de vacaciones al que corresponde según Salario (0 si no se cargó). */
+  anio: number
 }
 
 export interface ResumenPersona {
@@ -62,6 +77,25 @@ export interface ResumenPersona {
   vacaciones: PeriodoVacaciones[]
 }
 
+/** Licencia o ausencia cargada con fechas en Salario (tabla `asist`). */
+export interface LicenciaSalario {
+  legajo: number
+  desde: string
+  hasta: string
+  dias: number
+  tipo: number
+}
+
+/** Un período de trabajo (alta y baja) de un legajo (tabla `ingegr`). */
+export interface PeriodoLaboral {
+  legajo: number
+  ingreso: string
+  /** null si sigue trabajando. */
+  egreso: string | null
+  /** Motivo de egreso (tabla de códigos 27); solo se conoce para el último egreso del legajo. */
+  motivo: number
+}
+
 export interface AnomaliaHoras {
   mes: string
   legajo: number
@@ -71,11 +105,17 @@ export interface AnomaliaHoras {
 }
 
 export interface Catalogos {
+  /** Empresas del grupo (tabla `empresa`), sin las excluidas. */
+  empresas?: Record<number, string>
+  /** Empresas que se dejaron afuera de todos los cálculos (por ejemplo, Filmec). */
+  empresasExcluidas?: Record<number, string>
   centrosCosto: Record<number, string>
   secciones: Record<number, string>
   puestos: Record<number, string>
   esquemasLiquidacion: Record<number, string>
   tiposAusencia: Record<number, string>
+  /** Motivos de egreso (tabla de códigos 27). */
+  motivosEgreso?: Record<number, string>
 }
 
 export interface ResultadoResumen {
@@ -88,6 +128,14 @@ export interface ResultadoResumen {
   feriadosPorMes: Record<string, number>
   catalogos: Catalogos
   anomalias: AnomaliaHoras[]
+  /** Licencias con fechas (tabla `asist`), para episodios, licencias largas y el corte 26-25. */
+  licencias?: LicenciaSalario[]
+  /** Altas y bajas (tabla `ingegr`), para la rotación. */
+  periodosLaborales?: PeriodoLaboral[]
+  /** Esquema de liquidación de cada legajo (también de los que no se liquidaron en el período). */
+  esquemaDeLegajo?: Record<number, number>
+  /** Nombre y centro de costo de cada legajo con alta o baja en el período (para el detalle de RRHH). */
+  legajos?: Record<number, { nombre: string; cc: number }>
 }
 
 export interface OpcionesResumen {
@@ -97,7 +145,7 @@ export interface OpcionesResumen {
   vacacionesDesde?: string
 }
 
-const GRUPOS: GrupoHoras[] = ['he50', 'he100', 'fer', 'noct', 'comp']
+const GRUPOS: GrupoHoras[] = ['he50', 'he100', 'fer', 'noct', 'comp', 'jornal']
 
 function horasVacias(): HorasPorGrupo {
   return {
@@ -106,11 +154,12 @@ function horasVacias(): HorasPorGrupo {
     fer: { hs: 0, monto: 0 },
     noct: { hs: 0, monto: 0 },
     comp: { hs: 0, monto: 0 },
+    jornal: { hs: 0, monto: 0 },
   }
 }
 
 function totalesVacios(): Totales {
-  return { rem: 0, contrib: 0, costo: 0 }
+  return { rem: 0, norem: 0, contrib: 0, prov: 0, costo: 0, desc: 0, neto: 0, adelantos: 0 }
 }
 
 function num(v: string | null | undefined): number {
@@ -149,6 +198,7 @@ interface AcumuladoConcepto {
 
 interface AcumuladoPersonaMes {
   cc: number
+  empresa?: number
   conceptos: Map<string, AcumuladoConcepto>
 }
 
@@ -160,7 +210,15 @@ interface DatosEmpleado {
   esquema: number
   fechaIngreso: string | null
   fechaEgreso: string | null
+  motivoEgreso: number
+  empresa: number
 }
+
+/**
+ * Empresas que no forman parte del tablero (por nombre en la tabla `empresa` de Salario).
+ * Filmec es otra empresa: no se cuenta en ningún cálculo.
+ */
+export const EMPRESAS_EXCLUIDAS = [/filmec/i]
 
 const RE_TABLA_LIQ = /^liq(\d{4})$/
 
@@ -175,6 +233,9 @@ export class AcumuladorSalario {
   private readonly vacaciones = new Map<number, PeriodoVacaciones[]>()
   private readonly feriados = new Map<string, Map<number, number>>()
   private readonly codigos = new Map<number, Map<number, string>>()
+  private readonly empresas = new Map<number, string>()
+  private readonly licencias: LicenciaSalario[] = []
+  private readonly periodos: Omit<PeriodoLaboral, 'motivo'>[] = []
 
   constructor(
     private readonly opciones: OpcionesResumen & {
@@ -187,7 +248,7 @@ export class AcumuladorSalario {
   quiereTabla = (tabla: string): boolean => {
     const liq = RE_TABLA_LIQ.exec(tabla)
     if (liq) return Number(liq[1]) >= this.opciones.anioDesde
-    return tabla === 'empleado' || tabla === 'tablas' || tabla === 'vac'
+    return tabla === 'empleado' || tabla === 'tablas' || tabla === 'vac' || tabla === 'empresa' || tabla === 'asist' || tabla === 'ingegr'
   }
 
   onFila = (tabla: string, fila: FilaDump): void => {
@@ -195,6 +256,12 @@ export class AcumuladorSalario {
     else if (tabla === 'empleado') this.agregarEmpleado(fila)
     else if (tabla === 'tablas') this.agregarCodigo(fila)
     else if (tabla === 'vac') this.agregarVacacion(fila)
+    else if (tabla === 'asist') this.agregarLicencia(fila)
+    else if (tabla === 'ingegr') this.agregarPeriodo(fila)
+    else if (tabla === 'empresa') {
+      const codigo = entero(fila.CODIGO)
+      if (codigo > 0) this.empresas.set(codigo, (fila.DESCR ?? '').trim())
+    }
   }
 
   private agregarLiquidacion(fila: FilaDump): void {
@@ -210,6 +277,8 @@ export class AcumuladorSalario {
     }
     const cc = entero(fila.CCOSTO)
     if (cc > acc.cc) acc.cc = cc
+    const empresa = entero(fila.EMPRESA)
+    if (empresa > 0) acc.empresa = empresa
 
     const concepto = (fila.CONCEPTO ?? '').trim()
     if (!CONCEPTOS_RELEVANTES.has(concepto)) return
@@ -246,7 +315,34 @@ export class AcumuladorSalario {
       esquema: entero(fila.ESQLIQ),
       fechaIngreso: ingreso2 ?? fecha(fila.FECING),
       fechaEgreso: fecha(fila.FECEGR),
+      motivoEgreso: entero(fila.MOTEGR),
+      empresa: entero(fila.EMPRESA),
     })
+  }
+
+  /** Desde cuándo se guardan licencias y altas/bajas: un año antes del primer año liquidado que se lee. */
+  private get fechaMinima(): string {
+    return `${this.opciones.anioDesde - 1}-01-01`
+  }
+
+  private agregarLicencia(fila: FilaDump): void {
+    const legajo = entero(fila.LEGAJO)
+    const desde = fecha(fila.FECINI)
+    const hasta = fecha(fila.FECFIN)
+    // Fechas imposibles (año 0025, 2052…) o al revés: se descartan.
+    if (!legajo || !desde || !hasta || hasta < desde || hasta >= '2100' || hasta < this.fechaMinima) return
+    this.licencias.push({ legajo, desde, hasta, dias: num(fila.DIAS), tipo: entero(fila.TIPO) })
+  }
+
+  private agregarPeriodo(fila: FilaDump): void {
+    const legajo = entero(fila.LEGAJO)
+    const ingreso = fecha(fila.FECING)
+    const egresoBruto = fecha(fila.FECEGR)
+    // Salario marca "sigue trabajando" con fechas como 2100, 2500 o 2500-12-31.
+    const egreso = egresoBruto && egresoBruto < '2100' ? egresoBruto : null
+    if (!legajo || !ingreso) return
+    if (egreso && egreso < this.fechaMinima) return
+    this.periodos.push({ legajo, ingreso, egreso })
   }
 
   private agregarCodigo(fila: FilaDump): void {
@@ -268,7 +364,7 @@ export class AcumuladorSalario {
     if (!legajo || !desde || !hasta || hasta < desde) return
     if (this.opciones.vacacionesDesde && hasta < this.opciones.vacacionesDesde) return
     const lista = this.vacaciones.get(legajo) ?? []
-    lista.push({ desde, hasta, dias: entero(fila.DIAS) })
+    lista.push({ desde, hasta, dias: entero(fila.DIAS), anio: entero(fila.AA) })
     this.vacaciones.set(legajo, lista)
   }
 
@@ -284,14 +380,25 @@ export class AcumuladorSalario {
     const porCc = new Map<string, ResumenCentroCostoMes>()
     const personas = new Map<number, ResumenPersona>()
     const anomalias: AnomaliaHoras[] = []
+    const excluidas = new Set([...this.empresas].filter(([, nombre]) => EMPRESAS_EXCLUIDAS.some((re) => re.test(nombre))).map(([codigo]) => codigo))
+    const legajoExcluido = (legajo: number) => {
+      const e = this.empleados.get(legajo)?.empresa
+      return e !== undefined && excluidas.has(e)
+    }
 
     for (const [clave, acc] of this.personaMes) {
       const mes = clave.slice(0, 6)
       if (!mesesSet.has(mes)) continue
       const legajo = Number(clave.slice(7))
+      // Otra empresa (Filmec): no entra en ningún cálculo. Se mira la empresa del recibo y, si no viene, la del legajo.
+      if (acc.empresa !== undefined ? excluidas.has(acc.empresa) : legajoExcluido(legajo)) continue
 
-      const mp: MesPersona = { cc: acc.cc, horas: horasVacias(), totales: totalesVacios(), ausencias: {} }
+      const mp: MesPersona = { cc: acc.cc, horas: horasVacias(), totales: totalesVacios(), ausencias: {}, horasNormales: 0 }
+      if (acc.empresa) mp.empresa = acc.empresa
+      const diasLiquidados = acc.conceptos.get(CONCEPTO_DIAS_LIQUIDADOS)?.monto
+      if (diasLiquidados !== undefined) mp.dias = Math.min(30, Math.max(0, diasLiquidados))
       for (const [concepto, { cant, monto }] of acc.conceptos) {
+        if (concepto === CONCEPTO_DIAS_LIQUIDADOS) continue
         const grupo = grupoHorasDe(concepto)
         if (grupo) {
           let hs = cant
@@ -312,6 +419,15 @@ export class AcumuladorSalario {
         if (total) mp.totales[total] += monto
       }
 
+      // Horas normales: el personal por hora (jornal) trae sus horas; el resto, días presentes × jornada del convenio.
+      if (mp.horas.jornal.hs > 0) {
+        mp.horasNormales = mp.horas.jornal.hs
+      } else {
+        const dias = Math.min(30, acc.conceptos.get(CONCEPTO_DIAS_LIQUIDADOS)?.monto ?? 0)
+        const ausentes = Object.values(mp.ausencias).reduce((s, d) => s + d, 0)
+        mp.horasNormales = (Math.max(0, dias - ausentes) * this.horasMesDe(legajo)) / 30
+      }
+
       const ccClave = `${mes}|${acc.cc}`
       let rc = porCc.get(ccClave)
       if (!rc) {
@@ -323,10 +439,12 @@ export class AcumuladorSalario {
           horas: horasVacias(),
           totales: totalesVacios(),
           ausencias: {},
+          horasNormales: 0,
         }
         porCc.set(ccClave, rc)
       }
       rc.dotacion += 1
+      rc.horasNormales += mp.horasNormales
       if (mp.horas.he50.hs + mp.horas.he100.hs + mp.horas.fer.hs > 0) rc.conHorasExtra += 1
       for (const g of GRUPOS) {
         rc.horas[g].hs += mp.horas[g].hs
@@ -364,14 +482,37 @@ export class AcumuladorSalario {
       personas: [...personas.values()].sort((a, b) => a.legajo - b.legajo),
       feriadosPorMes,
       catalogos: {
+        empresas: Object.fromEntries([...this.empresas].filter(([codigo]) => !excluidas.has(codigo))),
+        empresasExcluidas: Object.fromEntries([...this.empresas].filter(([codigo]) => excluidas.has(codigo))),
         centrosCosto: this.tablaCodigos(TABLAS_CODIGOS.centroCosto),
         secciones: this.tablaCodigos(TABLAS_CODIGOS.seccion),
         puestos: this.tablaCodigos(TABLAS_CODIGOS.puesto),
         esquemasLiquidacion: this.tablaCodigos(TABLAS_CODIGOS.esquemaLiquidacion),
         tiposAusencia: this.tablaCodigos(TABLAS_CODIGOS.tipoAusencia),
+        motivosEgreso: this.tablaCodigos(TABLAS_CODIGOS.motivoEgreso),
       },
       anomalias,
+      licencias: this.licencias.filter((l) => !legajoExcluido(l.legajo)).sort((a, b) => a.legajo - b.legajo || (a.desde < b.desde ? -1 : a.desde > b.desde ? 1 : 0)),
+      periodosLaborales: this.periodos.filter((p) => !legajoExcluido(p.legajo)).map((p) => {
+        const emp = this.empleados.get(p.legajo)
+        // El motivo de egreso está en el legajo: corresponde a su última baja.
+        return { ...p, motivo: emp && p.egreso && emp.fechaEgreso === p.egreso ? emp.motivoEgreso : 0 }
+      }),
+      esquemaDeLegajo: Object.fromEntries([...this.empleados].filter(([legajo]) => !legajoExcluido(legajo)).map(([legajo, e]) => [legajo, e.esquema])),
+      legajos: Object.fromEntries(
+        [...new Set([...this.periodos.map((p) => p.legajo), ...this.licencias.map((l) => l.legajo)])].flatMap((legajo) => {
+          const e = this.empleados.get(legajo)
+          return e ? [[legajo, { nombre: e.nombre, cc: e.cc }]] : []
+        }),
+      ),
     }
+  }
+
+  /** Horas por mes de la jornada del convenio de la persona (por su esquema de liquidación). */
+  private horasMesDe(legajo: number): number {
+    const esquema = this.empleados.get(legajo)?.esquema ?? 0
+    const nombre = this.codigos.get(TABLAS_CODIGOS.esquemaLiquidacion)?.get(esquema)
+    return CONVENIOS[convenioDeEsquema(nombre)].horasMes
   }
 
   private nuevaPersona(legajo: number): ResumenPersona {
@@ -405,7 +546,15 @@ function redondearMes(m: MesPersona): MesPersona {
   for (const t of Object.keys(totales) as TotalLiquidacion[]) totales[t] = redondear(m.totales[t])
   const ausencias: Record<string, number> = {}
   for (const [tipo, dias] of Object.entries(m.ausencias)) ausencias[tipo] = redondear(dias)
-  return { cc: m.cc, horas, totales, ausencias }
+  return {
+    cc: m.cc,
+    horas,
+    totales,
+    ausencias,
+    horasNormales: redondear(m.horasNormales, 1),
+    ...(m.empresa ? { empresa: m.empresa } : {}),
+    ...(m.dias !== undefined ? { dias: redondear(m.dias) } : {}),
+  }
 }
 
 /** Cantidad de feriados del mes: el valor de FERIAD más repetido (a igualdad, el mayor). */
@@ -420,4 +569,10 @@ function modaFeriados(porCant: Map<number, number> | undefined): number {
     }
   }
   return mejor
+}
+
+/** Aclaración de las empresas que no se cuentan (por ejemplo, Filmec). */
+export function excluidas(resultado: ResultadoResumen): string[] {
+  const nombres = Object.values(resultado.catalogos.empresasExcluidas ?? {})
+  return nombres.length ? [`No incluye ${nombres.map((n) => n.trim()).join(' ni ')}: es otra empresa.`] : []
 }

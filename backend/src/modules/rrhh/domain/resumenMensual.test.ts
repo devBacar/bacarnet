@@ -78,12 +78,12 @@ describe('AcumuladorSalario con la muestra ficticia', () => {
     const dos = r.personas.find((p) => p.legajo === 2)!
     expect(dos.nombre).toBe('PERSONA O\'DOS, "PRUEBA"')
     expect(dos.meses['202608'].ausencias).toEqual({ Vacaciones: 14 })
-    expect(dos.vacaciones).toEqual([{ desde: '2026-08-03', hasta: '2026-08-16', dias: 14 }])
+    expect(dos.vacaciones).toEqual([{ desde: '2026-08-03', hasta: '2026-08-16', dias: 14, anio: 2025 }])
 
     const uno = r.personas.find((p) => p.legajo === 1)!
     expect(uno.fechaIngreso).toBe('2015-03-01')
     expect(uno.fechaEgreso).toBeNull()
-    expect(uno.vacaciones).toEqual([{ desde: '2026-11-02', hasta: '2026-11-15', dias: 14 }])
+    expect(uno.vacaciones).toEqual([{ desde: '2026-11-02', hasta: '2026-11-15', dias: 14, anio: 2026 }])
 
     const tres = r.personas.find((p) => p.legajo === 3)!
     expect(tres.cc).toBe(16)

@@ -86,7 +86,7 @@ const MODULE_TOGGLES: {
   {
     key: 'rrhhEnabled',
     label: 'Mostrar RRHH',
-    description: 'Habilita el módulo RRHH (horas extra) y la ruta /rrhh/horas-extra para usuarios con permiso.',
+    description: 'Habilita la lectura automática de Salario para el tablero de RRHH (15:30 y 22:30). Quién lo ve se define con el botón Acceso del tablero en Tableros.',
   },
 ]
 

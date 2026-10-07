@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AREA_AGRUPADA, construirCostosNomina } from './costosNomina.js'
+import { construirCostosNomina } from './costosNomina.js'
 import type { MesPersona, ResultadoResumen, ResumenPersona } from './resumenMensual.js'
 
 const vacio = { hs: 0, monto: 0 }
@@ -57,9 +57,9 @@ describe('costos de personal', () => {
     expect(c.empresas).toEqual([{ id: 1, nombre: 'BACAR' }, { id: 2, nombre: 'FILMEC' }])
   })
 
-  it('las áreas con menos de 3 personas van juntas, para no mostrar sueldos individuales', () => {
+  it('muestra cada área por separado aunque tenga una o dos personas', () => {
     const chica = c.filas.find((f) => f.convenio === 'camioneros')!
-    expect(chica.cc).toBe(AREA_AGRUPADA)
-    expect(chica.empresa).toBe(2)
+    expect(chica.cc).toBeGreaterThan(0)
+    expect(chica.personas).toBeLessThan(3)
   })
 })

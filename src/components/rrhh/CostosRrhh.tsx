@@ -243,7 +243,7 @@ export function CostosRrhh({
   const [elegido, setElegido] = useState<string | null>(null)
 
   const unidadDe = useMemo(() => new Map(areas.map((a) => [a.cc, a.unidad as string])), [areas])
-  const nombreArea = (n: number) => (n === -1 ? 'Otras áreas (menos de 3 personas)' : (areas.find((a) => a.cc === n)?.nombre ?? `Centro de costo ${n}`))
+  const nombreArea = (n: number) => (n === -1 ? 'Sin centro de costo' : (areas.find((a) => a.cc === n)?.nombre ?? `Centro de costo ${n}`))
   const filtradas = useMemo(() => filtrarCostos(costos.filas, unidadDe, unidad, cc, convenio), [costos.filas, unidadDe, unidad, cc, convenio])
   const nombreConvenio = (c: ConvenioRrhh) => costos.convenios.find((x) => x.id === c)?.nombre ?? c
   const filtroPersona = useMemo(
@@ -454,7 +454,7 @@ export function CostosRrhh({
           {verPersonas ? (
             <TarjetaRrhh
               titulo={`Personas en esta selección · ${seleccion} · ${p.etiqueta}`}
-              subtitulo="Solo lo ve el perfil RRHH. Cambia con cada filtro. Las áreas con menos de 3 personas se filtran juntas como en las tablas."
+              subtitulo="Solo lo ve el perfil RRHH. Cambia con cada filtro."
             >
               <PersonasSeleccion
                 meses={mesesPeriodo}

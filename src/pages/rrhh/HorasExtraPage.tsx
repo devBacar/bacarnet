@@ -69,11 +69,8 @@ const MENSAJE_INGESTA: Record<ResultadoIngestaRrhh['estado'], string> = {
   error: 'No se pudo procesar el backup.',
 }
 
-/**
- * Procesa el último backup de Salario de Drive, con confirmación en la misma pantalla. Lo puede usar quien ve el tablero;
- * volver a procesar un backup que ya se procesó, solo el super admin.
- */
-function ActualizarDesdeSalario({ puedeForzar }: { puedeForzar: boolean }) {
+/** Solo super admin: procesa el último backup de Salario de Drive, con confirmación en la misma pantalla. */
+function ActualizarDesdeSalario() {
   const queryClient = useQueryClient()
   const [confirmando, setConfirmando] = useState(false)
   const ingesta = useMutation({
@@ -122,7 +119,7 @@ function ActualizarDesdeSalario({ puedeForzar }: { puedeForzar: boolean }) {
           {MENSAJE_INGESTA[resultado.estado]}
           {resultado.mensaje && resultado.estado === 'error' ? ` ${resultado.mensaje}` : ''}
           {resultado.backupAtrasado ? ' Ojo: el último backup tiene más de 14 horas.' : ''}
-          {resultado.estado === 'ya_procesado' && puedeForzar ? (
+          {resultado.estado === 'ya_procesado' ? (
             <>
               {' '}
               <button
@@ -162,7 +159,7 @@ function FaltaActualizar({ superAdmin }: { superAdmin: boolean }) {
     <TarjetaRrhh titulo="Falta actualizar los datos">
       <p className="text-[15px] text-neutral-700 dark:text-gray-300">
         Esta sección se arma al procesar el backup de Salario con la versión nueva.{' '}
-        {superAdmin ? 'Tocá "Actualizar desde Salario" y después "Volver a procesar igual".' : 'Se completa con el próximo backup de Salario (se lee solo a las 15:30 y 22:30, o con "Actualizar desde Salario").'}
+        {superAdmin ? 'Tocá "Actualizar desde Salario" y después "Volver a procesar igual".' : 'Se completa con la próxima lectura de Salario (15:30 o 22:30).'}
       </p>
     </TarjetaRrhh>
   )
@@ -310,7 +307,14 @@ export function RrhhHorasExtraPage() {
             </p>
           )}
         </div>
-        {datos || sinDatos ? <ActualizarDesdeSalario puedeForzar={superAdmin} /> : null}
+        {superAdmin ? (
+          <ActualizarDesdeSalario />
+        ) : datos ? (
+          <p className="text-right text-[12.5px] text-neutral-600 dark:text-gray-400">
+            Se actualiza solo a las 15:30 y 22:30
+            <span className="block">último backup de Salario: {fechaHora(datos.meta.backupCreado)}</span>
+          </p>
+        ) : null}
       </header>
 
       {informe.isPending && <p className="text-body-muted text-[14px]">Cargando el informe…</p>}
@@ -318,7 +322,9 @@ export function RrhhHorasExtraPage() {
       {sinDatos && (
         <TarjetaRrhh titulo="Todavía no hay datos de Salario">
           <p className="text-[14px] text-neutral-700 dark:text-gray-300">
-            Tocá "Actualizar desde Salario" para procesar el último backup de Drive. Después se actualiza solo a las 15:30 y 22:30.
+            {superAdmin
+              ? 'Tocá "Actualizar desde Salario" para procesar el último backup de Drive. Después se actualiza solo a las 15:30 y 22:30.'
+              : 'Los datos se cargan solos a las 15:30 y 22:30. Si no aparecen, avisale a Sistemas.'}
           </p>
         </TarjetaRrhh>
       )}

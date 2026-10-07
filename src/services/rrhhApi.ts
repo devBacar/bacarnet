@@ -198,7 +198,7 @@ export interface EvolucionRrhh {
 
 export interface FilaCostoNominaRrhh {
   mes: string
-  /** -1: áreas con menos de 3 personas en el mes. */
+  /** -1: recibos sin centro de costo. */
   cc: number
   empresa: number
   convenio: ConvenioRrhh
@@ -498,7 +498,7 @@ export interface PersonaCostoRrhh {
   legajo: number
   nombre: string
   cc: number
-  /** -1 si el área se agrupó en "Otras áreas" (como en las filas de costos). */
+  /** -1 si el recibo no trae centro de costo (como en las filas de costos). */
   ccFiltro: number
   convenio: ConvenioRrhh
   empresa: number

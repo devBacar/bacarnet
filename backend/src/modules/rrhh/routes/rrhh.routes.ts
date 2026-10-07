@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { logError } from '../../../lib/log.js'
-import { isSuperAdminUser, requireSuperAdmin, requireWorkspaceUser } from '../../auth/middleware.js'
+import { requireSuperAdmin, requireWorkspaceUser } from '../../auth/middleware.js'
 import { requireTableroRrhh } from '../requireTableroRrhh.js'
 
 export const rrhhRouter = Router()
@@ -98,14 +98,11 @@ rrhhRouter.get('/ingestas', requireSuperAdmin, async (_req, res) => {
 })
 
 /**
- * Procesa ya el último backup de Salario: botón "Actualizar ahora" del tablero, para quien tiene acceso al tablero.
- * Si ese backup ya se procesó no hace nada. Body opcional: { "forzar": true } para reprocesarlo (solo super admin).
+ * Procesa ya el último backup de Salario (solo super admin): corre dentro de la function `api`, que atiende a toda
+ * la intranet, así que es una acción de Sistemas, a mano. El resto ve los datos de la lectura programada (15:30 y 22:30).
+ * Body opcional: { "forzar": true } para reprocesar un archivo que ya se procesó.
  */
-rrhhRouter.post('/ingestas/ejecutar', requireTableroRrhh('ver'), async (req, res) => {
-  if (req.body?.forzar === true && !isSuperAdminUser(req.authedUser!)) {
-    res.status(403).json({ error: 'Solo un super admin puede volver a procesar un backup ya procesado.' })
-    return
-  }
+rrhhRouter.post('/ingestas/ejecutar', requireSuperAdmin, async (req, res) => {
   try {
     const { ejecutarIngestaReal } = await import('../services/ingestaRrhh.js')
     const resultado = await ejecutarIngestaReal({

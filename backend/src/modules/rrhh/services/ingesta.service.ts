@@ -118,6 +118,28 @@ export function motivoParaNoGuardar(
   return null
 }
 
+/** Firestore corta en 1 MiB por documento: se deja margen para los metadatos y el cálculo de tamaño de Firestore. */
+export const MAX_BYTES_DOCUMENTO = 900 * 1024
+
+/**
+ * Control antes de escribir el informe: si algún documento pasaría el límite de Firestore, no se guarda nada
+ * (igual que las guardas de backups incompletos) y el motivo queda en rrhh_ingestas.
+ */
+export function motivoPorTamanio(informe: Informe): string | null {
+  const documentos: [string, unknown][] = [
+    ['rrhh_informe/agregado', informe.agregado],
+    ['rrhh_informe/detalle', informe.detalle],
+    ...Object.entries(informe.personasCostos ?? {}).map(([mes, personas]): [string, unknown] => [`rrhh_costos_personas/${mes}`, personas]),
+  ]
+  for (const [nombre, contenido] of documentos) {
+    const bytes = Buffer.byteLength(JSON.stringify(contenido) ?? '', 'utf8')
+    if (bytes > MAX_BYTES_DOCUMENTO) {
+      return `El documento ${nombre} pesaría ${Math.round(bytes / 1024)} KB y Firestore admite hasta 1 MiB (límite de seguridad ${Math.round(MAX_BYTES_DOCUMENTO / 1024)} KB). No se guardó nada: hay que partir el informe.`
+    }
+  }
+  return null
+}
+
 /** Id estable por archivo y contenido: el mismo backup no se procesa dos veces. */
 export function idIngesta(backup: BackupSalario): string {
   return `${backup.id}_${backup.md5 ?? backup.bytes}`
@@ -184,6 +206,8 @@ export async function ejecutarIngestaRrhh(
     if (motivo) throw new Error(motivo)
     // El informe se arma antes de escribir: si falla, no queda nada a medias.
     const informe = construirInforme(resultado, { pactadas: await deps.leerConfigPactadas?.() })
+    const motivoTamanio = motivoPorTamanio(informe)
+    if (motivoTamanio) throw new Error(motivoTamanio)
     const info: InfoIngestaGuardada = {
       ingestaId: id,
       archivo: backup.nombre,

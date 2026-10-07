@@ -10,7 +10,7 @@ import { unidadDeArea, type UnidadNegocio } from './evolucion.js'
 
 export interface FilaCostoNomina {
   mes: string
-  /** Centro de costo; -1 agrupa áreas con menos de 3 personas en el mes (para no mostrar sueldos individuales). */
+  /** Centro de costo del recibo; -1 si el recibo no trae centro de costo. Todas las áreas van por separado, sin importar cuántas personas tengan. */
   cc: number
   empresa: number
   convenio: Convenio
@@ -41,14 +41,14 @@ export interface CostosNomina {
   notas: string[]
 }
 
-export const AREA_AGRUPADA = -1
-const MINIMO_PERSONAS_AREA = 3
+/** Recibos sin centro de costo. */
+export const SIN_CENTRO_COSTO = -1
 
 /** Una persona en un mes, con sus importes. Solo perfil RRHH (se guarda aparte, un documento por mes). */
 export interface PersonaCosto {
   legajo: number
   nombre: string
-  /** Centro de costo real y el que se usa en los filtros (-1 si el área se agrupó en "Otras áreas"). */
+  /** Centro de costo real y el que se usa en los filtros (iguales salvo recibos sin centro de costo: -1). */
   cc: number
   ccFiltro: number
   convenio: Convenio
@@ -67,17 +67,12 @@ export interface PersonaCosto {
 
 export function construirCostosNomina(resultado: ResultadoResumen, nombreArea: (cc: number) => string = (cc) => `Centro de costo ${cc}`): CostosNomina & { personasPorMes: Record<string, PersonaCosto[]> } {
   const personasPorMes: Record<string, PersonaCosto[]> = {}
-  // Personas por área y mes, para agrupar las áreas chicas.
-  const dotacion = new Map<string, number>()
-  for (const r of resultado.centrosCosto) dotacion.set(`${r.mes}|${r.cc}`, r.dotacion)
-
   const filas = new Map<string, FilaCostoNomina>()
   for (const p of resultado.personas) {
     const convenio = convenioDeEsquema(resultado.catalogos.esquemasLiquidacion[p.esquemaLiquidacion])
     for (const [mes, m] of Object.entries(p.meses)) {
       if (m.totales.rem <= 0 && m.totales.norem <= 0) continue
-      const chica = (dotacion.get(`${mes}|${m.cc}`) ?? 0) < MINIMO_PERSONAS_AREA || m.cc <= 0
-      const cc = chica ? AREA_AGRUPADA : m.cc
+      const cc = m.cc > 0 ? m.cc : SIN_CENTRO_COSTO
       const empresa = m.empresa ?? 1
       const clave = `${mes}|${cc}|${empresa}|${convenio}`
       const f = filas.get(clave) ?? {
@@ -169,7 +164,6 @@ export function construirCostosNomina(resultado: ResultadoResumen, nombreArea: (
       'Contribuciones patronales: desde junio de 2026, costo laboral menos remunerativo y no remunerativo (el total de contribuciones de Salario suma de más en algunos recibos con pagos no remunerativos grandes, como gratificaciones por baja).',
       'Costo laboral = el concepto "Costo laboral" de Salario (remunerativo + no remunerativo + contribuciones patronales); antes de junio de 2026, que Salario no lo calculaba, se suma igual. Las provisiones de aguinaldo y despidos se muestran aparte: no se pagan en el mes.',
       'El aguinaldo se liquida aparte (en junio y diciembre) y no está sumado acá; sus contribuciones aparecen en la liquidación mensual siguiente, por eso esos meses dan más altos.',
-      'Las áreas con menos de 3 personas en el mes van juntas en "Otras áreas", para no mostrar sueldos individuales.',
       'Importes en pesos de cada mes, sin ajustar por inflación.',
     ],
   }

@@ -8,7 +8,9 @@ import type { BackupSalario } from './backupsDrive.js'
 import {
   ejecutarIngestaRrhh,
   idIngesta,
+  MAX_BYTES_DOCUMENTO,
   motivoParaNoGuardar,
+  motivoPorTamanio,
   VENCIMIENTO_EN_CURSO_MS,
   type DatosFinIngesta,
   type DatosInicioIngesta,
@@ -198,5 +200,25 @@ describe('guardas contra backups incompletos', () => {
         2025,
       ),
     ).toBeNull()
+  })
+})
+
+describe('guarda de tamaño del informe (límite de Firestore)', () => {
+  const informe = (relleno: number) =>
+    ({ agregado: { texto: 'x'.repeat(relleno) }, detalle: {}, personasCostos: { '202609': [] } }) as unknown as Informe
+
+  it('deja guardar un informe chico', () => {
+    expect(motivoPorTamanio(informe(1000))).toBeNull()
+  })
+
+  it('no guarda si un documento pasa el límite de seguridad', () => {
+    const motivo = motivoPorTamanio(informe(MAX_BYTES_DOCUMENTO + 1))
+    expect(motivo).toContain('rrhh_informe/agregado')
+    expect(motivo).toContain('No se guardó nada')
+  })
+
+  it('también controla los documentos de personas por mes', () => {
+    const grande = { agregado: {}, detalle: {}, personasCostos: { '202609': ['x'.repeat(MAX_BYTES_DOCUMENTO)] } } as unknown as Informe
+    expect(motivoPorTamanio(grande)).toContain('rrhh_costos_personas/202609')
   })
 })

@@ -3,28 +3,26 @@ import {
   CATEGORIA_IMPUESTO_AL_CHEQUE,
   DIAS_PROXIMOS,
   DIAS_VARIACION_SALDO,
+  GRUPO_A_REVISAR,
   GRUPO_GASTOS_BANCARIOS,
+  GRUPO_INVERSIONES,
   GRUPO_MOVIMIENTOS_INTERNOS,
   MESES_EN_GRAFICO,
   SIN_BANCO,
   SIN_CATEGORIA,
-  SIN_IDENTIFICAR,
-  CATEGORIA_SUELDOS,
-  TOP_CONTRAPARTES,
-  UMBRAL_CONCENTRACION_COBROS,
-  UMBRAL_SUBA_COSTO_BANCARIO,
 } from './constantes.js'
-import { inicioMes, mesDeFecha, mesesHasta, sumarMeses, ultimoDiaMes } from './fechas.js'
+import { habilEnODespues, habilSiguiente, lunesDe, sumarDiasCalendario } from './diasHabiles.js'
+import { mesDeFecha, mesesHasta, sumarMeses } from './fechas.js'
 
 export type MonedaTablero = 'ARS' | 'USD'
+
+export type FormaCheque = 'fisico' | 'echeq'
 
 export interface MovimientoTablero {
   fechaProceso: string
   montoCentavos: number
   tipo: 'credito' | 'debito'
   categoriaId: string | null
-  contraparteNombre: string | null
-  contraparteCuit: string | null
   cuentaId: string
   bancoNombre: string
   moneda: MonedaTablero
@@ -56,7 +54,10 @@ export interface ChequeTablero {
   estado: string
   fechaPago: string
   montoCentavos: number
-  etiqueta: string
+  numero: string
+  forma: FormaCheque | null
+  banco: string
+  contraparte: string
 }
 
 export interface CompromisoTablero {
@@ -94,29 +95,55 @@ export interface EntradaTablero {
   cobros: CobroTablero[]
 }
 
-export interface ItemTablero {
-  etiqueta: string
-  fecha: string
-  centavos: number
-}
-
-export interface BloqueTablero {
-  cantidad: number
-  centavos: number
-  items: ItemTablero[]
-}
-
-export interface ContraparteTablero {
+export interface CategoriaMonto {
   nombre: string
   centavos: number
   porcentaje: number | null
+  cantidad: number
 }
 
-export type AlertaTablero =
-  | { id: string; tipo: 'descubierto'; banco: string; dias: number }
-  | { id: string; tipo: 'cheques_rechazados'; cantidad: number; centavos: number }
-  | { id: string; tipo: 'costo_bancario'; porcentaje: number }
-  | { id: string; tipo: 'salidas_mayores' }
+export interface GrupoMonto {
+  grupo: string
+  centavos: number
+  porcentaje: number | null
+  /** A revisar o Sin categoría: se muestran al final y en gris. */
+  faltaClasificar: boolean
+  categorias: CategoriaMonto[]
+}
+
+export interface CostoCategoria {
+  nombre: string
+  centavos: number
+  cantidad: number
+}
+
+export interface CostoBanco {
+  banco: string
+  centavos: number
+  mesAnteriorCentavos: number
+  variacionPorcentaje: number | null
+  categorias: CostoCategoria[]
+}
+
+export interface ChequeVentana {
+  id: string
+  tipo: 'a_debitar' | 'a_cobrar'
+  fechaPago: string
+  fechaEfectiva: string
+  banco: string
+  contraparte: string
+  numero: string
+  forma: FormaCheque | null
+  montoCentavos: number
+}
+
+export interface SemanaCheques {
+  /** Primer día de esa semana dentro de la ventana (AAAA-MM-DD). */
+  desde: string
+  debitarCentavos: number
+  acreditarCentavos: number
+  netoCentavos: number
+}
 
 export interface TableroFinanzas {
   mes: string
@@ -136,45 +163,32 @@ export interface TableroFinanzas {
     costoBancarioCentavos: number
     /** Porcentaje del costo bancario sobre lo que salió. Null si no hubo salidas. */
     costoBancarioPorcentaje: number | null
+    costoBancarioMesAnteriorCentavos: number
+    costoBancarioVariacionPorcentaje: number | null
   }
   porMes: Array<{ mes: string; entradasCentavos: number; salidasCentavos: number }>
-  salidasPorGrupo: Array<{
-    grupo: string
-    centavos: number
-    porcentaje: number | null
-    categorias: Array<{ nombre: string; centavos: number; porcentaje: number | null }>
-  }>
-  costoPorBanco: Array<{
-    banco: string
-    centavos: number
-    mesAnteriorCentavos: number
-    variacionPorcentaje: number | null
-  }>
-  contrapartes: {
-    entradas: ContraparteTablero[]
-    salidas: ContraparteTablero[]
-    concentracionCobros: boolean
-    concentracionPorcentaje: number | null
-    /** Parte del total que no tiene contraparte (no entra al ranking). */
-    entradasSinIdentificarPorcentaje: number | null
-    salidasSinIdentificarPorcentaje: number | null
-  }
+  salidasPorGrupo: GrupoMonto[]
+  entradasPorGrupo: GrupoMonto[]
+  costoPorBanco: CostoBanco[]
   proximos30: {
     desde: string
     hasta: string
-    chequesADebitar: BloqueTablero
-    chequesACobrar: BloqueTablero
-    compromisos: BloqueTablero
-    cobros: BloqueTablero
+    totalADebitarCentavos: number
+    totalACobrarCentavos: number
+    compromisosCentavos: number
+    compromisosCantidad: number
+    cobrosCentavos: number
+    cobrosCantidad: number
     saldoEstimadoCentavos: number
+    porSemana: SemanaCheques[]
+    cheques: ChequeVentana[]
   }
-  alertas: AlertaTablero[]
 }
 
 interface InfoCategoria {
   nombre: string
   grupo: string
-  interno: boolean
+  excluido: boolean
   costo: boolean
 }
 
@@ -206,19 +220,15 @@ function infoCategoria(
   mapa: Map<string, { nombre: string; grupo: string | null }>,
   categoriaId: string | null,
 ): InfoCategoria {
-  if (!categoriaId) return { nombre: SIN_CATEGORIA, grupo: SIN_CATEGORIA, interno: false, costo: false }
+  if (!categoriaId) return { nombre: SIN_CATEGORIA, grupo: SIN_CATEGORIA, excluido: false, costo: false }
   const categoria = mapa.get(categoriaId)
-  if (!categoria) return { nombre: SIN_CATEGORIA, grupo: SIN_CATEGORIA, interno: false, costo: false }
-  if (categoria.grupo === GRUPO_MOVIMIENTOS_INTERNOS) {
-    return { nombre: categoria.nombre, grupo: categoria.grupo, interno: true, costo: false }
+  if (!categoria) return { nombre: SIN_CATEGORIA, grupo: SIN_CATEGORIA, excluido: false, costo: false }
+  const grupo = categoria.grupo ?? categoria.nombre
+  if (grupo === GRUPO_MOVIMIENTOS_INTERNOS || grupo === GRUPO_INVERSIONES) {
+    return { nombre: categoria.nombre, grupo, excluido: true, costo: false }
   }
-  const costo = categoria.grupo === GRUPO_GASTOS_BANCARIOS || categoria.nombre === CATEGORIA_IMPUESTO_AL_CHEQUE
-  return {
-    nombre: categoria.nombre,
-    grupo: categoria.grupo ?? categoria.nombre,
-    interno: false,
-    costo,
-  }
+  const costo = grupo === GRUPO_GASTOS_BANCARIOS || categoria.nombre === CATEGORIA_IMPUESTO_AL_CHEQUE
+  return { nombre: categoria.nombre, grupo, excluido: false, costo }
 }
 
 function clasificar(entrada: EntradaTablero): MovimientoClasificado[] {
@@ -230,7 +240,7 @@ function clasificar(entrada: EntradaTablero): MovimientoClasificado[] {
     if (!Number.isFinite(movimiento.montoCentavos) || movimiento.montoCentavos <= 0) continue
     if (!/^\d{4}-\d{2}-\d{2}$/.test(movimiento.fechaProceso)) continue
     const info = infoCategoria(mapa, movimiento.categoriaId)
-    if (info.interno) continue
+    if (info.excluido) continue
     filas.push({ ...movimiento, moneda: entrada.moneda, mesMov: mesDeFecha(movimiento.fechaProceso), info })
   }
   return filas
@@ -245,64 +255,73 @@ function costoNeto(filas: MovimientoClasificado[]): number {
   return total
 }
 
-function costoPorBanco(filas: MovimientoClasificado[]): Map<string, number> {
-  const mapa = new Map<string, number>()
+interface AcumCosto {
+  centavos: number
+  categorias: Map<string, CostoCategoria>
+}
+
+function acumularCosto(filas: MovimientoClasificado[]): Map<string, AcumCosto> {
+  const mapa = new Map<string, AcumCosto>()
   for (const fila of filas) {
     if (!fila.info.costo) continue
     const banco = fila.bancoNombre.trim() || SIN_BANCO
+    const acc = mapa.get(banco) ?? { centavos: 0, categorias: new Map() }
     const delta = fila.tipo === 'debito' ? fila.montoCentavos : -fila.montoCentavos
-    mapa.set(banco, (mapa.get(banco) ?? 0) + delta)
+    acc.centavos += delta
+    const clave = fila.categoriaId ?? fila.info.nombre
+    const cat = acc.categorias.get(clave) ?? { nombre: fila.info.nombre, centavos: 0, cantidad: 0 }
+    cat.centavos += delta
+    cat.cantidad += 1
+    acc.categorias.set(clave, cat)
+    mapa.set(banco, acc)
   }
   return mapa
 }
 
-function claveContraparte(movimiento: MovimientoTablero): { clave: string; nombre: string } {
-  const cuit = (movimiento.contraparteCuit ?? '').replace(/\D/g, '')
-  const nombre = (movimiento.contraparteNombre ?? '').replace(/\s+/g, ' ').trim()
-  if (!cuit && !nombre) return { clave: SIN_IDENTIFICAR, nombre: SIN_IDENTIFICAR }
-  if (cuit) return { clave: `cuit:${cuit}`, nombre: nombre || cuit }
-  return { clave: `nombre:${nombre.toLocaleLowerCase('es-AR')}`, nombre }
+function faltaClasificar(grupo: string): boolean {
+  return grupo === GRUPO_A_REVISAR || grupo === SIN_CATEGORIA
 }
 
-function topContrapartes(filas: MovimientoClasificado[], tipo: 'credito' | 'debito'): {
-  items: ContraparteTablero[]
-  concentracionPorcentaje: number | null
-  concentra: boolean
-  sinIdentificarPorcentaje: number | null
-} {
-  const mapa = new Map<string, { nombre: string; centavos: number; nombreDe: number }>()
+function compararGrupos(a: { grupo: string; centavos: number }, b: { grupo: string; centavos: number }): number {
+  const peso = (grupo: string) => (grupo === SIN_CATEGORIA ? 2 : grupo === GRUPO_A_REVISAR ? 1 : 0)
+  const diferencia = peso(a.grupo) - peso(b.grupo)
+  if (diferencia !== 0) return diferencia
+  return b.centavos - a.centavos || a.grupo.localeCompare(b.grupo, 'es')
+}
+
+function porGrupo(filas: MovimientoClasificado[], tipo: 'credito' | 'debito', total: number): GrupoMonto[] {
+  const grupos = new Map<string, Map<string, { nombre: string; centavos: number; cantidad: number }>>()
   for (const fila of filas) {
-    if (fila.tipo !== tipo) continue
-    if (tipo === 'debito' && fila.info.nombre === CATEGORIA_SUELDOS) continue
-    const { clave, nombre } = claveContraparte(fila)
-    const previo = mapa.get(clave) ?? { nombre, centavos: 0, nombreDe: -1 }
+    if (fila.tipo !== tipo || fila.info.costo) continue
+    const categorias = grupos.get(fila.info.grupo) ?? new Map()
+    const clave = fila.info.grupo === SIN_CATEGORIA ? SIN_CATEGORIA : (fila.categoriaId ?? fila.info.nombre)
+    const previo = categorias.get(clave) ?? { nombre: fila.info.nombre, centavos: 0, cantidad: 0 }
     previo.centavos += fila.montoCentavos
-    if (nombre !== SIN_IDENTIFICAR && fila.montoCentavos >= previo.nombreDe) {
-      previo.nombre = nombre
-      previo.nombreDe = fila.montoCentavos
-    }
-    mapa.set(clave, previo)
+    previo.cantidad += 1
+    categorias.set(clave, previo)
+    grupos.set(fila.info.grupo, categorias)
   }
-  const todos = [...mapa.entries()]
-  const total = todos.reduce((suma, [, item]) => suma + item.centavos, 0)
-  const sinIdentificar = mapa.get(SIN_IDENTIFICAR)?.centavos ?? 0
-  // "Sin identificar" no compite en el ranking ni en la concentración: se informa aparte.
-  const ordenados = todos
-    .filter(([clave]) => clave !== SIN_IDENTIFICAR)
-    .map(([, item]) => item)
-    .sort((a, b) => b.centavos - a.centavos || a.nombre.localeCompare(b.nombre, 'es'))
-  const top3 = ordenados.slice(0, 3).reduce((suma, item) => suma + item.centavos, 0)
-  const concentracionPorcentaje = ordenados.length > 0 ? porcentaje(top3, total) : null
-  return {
-    items: ordenados.slice(0, TOP_CONTRAPARTES).map((item) => ({
-      nombre: item.nombre,
-      centavos: item.centavos,
-      porcentaje: porcentaje(item.centavos, total),
-    })),
-    concentracionPorcentaje,
-    concentra: concentracionPorcentaje != null && concentracionPorcentaje > UMBRAL_CONCENTRACION_COBROS,
-    sinIdentificarPorcentaje: total > 0 ? porcentaje(sinIdentificar, total) : null,
-  }
+  return [...grupos.entries()]
+    .map(([grupo, categorias]) => {
+      const lista = [...categorias.values()].sort(
+        (a, b) => b.centavos - a.centavos || a.nombre.localeCompare(b.nombre, 'es'),
+      )
+      const centavos = lista.reduce((suma, item) => suma + item.centavos, 0)
+      return {
+        grupo,
+        centavos,
+        porcentaje: porcentaje(centavos, total),
+        faltaClasificar: faltaClasificar(grupo),
+        categorias: lista.map((item) => ({
+          nombre: item.nombre,
+          centavos: item.centavos,
+          porcentaje: porcentaje(item.centavos, centavos),
+          cantidad: item.cantidad,
+        })),
+      }
+    })
+    .filter((grupo) => grupo.centavos > 0)
+    .sort(compararGrupos)
 }
 
 function etiquetasCuentas(cuentas: CuentaTablero[]): Map<string, string> {
@@ -316,23 +335,70 @@ function etiquetasCuentas(cuentas: CuentaTablero[]): Map<string, string> {
   return mapa
 }
 
-function ordenarItems(items: ItemTablero[]): ItemTablero[] {
-  return [...items].sort((a, b) => a.fecha.localeCompare(b.fecha) || a.etiqueta.localeCompare(b.etiqueta, 'es'))
-}
-
-function bloque(items: ItemTablero[]): BloqueTablero {
-  const ordenados = ordenarItems(items)
-  return {
-    cantidad: ordenados.length,
-    centavos: ordenados.reduce((suma, item) => suma + item.centavos, 0),
-    items: ordenados,
-  }
-}
-
 function mesesParaElegir(hoy: string, seleccionado: string): string[] {
   const lista = mesesHasta(mesDeFecha(hoy), MESES_EN_GRAFICO)
   if (!lista.includes(seleccionado)) lista.push(seleccionado)
   return lista.sort()
+}
+
+function armarCheques(cheques: ChequeTablero[], hoy: string, hasta: string): ChequeVentana[] {
+  const enVentana = (fecha: string) => fecha >= hoy && fecha <= hasta
+  const lista: ChequeVentana[] = []
+  for (const cheque of cheques) {
+    if (cheque.montoCentavos <= 0 || !enVentana(cheque.fechaPago)) continue
+    const aDebitar =
+      cheque.direccion === 'emitido' &&
+      (cheque.estado === 'pendiente' || (cheque.estado === 'debitado' && cheque.fechaPago > hoy))
+    const aCobrar = cheque.direccion === 'recibido' && cheque.estado === 'en_cartera'
+    if (!aDebitar && !aCobrar) continue
+    const tipo = aDebitar ? 'a_debitar' : 'a_cobrar'
+    lista.push({
+      id: cheque.id,
+      tipo,
+      fechaPago: cheque.fechaPago,
+      fechaEfectiva: tipo === 'a_cobrar' ? habilSiguiente(cheque.fechaPago) : habilEnODespues(cheque.fechaPago),
+      banco: cheque.banco.trim() || SIN_BANCO,
+      contraparte: cheque.contraparte.trim() || 'Sin nombre',
+      numero: cheque.numero.trim(),
+      forma: cheque.forma,
+      montoCentavos: cheque.montoCentavos,
+    })
+  }
+  lista.sort(
+    (a, b) =>
+      a.fechaEfectiva.localeCompare(b.fechaEfectiva) ||
+      a.fechaPago.localeCompare(b.fechaPago) ||
+      a.numero.localeCompare(b.numero, 'es', { numeric: true }) ||
+      a.id.localeCompare(b.id),
+  )
+  return lista
+}
+
+function armarSemanas(desde: string, hasta: string, cheques: ChequeVentana[]): SemanaCheques[] {
+  const claves: string[] = []
+  const fin = lunesDe(hasta)
+  for (let cursor = lunesDe(desde); cursor <= fin; cursor = sumarDiasCalendario(cursor, 7)) claves.push(cursor)
+  for (const cheque of cheques) {
+    const lunes = lunesDe(cheque.fechaEfectiva)
+    if (!claves.includes(lunes)) claves.push(lunes)
+  }
+  claves.sort()
+  return claves.map((lunes) => {
+    const domingo = sumarDiasCalendario(lunes, 6)
+    let debitarCentavos = 0
+    let acreditarCentavos = 0
+    for (const cheque of cheques) {
+      if (cheque.fechaEfectiva < lunes || cheque.fechaEfectiva > domingo) continue
+      if (cheque.tipo === 'a_debitar') debitarCentavos += cheque.montoCentavos
+      else acreditarCentavos += cheque.montoCentavos
+    }
+    return {
+      desde: lunes < desde ? desde : lunes,
+      debitarCentavos,
+      acreditarCentavos,
+      netoCentavos: acreditarCentavos - debitarCentavos,
+    }
+  })
 }
 
 export function armarTablero(entrada: EntradaTablero): TableroFinanzas {
@@ -348,6 +414,7 @@ export function armarTablero(entrada: EntradaTablero): TableroFinanzas {
   const entradasCentavos = delMes.reduce((suma, fila) => suma + (fila.tipo === 'credito' ? fila.montoCentavos : 0), 0)
   const salidasCentavos = delMes.reduce((suma, fila) => suma + (fila.tipo === 'debito' ? fila.montoCentavos : 0), 0)
   const costoBancarioCentavos = costoNeto(delMes)
+  const costoAnterior = costoNeto(delMesAnterior)
 
   const porMesMapa = new Map<string, { entradasCentavos: number; salidasCentavos: number }>()
   for (const fila of deVentana) {
@@ -361,56 +428,31 @@ export function armarTablero(entrada: EntradaTablero): TableroFinanzas {
     .sort((a, b) => a[0].localeCompare(b[0]))
     .map(([mes, valor]) => ({ mes, ...valor }))
 
-  const grupos = new Map<string, Map<string, { nombre: string; centavos: number }>>()
-  for (const fila of delMes) {
-    if (fila.tipo !== 'debito') continue
-    const categorias = grupos.get(fila.info.grupo) ?? new Map()
-    const clave = fila.info.grupo === SIN_CATEGORIA ? SIN_CATEGORIA : (fila.categoriaId ?? fila.info.nombre)
-    const previo = categorias.get(clave) ?? { nombre: fila.info.nombre, centavos: 0 }
-    previo.centavos += fila.montoCentavos
-    categorias.set(clave, previo)
-    grupos.set(fila.info.grupo, categorias)
-  }
-  const salidasPorGrupo = [...grupos.entries()]
-    .map(([grupo, categorias]) => {
-      const lista = [...categorias.values()].sort(
-        (a, b) => b.centavos - a.centavos || a.nombre.localeCompare(b.nombre, 'es'),
-      )
-      const centavos = lista.reduce((suma, item) => suma + item.centavos, 0)
-      return {
-        grupo,
-        centavos,
-        porcentaje: porcentaje(centavos, salidasCentavos),
-        categorias: lista.map((item) => ({
-          nombre: item.nombre,
-          centavos: item.centavos,
-          porcentaje: porcentaje(item.centavos, centavos),
-        })),
-      }
-    })
-    .filter((grupo) => grupo.centavos > 0)
-    .sort((a, b) => b.centavos - a.centavos || a.grupo.localeCompare(b.grupo, 'es'))
+  const salidasPorGrupo = porGrupo(delMes, 'debito', salidasCentavos)
+  const entradasPorGrupo = porGrupo(delMes, 'credito', entradasCentavos)
 
-  const costoActual = costoPorBanco(delMes)
-  const costoPrevio = costoPorBanco(delMesAnterior)
+  const costoActual = acumularCosto(delMes)
+  const costoPrevio = acumularCosto(delMesAnterior)
   const bancos = new Set([...costoActual.keys(), ...costoPrevio.keys()])
-  const costoPorBancoLista = [...bancos]
+  const costoPorBanco = [...bancos]
     .map((banco) => {
-      const centavos = costoActual.get(banco) ?? 0
-      const mesAnteriorCentavos = costoPrevio.get(banco) ?? 0
+      const actual = costoActual.get(banco)
+      const centavos = actual?.centavos ?? 0
+      const mesAnteriorCentavos = costoPrevio.get(banco)?.centavos ?? 0
+      const categorias = [...(actual?.categorias.values() ?? [])]
+        .filter((categoria) => categoria.cantidad > 0)
+        .sort((a, b) => b.centavos - a.centavos || a.nombre.localeCompare(b.nombre, 'es'))
       return {
         banco,
         centavos,
         mesAnteriorCentavos,
         variacionPorcentaje:
           mesAnteriorCentavos > 0 ? porcentaje(centavos - mesAnteriorCentavos, mesAnteriorCentavos) : null,
+        categorias,
       }
     })
     .filter((banco) => banco.centavos !== 0 || banco.mesAnteriorCentavos !== 0)
     .sort((a, b) => b.centavos - a.centavos || a.banco.localeCompare(b.banco, 'es'))
-
-  const entradasTop = topContrapartes(delMes, 'credito')
-  const salidasTop = topContrapartes(delMes, 'debito')
 
   const cuentasMoneda = entrada.cuentas.filter((cuenta) => monedaDe(cuenta.moneda) === entrada.moneda)
   const nombres = etiquetasCuentas(cuentasMoneda)
@@ -436,36 +478,12 @@ export function armarTablero(entrada: EntradaTablero): TableroFinanzas {
     : null
   const variacion30Centavos = saldoHace30Centavos == null ? null : saldoHoyCentavos - saldoHace30Centavos
 
-  const desdeMes = inicioMes(entrada.mes)
-  const hastaMes = ultimoDiaMes(entrada.mes)
-  const diasNegativos = new Map<string, Set<string>>()
-  for (const saldo of entrada.saldosDiarios) {
-    if (monedaDe(saldo.moneda) !== entrada.moneda) continue
-    if (!nombres.has(saldo.cuentaId)) continue
-    if (saldo.fecha < desdeMes || saldo.fecha > hastaMes) continue
-    if (saldo.saldoFinCentavos >= 0) continue
-    const dias = diasNegativos.get(saldo.cuentaId) ?? new Set()
-    dias.add(saldo.fecha)
-    diasNegativos.set(saldo.cuentaId, dias)
-  }
-
   const hastaProximos = sumarDias(entrada.hoy, DIAS_PROXIMOS)
-  const enVentana = (fecha: string) => fecha >= entrada.hoy && fecha <= hastaProximos
   const chequesPesos = entrada.moneda === 'ARS' ? entrada.cheques : []
-  const aDebitar = chequesPesos.filter(
-    // Un cheque propio no se puede debitar antes de su fecha de pago: si figura "debitado" con fecha futura, sigue por debitar.
-    (cheque) =>
-      cheque.direccion === 'emitido' &&
-      (cheque.estado === 'pendiente' || (cheque.estado === 'debitado' && cheque.fechaPago > entrada.hoy)) &&
-      enVentana(cheque.fechaPago) &&
-      cheque.montoCentavos > 0,
-  )
-  const aCobrar = chequesPesos.filter(
-    (cheque) =>
-      cheque.direccion === 'recibido' && cheque.estado === 'en_cartera' && enVentana(cheque.fechaPago) && cheque.montoCentavos > 0,
-  )
-  const chequesContados = new Set([...aDebitar, ...aCobrar].map((cheque) => cheque.id))
+  const cheques = armarCheques(chequesPesos, entrada.hoy, hastaProximos)
+  const chequesContados = new Set(cheques.map((cheque) => cheque.id))
   const yaEstaEnCheque = (chequeId: string | null) => Boolean(chequeId && chequesContados.has(chequeId))
+  const enVentana = (fecha: string) => fecha >= entrada.hoy && fecha <= hastaProximos
 
   const compromisos = entrada.compromisos.filter(
     (compromiso) =>
@@ -484,50 +502,11 @@ export function armarTablero(entrada: EntradaTablero): TableroFinanzas {
       !yaEstaEnCheque(cobro.chequeId),
   )
 
-  const chequesADebitar = bloque(aDebitar.map((cheque) => ({ etiqueta: cheque.etiqueta, fecha: cheque.fechaPago, centavos: cheque.montoCentavos })))
-  const chequesACobrar = bloque(aCobrar.map((cheque) => ({ etiqueta: cheque.etiqueta, fecha: cheque.fechaPago, centavos: cheque.montoCentavos })))
-  const bloqueCompromisos = bloque(
-    compromisos.map((compromiso) => ({
-      etiqueta: compromiso.concepto && compromiso.concepto !== compromiso.nombre ? `${compromiso.nombre} · ${compromiso.concepto}` : compromiso.nombre,
-      fecha: compromiso.fecha,
-      centavos: compromiso.restanteCentavos,
-    })),
-  )
-  const bloqueCobros = bloque(cobros.map((cobro) => ({ etiqueta: cobro.nombre, fecha: cobro.fecha, centavos: cobro.montoCentavos })))
-  const saldoEstimadoCentavos = saldoHoyCentavos + chequesACobrar.centavos + bloqueCobros.centavos - chequesADebitar.centavos - bloqueCompromisos.centavos
-
-  const rechazados =
-    entrada.moneda === 'ARS'
-      ? entrada.cheques.filter(
-          (cheque) => cheque.estado === 'rechazado' && cheque.fechaPago >= desdeMes && cheque.fechaPago <= hastaMes && cheque.montoCentavos > 0,
-        )
-      : []
-
-  const costoAnterior = costoNeto(delMesAnterior)
-  const variacionCosto = costoAnterior > 0 ? porcentaje(costoBancarioCentavos - costoAnterior, costoAnterior) : null
-
-  const alertas: AlertaTablero[] = []
-  const descubiertos = cuentasMoneda
-    .map((cuenta) => ({ banco: nombres.get(cuenta.id) ?? cuenta.bancoNombre, dias: diasNegativos.get(cuenta.id)?.size ?? 0, id: cuenta.id }))
-    .filter((cuenta) => cuenta.dias > 0)
-    .sort((a, b) => b.dias - a.dias || a.banco.localeCompare(b.banco, 'es'))
-  for (const cuenta of descubiertos) {
-    alertas.push({ id: `descubierto-${cuenta.id}`, tipo: 'descubierto', banco: cuenta.banco, dias: cuenta.dias })
-  }
-  if (rechazados.length > 0) {
-    alertas.push({
-      id: 'cheques-rechazados',
-      tipo: 'cheques_rechazados',
-      cantidad: rechazados.length,
-      centavos: rechazados.reduce((suma, cheque) => suma + cheque.montoCentavos, 0),
-    })
-  }
-  if (variacionCosto != null && variacionCosto > UMBRAL_SUBA_COSTO_BANCARIO) {
-    alertas.push({ id: 'costo-bancario', tipo: 'costo_bancario', porcentaje: variacionCosto })
-  }
-  if (salidasCentavos > entradasCentavos) {
-    alertas.push({ id: 'salidas-mayores', tipo: 'salidas_mayores' })
-  }
+  const totalADebitarCentavos = cheques.reduce((suma, cheque) => suma + (cheque.tipo === 'a_debitar' ? cheque.montoCentavos : 0), 0)
+  const totalACobrarCentavos = cheques.reduce((suma, cheque) => suma + (cheque.tipo === 'a_cobrar' ? cheque.montoCentavos : 0), 0)
+  const compromisosCentavos = compromisos.reduce((suma, compromiso) => suma + compromiso.restanteCentavos, 0)
+  const cobrosCentavos = cobros.reduce((suma, cobro) => suma + cobro.montoCentavos, 0)
+  const saldoEstimadoCentavos = saldoHoyCentavos + totalACobrarCentavos + cobrosCentavos - totalADebitarCentavos - compromisosCentavos
 
   const hayUsd =
     entrada.cuentas.some((cuenta) => cuenta.moneda === 'USD') || entrada.movimientos.some((movimiento) => movimiento.moneda === 'USD')
@@ -548,27 +527,26 @@ export function armarTablero(entrada: EntradaTablero): TableroFinanzas {
       salidasCentavos,
       costoBancarioCentavos,
       costoBancarioPorcentaje: porcentaje(costoBancarioCentavos, salidasCentavos),
+      costoBancarioMesAnteriorCentavos: costoAnterior,
+      costoBancarioVariacionPorcentaje:
+        costoAnterior > 0 ? porcentaje(costoBancarioCentavos - costoAnterior, costoAnterior) : null,
     },
     porMes,
     salidasPorGrupo,
-    costoPorBanco: costoPorBancoLista,
-    contrapartes: {
-      entradas: entradasTop.items,
-      salidas: salidasTop.items,
-      concentracionCobros: entradasTop.concentra,
-      concentracionPorcentaje: entradasTop.concentracionPorcentaje,
-      entradasSinIdentificarPorcentaje: entradasTop.sinIdentificarPorcentaje,
-      salidasSinIdentificarPorcentaje: salidasTop.sinIdentificarPorcentaje,
-    },
+    entradasPorGrupo,
+    costoPorBanco,
     proximos30: {
       desde: entrada.hoy,
       hasta: hastaProximos,
-      chequesADebitar,
-      chequesACobrar,
-      compromisos: bloqueCompromisos,
-      cobros: bloqueCobros,
+      totalADebitarCentavos,
+      totalACobrarCentavos,
+      compromisosCentavos,
+      compromisosCantidad: compromisos.length,
+      cobrosCentavos,
+      cobrosCantidad: cobros.length,
       saldoEstimadoCentavos,
+      porSemana: armarSemanas(entrada.hoy, hastaProximos, cheques),
+      cheques,
     },
-    alertas,
   }
 }

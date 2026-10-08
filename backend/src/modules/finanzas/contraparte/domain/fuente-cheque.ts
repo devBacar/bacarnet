@@ -2,7 +2,7 @@ import type { ContraparteGuardada } from './contraparte.types.js'
 import { claveTexto, nombreContraparteLimpio } from './normalizar.js'
 
 /**
- * Textos del banco para cheques propios que se debitan (categoría Cheques pagados).
+ * Textos del banco para cheques propios que se debitan (categoría Cheques propios; antes Cheques pagados).
  * La lista sale de la semilla de categorías; un texto nuevo se agrega acá.
  */
 const TEXTOS_DEBITO_CHEQUE_PROPIO = [
@@ -72,7 +72,9 @@ export function claseMovimientoCheque(mov: {
   const categoria = claveTexto(mov.categoriaNombre)
   if (
     mov.tipo === 'debito' &&
-    (categoria === claveTexto('Cheques pagados') || textoIncluye(mov, TEXTOS_DEBITO_CHEQUE_PROPIO))
+    (categoria === claveTexto('Cheques propios') ||
+      categoria === claveTexto('Cheques pagados') ||
+      textoIncluye(mov, TEXTOS_DEBITO_CHEQUE_PROPIO))
   ) {
     return 'emitido'
   }

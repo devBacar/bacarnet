@@ -90,6 +90,10 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
       'GASTOS S/CANJE ACELERADO',
       'RECUPERO DE GASTOS',
       'HONORARIOS GESTOR',
+      'COM.SDO.PROM.MENOR',
+      'COMISION TRANSF. E-BANK',
+      'COM.MOVIMIENTOS POR CAJA',
+      'COMIS.RIESGO CONTING',
     ],
     codigosIb: [
       'COM.TRANSF',
@@ -231,6 +235,8 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
       'CREDITO POR PRESTAMO OTOR',
       'COBRANZA PRESTAMOS',
       'AMORTIZACION S/PRESTAMO O',
+      // Créditos grandes de Bancor que Finanzas identificó como préstamo o adelanto (08/10/2026).
+      'CREDITO GCIA.ADIMINI',
     ],
     codigosIb: ['DESEM.PMO', 'CRED.OTORG', 'PTMO.M/NAC'],
   },
@@ -268,20 +274,21 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
   {
     // DESC.DOC = Descuento de Documentos (cheques de pago diferido / pagarés adelantados por el
     // banco). DEB.DOC.DESCONTADO = débito de un documento descontado (cheque rechazado o cuota).
-    nombre: 'Descuento de documentos',
+    nombre: 'Cheques descontados',
     grupo: 'Financiación',
     color: '#a21caf',
     descripciones: ['DESC.DOC', 'DEB.DOC.DESCONTADO'],
     codigosIb: ['DESC.DOC'],
+    reemplazaA: ['Descuento de documentos'],
   },
   {
     // PA.RES.DEB.CTA.AT PR = pago de resumen / débito en cuenta de un producto (tarjeta,
     // préstamo o adelanto).
-    nombre: 'Resúmenes y cuotas',
-    grupo: 'Financiación',
+    nombre: 'Tarjetas de crédito',
+    grupo: 'Pagos',
     color: '#be185d',
     descripciones: ['PA.RES.DEB.CTA.AT PR'],
-    reemplazaA: ['Débitos automáticos y servicios'],
+    reemplazaA: ['Débitos automáticos y servicios', 'Resúmenes y cuotas'],
   },
   {
     nombre: 'Planes de ahorro',
@@ -295,7 +302,7 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
     nombre: 'Fondos comunes (FCI)',
     grupo: 'Inversiones',
     color: '#15803d',
-    descripciones: ['SUSCRIP.CLIENTES FCI', 'RESCATE CLIENTES FCI'],
+    descripciones: ['SUSCRIP.CLIENTES FCI', 'RESCATE CLIENTES FCI', 'RESCATE CLIENTE FCI'],
     reemplazaA: ['Rescate'],
   },
 
@@ -314,19 +321,15 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
     ],
   },
   {
-    nombre: 'Proveedores',
+    nombre: 'Proveedores y terceros',
     grupo: 'Pagos',
     color: '#4f46e5',
-    descripciones: ['TF.DB.PAG.PROV.', 'INTERBANK.PROVEEDORE', 'TRANS.DEB B.TO B.'],
-    codigosIb: ['PAGOS BTOB'],
-  },
-  {
-    // estimado: transferencias salientes por home banking / Red Link / DEBIN a terceros.
-    // Las que van a cuentas propias las toma antes la regla por CUIT.
-    nombre: 'Transferencias a terceros',
-    grupo: 'Pagos',
-    color: '#6366f1',
     descripciones: [
+      'TF.DB.PAG.PROV.',
+      'INTERBANK.PROVEEDORE',
+      'TRANS.DEB B.TO B.',
+      // Antes "Transferencias a terceros": mismo pago, otro canal (home banking, Red Link, DEBIN, Datanet).
+      // Las que van a cuentas propias las toma antes la regla por CUIT.
       'TRANSF.HB.E',
       'TRANSF.HB-G',
       'DEB. TRANF RED LINK',
@@ -337,7 +340,15 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
       'DEBIN',
       'GIROS/TRF',
     ],
-    codigosIb: ['GIROS/TRF'],
+    codigosIb: ['PAGOS BTOB', 'GIROS/TRF'],
+    reemplazaA: ['Proveedores', 'Transferencias a terceros'],
+  },
+  {
+    // Débitos judiciales de Bancor (embargos, cuota alimentaria) (08/10/2026).
+    nombre: 'Embargos y oficios judiciales',
+    grupo: 'Pagos',
+    color: '#7c2d12',
+    descripciones: ['DEB.TRANS.BANCON JUD'],
   },
   {
     nombre: 'Débitos automáticos y servicios',
@@ -360,8 +371,8 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
 
   // ─── Cheques ───────────────────────────────────────────────────────
   {
-    nombre: 'Cheques pagados',
-    grupo: 'Cheques',
+    nombre: 'Cheques propios',
+    grupo: 'Pagos',
     color: '#9a3412',
     descripciones: [
       'CHEQUE CAMARA LOCAL',
@@ -373,7 +384,7 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
       'DEB.P/CANJE INTERNO',
     ],
     codigosIb: ['CH DEP 72'],
-    reemplazaA: ['Cheques'],
+    reemplazaA: ['Cheques', 'Cheques pagados'],
   },
   {
     nombre: 'Cheques depositados',
@@ -391,6 +402,7 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
       'DEB.VS./RECH.VALORES',
       'CH/DEV.F.TEC.NO.IMPU',
       'REV DEB AUT REC CAMA',
+      'CH.RECH.FORMA S/MULT',
     ],
     codigosIb: ['RECH.DEP48', 'RE.V.CO LD', 'FALLA TECN', 'REV.DE.AUT'],
   },
@@ -418,6 +430,9 @@ export const SEMILLA_CATEGORIAS_MOVIMIENTOS: SemillaCategoria[] = [
       // automática). TRANS P PR comparte el mismo código de Interbanking.
       'CREDITO PROVEEDOR TA',
       'TRANS P PR',
+      'Cred.Transferencia',
+      'CREDIN TRAN-GRAVADO',
+      'TRANSF. RECIBIDA G',
     ],
     codigosIb: ['TRANS P PR'],
   },

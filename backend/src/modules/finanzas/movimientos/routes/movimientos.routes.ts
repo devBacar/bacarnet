@@ -6,6 +6,7 @@ import {
   MovimientoAnotacionError,
   MovimientosSyncEnCursoError,
   actualizarAnotacionMovimiento,
+  hoyArgentina,
   listMovimientosApi,
   syncMovimientosBancarios,
 } from '../services/movimientos.service.js'
@@ -35,9 +36,14 @@ finanzasMovimientosRouter.get('/', async (req, res) => {
   }
 })
 
+/** El botón revisa solo los últimos días: todo el historial (con Interbanking día por día) tarda más que el corte del pedido. */
+const DIAS_COMPLETAR_CONTRAPARTES = 30
+
 finanzasMovimientosRouter.post('/contrapartes/completar', requireFinanzasPermiso('finanzas_categorias'), async (_req, res) => {
   try {
-    const resultado = await enriquecerContrapartes()
+    const hoy = hoyArgentina()
+    const desde = new Date(Date.parse(`${hoy}T12:00:00Z`) - DIAS_COMPLETAR_CONTRAPARTES * 86_400_000).toISOString().slice(0, 10)
+    const resultado = await enriquecerContrapartes({ desde, hasta: hoy })
     res.json(resultado)
   } catch (err) {
     console.error('[finanzas/movimientos] completar contrapartes', err)

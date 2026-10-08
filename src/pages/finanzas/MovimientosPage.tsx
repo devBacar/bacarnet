@@ -207,8 +207,8 @@ export function FinanzasMovimientosPage() {
       await invalidarTrasCambio()
       toast.success(
         result.actualizados > 0
-          ? `Se completaron ${result.actualizados.toLocaleString('es-AR')} movimientos`
-          : 'No había contrapartes nuevas para completar',
+          ? `Se completaron ${result.actualizados.toLocaleString('es-AR')} movimientos de los últimos 30 días`
+          : 'No había contrapartes nuevas para completar en los últimos 30 días',
       )
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudieron completar las contrapartes')
@@ -264,7 +264,7 @@ export function FinanzasMovimientosPage() {
             {completando ? 'Completando…' : 'Completar contrapartes'}
           </button>
           <p className="text-body-muted mt-1.5 text-xs">
-            Crear, agrupar o unir categorías y clasificar lo que quedó sin clasificar.
+            Crear, agrupar o unir categorías y clasificar lo que quedó sin clasificar. Completar contrapartes revisa los últimos 30 días.
           </p>
         </div>
         ) : null}

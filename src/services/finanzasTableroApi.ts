@@ -3,29 +3,49 @@ import { resolveApiUrl } from './resolveApiUrl'
 
 export type MonedaTablero = 'ARS' | 'USD'
 
-export interface ItemTablero {
-  etiqueta: string
-  fecha: string
-  centavos: number
-}
+export type FormaCheque = 'fisico' | 'echeq'
 
-export interface BloqueTablero {
-  cantidad: number
-  centavos: number
-  items: ItemTablero[]
-}
-
-export interface ContraparteTablero {
+export interface CategoriaMonto {
   nombre: string
   centavos: number
   porcentaje: number | null
+  cantidad: number
 }
 
-export type AlertaTablero =
-  | { id: string; tipo: 'descubierto'; banco: string; dias: number }
-  | { id: string; tipo: 'cheques_rechazados'; cantidad: number; centavos: number }
-  | { id: string; tipo: 'costo_bancario'; porcentaje: number }
-  | { id: string; tipo: 'salidas_mayores' }
+export interface GrupoMonto {
+  grupo: string
+  centavos: number
+  porcentaje: number | null
+  faltaClasificar: boolean
+  categorias: CategoriaMonto[]
+}
+
+export interface CostoBanco {
+  banco: string
+  centavos: number
+  mesAnteriorCentavos: number
+  variacionPorcentaje: number | null
+  categorias: Array<{ nombre: string; centavos: number; cantidad: number }>
+}
+
+export interface ChequeVentana {
+  id: string
+  tipo: 'a_debitar' | 'a_cobrar'
+  fechaPago: string
+  fechaEfectiva: string
+  banco: string
+  contraparte: string
+  numero: string
+  forma: FormaCheque | null
+  montoCentavos: number
+}
+
+export interface SemanaCheques {
+  desde: string
+  debitarCentavos: number
+  acreditarCentavos: number
+  netoCentavos: number
+}
 
 export interface TableroFinanzas {
   mes: string
@@ -43,38 +63,26 @@ export interface TableroFinanzas {
     salidasCentavos: number
     costoBancarioCentavos: number
     costoBancarioPorcentaje: number | null
+    costoBancarioMesAnteriorCentavos: number
+    costoBancarioVariacionPorcentaje: number | null
   }
   porMes: Array<{ mes: string; entradasCentavos: number; salidasCentavos: number }>
-  salidasPorGrupo: Array<{
-    grupo: string
-    centavos: number
-    porcentaje: number | null
-    categorias: Array<{ nombre: string; centavos: number; porcentaje: number | null }>
-  }>
-  costoPorBanco: Array<{
-    banco: string
-    centavos: number
-    mesAnteriorCentavos: number
-    variacionPorcentaje: number | null
-  }>
-  contrapartes: {
-    entradas: ContraparteTablero[]
-    salidas: ContraparteTablero[]
-    concentracionCobros: boolean
-    concentracionPorcentaje: number | null
-    entradasSinIdentificarPorcentaje: number | null
-    salidasSinIdentificarPorcentaje: number | null
-  }
+  salidasPorGrupo: GrupoMonto[]
+  entradasPorGrupo: GrupoMonto[]
+  costoPorBanco: CostoBanco[]
   proximos30: {
     desde: string
     hasta: string
-    chequesADebitar: BloqueTablero
-    chequesACobrar: BloqueTablero
-    compromisos: BloqueTablero
-    cobros: BloqueTablero
+    totalADebitarCentavos: number
+    totalACobrarCentavos: number
+    compromisosCentavos: number
+    compromisosCantidad: number
+    cobrosCentavos: number
+    cobrosCantidad: number
     saldoEstimadoCentavos: number
+    porSemana: SemanaCheques[]
+    cheques: ChequeVentana[]
   }
-  alertas: AlertaTablero[]
 }
 
 async function tableroFetch(path: string): Promise<Response> {

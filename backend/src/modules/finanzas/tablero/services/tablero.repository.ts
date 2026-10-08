@@ -19,7 +19,8 @@ import {
 import { listCategoriaMovimientoDocuments } from '../../movimientos/services/categorias-movimientos.repository.js'
 import { listCuentaDocuments } from '../../services/cuentas.repository.js'
 import { listSaldosDiariosDeCuentas } from '../../services/saldos-diarios.repository.js'
-import { CACHE_TABLERO_MS, COLECCION_TABLERO, DIAS_PROXIMOS, DIAS_VARIACION_SALDO, MESES_EN_GRAFICO } from '../domain/constantes.js'
+import { partirPayloadCache } from '../domain/cacheTablero.js'
+import { CACHE_TABLERO_MS, COLECCION_TABLERO, DIAS_PROXIMOS, DIAS_VARIACION_SALDO, MESES_EN_GRAFICO, SIN_BANCO } from '../domain/constantes.js'
 import { inicioMes, mesDeFecha, sumarMeses, ultimoDiaMes } from '../domain/fechas.js'
 import { sumarDias } from '../../hoy/domain/hoy.fechas.js'
 import type {
@@ -28,6 +29,7 @@ import type {
   CobroTablero,
   CompromisoTablero,
   CuentaTablero,
+  FormaCheque,
   MonedaTablero,
   MovimientoTablero,
   SaldoDiarioTablero,
@@ -91,8 +93,6 @@ function aMovimiento(data: FirebaseFirestore.DocumentData): MovimientoTablero | 
     montoCentavos: data.montoCentavos,
     tipo: data.tipo,
     categoriaId: texto(data.categoriaId),
-    contraparteNombre: texto(data.contraparteNombre),
-    contraparteCuit: texto(data.contraparteCuit),
     cuentaId: texto(data.cuentaId) ?? '',
     bancoNombre: texto(data.bancoNombre) ?? 'Sin banco',
     moneda: monedaDe(data.moneda),
@@ -117,8 +117,6 @@ export async function listarMovimientosDelRango(desde: string, hasta: string): P
         'montoCentavos',
         'tipo',
         'categoriaId',
-        'contraparteNombre',
-        'contraparteCuit',
         'moneda',
         'bancoNombre',
       )
@@ -136,14 +134,17 @@ export async function listarMovimientosDelRango(desde: string, hasta: string): P
   return filas
 }
 
-function etiquetaCheque(data: FirebaseFirestore.DocumentData, direccion: string): string {
-  const numero = texto(data.numero)
-  const persona =
+function formaDe(value: unknown): FormaCheque | null {
+  if (value === 'fisico' || value === 'echeq') return value
+  return null
+}
+
+function contraparteCheque(data: FirebaseFirestore.DocumentData, direccion: string): string {
+  const nombre =
     direccion === 'emitido'
       ? texto(data.destinatario) || texto(data.emisor)
-      : texto(data.cliente) || texto(data.emisor) || texto(data.endosante)
-  if (persona && numero) return `${persona} · ${numero}`
-  return persona || (numero ? `Cheque ${numero}` : 'Cheque')
+      : texto(data.emisor) || texto(data.cliente) || texto(data.endosante)
+  return nombre || 'Sin nombre'
 }
 
 async function listarChequesDelRango(desde: string, hasta: string): Promise<ChequeTablero[]> {
@@ -151,7 +152,7 @@ async function listarChequesDelRango(desde: string, hasta: string): Promise<Cheq
     .collection(CHEQUES_COLLECTION)
     .where('fechaPago', '>=', desde)
     .where('fechaPago', '<=', hasta)
-    .select('direccion', 'estado', 'fechaPago', 'montoCentavos', 'numero', 'emisor', 'destinatario', 'cliente', 'endosante')
+    .select('direccion', 'estado', 'fechaPago', 'montoCentavos', 'numero', 'tipo', 'bancoEmisor', 'emisor', 'destinatario', 'cliente', 'endosante')
     .get()
   const filas: ChequeTablero[] = []
   for (const doc of snap.docs) {
@@ -165,7 +166,10 @@ async function listarChequesDelRango(desde: string, hasta: string): Promise<Cheq
       estado: typeof data.estado === 'string' ? data.estado : '',
       fechaPago: data.fechaPago,
       montoCentavos: data.montoCentavos,
-      etiqueta: etiquetaCheque(data, data.direccion),
+      numero: texto(data.numero) ?? '',
+      forma: formaDe(data.tipo),
+      banco: texto(data.bancoEmisor) ?? SIN_BANCO,
+      contraparte: contraparteCheque(data, data.direccion),
     })
   }
   return filas
@@ -210,22 +214,17 @@ export async function cargarDatosTablero(mes: string, hoy: string): Promise<Dato
   const inicioDatos = sumarMeses(mes < inicioGrafico ? mes : inicioGrafico, -1)
   const desdeMov = inicioMes(inicioDatos)
   const hastaMov = ultimoDiaMes(mesTope)
-  const inicio = inicioMes(mes)
-  const finMes = ultimoDiaMes(mes)
-  const finVentana = sumarDias(hoy, DIAS_PROXIMOS)
-  const desdeCheques = inicio < hoy ? inicio : hoy
-  const hastaCheques = finMes > finVentana ? finMes : finVentana
+  const hastaCheques = sumarDias(hoy, DIAS_PROXIMOS)
   const fechaPrevia = sumarDias(hoy, -DIAS_VARIACION_SALDO)
 
   const cuentasDocs = await listCuentaDocuments()
   const cuentaIds = cuentasDocs.map((cuenta) => cuenta.id)
 
-  const [movimientos, categoriasDocs, saldosMes, saldosPrevio, cheques, compromisosDocs, cobrosDocs] = await Promise.all([
+  const [movimientos, categoriasDocs, saldosPrevio, cheques, compromisosDocs, cobrosDocs] = await Promise.all([
     listarMovimientosDelRango(desdeMov, hastaMov),
     listCategoriaMovimientoDocuments(),
-    listSaldosDiariosDeCuentas({ cuentaIds, desde: inicioMes(mes), hasta: ultimoDiaMes(mes) }),
     listSaldosDiariosDeCuentas({ cuentaIds, desde: fechaPrevia, hasta: fechaPrevia }),
-    listarChequesDelRango(desdeCheques, hastaCheques),
+    listarChequesDelRango(hoy, hastaCheques),
     listAllCompromisos(),
     listAllCobros(),
   ])
@@ -237,7 +236,7 @@ export async function cargarDatosTablero(mes: string, hoy: string): Promise<Dato
     saldoActualCentavos: typeof data.saldoActualCentavos === 'number' ? data.saldoActualCentavos : 0,
   }))
 
-  const saldosDiarios: SaldoDiarioTablero[] = [...saldosMes, ...saldosPrevio].map((saldo) => ({
+  const saldosDiarios: SaldoDiarioTablero[] = saldosPrevio.map((saldo) => ({
     cuentaId: saldo.cuentaId,
     fecha: saldo.fecha,
     saldoFinCentavos: saldo.saldoFinCentavos,
@@ -268,17 +267,36 @@ export async function cargarDatosTablero(mes: string, hoy: string): Promise<Dato
 function esPayload(value: unknown): value is TableroFinanzas {
   if (!value || typeof value !== 'object') return false
   const row = value as Partial<TableroFinanzas>
-  return typeof row.mes === 'string' && row.resumen != null && Array.isArray(row.alertas) && Array.isArray(row.porMes)
+  return (
+    typeof row.mes === 'string' &&
+    row.resumen != null &&
+    Array.isArray(row.porMes) &&
+    Array.isArray(row.salidasPorGrupo) &&
+    Array.isArray(row.entradasPorGrupo) &&
+    row.proximos30 != null &&
+    Array.isArray(row.proximos30.cheques)
+  )
+}
+
+function docCheques(mes: string, moneda: MonedaTablero): string {
+  return `${docId(mes, moneda)}_cheques`
 }
 
 export async function leerCacheTablero(mes: string, moneda: MonedaTablero): Promise<CacheTablero | null> {
   const snap = await adminDb().collection(COLECCION_TABLERO).doc(docId(mes, moneda)).get()
   if (!snap.exists) return null
   const data = snap.data()
-  if (!data || data.version !== 1) return null
+  if (!data || data.version !== 2) return null
   if (typeof data.calculadoAtMs !== 'number' || typeof data.huella !== 'string') return null
   if (!esPayload(data.payload)) return null
-  return { calculadoAtMs: data.calculadoAtMs, huella: data.huella, payload: data.payload }
+  let payload = data.payload
+  if (data.chequesAparte === true) {
+    const extra = await adminDb().collection(COLECCION_TABLERO).doc(docCheques(mes, moneda)).get()
+    const crudo = extra.data()
+    if (!crudo || crudo.version !== 2 || !Array.isArray(crudo.cheques)) return null
+    payload = { ...payload, proximos30: { ...payload.proximos30, cheques: crudo.cheques } }
+  }
+  return { calculadoAtMs: data.calculadoAtMs, huella: data.huella, payload }
 }
 
 export function cacheTableroVigente(cache: CacheTablero, ahoraMs: number): boolean {
@@ -292,14 +310,30 @@ export async function guardarCacheTablero(input: {
   payload: TableroFinanzas
   ahoraMs: number
 }): Promise<void> {
-  await adminDb().collection(COLECCION_TABLERO).doc(docId(input.mes, input.moneda)).set({
-    version: 1,
+  const parte = partirPayloadCache(input.payload)
+  if (parte.modo === 'no-cachear') {
+    logError('[finanzas/tablero] el tablero supera el tamaño de la caché y no se guardó', new Error('payload grande'))
+    return
+  }
+  const db = adminDb()
+  const ref = db.collection(COLECCION_TABLERO).doc(docId(input.mes, input.moneda))
+  const refCheques = db.collection(COLECCION_TABLERO).doc(docCheques(input.mes, input.moneda))
+  const batch = db.batch()
+  batch.set(ref, {
+    version: 2,
     mes: input.mes,
     moneda: input.moneda,
     calculadoAtMs: input.ahoraMs,
     huella: input.huella,
-    payload: input.payload,
+    chequesAparte: parte.modo === 'cheques-aparte',
+    payload: parte.payload,
   })
+  if (parte.modo === 'cheques-aparte') {
+    batch.set(refCheques, { version: 2, calculadoAtMs: input.ahoraMs, cheques: parte.cheques })
+  } else {
+    batch.delete(refCheques)
+  }
+  await batch.commit()
 }
 
 async function ultimoCambio(coleccion: string): Promise<number> {

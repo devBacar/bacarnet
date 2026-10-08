@@ -19,6 +19,12 @@ export function fechaCorta(ymd: string): string {
   return `${dia}/${mes}/${anio}`
 }
 
+export function diaMes(ymd: string): string {
+  const [, mes, dia] = ymd.split('-')
+  if (!dia) return ymd
+  return `${dia}/${mes}`
+}
+
 export function fechaHora(iso: string): string {
   const date = new Date(iso)
   if (Number.isNaN(date.getTime())) return ''
@@ -39,6 +45,27 @@ export function textoPct(valor: number | null): string {
 
 export function plata(centavos: number, moneda: MonedaTablero): string {
   return formatMoneyCentavos(centavos, moneda)
+}
+
+/** Monto corto para que entre arriba de una barra. */
+export function plataCorta(centavos: number): string {
+  const pesos = Math.abs(centavos) / 100
+  const signo = centavos < 0 ? '−' : ''
+  if (pesos >= 1_000_000) {
+    const millones = pesos / 1_000_000
+    const texto = millones >= 10 ? String(Math.round(millones)) : millones.toLocaleString('es-AR', { maximumFractionDigits: 1 })
+    return `${signo}$${texto} M`
+  }
+  if (pesos >= 10_000) {
+    const miles = pesos / 1_000
+    const texto = miles >= 100 ? String(Math.round(miles)) : miles.toLocaleString('es-AR', { maximumFractionDigits: 1 })
+    return `${signo}$${texto} mil`
+  }
+  return `${signo}$${Math.round(pesos).toLocaleString('es-AR')}`
+}
+
+export function textoMovimientos(cantidad: number): string {
+  return cantidad === 1 ? '1 movimiento' : `${cantidad} movimientos`
 }
 
 export function textoVariacion30(centavos: number | null, moneda: MonedaTablero): string | null {

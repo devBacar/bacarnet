@@ -26,6 +26,28 @@ function legajos(x: unknown): number[] {
   return Array.isArray(x) ? x.filter((n): n is number => Number.isInteger(n)) : []
 }
 
+/** Calendario oficial ya guardado (rrhh_config/feriados_AAAA). null si todavía no se trajo. */
+export async function leerFeriadosGuardados(anio: number): Promise<Record<string, string> | null> {
+  const snap = await adminDb().collection(COLECCIONES_RRHH.config).doc(`feriados_${anio}`).get()
+  if (!snap.exists) return null
+  const fechas = snap.get('fechas')
+  if (!fechas || typeof fechas !== 'object') return null
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(fechas as Record<string, unknown>)) {
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(k)) out[k] = v
+  }
+  return Object.keys(out).length ? out : null
+}
+
+export async function guardarFeriados(anio: number, fechas: Record<string, string>): Promise<void> {
+  await adminDb().collection(COLECCIONES_RRHH.config).doc(`feriados_${anio}`).set({
+    anio,
+    fechas,
+    origen: 'oficial',
+    actualizadoAt: FieldValue.serverTimestamp(),
+  })
+}
+
 /** Personas que RRHH confirmó o sacó de las horas pactadas (se aplica en la próxima ingesta). */
 export async function leerConfigPactadas(): Promise<ConfigPactadas> {
   const snap = await adminDb().collection(COLECCIONES_RRHH.config).doc(DOC_CONFIG_PACTADAS).get()

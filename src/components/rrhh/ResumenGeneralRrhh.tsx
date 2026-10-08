@@ -5,7 +5,7 @@ import { bajasNoPrevistas, porcentaje, sumarIndicadores, tasaAusentismo, tempran
 import { atencionDelMes } from './atencionRrhh'
 import { AtenderRrhh, BandaRrhh } from './ResumenSimpleRrhh'
 
-export type SeccionRrhh = 'resumen' | 'horas' | 'personal' | 'costos' | 'evolucion'
+export type SeccionRrhh = 'resumen' | 'horas' | 'personal' | 'dotacion' | 'costos' | 'evolucion'
 
 function variacion(actual: number, anterior: number | undefined, sufijo = 'contra el mes anterior'): string | null {
   if (!anterior) return null

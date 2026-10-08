@@ -87,11 +87,11 @@ describe('ejecutarIngestaRrhh', () => {
     expect(r).toMatchObject({ estado: 'ok', ultimoMes: '202609', backupAtrasado: false })
     expect(informes).toHaveLength(1)
     expect(informes[0].agregado.actual).toBe('202610')
-    expect(r.escritura).toEqual({ resumenes: 4, personas: 3, borrados: 0 })
+    expect(r.escritura).toEqual({ resumenes: 5, personas: 8, borrados: 0 })
     expect(guardados).toHaveLength(1)
     const doc = registro.docs.get(idIngesta(BACKUP))!
     expect(doc.estado).toBe('ok')
-    expect(doc.fin?.filasPorTabla).toEqual({ empleado: 3, liq2026: 19, tablas: 7, vac: 3 })
+    expect(doc.fin?.filasPorTabla).toEqual({ empleado: 9, empresa: 2, familiar: 6, liq2026: 25, tablas: 22, vac: 3 })
     expect(doc.fin?.anomalias).toBe(2)
   })
 
@@ -183,7 +183,7 @@ describe('guardas contra backups incompletos', () => {
       },
     })
     expect((await ejecutarIngestaRrhh(deps, MANUAL)).estado).toBe('ok')
-    expect(filasGuardadas).toEqual({ empleado: 3, liq2026: 19, tablas: 7, vac: 3 })
+    expect(filasGuardadas).toEqual({ empleado: 9, empresa: 2, familiar: 6, liq2026: 25, tablas: 22, vac: 3 })
   })
 
   it('ignora tablas de años que quedaron fuera de la ventana (cambio de año)', () => {

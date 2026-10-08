@@ -5,9 +5,18 @@ import { googleStatus } from '../drive/assertInSharedDrive.js'
 import { getAccessibleBoardIds, isSuperAdminUser, syncBoardName } from './boardAccess.js'
 import { boardsFeatureConfigured } from './policy.js'
 import { getRrhhBoardFolderId } from '../rrhh/boardRrhhConfig.js'
+import { getFinanzasBoardFolderId } from '../finanzas/tablero/boardFinanzasConfig.js'
 import { getBoardsConfig } from './policy.js'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
+
+function tipoDeTablero(id: string): 'rrhh' | 'finanzas' | null {
+  const rrhh = getRrhhBoardFolderId()
+  if (rrhh && id === rrhh) return 'rrhh'
+  const finanzas = getFinanzasBoardFolderId()
+  if (finanzas && id === finanzas) return 'finanzas'
+  return null
+}
 
 export async function listBoards(req: Request, res: Response): Promise<void> {
   const user = req.authedUser
@@ -43,14 +52,17 @@ export async function listBoards(req: Request, res: Response): Promise<void> {
     const boards = (listed.data.files ?? [])
       .filter((file) => Boolean(file.id && file.name))
       .filter((file) => superAdmin || accessibleIds!.has(file.id!))
-      .map((file) => ({
-        id: file.id!,
-        name: file.name!,
-        modifiedTime: file.modifiedTime ?? null,
-        entryPath: 'index.html',
-        // Tableros React (no HTML de Drive): el frontend los abre en su propia ruta.
-        ...(file.id === getRrhhBoardFolderId() ? { tipo: 'rrhh' as const } : {}),
-      }))
+      .map((file) => {
+        const tipo = tipoDeTablero(file.id!)
+        return {
+          id: file.id!,
+          name: file.name!,
+          modifiedTime: file.modifiedTime ?? null,
+          entryPath: 'index.html',
+          // Tableros React (no HTML de Drive): el frontend los abre en su propia ruta.
+          ...(tipo ? { tipo } : {}),
+        }
+      })
 
     await Promise.all(boards.map((board) => syncBoardName(board.id, board.name)))
 

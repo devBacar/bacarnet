@@ -40,3 +40,4 @@ export {
 export { FinanzasChequesPage } from './finanzas/ChequesPage'
 export { FinanzasIndexRedirect } from './finanzas/FinanzasIndexRedirect'
 export { RrhhHorasExtraPage } from './rrhh/HorasExtraPage'
+export { TableroFinanzasPage } from './tablero-finanzas/TableroFinanzasPage'

@@ -6,7 +6,7 @@ export interface BoardDto {
   modifiedTime: string | null
   entryPath: string
   /** Tablero React con ruta propia (lo marca el backend). */
-  tipo?: 'rrhh'
+  tipo?: 'rrhh' | 'finanzas'
 }
 
 export interface ListBoardsResult {

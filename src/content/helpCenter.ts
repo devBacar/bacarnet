@@ -240,10 +240,10 @@ export const HELP_CATEGORIES: HelpCategory[] = [
       },
       {
         id: 'cuenta-area-vs-depto',
-        question: 'Área de pertenencia vs departamento: ¿cuál es la diferencia?',
+        question: 'Áreas donde trabaja y departamento: ¿cuál es la diferencia?',
         paragraphs: [
-          'El departamento es una etiqueta organizativa (aparece en el directorio de contactos: Comercial, RRHH, etc.). Sirve para ubicar personas, no define permisos en Archivos.',
-          'Las áreas de pertenencia son las áreas de BacarNet a las que estás vinculado para gobernanza de documentos (Sistemas, Operaciones…). Definen quién puede aprobar solicitudes, heredar accesos por área y similares. Solo un administrador puede cambiarlas.',
+          'El departamento es una etiqueta para ubicar a la persona en Contactos (Comercial, RRHH, etc.). Sirve para encontrarla. No define qué puede hacer con los archivos.',
+          'Las áreas donde trabaja son las de BacarNet (Sistemas, Operaciones…). Ahí se ve de qué archivos participa. Si es jefe del área, también la administra: puede aprobar pedidos y dar accesos. Solo un administrador puede cambiarlas.',
         ],
       },
       {

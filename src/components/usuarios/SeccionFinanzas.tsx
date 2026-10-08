@@ -18,15 +18,22 @@ export function SeccionFinanzas({
   permissions,
   puedeEditar,
   onPermisos,
+  incluirPersonalizado = true,
+  ayuda,
 }: {
   permissions: UserPermissions
   puedeEditar: boolean
   onPermisos: (permissions: UserPermissions) => void
+  incluirPersonalizado?: boolean
+  ayuda?: string
 }) {
   const [verDetalle, setVerDetalle] = useState(false)
   const flags = flagsFinanzasDe(permissions)
   const perfil = perfilDePermisos(flags)
-  const mostrarDetalle = perfil === 'personalizado' || verDetalle
+  const mostrarDetalle = incluirPersonalizado && (perfil === 'personalizado' || verDetalle)
+  const perfiles = incluirPersonalizado
+    ? PERFILES_FINANZAS
+    : PERFILES_FINANZAS.filter((opcion) => opcion.id !== 'personalizado')
 
   const elegir = (siguiente: PerfilFinanzas) => {
     if (!puedeEditar) return
@@ -44,8 +51,9 @@ export function SeccionFinanzas({
 
   return (
     <SeccionFicha icono={Wallet} titulo="Finanzas">
+      {ayuda ? <p className="text-xs text-neutral-500 dark:text-gray-400">{ayuda}</p> : null}
       <div className="flex flex-wrap gap-2">
-        {PERFILES_FINANZAS.map((opcion) => {
+        {perfiles.map((opcion) => {
           const activo = perfil === opcion.id
           return (
             <button
@@ -66,7 +74,12 @@ export function SeccionFinanzas({
         })}
       </div>
       <p className="text-sm text-neutral-600 dark:text-gray-300">{resumenFinanzas(flags)}</p>
-      {perfil !== 'personalizado' && (
+      {!incluirPersonalizado && perfil === 'personalizado' && (
+        <p className="text-sm text-neutral-600 dark:text-gray-300">
+          Esta combinación no es un perfil. Elegí uno de arriba para reemplazarla.
+        </p>
+      )}
+      {incluirPersonalizado && perfil !== 'personalizado' && (
         <button
           type="button"
           onClick={() => setVerDetalle((actual) => !actual)}

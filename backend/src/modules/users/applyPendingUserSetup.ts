@@ -17,15 +17,29 @@ export interface PendingBoardAccess {
   boardName?: string
 }
 
+const CLAVES_PERMISO = [
+  'view_directory',
+  'view_drive',
+  'rag_assistant',
+  'rrhh_detalle',
+  'view_finanzas',
+  'finanzas_agenda',
+  'finanzas_cheques',
+  'finanzas_categorias',
+  'finanzas_transferencias',
+  'finanzas_destinatarios',
+  'finanzas_saldos',
+  'manage_finanzas_caja',
+] as const
+
+type ClavePermisoPendiente = (typeof CLAVES_PERMISO)[number]
+
 export interface PendingUserSetupData {
   email: string
   role?: 'admin' | 'user'
   managedAreaIds?: string[]
   memberAreaIds?: string[]
-  permissions?: {
-    view_directory?: boolean
-    view_drive?: boolean
-  }
+  permissions?: Partial<Record<ClavePermisoPendiente, boolean>>
   boardAccess?: PendingBoardAccess[]
   note?: string
   createdByUid?: string
@@ -60,28 +74,24 @@ function parseBoardAccess(value: unknown): PendingBoardAccess[] {
   return rows
 }
 
+function parsePermissions(
+  value: unknown,
+): Partial<Record<ClavePermisoPendiente, boolean>> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const raw = value as Record<string, unknown>
+  const permissions: Partial<Record<ClavePermisoPendiente, boolean>> = {}
+  for (const clave of CLAVES_PERMISO) {
+    const valor = raw[clave]
+    if (typeof valor === 'boolean') permissions[clave] = valor
+  }
+  return permissions
+}
+
 function parsePendingData(email: string, data: DocumentData): PendingUserSetupData | null {
   const roleRaw = data.role
   const role =
     roleRaw === 'admin' || roleRaw === 'user' ? roleRaw : undefined
-  const permissionsRaw = data.permissions
-  const permissions =
-    permissionsRaw && typeof permissionsRaw === 'object' && !Array.isArray(permissionsRaw)
-      ? {
-          view_directory:
-            (permissionsRaw as Record<string, unknown>).view_directory === true
-              ? true
-              : (permissionsRaw as Record<string, unknown>).view_directory === false
-                ? false
-                : undefined,
-          view_drive:
-            (permissionsRaw as Record<string, unknown>).view_drive === true
-              ? true
-              : (permissionsRaw as Record<string, unknown>).view_drive === false
-                ? false
-                : undefined,
-        }
-      : undefined
+  const permissions = parsePermissions(data.permissions)
 
   return {
     email,
@@ -161,16 +171,14 @@ export async function applyPendingUserSetupForNewUser(input: {
         ? { ...(userSnap.get('permissions') as Record<string, unknown>) }
         : {}
 
-    if (pending.permissions?.view_directory !== undefined) {
-      existingPermissions.view_directory = pending.permissions.view_directory
+    let permisosTocados = false
+    for (const clave of CLAVES_PERMISO) {
+      const valor = pending.permissions?.[clave]
+      if (valor === undefined) continue
+      existingPermissions[clave] = valor
+      permisosTocados = true
     }
-    if (pending.permissions?.view_drive !== undefined) {
-      existingPermissions.view_drive = pending.permissions.view_drive
-    }
-    if (
-      pending.permissions?.view_directory !== undefined ||
-      pending.permissions?.view_drive !== undefined
-    ) {
+    if (permisosTocados) {
       userPatch.permissions = existingPermissions
     }
 

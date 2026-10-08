@@ -166,28 +166,35 @@ export function FichaUsuario({
             rol={borrador.role}
             areas={areas}
             cargandoAreas={cargandoAreas}
-            puedeEditarRol={puedeAsignarRol}
             puedeEditarNacimiento={puedeEditarNacimiento}
             esSuperAdmin={esSuperAdmin}
             onNombre={(displayName) => parche({ displayName })}
             onDepartamento={(department) => parche({ department })}
             onNacimiento={(birthDate) => parche({ birthDate })}
-            onRol={(role) => parche({ role })}
           />
           <SeccionAreas
             areas={areas}
             cargando={cargandoAreas}
             rolEsAdmin={borrador.role === 'admin'}
             miembroIds={borrador.memberAreaIds}
-            jefeIds={borrador.managedAreaIds}
+            jefeIds={jefeIds}
             motivo={borrador.areasReason}
             mostrarMotivo={motivoAreasObligatorio(base, borrador, opciones)}
             puedeEditarMiembro={!esSuperAdmin}
-            puedeEditarJefe={puedeEditarPermisos && borrador.role === 'admin'}
+            puedeEditarJefe={puedeEditarPermisos}
             esSuperAdmin={esSuperAdmin}
             puedeAsignarRol={puedeAsignarRol}
             onMiembro={(memberAreaIds) => parche({ memberAreaIds })}
-            onJefe={(managedAreaIds) => parche({ managedAreaIds })}
+            onJefe={(managedAreaIds) => {
+              if (esSuperAdmin) {
+                parche({ managedAreaIds })
+                return
+              }
+              parche({
+                managedAreaIds,
+                role: managedAreaIds.length > 0 ? 'admin' : 'user',
+              })
+            }}
             onMotivo={(areasReason) => parche({ areasReason })}
           />
           <SeccionModulos

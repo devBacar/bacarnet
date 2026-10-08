@@ -10,6 +10,8 @@ export function SeccionModulos({
   puedeEditar,
   esSuperAdmin,
   onToggle,
+  mostrarResumenFinanzas = true,
+  ayuda,
 }: {
   permissions: UserPermissions
   puedeEditar: boolean
@@ -18,11 +20,14 @@ export function SeccionModulos({
     clave: 'view_directory' | 'view_drive' | 'rag_assistant' | 'rrhh_detalle',
     valor: boolean,
   ) => void
+  mostrarResumenFinanzas?: boolean
+  ayuda?: string
 }) {
   const perfil = etiquetaPerfil(perfilDePermisos(flagsFinanzasDe(permissions)))
 
   return (
     <SeccionFicha icono={LayoutGrid} titulo="Qué puede usar">
+      {ayuda ? <p className="text-xs text-neutral-500 dark:text-gray-400">{ayuda}</p> : null}
       {!puedeEditar && (
         <p className="text-xs text-neutral-500 dark:text-gray-400">
           {esSuperAdmin
@@ -40,15 +45,17 @@ export function SeccionModulos({
           onChange={(valor) => onToggle(modulo.clave, valor)}
         />
       ))}
-      <div className="flex items-start justify-between gap-4 rounded-lg border border-neutral-100 px-4 py-3 dark:border-zinc-800">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-neutral-900 dark:text-gray-100">Finanzas</p>
-          <p className="mt-0.5 text-xs text-neutral-500 dark:text-gray-400">
-            El perfil se elige en la sección de abajo.
-          </p>
+      {mostrarResumenFinanzas && (
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-neutral-100 px-4 py-3 dark:border-zinc-800">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-neutral-900 dark:text-gray-100">Finanzas</p>
+            <p className="mt-0.5 text-xs text-neutral-500 dark:text-gray-400">
+              El perfil se elige en la sección de abajo.
+            </p>
+          </div>
+          <span className="shrink-0 text-sm font-medium text-[var(--color-primary)]">{perfil}</span>
         </div>
-        <span className="shrink-0 text-sm font-medium text-[var(--color-primary)]">{perfil}</span>
-      </div>
+      )}
       <Interruptor
         titulo="RRHH: ver nombres, legajos y sueldos"
         ayuda="Para el Tablero de RRHH (rrhh_detalle). El acceso al tablero se da desde el tablero, botón Acceso."

@@ -18,9 +18,32 @@ export interface PendingBoardAccess {
   boardName?: string
 }
 
+const CLAVES_PERMISO_OPCIONAL = [
+  'rag_assistant',
+  'rrhh_detalle',
+  'view_finanzas',
+  'finanzas_agenda',
+  'finanzas_cheques',
+  'finanzas_categorias',
+  'finanzas_transferencias',
+  'finanzas_destinatarios',
+  'finanzas_saldos',
+  'manage_finanzas_caja',
+] as const
+
 export interface PendingUserSetupPermissions {
   view_directory: boolean
   view_drive: boolean
+  rag_assistant?: boolean
+  rrhh_detalle?: boolean
+  view_finanzas?: boolean
+  finanzas_agenda?: boolean
+  finanzas_cheques?: boolean
+  finanzas_categorias?: boolean
+  finanzas_transferencias?: boolean
+  finanzas_destinatarios?: boolean
+  finanzas_saldos?: boolean
+  manage_finanzas_caja?: boolean
 }
 
 export interface PendingUserSetup {
@@ -77,19 +100,28 @@ function parseBoardAccess(value: unknown): PendingBoardAccess[] {
   return rows
 }
 
+function leerPermisos(value: unknown): PendingUserSetupPermissions {
+  const raw =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null
+  const permissions: PendingUserSetupPermissions = {
+    view_directory: raw ? raw.view_directory !== false : true,
+    view_drive: raw ? raw.view_drive !== false : true,
+  }
+  if (!raw) return permissions
+  for (const clave of CLAVES_PERMISO_OPCIONAL) {
+    const valor = raw[clave]
+    if (typeof valor === 'boolean') permissions[clave] = valor
+  }
+  return permissions
+}
+
 function mapDoc(id: string, data: Record<string, unknown>): PendingUserSetup {
   const roleRaw = data.role
   const role: UserRole =
     roleRaw === 'admin' ? 'admin' : 'user'
-  const permissionsRaw = data.permissions
-  const permissions =
-    permissionsRaw && typeof permissionsRaw === 'object' && !Array.isArray(permissionsRaw)
-      ? {
-          view_directory:
-            (permissionsRaw as Record<string, unknown>).view_directory !== false,
-          view_drive: (permissionsRaw as Record<string, unknown>).view_drive !== false,
-        }
-      : { view_directory: true, view_drive: true }
+  const permissions = leerPermisos(data.permissions)
 
   return {
     email: id,

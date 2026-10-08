@@ -118,7 +118,7 @@ export interface PactadasAgregadoRrhh {
 export type IdPlanRrhh = 'suave' | 'medio' | 'brusco'
 
 export interface MedidaPlanRrhh {
-  id: 'contratar' | 'vacaciones' | 'eventuales' | 'turnos' | 'feriados'
+  id: 'contratar' | 'vacaciones' | 'eventuales' | 'turnos' | 'feriados' | 'ausentismo' | 'concentradas'
   titulo: string
   explicacion: string
   ahorroAnual: number
@@ -260,6 +260,86 @@ export interface IndicadoresRrhh {
   notas: string[]
 }
 
+/* ---------- Personal (backend/src/modules/rrhh/domain/personal.ts) ---------- */
+
+export type DatoPrivadoRrhh = number | 'menos de 3'
+
+export interface RangoPersonalRrhh {
+  id: string
+  nombre: string
+  cantidad: number
+}
+
+export interface ItemDistribucionRrhh {
+  id: string
+  nombre: string
+  cantidad: number
+}
+
+export interface CortePersonalRrhh {
+  id: string
+  nombre: string
+  mes: string
+  personas: number
+  edadPromedio: number | null
+  antiguedadPromedio: number | null
+  pctMujeres: DatoPrivadoRrhh
+  pctConHijos: number
+  discapacidad: DatoPrivadoRrhh
+}
+
+export interface PersonalAgregadoRrhh {
+  mes: string
+  nota: string
+  dotacion: number
+  edadPromedio: number | null
+  antiguedadPromedio: number | null
+  mujeres: number
+  varones: number
+  sinSexo: number
+  pctMujeres: number
+  pctVarones: number
+  rangosEdad: RangoPersonalRrhh[]
+  rangosAntiguedad: RangoPersonalRrhh[]
+  enEdadDeJubilarse: number
+  jubilacionProximos2Anios: number
+  aniversarios: { mes: string; cantidad: number; porAnios: { anios: number; cantidad: number }[] }
+  porArea: CortePersonalRrhh[]
+  porConvenio: CortePersonalRrhh[]
+  estadoCivil: ItemDistribucionRrhh[]
+  estudios: ItemDistribucionRrhh[]
+  contratos: ItemDistribucionRrhh[]
+  jornadaParcial: number
+  jornadaCompleta: number
+  jornadaSinDato: number
+  calidad: { estudios: number; estadoCivil: number; contrato: number; sexo: number; edad: number; jornada: number }
+  familia: {
+    nota: string
+    personasConHijos: number
+    totalHijos: number
+    hijosEdadEscolar: number
+    familiaresConDiscapacidad: number
+  }
+}
+
+export interface PersonaPersonalRrhh {
+  legajo: number
+  nombre: string
+  area: string
+  convenio: ConvenioRrhh
+  convenioNombre: string
+  edad: number | null
+  antiguedad: number | null
+  sexo: string
+  contrato: string
+  hijos: number
+}
+
+export interface PersonalDetalleRrhh {
+  personas: PersonaPersonalRrhh[]
+  aniversarios: { legajo: number; nombre: string; area: string; anios: number; ingreso: string }[]
+}
+
 export interface PersonaLicenciaLargaRrhh {
   legajo: number
   nombre: string
@@ -337,6 +417,8 @@ export interface InformeRrhh {
   evolucion?: EvolucionRrhh
   costos?: CostosNominaRrhh
   indicadores?: IndicadoresRrhh
+  personal?: PersonalAgregadoRrhh
+  origenFeriados?: { anio: string; origen: string; texto: string }[]
   reporte: ReporteMensualRrhh
   meta: MetaInformeRrhh
 }
@@ -474,6 +556,7 @@ export interface InformeDetalleRrhh {
   pactadas?: PersonaPactadaRrhh[]
   pactadasDescartadas?: { legajo: number; nombre: string; area: string }[]
   indicadores?: { licenciasLargas: PersonaLicenciaLargaRrhh[]; bajasTempranas: PersonaBajaRrhh[] }
+  personal?: PersonalDetalleRrhh
   meta: MetaInformeRrhh
 }
 

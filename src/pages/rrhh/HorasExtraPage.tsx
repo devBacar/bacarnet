@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BriefcaseBusiness, ChartLine, Clock, LayoutDashboard, RefreshCw, UserCheck, Wallet } from 'lucide-react'
+import { BriefcaseBusiness, ChartLine, Clock, LayoutDashboard, RefreshCw, UserCheck, Users, Wallet } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../context'
@@ -16,6 +16,7 @@ import { CostosRrhh } from '../../components/rrhh/CostosRrhh'
 import { EvolucionRrhh } from '../../components/rrhh/EvolucionRrhh'
 import { HorasPactadasRrhh } from '../../components/rrhh/HorasPactadasRrhh'
 import { IndicadoresRrhh } from '../../components/rrhh/IndicadoresRrhh'
+import { PersonalRrhh } from '../../components/rrhh/PersonalRrhh'
 import { ResumenGeneralRrhh, type SeccionRrhh } from '../../components/rrhh/ResumenGeneralRrhh'
 import { PlanAhorroRrhh } from '../../components/rrhh/PlanAhorroRrhh'
 import { TarjetaRrhh } from '../../components/rrhh/TarjetaRrhh'
@@ -187,14 +188,15 @@ const SECCIONES: { id: SeccionRrhh; titulo: string; detalle: string; icono: type
   { id: 'resumen', titulo: 'Resumen', detalle: 'lo más importante', icono: LayoutDashboard },
   { id: 'horas', titulo: 'Horas extra', detalle: 'por mes, plan de ahorro', icono: Clock },
   { id: 'personal', titulo: 'Ausencias y rotación', detalle: 'ausentismo, altas y bajas', icono: UserCheck },
+  { id: 'dotacion', titulo: 'Personal', detalle: 'edades, antigüedad, familia', icono: Users },
   { id: 'costos', titulo: 'Costos', detalle: 'sueldos y cargas', icono: Wallet },
   { id: 'evolucion', titulo: 'Evolución', detalle: 'mes, trimestre, año', icono: ChartLine },
 ]
 
-/** Botones grandes de las cinco secciones del tablero. */
+/** Botones grandes de las secciones del tablero. */
 function MenuSecciones({ activa, onChange }: { activa: SeccionRrhh; onChange: (s: SeccionRrhh) => void }) {
   return (
-    <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" role="tablist" aria-label="Secciones del tablero">
+    <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" role="tablist" aria-label="Secciones del tablero">
       {SECCIONES.map((s) => {
         const Icono = s.icono
         const on = s.id === activa
@@ -401,6 +403,11 @@ export function RrhhHorasExtraPage() {
                     ))}
                   </select>
                 </label>
+                {datos.origenFeriados && datos.origenFeriados.length > 0 ? (
+                  <p className="text-[13px] text-neutral-600 dark:text-gray-400">
+                    Calendario de feriados: {datos.origenFeriados.map((o) => `${o.anio}, ${o.texto.toLowerCase()}`).join(' · ')}.
+                  </p>
+                ) : null}
               </div>
 
               {cerradoActivo && (
@@ -462,6 +469,13 @@ export function RrhhHorasExtraPage() {
               <FaltaActualizar superAdmin={superAdmin} />
             ))}
 
+          {seccion === 'dotacion' &&
+            (datos.personal ? (
+              <PersonalRrhh personal={datos.personal} detalle={verDetalle ? (detalle.data?.personal ?? null) : null} />
+            ) : (
+              <FaltaActualizar superAdmin={superAdmin} />
+            ))}
+
           {seccion === 'costos' &&
             (datos.costos ? (
               <CostosRrhh
@@ -491,6 +505,9 @@ export function RrhhHorasExtraPage() {
                 El mes en curso y la previsión se estiman con lo que pasó en cada área desde marzo de 2025: cuántas horas extra genera
                 cada día de vacaciones o licencia, las vacaciones ya cargadas, las del mismo mes del año anterior y el calendario de
                 feriados.
+                {datos.origenFeriados && datos.origenFeriados.length > 0
+                  ? ` Feriados: ${datos.origenFeriados.map((o) => `${o.anio} ${o.texto.toLowerCase()}`).join(' · ')}.`
+                  : ''}
               </p>
               <p>
                 Los costos de horas extra son <strong>costo para la empresa</strong>: lo liquidado más contribuciones patronales,

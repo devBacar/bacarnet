@@ -1,12 +1,13 @@
 import type { FactoresCosto } from './costosEmpresa.js'
 
 /**
- * Tres planes para bajar las horas extra (suave, medio y brusco) con las mismas cinco palancas
+ * Tres planes para bajar las horas extra (suave, medio y brusco) con las mismas palancas
  * en distinta intensidad. Todo a costo empresa (ver costosEmpresa.ts) y sin las horas pactadas.
+ * Cada medida se aplica sobre las horas que quedan después de las anteriores.
  */
 
 export type IdPlan = 'suave' | 'medio' | 'brusco'
-export type IdMedida = 'contratar' | 'vacaciones' | 'eventuales' | 'turnos' | 'feriados'
+export type IdMedida = 'contratar' | 'vacaciones' | 'eventuales' | 'turnos' | 'feriados' | 'ausentismo' | 'concentradas'
 
 /** Datos de un área que necesitan los planes (los arma informeMensual). */
 export interface InsumoPlanArea {
@@ -33,6 +34,15 @@ export interface InsumoPlanArea {
   productividad: number
   /** Horas extra por hora de ausencia por encima del umbral (áreas tipo ausencias). */
   horasExtraPorHoraAusencia: number
+  /**
+   * Horas extra del mes que alcanzan a cubrir enfermedad, accidentes, faltas sin aviso y suspensiones.
+   * Ya topadas por las horas extra del área. Solo áreas que tienen horas extra.
+   */
+  horasPorAusencias: number
+  /** Horas del mes que una persona hace por encima de las 30 h. */
+  horasSobre30: number
+  /** Cuántas personas hacen la mitad de las horas extra del área. */
+  personasMitadHoras: number
   /** Meses que quedan de la temporada de vacaciones: días previstos y días que el área cubre sin horas extra. */
   temporada: { mes: string; vacaciones: number; cupo: number }[]
 }
@@ -103,16 +113,19 @@ export interface PlanesReduccion {
   supuestos: string[]
 }
 
-export const NIVELES: Record<IdPlan, { contratar: number; vacaciones: number; eventuales: number; turnos: number; feriados: number }> = {
-  suave: { contratar: 0, vacaciones: 0.5, eventuales: 0, turnos: 0.1, feriados: 0 },
-  medio: { contratar: 1 / 3, vacaciones: 0.75, eventuales: 0.5, turnos: 0.25, feriados: 0.05 },
-  brusco: { contratar: 2 / 3, vacaciones: 1, eventuales: 1, turnos: 0.4, feriados: 0.1 },
+export const NIVELES: Record<
+  IdPlan,
+  { contratar: number; vacaciones: number; eventuales: number; turnos: number; feriados: number; ausentismo: number; concentradas: number }
+> = {
+  suave: { contratar: 0, vacaciones: 0.5, eventuales: 0, turnos: 0.1, feriados: 0, ausentismo: 0.1, concentradas: 0.1 },
+  medio: { contratar: 1 / 3, vacaciones: 0.75, eventuales: 0.5, turnos: 0.25, feriados: 0.05, ausentismo: 0.2, concentradas: 0.2 },
+  brusco: { contratar: 2 / 3, vacaciones: 1, eventuales: 1, turnos: 0.4, feriados: 0.1, ausentismo: 0.3, concentradas: 0.3 },
 }
 
 const NOMBRES: Record<IdPlan, { nombre: string; descripcion: string }> = {
   suave: {
     nombre: 'Plan suave',
-    descripcion: 'Sin contratar a nadie. Ordenar las vacaciones y armar mejor algunos turnos.',
+    descripcion: 'Sin contratar a nadie. Ordenar las vacaciones, bajar faltas cortas, repartir las horas concentradas y armar mejor algunos turnos.',
   },
   medio: {
     nombre: 'Plan medio',
@@ -120,7 +133,7 @@ const NOMBRES: Record<IdPlan, { nombre: string; descripcion: string }> = {
   },
   brusco: {
     nombre: 'Plan brusco',
-    descripcion: 'Todas las medidas al máximo razonable: 2 de cada 3 puestos con personal fijo, turnos rearmados y feriados con dotación mínima.',
+    descripcion: 'Todas las medidas al máximo razonable: 2 de cada 3 puestos con personal fijo, menos ausencias, reparto de horas, turnos rearmados y feriados con dotación mínima.',
   },
 }
 
@@ -152,6 +165,32 @@ function personas(n: number): string {
   return `${n} ${n === 1 ? 'persona' : 'personas'}`
 }
 
+function tomarHoras(pool: Map<number, number>, cc: number, horas: number): number {
+  const quedan = pool.get(cc) ?? 0
+  const usadas = Math.min(Math.max(0, horas), quedan)
+  pool.set(cc, quedan - usadas)
+  return usadas
+}
+
+/** Si el ahorro del mes pasa el gasto que se puede reducir, se recorta desde la última medida. */
+function limitarMedidas(medidas: MedidaPlan[], topeMensual: number): MedidaPlan[] {
+  const mensual = (ms: MedidaPlan[]) => ms.reduce((s, m) => s + m.ahorroAnual, 0) / 12
+  const out = medidas.map((m) => ({ ...m, areas: m.areas.map((a) => ({ ...a })) }))
+  let exceso = mensual(out) - topeMensual
+  if (exceso <= 1) return out
+  for (let i = out.length - 1; i >= 0 && exceso > 1; i -= 1) {
+    const m = out[i]
+    const mens = m.ahorroAnual / 12
+    if (mens <= 0) continue
+    const recorte = Math.min(mens, exceso)
+    const factor = (mens - recorte) / mens
+    m.ahorroAnual *= factor
+    m.areas = m.areas.map((a) => ({ ...a, ahorroAnual: a.ahorroAnual * factor }))
+    exceso -= recorte
+  }
+  return out.filter((m) => m.ahorroAnual >= 1)
+}
+
 function construirPlan(id: IdPlan, ins: InsumosPlanes, contratacion: ContratacionArea[]): Plan {
   const nivel = NIVELES[id]
   const medidas: MedidaPlan[] = []
@@ -159,16 +198,18 @@ function construirPlan(id: IdPlan, ins: InsumosPlanes, contratacion: Contratacio
   let costoContrataciones = 0
   let horasMenos = 0
   const horasHabitualesRestantes = new Map<number, number>()
+  const horasExtraRestantes = new Map<number, number>()
 
   // 1. Personal fijo donde las horas extra se repiten todos los meses y contratar cuesta menos.
   const contratar: AreaMedida[] = []
   for (const a of ins.areas) {
     const c = contratacion.find((x) => x.cc === a.cc)
     horasHabitualesRestantes.set(a.cc, a.horasHabituales)
+    horasExtraRestantes.set(a.cc, a.horasExtraMes)
     if (!c || !c.conviene || a.horasHabituales < HORAS_MINIMAS_CONTRATAR || nivel.contratar <= 0) continue
     const n = Math.floor(c.puestosEquivalentes * nivel.contratar)
     if (n <= 0) continue
-    const horas = n * a.horasMes * a.productividad
+    const horas = tomarHoras(horasExtraRestantes, a.cc, n * a.horasMes * a.productividad)
     horasHabitualesRestantes.set(a.cc, Math.max(0, a.horasHabituales - horas))
     personasTotal += n
     costoContrataciones += n * a.costoPersonaMes
@@ -201,7 +242,8 @@ function construirPlan(id: IdPlan, ins: InsumosPlanes, contratacion: Contratacio
     const libre = a.temporada.reduce((s, m) => s + Math.max(0, m.cupo - m.vacaciones), 0)
     const movibles = Math.min(exceso, libre) * nivel.vacaciones
     if (movibles >= 1) {
-      const horas = movibles * HORAS_POR_DIA * a.horasExtraPorHoraAusencia
+      const horasPedidas = movibles * HORAS_POR_DIA * a.horasExtraPorHoraAusencia
+      const horas = tomarHoras(horasExtraRestantes, a.cc, horasPedidas / 12) * 12
       horasMenos += horas / 12
       vacaciones.push({
         cc: a.cc,
@@ -214,7 +256,8 @@ function construirPlan(id: IdPlan, ins: InsumosPlanes, contratacion: Contratacio
     const sinCubrir = (exceso - Math.min(exceso, libre) * nivel.vacaciones) * HORAS_POR_DIA * a.horasExtraPorHoraAusencia
     const diferencia = a.horaExtraEmpresa - ins.eventuales.costoHora
     if (nivel.eventuales > 0 && sinCubrir > 0 && diferencia > 0 && ins.eventuales.costoHora > 0 && a.convenio === 'suvico') {
-      const horas = Math.min(sinCubrir, horasEventualesDisponibles) * nivel.eventuales
+      const pedido = Math.min(sinCubrir, horasEventualesDisponibles) * nivel.eventuales
+      const horas = tomarHoras(horasExtraRestantes, a.cc, pedido / 12) * 12
       horasEventualesDisponibles -= horas
       if (horas >= 1) {
         horasMenos += horas / 12
@@ -252,7 +295,7 @@ function construirPlan(id: IdPlan, ins: InsumosPlanes, contratacion: Contratacio
   for (const a of ins.areas) {
     if (a.proporcion100 <= 0.5 || a.horasExtraMes < HORAS_MINIMAS_CONTRATAR || a.valor100 <= a.valor50) continue
     const restantes = horasHabitualesRestantes.get(a.cc) ?? a.horasHabituales
-    const horas = restantes * a.proporcion100 * nivel.turnos
+    const horas = tomarHoras(horasExtraRestantes, a.cc, restantes * a.proporcion100 * nivel.turnos)
     if (horas < 1) continue
     const ahorroMes = horas * (a.valor100 - a.valor50) * ins.factores.total
     turnos.push({
@@ -299,7 +342,64 @@ function construirPlan(id: IdPlan, ins: InsumosPlanes, contratacion: Contratacio
     })
   }
 
-  const ahorroAnual = medidas.reduce((s, m) => s + m.ahorroAnual, 0)
+  // 6. Ausentismo: bajar una parte de las horas extra que cubren faltas y ausencias cortas.
+  const ausentismo: AreaMedida[] = []
+  if (nivel.ausentismo > 0) {
+    for (const a of ins.areas) {
+      if (a.horasExtraMes <= 0 || !(a.horasPorAusencias > 0)) continue
+      const horas = tomarHoras(horasExtraRestantes, a.cc, a.horasPorAusencias * nivel.ausentismo)
+      if (horas < 1) continue
+      horasMenos += horas
+      ausentismo.push({
+        cc: a.cc,
+        nombre: a.nombre,
+        ahorroAnual: horas * a.horaExtraEmpresa * 12,
+        detalle: `${nf.format(horas)} h por mes menos, de las que hoy se hacen para cubrir ausencias.`,
+      })
+    }
+  }
+  if (ausentismo.length) {
+    medidas.push({
+      id: 'ausentismo',
+      titulo: 'Bajar faltas y ausencias cortas',
+      explicacion: 'Parte de las horas extra se hacen para cubrir enfermedad, accidentes, faltas sin aviso y suspensiones. Bajar las faltas sin aviso y las ausencias cortas evita pagar esas horas.',
+      ahorroAnual: ausentismo.reduce((s, x) => s + x.ahorroAnual, 0),
+      areas: ausentismo,
+    })
+  }
+
+  // 7. Horas concentradas: una parte de lo que supera las 30 h por mes y por persona.
+  const concentradas: AreaMedida[] = []
+  if (nivel.concentradas > 0) {
+    for (const a of ins.areas) {
+      if (!(a.horasSobre30 > 0)) continue
+      const horas = tomarHoras(horasExtraRestantes, a.cc, a.horasSobre30 * nivel.concentradas)
+      if (horas < 1) continue
+      horasMenos += horas
+      const mitad = a.personasMitadHoras
+      const quienes = mitad > 0 ? ` ${personas(mitad)} ${mitad === 1 ? 'hace' : 'hacen'} la mitad de las horas extra del área.` : ''
+      concentradas.push({
+        cc: a.cc,
+        nombre: a.nombre,
+        ahorroAnual: horas * a.horaExtraEmpresa * 12,
+        detalle: `${nf.format(horas)} h por mes por encima de las 30 h.${quienes}`,
+      })
+    }
+  }
+  if (concentradas.length) {
+    medidas.push({
+      id: 'concentradas',
+      titulo: 'Autorizar y repartir las horas concentradas',
+      explicacion: 'Hay personas que pasan las 30 horas extra del mes, y en varias áreas pocas personas hacen la mitad de las horas. Con autorización previa se deja de pagar una parte de lo que supera las 30 horas; el resto se reparte para no pasar el tope legal.',
+      ahorroAnual: concentradas.reduce((s, x) => s + x.ahorroAnual, 0),
+      areas: concentradas,
+      requiere: 'Autorización previa del jefe del área.',
+    })
+  }
+
+  const topeMensual = Math.max(0, ins.gastoMensual - ins.pactadasMensual)
+  const medidasTope = limitarMedidas(medidas, topeMensual)
+  const ahorroAnual = medidasTope.reduce((s, m) => s + m.ahorroAnual, 0)
   const reducible = Math.max(1, ins.gastoMensual - ins.pactadasMensual)
   return {
     id,
@@ -310,7 +410,7 @@ function construirPlan(id: IdPlan, ins: InsumosPlanes, contratacion: Contratacio
     personasAContratar: personasTotal,
     costoContratacionesMes: costoContrataciones,
     horasMenosPorMes: horasMenos,
-    medidas: medidas.sort((x, y) => y.ahorroAnual - x.ahorroAnual),
+    medidas: medidasTope.sort((x, y) => y.ahorroAnual - x.ahorroAnual),
   }
 }
 
@@ -333,6 +433,8 @@ export function construirPlanes(ins: InsumosPlanes): PlanesReduccion {
       'Una persona nueva no trabaja todo el mes: se descuentan las vacaciones y licencias promedio del área.',
       'No incluye gastos que no pasan por Salario (uniforme, capacitación, selección, exámenes, equipamiento). En cada área se indica hasta cuánto pueden sumar por persona para que contratar siga conviniendo.',
       'No incluye las horas pactadas (acuerdos individuales), que no se pueden reducir.',
+      'Las horas de ausentismo son los días de enfermedad, accidentes, faltas sin aviso y suspensiones (sin vacaciones ni licencias especiales), pasados a horas (5 de cada 7 días, 8 h). Solo en áreas que ya tienen horas extra, y nunca más que las horas extra del área. El plan suave baja el 10%, el medio el 20% y el brusco el 30%.',
+      'Las horas concentradas son las que una persona hace por encima de las 30 h del mes. Repartirlas entre más personas evita pasar el tope legal pero no ahorra (la hora se sigue pagando como extra); el ahorro sale solo de las que se dejan de autorizar: 10% en el plan suave, 20% en el medio y 30% en el brusco. No se cuenta dos veces la misma hora: cada medida usa lo que queda después de las anteriores, y el ahorro del mes no pasa el gasto en horas extra que se puede reducir.',
       'Los importes están a valores del último mes liquidado. Si hay aumentos de sueldo, el ahorro sube en la misma proporción.',
     ],
   }

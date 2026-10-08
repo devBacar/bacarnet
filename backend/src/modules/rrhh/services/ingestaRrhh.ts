@@ -1,10 +1,13 @@
 import { logInfo } from '../../../lib/log.js'
 import { abrirBackup, buscarUltimoBackup } from './backupsDrive.js'
 import { ejecutarIngestaRrhh, type OrigenIngesta, type ResultadoIngesta } from './ingesta.service.js'
+import { traerFeriadosOficiales } from './feriadosOficiales.js'
 import {
+  guardarFeriados,
   guardarInforme,
   guardarResultado,
   leerConfigPactadas,
+  leerFeriadosGuardados,
   leerUltimaIngestaOk,
   registroIngestasFirestore,
 } from './rrhh.repository.js'
@@ -22,6 +25,9 @@ export function ejecutarIngestaReal(opciones: {
       guardarResultado,
       guardarInforme,
       leerConfigPactadas,
+      leerFeriados: leerFeriadosGuardados,
+      guardarFeriados,
+      traerFeriados: traerFeriadosOficiales,
       ultimaIngestaOk: leerUltimaIngestaOk,
       registro: registroIngestasFirestore,
       ahora: () => new Date(),

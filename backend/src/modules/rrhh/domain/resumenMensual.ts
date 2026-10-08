@@ -73,8 +73,36 @@ export interface ResumenPersona {
   esquemaLiquidacion: number
   fechaIngreso: string | null
   fechaEgreso: string | null
+  /** Nacimiento (AAAA-MM-DD). null si no está o es la fecha por defecto de Salario. */
+  fecNac?: string | null
+  /** M, F o null si no está cargado. */
+  sexo?: 'M' | 'F' | null
+  /** Código de estado civil (COTAB 20). 0 = sin dato. */
+  estadoCivil?: number
+  /** Código de estudios (COTAB 4). 0 = sin dato. */
+  estudio?: number
+  /** Código de tipo de contrato (COTAB 13). 0 = sin dato. */
+  contrato?: number
+  /** true si JORPARC > 0. null si el dato no vino. */
+  jornadaParcial?: boolean | null
   meses: Record<string, MesPersona>
   vacaciones: PeriodoVacaciones[]
+}
+
+/**
+ * Familiar cargado en Salario. Solo lo que hace falta para contar hijos y discapacidad:
+ * nunca nombre, documento ni otros datos personales.
+ */
+export interface FamiliarSalario {
+  legajo: number
+  /**
+   * 1 = cónyuge, 2 = hijo/a, 3 = otro.
+   * Verificar con RRHH: en el backup solo aparecen 1, 2 y 3.
+   */
+  relacion: number
+  fecNac: string | null
+  /** DISC 1 = con discapacidad. */
+  discapacidad: boolean
 }
 
 /** Licencia o ausencia cargada con fechas en Salario (tabla `asist`). */
@@ -116,6 +144,12 @@ export interface Catalogos {
   tiposAusencia: Record<number, string>
   /** Motivos de egreso (tabla de códigos 27). */
   motivosEgreso?: Record<number, string>
+  /** Estudios (COTAB 4). El código 0 no se guarda: es sin dato. */
+  estudios?: Record<number, string>
+  /** Tipos de contrato SIJP (COTAB 13). */
+  contratos?: Record<number, string>
+  /** Estado civil (COTAB 20). */
+  estadosCiviles?: Record<number, string>
 }
 
 export interface ResultadoResumen {
@@ -136,6 +170,8 @@ export interface ResultadoResumen {
   esquemaDeLegajo?: Record<number, number>
   /** Nombre y centro de costo de cada legajo con alta o baja en el período (para el detalle de RRHH). */
   legajos?: Record<number, { nombre: string; cc: number }>
+  /** Familiares cargados (sin nombres ni documentos). */
+  familiares?: FamiliarSalario[]
 }
 
 export interface OpcionesResumen {
@@ -177,6 +213,25 @@ function fecha(v: string | null | undefined): string | null {
   return v.slice(0, 10)
 }
 
+/** Nacimiento: la fecha por defecto de Salario (2100 o 2500) es sin dato. */
+function fechaNacimiento(v: string | null | undefined): string | null {
+  const f = fecha(v)
+  if (!f || f >= '2100-01-01') return null
+  return f
+}
+
+function sexoDe(v: string | null | undefined): 'M' | 'F' | null {
+  const s = (v ?? '').trim().toUpperCase()
+  if (s === 'M' || s === 'F') return s
+  return null
+}
+
+/** null si la columna no vino; true solo cuando la jornada parcial es mayor a 0. */
+function jornadaParcialDe(v: string | null | undefined): boolean | null {
+  if (v === null || v === undefined || v.trim() === '') return null
+  return num(v) > 0
+}
+
 function redondear(n: number, decimales = 2): number {
   const f = 10 ** decimales
   return Math.round(n * f) / f
@@ -212,6 +267,12 @@ interface DatosEmpleado {
   fechaEgreso: string | null
   motivoEgreso: number
   empresa: number
+  fecNac: string | null
+  sexo: 'M' | 'F' | null
+  estadoCivil: number
+  estudio: number
+  contrato: number
+  jornadaParcial: boolean | null
 }
 
 /**
@@ -236,6 +297,7 @@ export class AcumuladorSalario {
   private readonly empresas = new Map<number, string>()
   private readonly licencias: LicenciaSalario[] = []
   private readonly periodos: Omit<PeriodoLaboral, 'motivo'>[] = []
+  private readonly familiares: FamiliarSalario[] = []
 
   constructor(
     private readonly opciones: OpcionesResumen & {
@@ -248,7 +310,15 @@ export class AcumuladorSalario {
   quiereTabla = (tabla: string): boolean => {
     const liq = RE_TABLA_LIQ.exec(tabla)
     if (liq) return Number(liq[1]) >= this.opciones.anioDesde
-    return tabla === 'empleado' || tabla === 'tablas' || tabla === 'vac' || tabla === 'empresa' || tabla === 'asist' || tabla === 'ingegr'
+    return (
+      tabla === 'empleado' ||
+      tabla === 'tablas' ||
+      tabla === 'vac' ||
+      tabla === 'empresa' ||
+      tabla === 'asist' ||
+      tabla === 'ingegr' ||
+      tabla === 'familiar'
+    )
   }
 
   onFila = (tabla: string, fila: FilaDump): void => {
@@ -258,6 +328,7 @@ export class AcumuladorSalario {
     else if (tabla === 'vac') this.agregarVacacion(fila)
     else if (tabla === 'asist') this.agregarLicencia(fila)
     else if (tabla === 'ingegr') this.agregarPeriodo(fila)
+    else if (tabla === 'familiar') this.agregarFamiliar(fila)
     else if (tabla === 'empresa') {
       const codigo = entero(fila.CODIGO)
       if (codigo > 0) this.empresas.set(codigo, (fila.DESCR ?? '').trim())
@@ -307,6 +378,8 @@ export class AcumuladorSalario {
     const legajo = entero(fila.LEGAJO)
     if (!legajo) return
     const ingreso2 = fecha(fila.FECING2)
+    const egreso = fecha(fila.FECEGR)
+    // Quien sigue trabajando viene con 2100-01-01 o 2500-01-01.
     this.empleados.set(legajo, {
       nombre: (fila.NOMBRE ?? '').trim(),
       cc: entero(fila.CCOSTO),
@@ -314,9 +387,27 @@ export class AcumuladorSalario {
       puesto: entero(fila.PUESTO),
       esquema: entero(fila.ESQLIQ),
       fechaIngreso: ingreso2 ?? fecha(fila.FECING),
-      fechaEgreso: fecha(fila.FECEGR),
+      fechaEgreso: egreso && egreso < '2100-01-01' ? egreso : null,
       motivoEgreso: entero(fila.MOTEGR),
       empresa: entero(fila.EMPRESA),
+      fecNac: fechaNacimiento(fila.FECNAC),
+      sexo: sexoDe(fila.SEXO),
+      estadoCivil: entero(fila.ESTCIV),
+      estudio: entero(fila.ESTUDIO),
+      contrato: entero(fila.CONTRATO),
+      jornadaParcial: jornadaParcialDe(fila.JORPARC),
+    })
+  }
+
+  /** Solo legajo, relación, nacimiento y discapacidad. El resto de la fila no se guarda. */
+  private agregarFamiliar(fila: FilaDump): void {
+    const legajo = entero(fila.LEGAJO)
+    if (!legajo) return
+    this.familiares.push({
+      legajo,
+      relacion: entero(fila.RELACION),
+      fecNac: fechaNacimiento(fila.FECNAC),
+      discapacidad: entero(fila.DISC) === 1,
     })
   }
 
@@ -490,6 +581,9 @@ export class AcumuladorSalario {
         esquemasLiquidacion: this.tablaCodigos(TABLAS_CODIGOS.esquemaLiquidacion),
         tiposAusencia: this.tablaCodigos(TABLAS_CODIGOS.tipoAusencia),
         motivosEgreso: this.tablaCodigos(TABLAS_CODIGOS.motivoEgreso),
+        estudios: this.tablaCodigos(TABLAS_CODIGOS.estudios),
+        contratos: this.tablaCodigos(TABLAS_CODIGOS.contrato),
+        estadosCiviles: this.tablaCodigos(TABLAS_CODIGOS.estadoCivil),
       },
       anomalias,
       licencias: this.licencias.filter((l) => !legajoExcluido(l.legajo)).sort((a, b) => a.legajo - b.legajo || (a.desde < b.desde ? -1 : a.desde > b.desde ? 1 : 0)),
@@ -505,6 +599,7 @@ export class AcumuladorSalario {
           return e ? [[legajo, { nombre: e.nombre, cc: e.cc }]] : []
         }),
       ),
+      familiares: this.familiares.filter((f) => !legajoExcluido(f.legajo)),
     }
   }
 
@@ -527,6 +622,12 @@ export class AcumuladorSalario {
       esquemaLiquidacion: emp?.esquema ?? 0,
       fechaIngreso: emp?.fechaIngreso ?? null,
       fechaEgreso: emp?.fechaEgreso ?? null,
+      fecNac: emp?.fecNac ?? null,
+      sexo: emp?.sexo ?? null,
+      estadoCivil: emp?.estadoCivil ?? 0,
+      estudio: emp?.estudio ?? 0,
+      contrato: emp?.contrato ?? 0,
+      jornadaParcial: emp?.jornadaParcial ?? null,
       meses: {},
       vacaciones: vac,
     }

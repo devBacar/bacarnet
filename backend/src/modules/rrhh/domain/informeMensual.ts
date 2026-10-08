@@ -1,4 +1,4 @@
-import { feriadosDelMes } from './calendarioFeriados.js'
+import { armarCalendario, feriadosDelMes, resumenOrigenFeriados, type CalendarioFeriados, type OrigenAnioFeriados } from './calendarioFeriados.js'
 import {
   CONVENIOS,
   LIMITE_HE_ANUAL,
@@ -17,8 +17,9 @@ import {
 } from './horasPactadas.js'
 import { construirCostosNomina, type CostosNomina, type PersonaCosto } from './costosNomina.js'
 import { construirEvolucion, type EvolucionInforme } from './evolucion.js'
-import { construirIndicadores, type IndicadoresDetalle, type IndicadoresInforme } from './indicadores.js'
+import { construirIndicadores, diasAusenciaCubribles, type IndicadoresDetalle, type IndicadoresInforme } from './indicadores.js'
 import { ajustarUmbral } from './modeloArea.js'
+import { construirPersonal, type PersonalAgregado, type PersonalDetalle } from './personal.js'
 import { construirPlanes, type InsumoPlanArea, type PlanesReduccion } from './planesReduccion.js'
 import { generarFocos, generarRecomendaciones, type Foco, type Recomendacion } from './recomendaciones.js'
 import { construirReporte, type PersonaMes, type ReporteMensual } from './reportePeriodos.js'
@@ -169,6 +170,10 @@ export interface InformeAgregado {
   costos: CostosNomina
   /** Ausentismo, licencias largas, altas, bajas y rotación por convenio y mes. */
   indicadores: IndicadoresInforme
+  /** Edades, antigüedad y familia. Solo totales. */
+  personal: PersonalAgregado
+  /** De dónde salió el calendario de feriados de cada año proyectado. */
+  origenFeriados: OrigenAnioFeriados[]
   /** Un bloque por mes cerrado, el mes en curso, la previsión y, aparte, la visión anual. */
   reporte: ReporteMensual
 }
@@ -198,6 +203,8 @@ export interface InformeDetalle {
   pactadasDescartadas: { legajo: number; nombre: string; area: string }[]
   /** Licencias largas en curso y bajas tempranas, con nombre (solo RRHH). */
   indicadores: IndicadoresDetalle
+  /** Lista por persona (solo RRHH). */
+  personal: PersonalDetalle
 }
 
 export interface Informe {
@@ -263,7 +270,7 @@ function diasLicencia(r: ResumenCentroCostoMes | undefined): number {
  */
 export function construirInforme(
   resultado: ResultadoResumen,
-  opciones: { pactadas?: ConfigPactadas } = {},
+  opciones: { pactadas?: ConfigPactadas; feriados?: CalendarioFeriados } = {},
 ): Informe {
   const ultimoMes = resultado.ultimoMes
   if (!ultimoMes) throw new Error('No hay meses liquidados para armar el informe')
@@ -281,10 +288,15 @@ export function construirInforme(
   }
   const g = (cc: number, mes: string) => porCc.get(cc)?.get(mes)
 
+  const anioDesdeCal = Number(actual.slice(0, 4))
+  const anioHastaCal = Number(sumarMeses(actual, 11).slice(0, 4))
+  const aniosCal: number[] = []
+  for (let a = anioDesdeCal; a <= anioHastaCal; a += 1) aniosCal.push(a)
+  const calendario = opciones.feriados ?? armarCalendario(aniosCal)
   const feriados = new Map<string, { cantidad: number; detalle: string[] }>()
   for (const mes of resultado.meses) feriados.set(mes, { cantidad: resultado.feriadosPorMes[mes] ?? 0, detalle: [] })
   for (const mes of proyectados) {
-    const f = feriadosDelMes(mes)
+    const f = feriadosDelMes(mes, calendario)
     feriados.set(mes, { cantidad: f.cantidad, detalle: f.detalle })
   }
 
@@ -442,6 +454,34 @@ export function construirInforme(
   }
   const insumosPlan: InsumoPlanArea[] = []
 
+  /** Horas de ausencia cubribles (promedio de los 3 meses) y horas por encima de 30 h, para los planes. */
+  function horasParaPlanes(cc: number, tope: number): { horasPorAusencias: number; horasSobre30: number; personasMitadHoras: number } {
+    const dias = reales.reduce((s, m) => s + diasAusenciaCubribles(g(cc, m)?.ausencias ?? {}), 0) / 3
+    const horasPorAusencias = Math.min(Math.max(0, dias * HORAS_POR_DIA_AUSENCIA), Math.max(0, tope))
+    let sumaSobre = 0
+    const horasUltimo: number[] = []
+    for (const mes of reales) {
+      for (const p of resultado.personas) {
+        const mp = p.meses[mes]
+        if (!mp || mp.cc !== cc) continue
+        const he = mp.horas.he50.hs + mp.horas.he100.hs
+        sumaSobre += Math.max(0, he - LIMITE_HE_MENSUAL)
+        if (mes === ultimoMes && he > 0) horasUltimo.push(he)
+      }
+    }
+    const total = horasUltimo.reduce((s, h) => s + h, 0)
+    let personasMitadHoras = 0
+    if (total > 0) {
+      let acc = 0
+      for (const h of [...horasUltimo].sort((a, b) => b - a)) {
+        personasMitadHoras += 1
+        acc += h
+        if (acc >= total * 0.5) break
+      }
+    }
+    return { horasPorAusencias, horasSobre30: sumaSobre / 3, personasMitadHoras }
+  }
+
   // Áreas del informe: con dotación o con horas extra relevantes en los últimos 3 meses.
   const ccsUltimo = [...porCc.keys()].filter((cc) => g(cc, ultimoMes))
   const areas: AreaInforme[] = []
@@ -570,6 +610,7 @@ export function construirInforme(
       costoPersonaMes: persona.costoMes,
       productividad: persona.productividad,
       horasExtraPorHoraAusencia: ajuste.b,
+      ...horasParaPlanes(cc, sinPactadas),
       temporada: mesesTemporada.map((mes) => {
         const anterior = sumarMeses(mes, -12)
         const ratio = dotacion / Math.max(1, g(cc, anterior)?.dotacion ?? 0)
@@ -623,7 +664,9 @@ export function construirInforme(
   eventuales.horasLibres = Math.max(0, eventuales.personas * CONVENIOS.suvico.horasMes - eventuales.horas)
 
   const { personasPorMes: personasCostos, ...costos } = construirCostosNomina(resultado, (cc) => nombreArea(resultado.catalogos.centrosCosto[cc], cc))
-  const indicadores = construirIndicadores(resultado, (cc) => nombreArea(resultado.catalogos.centrosCosto[cc], cc))
+  const nombreDeArea = (cc: number) => nombreArea(resultado.catalogos.centrosCosto[cc], cc)
+  const indicadores = construirIndicadores(resultado, nombreDeArea)
+  const personal = construirPersonal(resultado, nombreDeArea)
   const base: Omit<InformeAgregado, 'reporte'> = {
     ultimoMes,
     reales,
@@ -643,6 +686,8 @@ export function construirInforme(
     pactadas: pactadasAgregado(ultimoMes),
     costos,
     indicadores: indicadores.indicadores,
+    personal: personal.agregado,
+    origenFeriados: resumenOrigenFeriados(calendario),
     evolucion: construirEvolucion(
       resultado,
       areas,
@@ -653,7 +698,7 @@ export function construirInforme(
     planes: construirPlanes({
       areas: insumosPlan,
       factores,
-      feriadosAnio: Array.from({ length: 12 }, (_, i) => feriadosDelMes(sumarMeses(actual, i)).cantidad).reduce((s, x) => s + x, 0),
+      feriadosAnio: Array.from({ length: 12 }, (_, i) => feriadosDelMes(sumarMeses(actual, i), calendario).cantidad).reduce((s, x) => s + x, 0),
       eventuales: { personas: eventuales.personas, horasLibresMes: eventuales.horasLibres, costoHora: eventuales.costoHora },
       gastoMensual:
         reales.reduce(
@@ -691,7 +736,19 @@ export function construirInforme(
     const p = resultado.personas.find((x) => x.legajo === legajo)
     return p ? [{ legajo, nombre: p.nombre.trim(), area: nombreArea(resultado.catalogos.centrosCosto[p.cc], p.cc) }] : []
   })
-  return { agregado, personasCostos, detalle: { anio: anioLimite, limite, porMes, pactadas: pactadasDetalle, pactadasDescartadas, indicadores: indicadores.detalle } }
+  return {
+    agregado,
+    personasCostos,
+    detalle: {
+      anio: anioLimite,
+      limite,
+      porMes,
+      pactadas: pactadasDetalle,
+      pactadasDescartadas,
+      indicadores: indicadores.detalle,
+      personal: personal.detalle,
+    },
+  }
 
   function pactadasAgregado(ultimo: string): PactadasAgregado {
     const porArea = new Map<number, { personas: number; horasMes: number; costoMes: number }>()

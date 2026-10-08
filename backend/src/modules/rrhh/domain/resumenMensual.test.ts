@@ -26,7 +26,7 @@ describe('sumarMeses', () => {
 describe('AcumuladorSalario con la muestra ficticia', () => {
   it('lee solo las tablas necesarias y los años pedidos', async () => {
     const { filas } = await resumirMuestra()
-    expect(filas).toEqual({ empleado: 3, liq2026: 19, tablas: 7, vac: 3 })
+    expect(filas).toEqual({ empleado: 9, empresa: 2, familiar: 6, liq2026: 25, tablas: 22, vac: 3 })
   })
 
   it('arma el resumen por centro de costo y mes', async () => {
@@ -74,7 +74,7 @@ describe('AcumuladorSalario con la muestra ficticia', () => {
 
   it('arma la ficha por persona con su último centro de costo y vacaciones desde la fecha de corte', async () => {
     const { r } = await resumirMuestra()
-    expect(r.personas.map((p) => p.legajo)).toEqual([1, 2, 3])
+    expect(r.personas.map((p) => p.legajo)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
     const dos = r.personas.find((p) => p.legajo === 2)!
     expect(dos.nombre).toBe('PERSONA O\'DOS, "PRUEBA"')
     expect(dos.meses['202608'].ausencias).toEqual({ Vacaciones: 14 })
@@ -93,8 +93,30 @@ describe('AcumuladorSalario con la muestra ficticia', () => {
 
   it('carga los catálogos de códigos', async () => {
     const { r } = await resumirMuestra()
-    expect(r.catalogos.centrosCosto).toEqual({ 16: 'PROTECCION DE VALORES', 17: 'SERVICIO DE SEGURIDAD PRIVADA' })
-    expect(r.catalogos.esquemasLiquidacion).toEqual({ 6: 'Suvico' })
+    expect(r.catalogos.centrosCosto).toEqual({ 16: 'PROTECCION DE VALORES', 17: 'SERVICIO DE SEGURIDAD PRIVADA', 18: 'ADMINISTRACION' })
+    expect(r.catalogos.esquemasLiquidacion).toEqual({
+      6: 'Suvico',
+      7: 'Empleados de Comercio',
+      9: 'Choferes de Camiones (40/89)',
+    })
     expect(r.catalogos.tiposAusencia).toEqual({ 3: 'Enfermedad' })
+    expect(r.catalogos.estudios?.[4]).toBe('Titulo secundario')
+    expect(r.catalogos.contratos?.[1]).toBe('Tiempo indeterminado')
+    expect(r.catalogos.estadosCiviles?.[2]).toBe('Casado')
+  })
+
+  it('no guarda datos sensibles y deja afuera a Filmec', async () => {
+    const { r } = await resumirMuestra()
+    expect(r.personas.some((p) => p.legajo === 9)).toBe(false)
+    const texto = JSON.stringify(r)
+    for (const secreto of ['20999888776', 'CALLE FALSA', 'email-secreto@example.com', 'CBUSECRETO', 'HIJO SECRETO', '30111222', 'FAMILIAR DISCAPACIDAD']) {
+      expect(texto).not.toContain(secreto)
+    }
+    const fam = r.familiares?.find((f) => f.legajo === 7)
+    expect(fam).toEqual({ legajo: 7, relacion: 2, fecNac: '2012-03-01', discapacidad: true })
+    expect(r.personas.find((p) => p.legajo === 1)).toMatchObject({ fecNac: '1985-04-02', sexo: 'M', estudio: 4, jornadaParcial: false })
+    expect(r.personas.find((p) => p.legajo === 3)?.fecNac).toBeNull()
+    expect(r.personas.find((p) => p.legajo === 6)?.jornadaParcial).toBe(true)
+    expect(r.personas.find((p) => p.legajo === 4)?.fechaEgreso).toBeNull()
   })
 })

@@ -152,6 +152,9 @@ describe('planes suave, medio y brusco', () => {
     productividad: 0.9,
     horasExtraPorHoraAusencia: 0,
     temporada: [],
+    horasPorAusencias: 0,
+    horasSobre30: 0,
+    personasMitadHoras: 0,
     ...x,
   })
   const insumos = (areas: InsumoPlanArea[]): InsumosPlanes => ({
@@ -208,6 +211,72 @@ describe('planes suave, medio y brusco', () => {
     const porDia = (5 / 7) * 8 * 0.7 * 20_000
     expect(vac(0)).toBeCloseTo(150 * porDia, 0)
     expect(vac(2)).toBeCloseTo(300 * porDia, 0)
+  })
+
+  it('ausentismo y horas concentradas bajan una parte, sin contar dos veces la misma hora', () => {
+    const base = area({
+      horasHabituales: 0,
+      horasExtraMes: 1_000,
+      proporcion100: 0.2,
+      costoPersonaMes: 0,
+      horaExtraEmpresa: 10_000,
+      horasPorAusencias: 800,
+      horasSobre30: 400,
+      personasMitadHoras: 3,
+    })
+    const { planes, supuestos } = construirPlanes(insumos([base]))
+    const aus = (i: number) => planes[i].medidas.find((m) => m.id === 'ausentismo')!.ahorroAnual
+    const conc = (i: number) => planes[i].medidas.find((m) => m.id === 'concentradas')!.ahorroAnual
+    // Suave: 10% de 800 h y 10% de 400 h, a $ 10.000 la hora.
+    expect(aus(0)).toBeCloseTo(80 * 10_000 * 12, 0)
+    expect(conc(0)).toBeCloseTo(40 * 10_000 * 12, 0)
+    expect(aus(1)).toBeCloseTo(160 * 10_000 * 12, 0)
+    expect(conc(2)).toBeCloseTo(120 * 10_000 * 12, 0)
+    expect(planes[0].personasAContratar).toBe(0)
+    expect(planes[0].descripcion.toLowerCase()).toContain('sin contratar')
+    expect(supuestos.some((s) => s.includes('faltas sin aviso'))).toBe(true)
+    expect(supuestos.some((s) => s.includes('30 h'))).toBe(true)
+    expect(planes[0].medidas.find((m) => m.id === 'concentradas')?.areas[0].detalle).toContain('3 personas')
+  })
+
+  it('las horas concentradas solo usan lo que queda después de contratar y del ausentismo', () => {
+    const { planes } = construirPlanes(
+      insumos([
+        area({
+          horasExtraMes: 2_000,
+          horasHabituales: 2_000,
+          proporcion100: 0.2,
+          horaExtraEmpresa: 20_000,
+          costoPersonaMes: 3_000_000,
+          horasPorAusencias: 2_000,
+          horasSobre30: 2_000,
+        }),
+      ]),
+    )
+    const brusco = planes[2]
+    // Contratar 7 personas cubre 1.260 h. Quedan 740. Ausentismo brusco pide 600. Concentradas se queda con 140.
+    expect(brusco.personasAContratar).toBe(7)
+    expect(brusco.medidas.find((m) => m.id === 'ausentismo')!.ahorroAnual).toBeCloseTo(600 * 20_000 * 12, 0)
+    expect(brusco.medidas.find((m) => m.id === 'concentradas')!.ahorroAnual).toBeCloseTo(140 * 20_000 * 12, 0)
+  })
+
+  it('el ahorro del mes no pasa el gasto que se puede reducir', () => {
+    const { planes, gastoMensualReducible } = construirPlanes({
+      ...insumos([
+        area({
+          horasHabituales: 0,
+          proporcion100: 0,
+          costoPersonaMes: 0,
+          horaExtraEmpresa: 100_000,
+          horasPorAusencias: 1_000,
+          horasSobre30: 1_000,
+        }),
+      ]),
+      gastoMensual: 1_000_000,
+      pactadasMensual: 0,
+    })
+    expect(gastoMensualReducible).toBe(1_000_000)
+    for (const p of planes) expect(p.ahorroMensual).toBeLessThanOrEqual(1_000_000 + 1)
   })
 
   it('el porcentaje se calcula sobre el gasto que se puede reducir (sin pactadas)', () => {

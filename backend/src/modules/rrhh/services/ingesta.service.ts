@@ -2,7 +2,9 @@ import type { Readable } from 'node:stream'
 import { leerDumpMysql } from '../domain/sqlDumpParser.js'
 import { AcumuladorSalario, type ResultadoResumen } from '../domain/resumenMensual.js'
 import type { ConfigPactadas } from '../domain/horasPactadas.js'
+import type { CalendarioFeriados } from '../domain/calendarioFeriados.js'
 import { construirInforme, type Informe } from '../domain/informeMensual.js'
+import { resolverCalendarioFeriados } from './feriadosOficiales.js'
 import type { BackupSalario } from './backupsDrive.js'
 import type { ConteoEscritura, InfoIngestaGuardada } from './rrhh.repository.js'
 
@@ -70,6 +72,11 @@ export interface DependenciasIngesta {
   guardarInforme(informe: Informe, info: InfoIngestaGuardada): Promise<void>
   /** Personas que RRHH confirmó o sacó de las horas pactadas. */
   leerConfigPactadas?(): Promise<ConfigPactadas>
+  /** Feriados oficiales ya guardados en rrhh_config/feriados_AAAA. */
+  leerFeriados?(anio: number): Promise<Record<string, string> | null>
+  guardarFeriados?(anio: number, fechas: Record<string, string>): Promise<void>
+  /** API de feriados. Si falta o falla, la ingesta sigue con el calendario calculado. */
+  traerFeriados?(anio: number): Promise<Record<string, string> | null>
   registro: RegistroIngestas
   ahora(): Date
   log?: (mensaje: string, extra?: Record<string, unknown>) => void
@@ -205,7 +212,12 @@ export async function ejecutarIngestaRrhh(
     )
     if (motivo) throw new Error(motivo)
     // El informe se arma antes de escribir: si falla, no queda nada a medias.
-    const informe = construirInforme(resultado, { pactadas: await deps.leerConfigPactadas?.() })
+    const feriados: CalendarioFeriados = await resolverCalendarioFeriados(inicio.getFullYear(), {
+      leer: deps.leerFeriados,
+      guardar: deps.guardarFeriados,
+      traer: deps.traerFeriados,
+    })
+    const informe = construirInforme(resultado, { pactadas: await deps.leerConfigPactadas?.(), feriados })
     const motivoTamanio = motivoPorTamanio(informe)
     if (motivoTamanio) throw new Error(motivoTamanio)
     const info: InfoIngestaGuardada = {

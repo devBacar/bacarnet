@@ -30,6 +30,19 @@ export const MOTIVOS_BAJA: { id: MotivoBaja; nombre: string }[] = [
   { id: 'otras', nombre: 'Otras (fallecimiento, abandono, otras causas)' },
 ]
 
+/**
+ * Días de ausencia que se cubren con horas extra: enfermedad, accidentes, faltas sin aviso y suspensiones.
+ * Sin vacaciones ni licencias especiales.
+ */
+export function diasAusenciaCubribles(ausencias: Record<string, number>): number {
+  let dias = 0
+  for (const [tipo, n] of Object.entries(ausencias)) {
+    const g = grupoAusencia(tipo)
+    if (g && g !== 'especiales') dias += n
+  }
+  return dias
+}
+
 /** Grupo de un tipo de ausencia de la liquidación (los nombres de CONCEPTOS_AUSENCIA). */
 export function grupoAusencia(tipo: string): GrupoAusencia | null {
   if (tipo === 'Vacaciones') return null

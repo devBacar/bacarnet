@@ -118,8 +118,14 @@ export function horasInvalidas(concepto: string, horas: number, monto: number): 
 /** Códigos de la tabla `tablas` (columna COTAB) que usa RRHH. */
 export const TABLAS_CODIGOS = {
   centroCosto: 2,
+  /** Estudios: 1 sin estudios, 2 universitario, 3 terciario, 4 secundario… El 0 es sin dato. */
+  estudios: 4,
   seccion: 5,
+  /** Tipos de contrato SIJP. El 0 es sin dato. */
+  contrato: 13,
   esquemaLiquidacion: 17,
+  /** Estado civil: 1 soltero, 2 casado, 3 concubino, 4 separado, 5 divorciado/a, 6 viudo. El 0 es sin dato. */
+  estadoCivil: 20,
   puesto: 22,
   tipoAusencia: 30,
   motivoEgreso: 27,

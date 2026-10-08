@@ -1,4 +1,4 @@
-import { Pencil, Plus, Trash2, X } from 'lucide-react'
+import { LayoutDashboard, Mail, Pencil, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context'
@@ -12,55 +12,44 @@ import {
   savePendingUserSetup,
   type PendingUserSetup,
   type PendingUserSetupInput,
+  type PendingUserSetupPermissions,
 } from '../services/pendingUserSetupService'
+import { DEFAULT_PERMISSIONS, type UserPermissions } from '../services/userService'
+import { apagarFinanzasSinVista, flagsFinanzasDe } from './finanzas/permisosFinanzas'
+import { SeccionAreas } from './usuarios/SeccionAreas'
+import { SeccionFicha } from './usuarios/SeccionFicha'
+import { SeccionFinanzas } from './usuarios/SeccionFinanzas'
+import { SeccionModulos } from './usuarios/SeccionModulos'
+import { rolSegunAreas } from './usuarios/util'
 
-const PERMISSION_FIELDS = [
-  {
-    key: 'view_directory' as const,
-    label: 'Ver contactos',
-    description: 'Acceso a /directorio',
-  },
-  {
-    key: 'view_drive' as const,
-    label: 'Ver archivos',
-    description: 'Acceso a /recursos y Drive',
-  },
-]
+function permisosIniciales(inicial: PendingUserSetup | null | undefined): UserPermissions {
+  const permisos = inicial?.permissions
+  return {
+    ...DEFAULT_PERMISSIONS,
+    view_directory: permisos ? permisos.view_directory : true,
+    view_drive: permisos ? permisos.view_drive : true,
+    rag_assistant: permisos?.rag_assistant === true,
+    rrhh_detalle: permisos?.rrhh_detalle === true,
+    ...flagsFinanzasDe(permisos),
+  }
+}
 
-function PermissionSwitch({
-  checked,
-  onChange,
-  label,
-  description,
-}: {
-  checked: boolean
-  onChange: (value: boolean) => void
-  label: string
-  description: string
-}) {
-  return (
-    <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border border-neutral-100 px-4 py-3 transition-colors hover:bg-neutral-50 dark:border-zinc-800 dark:hover:bg-zinc-950">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-neutral-900 dark:text-gray-100">{label}</p>
-        <p className="mt-0.5 text-xs text-neutral-500 dark:text-gray-400">{description}</p>
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-          checked ? 'bg-brand-primary' : 'bg-neutral-300'
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform dark:bg-zinc-900 ${
-            checked ? 'translate-x-5' : 'translate-x-0'
-          }`}
-        />
-      </button>
-    </label>
-  )
+function permisosParaGuardar(permissions: UserPermissions): PendingUserSetupPermissions {
+  const listos = apagarFinanzasSinVista(permissions)
+  return {
+    view_directory: listos.view_directory,
+    view_drive: listos.view_drive,
+    rag_assistant: listos.rag_assistant === true,
+    rrhh_detalle: listos.rrhh_detalle === true,
+    view_finanzas: listos.view_finanzas === true,
+    finanzas_agenda: listos.finanzas_agenda === true,
+    finanzas_cheques: listos.finanzas_cheques === true,
+    finanzas_categorias: listos.finanzas_categorias === true,
+    finanzas_transferencias: listos.finanzas_transferencias === true,
+    finanzas_destinatarios: listos.finanzas_destinatarios === true,
+    finanzas_saldos: listos.finanzas_saldos === true,
+    manage_finanzas_caja: listos.manage_finanzas_caja === true,
+  }
 }
 
 interface PendingSetupDrawerProps {
@@ -74,7 +63,6 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
   const { data: areas = [], isLoading: loadingAreas } = useAssignableAreasQuery()
   const { data: boardResult, isLoading: loadingBoards } = useBoardsQuery(user?.uid)
   const boards = boardResult?.boards ?? []
-  const loading = loadingAreas || loadingBoards
   const [email, setEmail] = useState(initial?.email ?? '')
   const [role, setRole] = useState<'admin' | 'user'>(initial?.role ?? 'user')
   const [managedAreaIds, setManagedAreaIds] = useState<string[]>(
@@ -83,10 +71,7 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
   const [memberAreaIds, setMemberAreaIds] = useState<string[]>(
     () => [...(initial?.memberAreaIds ?? [])],
   )
-  const [permissions, setPermissions] = useState({
-    view_directory: initial?.permissions.view_directory ?? true,
-    view_drive: initial?.permissions.view_drive ?? true,
-  })
+  const [permissions, setPermissions] = useState<UserPermissions>(() => permisosIniciales(initial))
   const [selectedBoardIds, setSelectedBoardIds] = useState<string[]>(
     () => initial?.boardAccess.map((row) => row.boardFolderId) ?? [],
   )
@@ -114,18 +99,6 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
     return map
   }, [boards, initial?.boardAccess])
 
-  const toggleManagedArea = (id: string) => {
-    setManagedAreaIds((prev) =>
-      prev.includes(id) ? prev.filter((row) => row !== id) : [...prev, id],
-    )
-  }
-
-  const toggleMemberArea = (id: string) => {
-    setMemberAreaIds((prev) =>
-      prev.includes(id) ? prev.filter((row) => row !== id) : [...prev, id],
-    )
-  }
-
   const toggleBoard = (id: string) => {
     setSelectedBoardIds((prev) =>
       prev.includes(id) ? prev.filter((row) => row !== id) : [...prev, id],
@@ -136,12 +109,22 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
     e.preventDefault()
     setSaving(true)
     try {
+      const rolDestino = rolSegunAreas(
+        initial?.role ?? 'user',
+        {
+          memberAreaIds: initial?.memberAreaIds ?? [],
+          managedAreaIds: initial?.managedAreaIds ?? [],
+        },
+        { memberAreaIds, managedAreaIds },
+      )
+      const roleToSave = rolDestino === 'admin' ? 'admin' : 'user'
+      const managedToSave = roleToSave === 'admin' ? managedAreaIds : []
       const input: PendingUserSetupInput = {
         email,
-        role,
-        managedAreaIds: role === 'admin' ? managedAreaIds : [],
-        memberAreaIds,
-        permissions,
+        role: roleToSave,
+        managedAreaIds: managedToSave,
+        memberAreaIds: [...new Set([...memberAreaIds, ...managedToSave])],
+        permissions: permisosParaGuardar(permissions),
         boardAccess: selectedBoardIds.map((boardFolderId) => ({
           boardFolderId,
           boardName: boardNameById.get(boardFolderId),
@@ -185,146 +168,107 @@ function PendingSetupDrawer({ initial, onClose, onSaved }: PendingSetupDrawerPro
         </header>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="app-drawer-scroll space-y-5 px-6 py-5">
-            <div>
-              <label htmlFor="pending-email" className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-gray-300">
-                Email
-              </label>
+          <div className="app-drawer-scroll space-y-6 px-6 py-5">
+            <SeccionFicha icono={Mail} titulo="Email">
+              <p className="text-xs text-neutral-500 dark:text-gray-400">
+                Se aplica sola cuando esa persona entra por primera vez.
+              </p>
               <input
                 id="pending-email"
                 type="email"
                 required
                 disabled={Boolean(initial)}
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="input-brand-focus w-full rounded-lg border border-neutral-300 px-3 py-2.5 text-sm disabled:bg-neutral-100 dark:border-zinc-700 dark:bg-zinc-900 dark:disabled:bg-zinc-800"
+                onChange={(event) => setEmail(event.target.value)}
+                aria-label="Email"
+                className="input-brand-focus w-full min-w-0 rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm disabled:bg-neutral-100 dark:border-zinc-700 dark:bg-zinc-900 dark:disabled:bg-zinc-800"
                 placeholder="persona@bacarsa.com.ar"
               />
-              <p className="mt-1.5 text-xs text-neutral-400">
-                Se aplica automáticamente cuando esa persona crea su perfil por primera vez.
-              </p>
-            </div>
+            </SeccionFicha>
 
-            <div>
-              <p className="mb-2 text-sm font-semibold text-neutral-900 dark:text-gray-100">Rol</p>
-              <div className="flex gap-2">
-                {(['user', 'admin'] as const).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => setRole(option)}
-                    className={`rounded-lg border px-3 py-2 text-sm font-medium ${
-                      role === option
-                        ? 'border-brand-primary bg-brand-primary/10 text-brand-primary'
-                        : 'border-neutral-300 text-neutral-600 dark:border-zinc-700 dark:text-gray-400'
-                    }`}
-                  >
-                    {option === 'admin' ? 'Admin de área' : 'Usuario'}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <SeccionAreas
+              areas={areas}
+              cargando={loadingAreas}
+              rolEsAdmin={role === 'admin'}
+              miembroIds={memberAreaIds}
+              jefeIds={managedAreaIds}
+              motivo=""
+              mostrarMotivo={false}
+              puedeEditarMiembro
+              puedeEditarJefe
+              esSuperAdmin={false}
+              puedeAsignarRol
+              onMiembro={setMemberAreaIds}
+              onJefe={(ids) => {
+                setManagedAreaIds(ids)
+                setRole(ids.length > 0 ? 'admin' : 'user')
+              }}
+              onMotivo={() => undefined}
+            />
 
-            {loading ? (
-              <p className="text-sm text-neutral-500">Cargando áreas y tableros…</p>
-            ) : (
-              <>
-                {role === 'admin' && (
-                  <div>
-                    <p className="mb-2 text-sm font-semibold text-neutral-900 dark:text-gray-100">
-                      Áreas que gobierna
-                    </p>
-                    <div className="space-y-1 rounded-lg border border-neutral-200 p-2 dark:border-zinc-800">
-                      {areas.map((area) => (
-                        <label key={area.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-50 dark:hover:bg-zinc-950">
-                          <input
-                            type="checkbox"
-                            checked={managedAreaIds.includes(area.id!)}
-                            onChange={() => toggleManagedArea(area.id!)}
-                          />
-                          <span className="text-sm">{area.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            <SeccionModulos
+              permissions={permissions}
+              puedeEditar
+              esSuperAdmin={false}
+              mostrarResumenFinanzas={false}
+              ayuda="Lo que va a poder abrir cuando entre."
+              onToggle={(clave, valor) =>
+                setPermissions((prev) => ({ ...prev, [clave]: valor }))
+              }
+            />
 
-                <div>
-                  <p className="mb-2 text-sm font-semibold text-neutral-900 dark:text-gray-100">
-                    Áreas de pertenencia
-                  </p>
+            <SeccionFinanzas
+              permissions={permissions}
+              puedeEditar
+              incluirPersonalizado={false}
+              ayuda="Elegí qué puede hacer en Finanzas."
+              onPermisos={setPermissions}
+            />
+
+            {(loadingBoards || boards.length > 0) && (
+              <SeccionFicha icono={LayoutDashboard} titulo="Acceso a tableros">
+                <p className="text-xs text-neutral-500 dark:text-gray-400">
+                  Los tableros a los que va a entrar.
+                </p>
+                {loadingBoards ? (
+                  <p className="text-sm text-neutral-500 dark:text-gray-400">Cargando tableros…</p>
+                ) : (
                   <div className="space-y-1 rounded-lg border border-neutral-200 p-2 dark:border-zinc-800">
-                    {areas.map((area) => (
-                      <label key={`member-${area.id}`} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-50 dark:hover:bg-zinc-950">
+                    {boards.map((board) => (
+                      <label key={board.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-50 dark:hover:bg-zinc-950">
                         <input
                           type="checkbox"
-                          checked={memberAreaIds.includes(area.id!)}
-                          onChange={() => toggleMemberArea(area.id!)}
+                          checked={selectedBoardIds.includes(board.id)}
+                          onChange={() => toggleBoard(board.id)}
                         />
-                        <span className="text-sm">{area.name}</span>
+                        <span className="text-sm">{board.name}</span>
                       </label>
                     ))}
                   </div>
-                </div>
-
-                <div>
-                  <p className="mb-2 text-sm font-semibold text-neutral-900 dark:text-gray-100">Permisos de módulos</p>
-                  <div className="space-y-2">
-                    {PERMISSION_FIELDS.map((field) => (
-                      <PermissionSwitch
-                        key={field.key}
-                        checked={permissions[field.key]}
-                        onChange={(value) =>
-                          setPermissions((prev) => ({ ...prev, [field.key]: value }))
-                        }
-                        label={field.label}
-                        description={field.description}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {boards.length > 0 && (
-                  <div>
-                    <p className="mb-2 text-sm font-semibold text-neutral-900 dark:text-gray-100">
-                      Acceso a tableros
-                    </p>
-                    <div className="space-y-1 rounded-lg border border-neutral-200 p-2 dark:border-zinc-800">
-                      {boards.map((board) => (
-                        <label key={board.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-neutral-50 dark:hover:bg-zinc-950">
-                          <input
-                            type="checkbox"
-                            checked={selectedBoardIds.includes(board.id)}
-                            onChange={() => toggleBoard(board.id)}
-                          />
-                          <span className="text-sm">{board.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
                 )}
-              </>
+              </SeccionFicha>
             )}
 
-            <div>
-              <label htmlFor="pending-note" className="mb-1.5 block text-sm font-medium text-neutral-700 dark:text-gray-300">
-                Nota interna (opcional)
-              </label>
+            <SeccionFicha icono={StickyNote} titulo="Nota interna">
+              <p className="text-xs text-neutral-500 dark:text-gray-400">
+                Solo la ven quienes administran. La persona no la ve.
+              </p>
               <textarea
                 id="pending-note"
                 rows={2}
                 value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="input-brand-focus w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                onChange={(event) => setNote(event.target.value)}
+                aria-label="Nota interna"
+                className="input-brand-focus w-full min-w-0 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
               />
-            </div>
+            </SeccionFicha>
           </div>
 
           <footer className="app-drawer-footer flex gap-3 px-6 py-4">
             <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-neutral-300 px-4 py-2.5 text-sm font-medium dark:border-zinc-700">
               Cancelar
             </button>
-            <button type="submit" disabled={saving || loading} className="btn-primary flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-60">
+            <button type="submit" disabled={saving} className="btn-primary flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold disabled:opacity-60">
               {saving ? 'Guardando…' : 'Guardar'}
             </button>
           </footer>
@@ -385,7 +329,7 @@ export function PendingUserSetupPanel() {
             Configuración pendiente
           </h2>
           <p className="mt-1 max-w-2xl text-sm text-neutral-500 dark:text-gray-400">
-            Definí áreas, permisos y tableros para personas que todavía no iniciaron sesión.
+            Definí áreas, qué puede usar y tableros para personas que todavía no iniciaron sesión.
             Al crear su perfil por primera vez, el sistema aplica esta configuración automáticamente.
           </p>
         </div>
@@ -476,6 +420,7 @@ export function PendingUserSetupPanel() {
 
       {drawer !== null && (
         <PendingSetupDrawer
+          key={drawer === 'new' ? 'new' : drawer.email}
           initial={drawer === 'new' ? null : drawer}
           onClose={() => setDrawer(null)}
           onSaved={() => void load()}

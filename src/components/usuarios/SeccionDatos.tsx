@@ -12,13 +12,11 @@ export function SeccionDatos({
   rol,
   areas,
   cargandoAreas,
-  puedeEditarRol,
   puedeEditarNacimiento,
   esSuperAdmin,
   onNombre,
   onDepartamento,
   onNacimiento,
-  onRol,
 }: {
   nombre: string
   email: string
@@ -27,13 +25,11 @@ export function SeccionDatos({
   rol: UserRole
   areas: GoverningArea[]
   cargandoAreas: boolean
-  puedeEditarRol: boolean
   puedeEditarNacimiento: boolean
   esSuperAdmin: boolean
   onNombre: (valor: string) => void
   onDepartamento: (valor: string) => void
   onNacimiento: (valor: string) => void
-  onRol: (rol: 'admin' | 'user') => void
 }) {
   const opciones = opcionesDepartamento(areas, departamento)
 
@@ -100,34 +96,17 @@ export function SeccionDatos({
         </div>
       )}
 
-      <div>
-        <p className="mb-1.5 text-sm font-medium text-neutral-700 dark:text-gray-300">Rol</p>
-        {puedeEditarRol && !esSuperAdmin ? (
-          <>
-            <select
-              id="ficha-rol"
-              value={rol === 'admin' ? 'admin' : 'user'}
-              onChange={(event) => onRol(event.target.value as 'admin' | 'user')}
-              className="input-brand-focus w-full min-w-0 rounded-lg border border-neutral-300 bg-white px-3 py-2.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-            >
-              <option value="user">Usuario</option>
-              <option value="admin">Administrador de área</option>
-            </select>
-            <p className="mt-1.5 text-xs text-neutral-500 dark:text-gray-400">
-              Super admin no se asigna desde acá.
-            </p>
-          </>
-        ) : (
+      {esSuperAdmin && (
+        <div>
+          <p className="mb-1.5 text-sm font-medium text-neutral-700 dark:text-gray-300">Rol</p>
           <div className="space-y-1.5">
             <EtiquetaRol rol={rol} />
             <p className="text-xs text-neutral-500 dark:text-gray-400">
-              {esSuperAdmin
-                ? 'Este rol no se cambia desde acá.'
-                : 'Solo un super admin puede cambiar el rol.'}
+              Este rol no se cambia desde acá.
             </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </SeccionFicha>
   )
 }

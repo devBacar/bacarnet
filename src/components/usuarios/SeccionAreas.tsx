@@ -49,11 +49,17 @@ export function SeccionAreas({
   const ocupados = new Set(chips.map((chip) => chip.id))
   const disponibles = areas.filter((area) => area.id && !ocupados.has(area.id))
 
+  const sumarMiembro = (id: string) => {
+    if (!puedeEditarMiembro || miembroIds.includes(id)) return
+    onMiembro([...miembroIds, id])
+  }
+
   const agregar = (comoJefe: boolean) => {
     if (!areaNueva) return
     if (comoJefe) {
       if (!puedeEditarJefe) return
       if (!jefeIds.includes(areaNueva)) onJefe([...jefeIds, areaNueva])
+      sumarMiembro(areaNueva)
     } else if (puedeEditarMiembro && !miembroIds.includes(areaNueva)) {
       onMiembro([...miembroIds, areaNueva])
     }
@@ -104,6 +110,7 @@ export function SeccionAreas({
                       type="button"
                       onClick={() => {
                         if (!jefeIds.includes(chip.id)) onJefe([...jefeIds, chip.id])
+                        sumarMiembro(chip.id)
                       }}
                       className="text-xs font-medium text-brand-primary hover:underline"
                     >
@@ -118,11 +125,6 @@ export function SeccionAreas({
           {!puedeAsignarRol && (rolEsAdmin || jefeIds.length > 0) && (
             <p className="text-xs text-neutral-500 dark:text-gray-400">
               Solo un super admin puede cambiar quién es jefe de un área.
-            </p>
-          )}
-          {puedeAsignarRol && !rolEsAdmin && (
-            <p className="text-xs text-neutral-500 dark:text-gray-400">
-              Para ser jefe de un área, el rol tiene que ser Administrador de área.
             </p>
           )}
 

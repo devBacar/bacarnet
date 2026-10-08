@@ -5,6 +5,7 @@ import {
   isAccountRejected,
   isExternalAccount,
   type UserProfile,
+  type UserRole,
 } from '../../services/userService'
 import {
   PERFILES_FINANZAS,
@@ -146,6 +147,28 @@ export function resumenFinanzas(flags: FlagsPermisosFinanzas): string {
   if (partes.length === 0) return 'No entra a Finanzas.'
   const linea = partes.join(' · ')
   return `${linea.charAt(0).toUpperCase()}${linea.slice(1)}.`
+}
+
+function mismasAreas(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const ordenA = [...a].sort()
+  const ordenB = [...b].sort()
+  return ordenA.every((valor, indice) => valor === ordenB[indice])
+}
+
+/**
+ * El rol solo se recalcula cuando se toca quién es jefe: jefe de al menos un área es admin;
+ * si no, usuario. Cambiar solo las áreas donde trabaja conserva el rol guardado
+ * (ni un admin sin jefatura baja a usuario, ni un usuario con jefaturas viejas guardadas sube a admin).
+ */
+export function rolSegunAreas(
+  rolGuardado: UserRole,
+  antes: { memberAreaIds: string[]; managedAreaIds: string[] },
+  ahora: { memberAreaIds: string[]; managedAreaIds: string[] },
+): UserRole {
+  if (rolGuardado === 'super_admin') return 'super_admin'
+  if (mismasAreas(antes.managedAreaIds, ahora.managedAreaIds)) return rolGuardado
+  return ahora.managedAreaIds.length > 0 ? 'admin' : 'user'
 }
 
 export function nombresPorId(areas: GoverningArea[]): Map<string, string> {

@@ -14,6 +14,7 @@ import {
 import { patchUserActionGrants } from '../../services/usersApi'
 import { isValidReason } from '../../utils/reasonValidation'
 import { apagarFinanzasSinVista, flagsFinanzasDe } from '../finanzas/permisosFinanzas'
+import { rolSegunAreas } from './util'
 
 const CLAVES_PERMISO: (keyof UserPermissions)[] = [
   'view_directory',
@@ -147,8 +148,14 @@ export function fichaTieneCambios(
   if (base.role === 'super_admin') return false
   if (!arraysEqual(draft.memberAreaIds, base.memberAreaIds)) return true
   if (!opciones.puedeAsignarRol) return false
-  if (rolAsignable(draft.role) !== rolAsignable(base.role)) return true
-  if (!arraysEqual(jefesEfectivos(draft), jefesEfectivosDe(base.role, base.managedAreaIds))) {
+  const rolDestino = rolSegunAreas(base.role, base, draft)
+  if (rolAsignable(rolDestino) !== rolAsignable(base.role)) return true
+  if (
+    !arraysEqual(
+      jefesEfectivosDe(rolDestino, draft.managedAreaIds),
+      jefesEfectivosDe(base.role, base.managedAreaIds),
+    )
+  ) {
     return true
   }
   if (!permisosIguales(draft.permissions, base.permissions)) return true
@@ -164,7 +171,7 @@ export function motivoAreasObligatorio(
   if (!arraysEqual(draft.memberAreaIds, base.memberAreaIds)) return true
   if (!opciones.puedeAsignarRol) return false
   const rolBase = rolAsignable(base.role)
-  const rolDraft = rolAsignable(draft.role)
+  const rolDraft = rolAsignable(rolSegunAreas(base.role, base, draft))
   if (rolBase === 'admin' && rolDraft === 'user' && base.managedAreaIds.length > 0) return true
   return rolDraft === 'admin' && !arraysEqual(draft.managedAreaIds, base.managedAreaIds)
 }
@@ -232,7 +239,7 @@ export async function guardarFicha(
 
   if (actual.role !== 'super_admin' && opciones.puedeAsignarRol) {
     const rolBase = rolAsignable(actual.role)
-    const rolDraft = rolAsignable(draft.role)
+    const rolDraft = rolAsignable(rolSegunAreas(actual.role, actual, draft))
     const cambiaRol = rolDraft !== rolBase
     const cambianJefes = !arraysEqual(draft.managedAreaIds, actual.managedAreaIds)
     const motivo = draft.areasReason.trim()
@@ -332,10 +339,6 @@ export async function guardarFicha(
     base: actual,
     grantOps: ops,
   }
-}
-
-function jefesEfectivos(draft: BorradorFicha): string[] {
-  return jefesEfectivosDe(draft.role, draft.managedAreaIds)
 }
 
 function jefesEfectivosDe(role: UserRole, ids: string[]): string[] {

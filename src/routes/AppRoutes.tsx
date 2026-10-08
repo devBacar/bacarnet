@@ -40,6 +40,7 @@ import {
   FinanzasLayout,
   FinanzasIndexRedirect,
   RrhhHorasExtraPage,
+  TableroFinanzasPage,
 } from '../pages'
 import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
 import { ProtectedRoute } from './ProtectedRoute'
@@ -115,6 +116,8 @@ export function AppRoutes() {
               <Route path="tableros" element={<BoardList />} />
               {/* Tablero React de RRHH: el acceso lo controla la API (mismo esquema que los demás tableros). */}
               <Route path="tableros/rrhh" element={<RrhhHorasExtraPage />} />
+              {/* Tablero React de Finanzas: el acceso lo controla la API (mismo esquema que los demás tableros). */}
+              <Route path="tableros/finanzas" element={<TableroFinanzasPage />} />
             </Route>
 
             <Route path="tableros/desarrollo-proyectos" element={<DesarrolloProyectosBoard />} />

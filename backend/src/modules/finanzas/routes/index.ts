@@ -13,6 +13,7 @@ import { finanzasCajaDiaRouter } from '../hoy/routes/caja-dia.routes.js'
 import { finanzasCompromisosMesRouter } from '../hoy/routes/compromisos-mes.routes.js'
 import { finanzasExtractosRouter } from '../extractos/routes/extractos.routes.js'
 import { finanzasChequesRouter } from '../cheques/routes/cheques.routes.js'
+import { finanzasTableroRouter } from '../tablero/routes/tablero.routes.js'
 
 export const finanzasRouter = Router()
 
@@ -30,3 +31,4 @@ finanzasRouter.use('/reglas-categorizacion', finanzasReglasCategorizacionRouter)
 finanzasRouter.use('/movimientos', finanzasMovimientosRouter)
 finanzasRouter.use('/extractos', finanzasExtractosRouter)
 finanzasRouter.use('/cheques', finanzasChequesRouter)
+finanzasRouter.use('/tablero', finanzasTableroRouter)

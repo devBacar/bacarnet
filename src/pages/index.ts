@@ -38,6 +38,7 @@ export {
   CajasWorkspace as FinanzasCajaChicaPage,
 } from './finanzas/CajasWorkspace'
 export { FinanzasChequesPage } from './finanzas/ChequesPage'
+export { FinanzasVientriPage } from './finanzas/VientriPage'
 export { FinanzasIndexRedirect } from './finanzas/FinanzasIndexRedirect'
 export { RrhhHorasExtraPage } from './rrhh/HorasExtraPage'
 export { TableroFinanzasPage } from './tablero-finanzas/TableroFinanzasPage'

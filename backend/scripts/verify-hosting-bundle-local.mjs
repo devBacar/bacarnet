@@ -1,6 +1,7 @@
 /**
  * Obligatorio ANTES de `firebase deploy --only hosting:bacarnet`.
- * Falla si el bundle en dist/ incluye URLs de API local (p. ej. VITE_API_BASE_URL de E2E).
+ * Falla si el bundle en dist/ incluye URLs de API local (p. ej. VITE_API_BASE_URL de E2E)
+ * o si NO tiene la configuración de Firebase (build hecho sin .env.local: nadie podría iniciar sesión).
  *
  *   node backend/scripts/verify-hosting-bundle-local.mjs
  */
@@ -44,6 +45,16 @@ function main() {
     }
   }
 
+  const conConfig = jsFiles.some((file) => {
+    const text = readFileSync(resolve(ASSETS_DIR, file), 'utf8')
+    return /AIza[0-9A-Za-z_-]{30,}/.test(text) && text.includes('bacar-web')
+  })
+  if (!conConfig) {
+    console.error('FAIL  El bundle no tiene la configuración de Firebase (VITE_FIREBASE_*).')
+    console.error('      Falta .env.local en la raíz del repo: no despliegues este build.')
+    process.exit(1)
+  }
+
   if (failed) {
     console.error('')
     console.error('Revisá .env.local / .env.development.local: no debe quedar VITE_API_BASE_URL apuntando a localhost.')
@@ -51,7 +62,7 @@ function main() {
     process.exit(1)
   }
 
-  console.log(`OK  ${jsFiles.length} bundle(s) en dist/assets sin URLs locales de API`)
+  console.log(`OK  ${jsFiles.length} bundle(s) en dist/assets sin URLs locales de API y con configuración de Firebase`)
   for (const file of jsFiles) {
     console.log(`    - ${file}`)
   }

@@ -37,6 +37,7 @@ import {
   FinanzasExtractosPage,
   FinanzasCajasPage,
   FinanzasChequesPage,
+  FinanzasVientriPage,
   FinanzasLayout,
   FinanzasIndexRedirect,
   RrhhHorasExtraPage,
@@ -95,6 +96,7 @@ export function AppRoutes() {
                   <Route path="movimientos" element={<FinanzasMovimientosPage />} />
                   <Route path="extractos" element={<FinanzasExtractosPage />} />
                   <Route path="cheques" element={<FinanzasChequesPage />} />
+                  <Route path="vientri" element={<FinanzasVientriPage />} />
                 </Route>
                 <Route path="cajas" element={<FinanzasCajasPage />} />
                 <Route path="cajachica" element={<Navigate to="/finanzas/cajas" replace />} />

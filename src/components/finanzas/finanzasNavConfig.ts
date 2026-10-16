@@ -61,6 +61,12 @@ export const FINANZAS_NAV_ITEMS: FinanzasNavItem[] = [
     enabled: true,
     ayuda: 'La cartera, los cheques emitidos y los endosados. Acá queda el cheque que usaste para pagar.',
   },
+  {
+    to: '/finanzas/vientri',
+    label: 'Vientri',
+    enabled: true,
+    ayuda: 'Lo que se cargó en Vientri: cheques y facturas pendientes. Solo para ver; se corrige en Vientri.',
+  },
   // Fases futuras — habilitar cuando exista la ruta:
   // { to: '/finanzas/creditos', label: 'Créditos', enabled: false },
 ]

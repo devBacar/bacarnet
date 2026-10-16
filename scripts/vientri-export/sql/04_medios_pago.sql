@@ -15,4 +15,4 @@ FROM PGODET d
 WHERE (@desde IS NOT NULL AND d.FECSYS > @desde)
    OR (@desde IS NULL AND EXISTS (SELECT 1 FROM CMP c
                                   WHERE c.ID = d.IDCMP AND c.IDPER_EMPRESA = 1
-                                    AND (c.FEC_CMP >= '20250101' OR c.ABIERTO = 1)));
+                                    AND (c.FEC_CMP >= '20250101' OR c.ABIERTO = 1 OR c.IMPORTEPENDIENTE <> 0)));

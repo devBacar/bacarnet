@@ -7,9 +7,9 @@ function carpeta(overrides: Record<string, string> = {}): Map<string, string> {
     'personas.csv': 'vientri_id;nombre;cuit;es_cliente;es_proveedor;baja\n1;EMPRESA PROPIA;;0;0;0\n50;Cliente Uno;;1;0;0\n60;Proveedor Dos;;0;1;0\n',
     'comprobantes.csv':
       'vientri_id;id_tipo;nom_tipo;letra;punto_venta;numero;id_persona;fecha;fecha_vto;total;importe_pendiente;abierto;id_divisa;baja\n' +
-      '10;1;FAC;A;1;123;60;2026-10-01;2026-10-31;1000.00;400.00;1;1;0\n' +
-      '11;2;FAV;A;2;55;50;2026-10-02;2026-11-02;2000.00;2000.00;1;1;0\n' +
-      '12;1;FAC;A;1;124;60;2026-10-01;2026-10-31;300.00;0.00;0;1;0\n',
+      '10;12;FCG;A;1;123;60;2026-10-01;2026-10-31;1000.00;400.00;0;1;0\n' +
+      '11;3;FAA;A;2;55;50;2026-10-02;2026-11-02;2000.00;2000.00;0;1;0\n' +
+      '12;34;RMT;R;1;124;60;2026-10-01;2026-10-31;300.00;0.00;1;1;0\n',
     'aplicaciones.csv': 'vientri_id;id_cmp;id_cmp_cancelado;importe;baja\n',
     'medios_pago.csv': 'vientri_id;id_cmp;id_medio;importe\n',
     'cheques.csv':
@@ -46,7 +46,8 @@ describe('procesarCarpeta', () => {
       ['cmp-10', 'pagar', 40000],
       ['cmp-11', 'cobrar', 200000],
     ])
-    expect(r.pendientes[0].comprobante).toBe('FAC A 0001-00000123')
+    expect(r.pendientes[0].comprobante).toBe('FCG A 0001-00000123')
+    expect(r.pendientes[0].tipo).toBe('Factura de proveedor')
   })
 
   it('frena si falta _control.csv (exportación incompleta)', () => {

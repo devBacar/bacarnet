@@ -1,7 +1,8 @@
 /**
  * Obligatorio ANTES de `firebase deploy --only hosting:bacarnet`.
  * Falla si el bundle en dist/ incluye URLs de API local (p. ej. VITE_API_BASE_URL de E2E)
- * o si NO tiene la configuración de Firebase (build hecho sin .env.local: nadie podría iniciar sesión).
+ * o si NO tiene la configuración de Firebase (build hecho sin .env.local: nadie podría iniciar sesión),
+ * o si los .env que usa Vite en modo producción dicen staging / emuladores / API externa.
  *
  *   node backend/scripts/verify-hosting-bundle-local.mjs
  */
@@ -21,7 +22,41 @@ const FORBIDDEN = [
   },
 ]
 
+/** Mismos archivos y orden que Vite en `vite build` (modo production); el último gana. */
+const ENV_FILES = ['.env', '.env.local', '.env.production', '.env.production.local']
+
+function leerEnvProduccion() {
+  const vars = {}
+  for (const nombre of ENV_FILES) {
+    const ruta = resolve(ROOT, nombre)
+    if (!existsSync(ruta)) continue
+    for (const linea of readFileSync(ruta, 'utf8').split(/\r?\n/)) {
+      const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(linea)
+      if (m) vars[m[1]] = m[2].replace(/^["']|["']$/g, '')
+    }
+  }
+  for (const k of Object.keys(vars)) if (process.env[k] !== undefined) vars[k] = process.env[k]
+  return vars
+}
+
+function verificarEntorno() {
+  const env = leerEnvProduccion()
+  const problemas = []
+  if ((env.VITE_APP_ENV ?? '').trim() === 'staging') problemas.push('VITE_APP_ENV=staging (entorno de pruebas)')
+  if ((env.VITE_USE_EMULATORS ?? '').trim() === 'true') problemas.push('VITE_USE_EMULATORS=true')
+  if ((env.VITE_API_BASE_URL ?? '').trim() !== '') problemas.push(`VITE_API_BASE_URL=${env.VITE_API_BASE_URL} (producción usa /api del mismo sitio)`)
+  const proyecto = (env.VITE_FIREBASE_PROJECT_ID ?? '').trim()
+  if (proyecto && proyecto !== 'bacar-web') problemas.push(`VITE_FIREBASE_PROJECT_ID=${proyecto} (producción es bacar-web)`)
+  if (problemas.length > 0) {
+    console.error('FAIL  La configuración del build NO es de producción:')
+    for (const p of problemas) console.error(`      - ${p}`)
+    console.error('      Desplegá solo desde una copia con la configuración de producción.')
+    process.exit(1)
+  }
+}
+
 function main() {
+  verificarEntorno()
   if (!existsSync(ASSETS_DIR)) {
     console.error('FAIL  No existe dist/assets/. Ejecutá npm run build (o npx vite build) primero.')
     process.exit(1)

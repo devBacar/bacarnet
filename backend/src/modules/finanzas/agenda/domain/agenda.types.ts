@@ -39,6 +39,8 @@ export interface VientriEnAgenda {
   totalCentavos: number
   fechaVencimiento: string
   fechaDatos: string
+  /** En Vientri no tiene vencimiento (es la fecha de la factura): Finanzas tiene que ponerle el día. */
+  sinFechaDePago?: boolean
 }
 
 export interface CompromisoPagoDocument {

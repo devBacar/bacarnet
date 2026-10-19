@@ -1,11 +1,12 @@
 /** Filtro de la Agenda por plazo: lo atrasado y lo de la semana, todo junto. */
-export type PlazoAgenda = 'semana' | 'atrasados' | 'hoy' | 'proximos' | 'todos'
+export type PlazoAgenda = 'semana' | 'atrasados' | 'hoy' | 'proximos' | 'sinFecha' | 'todos'
 
 export const PLAZOS: Array<{ id: PlazoAgenda; label: string }> = [
   { id: 'semana', label: 'Atrasados + próximos 7 días' },
   { id: 'atrasados', label: 'Atrasados' },
   { id: 'hoy', label: 'Hoy' },
   { id: 'proximos', label: 'Próximos 7 días' },
+  { id: 'sinFecha', label: 'Sin fecha de pago' },
   { id: 'todos', label: 'Todos' },
 ]
 
@@ -25,8 +26,15 @@ export function sumarDias(ymd: string, dias: number): string {
   return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10)
 }
 
-export function enPlazo(fechaIso: string | null | undefined, plazo: PlazoAgenda, hoy: string): boolean {
+export function enPlazo(
+  fechaIso: string | null | undefined,
+  plazo: PlazoAgenda,
+  hoy: string,
+  sinFecha = false,
+): boolean {
   if (plazo === 'todos') return true
+  if (plazo === 'sinFecha') return sinFecha
+  if (sinFecha) return false
   if (!fechaIso) return plazo === 'atrasados' || plazo === 'semana'
   const dia = diaArgentina(fechaIso)
   const limite = sumarDias(hoy, 7)
@@ -42,3 +50,10 @@ export function enPlazo(fechaIso: string | null | undefined, plazo: PlazoAgenda,
   }
 }
 
+/** Factura de Vientri sin vencimiento y sin fecha puesta por Finanzas. */
+export function esSinFecha(row: {
+  vientri?: { sinFechaDePago?: boolean; fechaVencimiento: string } | null
+  fecha: string | null | undefined
+}): boolean {
+  return row.vientri?.sinFechaDePago === true && !!row.fecha && diaArgentina(row.fecha) === row.vientri.fechaVencimiento
+}

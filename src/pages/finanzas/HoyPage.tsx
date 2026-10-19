@@ -177,6 +177,7 @@ export function FinanzasHoyPage() {
             <CobrosHoy
               ingresos={data.ingresos.filas}
               atrasados={data.prevision.cobrosAtrasados}
+              sinFecha={data.cobrosSinFecha}
               confirmandoId={confirmandoId}
               onConfirmar={(ingreso) => {
                 if (!ingreso.movimientoId) return
@@ -195,6 +196,37 @@ export function FinanzasHoyPage() {
               puedeOperar={permisos.agenda}
             />
           </div>
+          {(data.pagosAtrasados?.filas.length ?? 0) > 0 || (data.pagosSinFecha?.filas.length ?? 0) > 0 ? (
+            <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
+              {data.pagosAtrasados && data.pagosAtrasados.filas.length > 0 ? (
+                <PagosHoy
+                  pagos={data.pagosAtrasados}
+                  titulo={`Pagos atrasados (${data.pagosAtrasados.filas.length})`}
+                  vacio="No hay pagos atrasados."
+                  ayuda="Ya pasó su fecha de pago. No suman en los números de hoy. Si ya se pagaron, marcalos; si se van a pagar otro día, cambiales la fecha."
+                  tour="hoy-pagos-atrasados"
+                  onPagar={setPagoModo}
+                  onYaPague={setYaPague}
+                  onReprogramar={setReprogramarPago}
+                  puedeOperar={permisos.agenda}
+                />
+              ) : null}
+              {data.pagosSinFecha && data.pagosSinFecha.filas.length > 0 ? (
+                <PagosHoy
+                  pagos={data.pagosSinFecha}
+                  titulo={`Sin fecha de pago (${data.pagosSinFecha.filas.length})`}
+                  vacio="No hay facturas sin fecha."
+                  ayuda="Facturas de Vientri que no tienen vencimiento. Poneles el día en que las vas a pagar y pasan a ese día."
+                  tour="hoy-pagos-sin-fecha"
+                  sinFecha
+                  onPagar={setPagoModo}
+                  onYaPague={setYaPague}
+                  onReprogramar={setReprogramarPago}
+                  puedeOperar={permisos.agenda}
+                />
+              ) : null}
+            </div>
+          ) : null}
           <CompromisosSemana onPagar={pagarDesdePlanilla} />
           <div className="grid min-w-0 items-start gap-4 lg:grid-cols-3">
             <TarjetaBancos dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />

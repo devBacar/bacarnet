@@ -97,8 +97,14 @@ export interface HoyResponse {
   saludo: string
   fecha: string
   vacio: boolean
+  /** Solo lo que vence hoy. */
   pagos: { totalCentavos: number; filas: PagoHoy[] }
+  /** Vencimiento ya pasado; no suma en el día. */
+  pagosAtrasados?: { totalCentavos: number; filas: PagoHoy[] }
+  /** Facturas de Vientri sin vencimiento: hay que ponerles el día de pago. */
+  pagosSinFecha?: { totalCentavos: number; filas: PagoHoy[] }
   ingresos: { filas: IngresoHoy[] }
+  cobrosSinFecha?: { cantidad: number; totalCentavos: number }
   dia: {
     saldoInicialCentavos: number
     pagosCentavos: number

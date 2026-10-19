@@ -114,14 +114,33 @@ describe('hoy: pagos de hoy y vencidos', () => {
     )
 
     expect(vista.saludo).toBe('Buen día. Hoy es miércoles 30 de septiembre.')
-    expect(vista.pagos.filas.map((fila) => fila.id)).toEqual(['viejo', 'hoy'])
-    expect(vista.pagos.filas[0]).toMatchObject({
+    expect(vista.pagos.filas.map((fila) => fila.id)).toEqual(['hoy'])
+    expect(vista.pagos.filas[0]?.vencido).toBe(false)
+    expect(vista.pagos.totalCentavos).toBe(1_000)
+    // Lo atrasado va aparte y no suma en el día.
+    expect(vista.pagosAtrasados.filas.map((fila) => fila.id)).toEqual(['viejo'])
+    expect(vista.pagosAtrasados.filas[0]).toMatchObject({
       vencido: true,
       vencidoTexto: 'Venció hace 3 días',
       comoPagar: 'Por banco',
     })
-    expect(vista.pagos.filas[1]?.vencido).toBe(false)
-    expect(vista.pagos.totalCentavos).toBe(4_000)
+    expect(vista.pagosAtrasados.totalCentavos).toBe(3_000)
+    expect(vista.dia.pagosCentavos).toBe(1_000)
+  })
+
+  it('separa las facturas de Vientri sin fecha de pago', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [
+          compromiso({ id: 'sin', fechaVencimiento: '2026-01-10', montoCentavos: 2_000, sinFecha: true }),
+          compromiso({ id: 'hoy', fechaVencimiento: HOY, montoCentavos: 1_000 }),
+        ],
+      }),
+    )
+    expect(vista.pagos.filas.map((f) => f.id)).toEqual(['hoy'])
+    expect(vista.pagosAtrasados.filas).toEqual([])
+    expect(vista.pagosSinFecha.filas.map((f) => f.id)).toEqual(['sin'])
+    expect(vista.pagosSinFecha.filas[0]?.vencido).toBe(false)
   })
 })
 
@@ -272,7 +291,7 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(viernes?.quedaCentavos).toBe(10_000_000 - 1_000_000 - 8_000_000 + 2_000_000)
   })
 
-  it('lista cobros vencidos hace más de 3 días, del mayor al menor', () => {
+  it('lista todos los cobros atrasados, del mayor al menor', () => {
     const cobros = [
       cobro({ id: 'chico', fechaEsperada: '2026-09-20', montoCentavos: 100, clienteONombre: 'Chico' }),
       cobro({ id: 'grande', fechaEsperada: '2026-09-10', montoCentavos: 9_000, clienteONombre: 'Grande', email: 'a@b.com' }),
@@ -280,10 +299,10 @@ describe('hoy: semana, atrasos y firmas', () => {
       cobro({ id: 'cobrado', fechaEsperada: '2026-09-01', montoCentavos: 80_000, estado: 'confirmado' }),
     ]
     const lista = listarCobrosAtrasados(cobros, HOY, new Set())
-    expect(lista.map((row) => row.id)).toEqual(['grande', 'chico'])
-    expect(lista[0]).toMatchObject({ haceDias: 20, haceTexto: 'Hace 20 días', email: 'a@b.com' })
-    expect(lista[0]?.textoReclamo).toContain('Grande')
-    expect(lista[0]?.textoReclamo).toContain('Bacar')
+    expect(lista.map((row) => row.id)).toEqual(['recien', 'grande', 'chico'])
+    expect(lista[1]).toMatchObject({ haceDias: 20, haceTexto: 'Hace 20 días', email: 'a@b.com' })
+    expect(lista[1]?.textoReclamo).toContain('Grande')
+    expect(lista[1]?.textoReclamo).toContain('Bacar')
   })
 
   it('avisa transferencias que siguen en Falta firmar hace más de 2 horas', () => {

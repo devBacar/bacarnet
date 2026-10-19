@@ -198,19 +198,33 @@ export function FinanzasHoyPage() {
           </div>
           {(data.pagosAtrasados?.filas.length ?? 0) > 0 || (data.pagosSinFecha?.filas.length ?? 0) > 0 ? (
             <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
-              {data.pagosAtrasados && data.pagosAtrasados.filas.length > 0 ? (
-                <PagosHoy
-                  pagos={data.pagosAtrasados}
-                  titulo={`Pagos atrasados (${data.pagosAtrasados.filas.length})`}
-                  vacio="No hay pagos atrasados."
-                  ayuda="Ya pasó su fecha de pago. No suman en los números de hoy. Si ya se pagaron, marcalos; si se van a pagar otro día, cambiales la fecha."
-                  tour="hoy-pagos-atrasados"
-                  onPagar={setPagoModo}
-                  onYaPague={setYaPague}
-                  onReprogramar={setReprogramarPago}
-                  puedeOperar={permisos.agenda}
-                />
-              ) : null}
+              {[
+                { titulo: 'Pagos atrasados hasta 30 días', recientes: true },
+                { titulo: 'Atrasados de más de 30 días: revisar si ya se pagaron', recientes: false },
+              ].map(({ titulo, recientes }) => {
+                const filas = (data.pagosAtrasados?.filas ?? []).filter((f) =>
+                  recientes ? (f.diasAtraso ?? 0) <= 30 : (f.diasAtraso ?? 0) > 30,
+                )
+                if (filas.length === 0) return null
+                return (
+                  <PagosHoy
+                    key={titulo}
+                    pagos={{ filas, totalCentavos: filas.reduce((s, f) => s + f.montoCentavos, 0) }}
+                    titulo={`${titulo} (${filas.length})`}
+                    vacio="No hay pagos atrasados."
+                    ayuda={
+                      recientes
+                        ? 'Ya pasó su fecha de pago. No suman en los números de hoy. Si ya se pagaron, marcalos; si se van a pagar otro día, cambiales la fecha.'
+                        : 'Siguen con saldo en Vientri pero pasó más de un mes: lo normal es que ya estén pagados y falte cargarlo en Vientri. Revisalos con Administración.'
+                    }
+                    tour={recientes ? 'hoy-pagos-atrasados' : 'hoy-pagos-atrasados-viejos'}
+                    onPagar={setPagoModo}
+                    onYaPague={setYaPague}
+                    onReprogramar={setReprogramarPago}
+                    puedeOperar={permisos.agenda}
+                  />
+                )
+              })}
               {data.pagosSinFecha && data.pagosSinFecha.filas.length > 0 ? (
                 <PagosHoy
                   pagos={data.pagosSinFecha}

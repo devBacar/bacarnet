@@ -16,6 +16,8 @@ export interface CompromisoHoy {
   cuentaId: string | null
   /** Factura de Vientri sin vencimiento cargado (y Finanzas todavía no le puso fecha de pago). */
   sinFecha?: boolean
+  /** La fecha no viene de Vientri: se estimó según lo que tarda este proveedor en cobrar. */
+  estimada?: boolean
 }
 
 export interface CobroHoy {
@@ -31,6 +33,8 @@ export interface CobroHoy {
   contraparte: string | null
   /** Factura de Vientri sin vencimiento cargado (y Finanzas todavía no le puso fecha). */
   sinFecha?: boolean
+  /** La fecha no viene de Vientri: se estimó según lo que tarda este cliente en pagar. */
+  estimada?: boolean
 }
 
 export interface MovimientoHoy {
@@ -80,6 +84,8 @@ export interface PagoFilaHoy {
   urgencia: string
   vencido: boolean
   vencidoTexto: string | null
+  /** Días de atraso (0 si no está atrasado). */
+  diasAtraso?: number
   aQuien: string
   concepto: string
   montoCentavos: number
@@ -87,6 +93,7 @@ export interface PagoFilaHoy {
   medioPago: MedioPagoHoy
   proveedorONombre: string
   sugerenciasBanco: SugerenciaBanco[]
+  estimada?: boolean
 }
 
 export interface IngresoFilaHoy {
@@ -102,6 +109,7 @@ export interface IngresoFilaHoy {
   movimientoId: string | null
   cuentaId: string | null
   textoReclamo: string
+  estimada?: boolean
 }
 
 export interface BancoFilaHoy {
@@ -129,6 +137,7 @@ export interface CobroAtrasadoHoy {
   haceTexto: string
   email: string | null
   textoReclamo: string
+  estimada?: boolean
 }
 
 export interface FirmasHoy {

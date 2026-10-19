@@ -8,6 +8,7 @@
  * - Si la factura ya no tiene saldo en Vientri, se cierra (pagada / cobrada) "según Vientri".
  * - Si sigue con saldo pero quedó fuera de los 12 meses, no se toca.
  */
+import { plazoPara, type PlazoEstimado, type PlazosHistoricos } from './plazos.js'
 import type { VientriPendienteDoc } from './tipos.js'
 
 export const ACTOR_VIENTRI = 'vientri'
@@ -30,6 +31,10 @@ export interface DatosVientriAgenda {
     totalCentavos: number
     fechaVencimiento: string
     sinFechaDePago: boolean
+    /** La fecha de la Agenda no viene de Vientri: se calculó con lo que tarda esta persona en pagar o cobrar. */
+    fechaEstimada: boolean
+    plazoDias: number | null
+    plazoOrigen: 'historia' | 'general' | null
   }
 }
 
@@ -47,6 +52,7 @@ export interface ExistenteAgenda {
   nombre: string
   moneda: string | null
   sinFecha?: boolean | null
+  fechaEstimada?: boolean | null
 }
 
 /** Compromiso o cobro cargado a mano (sin origen Vientri), para avisar posibles duplicados. */
@@ -76,8 +82,19 @@ export function idAgendaVientri(clave: string): string {
   return `vientri-${clave}`
 }
 
-export function datosDesdePendiente(p: VientriPendienteDoc, fechaDatos: string): DatosVientriAgenda {
-  const fecha = (p.fechaVencimiento ?? p.fecha ?? fechaDatos).slice(0, 10)
+function sumarDias(ymd: string, dias: number): string {
+  const d = new Date(`${ymd.slice(0, 10)}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + dias)
+  return d.toISOString().slice(0, 10)
+}
+
+export function datosDesdePendiente(p: VientriPendienteDoc, fechaDatos: string, plazo?: PlazoEstimado): DatosVientriAgenda {
+  const fechaVientri = (p.fechaVencimiento ?? p.fecha ?? fechaDatos).slice(0, 10)
+  // Vientri no tiene vencimiento propio: el "vencimiento" es la misma fecha de la factura.
+  const sinFechaDePago = !p.fechaVencimiento || p.fechaVencimiento.slice(0, 10) === (p.fecha ?? '').slice(0, 10)
+  const estimada = sinFechaDePago && plazo !== undefined
+  // Sin vencimiento en Vientri, la fecha es la de la factura más lo que suele tardar esta persona.
+  const fecha = estimada ? sumarDias((p.fecha ?? fechaDatos).slice(0, 10), plazo.dias) : fechaVientri
   return {
     concepto: p.comprobante,
     nombre: p.persona?.nombre?.trim() || 'Sin nombre en Vientri',
@@ -92,8 +109,10 @@ export function datosDesdePendiente(p: VientriPendienteDoc, fechaDatos: string):
       cuit: p.persona?.cuit ?? null,
       totalCentavos: p.totalCentavos,
       fechaVencimiento: fecha,
-      // Vientri no tiene vencimiento propio: el "vencimiento" es la misma fecha de la factura.
-      sinFechaDePago: !p.fechaVencimiento || p.fechaVencimiento.slice(0, 10) === (p.fecha ?? '').slice(0, 10),
+      sinFechaDePago,
+      fechaEstimada: estimada,
+      plazoDias: estimada ? plazo.dias : null,
+      plazoOrigen: estimada ? plazo.origen : null,
     },
   }
 }
@@ -118,6 +137,8 @@ export function planAgenda(opts: {
   existentes: ExistenteAgenda[]
   fechaDatos: string
   manuales?: ManualAgenda[]
+  /** Plazos históricos para estimar la fecha de lo que no tiene vencimiento en Vientri. */
+  plazos?: PlazosHistoricos
 }): ResultadoPlanAgenda {
   const dia = (s: string) => Date.parse(`${s.slice(0, 10)}T12:00:00Z`) / 86_400_000
   const buscarDuplicado = (datos: DatosVientriAgenda): PosibleDuplicado | null => {
@@ -147,7 +168,7 @@ export function planAgenda(opts: {
     }
     const id = idAgendaVientri(p.clave)
     vistos.add(id)
-    const datos = datosDesdePendiente(p, opts.fechaDatos)
+    const datos = datosDesdePendiente(p, opts.fechaDatos, opts.plazos ? plazoPara(opts.plazos, opts.lado, p.persona?.vientriId) : undefined)
     const ex = existentes.get(id)
     if (!ex) {
       operaciones.push({ tipo: 'crear', id, datos, posibleDuplicado: buscarDuplicado(datos) })
@@ -167,7 +188,8 @@ export function planAgenda(opts: {
       ex.concepto !== datos.concepto ||
       ex.nombre !== datos.nombre ||
       (ex.moneda ?? 'ARS') !== datos.moneda ||
-      (ex.sinFecha ?? false) !== datos.vientri.sinFechaDePago
+      (ex.sinFecha ?? false) !== datos.vientri.sinFechaDePago ||
+      (ex.fechaEstimada ?? false) !== datos.vientri.fechaEstimada
     if (cambio) operaciones.push({ tipo: 'actualizar', id, datos, cambiarFecha })
   }
 

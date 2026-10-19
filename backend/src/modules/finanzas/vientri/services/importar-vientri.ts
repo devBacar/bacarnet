@@ -154,6 +154,7 @@ export async function importarVientri(opts: {
     todosLosPendientes: proc.pendientes,
     fechaDatos,
     escribir: agendaActiva && !simular,
+    plazos: proc.plazos,
   })
   const resumenFinal = { ...resumen, agenda: { activa: agendaActiva, ...agenda } }
 

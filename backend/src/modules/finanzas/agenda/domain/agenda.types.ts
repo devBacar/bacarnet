@@ -41,6 +41,10 @@ export interface VientriEnAgenda {
   fechaDatos: string
   /** En Vientri no tiene vencimiento (es la fecha de la factura): Finanzas tiene que ponerle el día. */
   sinFechaDePago?: boolean
+  /** La fecha no viene de Vientri: se estimó según lo que tarda esta persona en pagar o cobrar. */
+  fechaEstimada?: boolean
+  plazoDias?: number | null
+  plazoOrigen?: 'historia' | 'general' | null
 }
 
 export interface CompromisoPagoDocument {

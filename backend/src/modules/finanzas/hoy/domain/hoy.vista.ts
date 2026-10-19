@@ -154,6 +154,7 @@ function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[])
     urgencia: row.urgencia ? URGENCIA_LABEL[row.urgencia] : 'Normal',
     vencido: dias > 0,
     vencidoTexto: dias > 0 ? textoHaceDias(dias, true) : null,
+    diasAtraso: dias,
     aQuien: row.proveedorONombre,
     concepto: row.concepto,
     montoCentavos: row.montoCentavos,
@@ -161,6 +162,7 @@ function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[])
     medioPago: row.medioPago,
     proveedorONombre: row.proveedorONombre,
     sugerenciasBanco: sugerirDebitos(row.montoCentavos, movimientos, hoy, row.cuentaId),
+    ...(row.estimada ? { estimada: true } : {}),
   }
 }
 
@@ -178,11 +180,11 @@ export function seleccionarPagos(compromisos: CompromisoHoy[], hoy: string, movi
     .map((row) => filaPago(row, hoy, movimientos))
 }
 
-/** Pagos atrasados: vencimiento real ya pasado. Primero los más viejos. */
+/** Pagos atrasados: vencimiento ya pasado. Primero los más recientes. */
 export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
   return compromisos
     .filter((row) => compromisoAbierto(row.estado) && !row.sinFecha && row.fechaVencimiento < hoy && row.montoCentavos > 0)
-    .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento) || porUrgenciaYNombre(a, b))
+    .sort((a, b) => b.fechaVencimiento.localeCompare(a.fechaVencimiento) || porUrgenciaYNombre(a, b))
     .map((row) => filaPago(row, hoy, movimientos))
 }
 
@@ -226,6 +228,7 @@ export function seleccionarIngresos(
       movimientoId: match?.id ?? null,
       cuentaId: match?.cuentaId ?? null,
       textoReclamo: textoReclamo({ concepto, montoCentavos: row.montoCentavos }),
+      ...(row.estimada ? { estimada: true } : {}),
     }
   })
   return {
@@ -374,6 +377,7 @@ export function listarCobrosAtrasados(cobros: CobroHoy[], hoy: string, yaLlegado
         haceTexto: textoHaceDias(dias, false),
         email: row.email?.trim() || null,
         textoReclamo: textoReclamo({ concepto, montoCentavos: row.montoCentavos }),
+        ...(row.estimada ? { estimada: true } : {}),
       }
     })
 }

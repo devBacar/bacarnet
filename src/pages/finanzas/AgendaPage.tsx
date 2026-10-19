@@ -1,4 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { PlazoChips } from '../../components/finanzas/agenda/PlazoChips'
+import { diaArgentina, enPlazo, type PlazoAgenda } from '../../components/finanzas/agenda/plazoAgenda'
 import { Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -125,13 +127,24 @@ export function FinanzasAgendaPage() {
     enabled: Boolean(user) && tab === 'cobros',
   })
 
-  const compromisos = useMemo(
+  const [plazoPagos, setPlazoPagos] = useState<PlazoAgenda>('semana')
+  const [plazoCobros, setPlazoCobros] = useState<PlazoAgenda>('semana')
+  const hoy = diaArgentina(new Date())
+  const compromisosTodos = useMemo(
     () => filterCompromisosForVista(compromisosRaw, 'pendientes'),
     [compromisosRaw],
   )
-  const cobros = useMemo(
+  const compromisos = useMemo(
+    () => compromisosTodos.filter((r) => enPlazo(r.fechaVencimiento, plazoPagos, hoy)),
+    [compromisosTodos, plazoPagos, hoy],
+  )
+  const cobrosVista = useMemo(
     () => filterCobrosForVista(cobrosRaw, vistaCobros),
     [cobrosRaw, vistaCobros],
+  )
+  const cobros = useMemo(
+    () => (vistaCobros === 'esperados' ? cobrosVista.filter((r) => enPlazo(r.fechaEsperada, plazoCobros, hoy)) : cobrosVista),
+    [cobrosVista, vistaCobros, plazoCobros, hoy],
   )
 
   const { data: cuentasData } = useQuery({
@@ -226,6 +239,15 @@ export function FinanzasAgendaPage() {
           ) : loadingPagos ? (
             <LoadingBlock />
           ) : (
+            <>
+            <PlazoChips
+              rows={compromisosTodos}
+              fecha={(r) => r.fechaVencimiento}
+              moneda={(r) => (r.moneda === 'USD' ? 'USD' : 'ARS')}
+              plazo={plazoPagos}
+              onChange={setPlazoPagos}
+              hoy={hoy}
+            />
             <CompromisosTable
               rows={compromisos}
               vista="pendientes"
@@ -259,6 +281,7 @@ export function FinanzasAgendaPage() {
                 invalidate()
               }}
             />
+            </>
           )}
         </div>
       ) : (
@@ -274,6 +297,17 @@ export function FinanzasAgendaPage() {
           {loadingCobros ? (
             <LoadingBlock />
           ) : (
+            <>
+            {vistaCobros === 'esperados' ? (
+              <PlazoChips
+                rows={cobrosVista}
+                fecha={(r) => r.fechaEsperada}
+                moneda={(r) => (r.moneda === 'USD' ? 'USD' : 'ARS')}
+                plazo={plazoCobros}
+                onChange={setPlazoCobros}
+                hoy={hoy}
+              />
+            ) : null}
             <CobrosTable
               rows={cobros}
               vista={vistaCobros}
@@ -289,6 +323,7 @@ export function FinanzasAgendaPage() {
                 invalidate()
               }}
             />
+            </>
           )}
         </div>
       )}
@@ -448,7 +483,7 @@ function CompromisosTable({
               <th className="px-3 py-3 text-left font-medium">Concepto</th>
               <th className="px-3 py-3 text-left font-medium">Monto</th>
               <th className="px-3 py-3 text-left font-medium">
-                {vista === 'pagados' ? 'Pagado el' : 'Vencimiento'}
+                {vista === 'pagados' ? 'Pagado el' : 'Fecha de pago'}
               </th>
               {vista === 'pendientes' ? (
                 <>

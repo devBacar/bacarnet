@@ -70,6 +70,20 @@ describe('aplicarVentana', () => {
     )
     expect(r.cheques.find((c) => c.clave === 'a')?.revisar[0]).toContain('Vencido para depositar')
     expect(r.cheques.find((c) => c.clave === 'b')?.revisar).toEqual([])
+    expect(r.limpieza.map((c) => c.clave)).toEqual(['a'])
+  })
+
+  it('lista los cheques propios sin débito con la fecha de pago pasada hace más de 7 días', () => {
+    const r = aplicarVentana(
+      [
+        cheque({ clave: 'viejo', direccion: 'emitido', estado: 'pendiente_debito', fechaVencimiento: '2026-10-01' }),
+        cheque({ clave: 'reciente', direccion: 'emitido', estado: 'pendiente_debito', fechaVencimiento: '2026-10-15' }),
+      ],
+      [],
+      fechaDatos,
+    )
+    expect(r.cheques).toHaveLength(2)
+    expect(r.limpieza.map((c) => c.clave)).toEqual(['viejo'])
   })
 
   it('deja solo los compromisos que vencen desde hace 12 meses', () => {

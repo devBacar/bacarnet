@@ -43,6 +43,21 @@ describe('estadoDesdeChq', () => {
 })
 
 describe('armarCheques', () => {
+  it('descarta el estado 5 que tiene un gemelo con el mismo número, banco e importe', () => {
+    const r = armarCheques(
+      [
+        chq({ vientri_id: '10', numero: '00001234', id_estado: '5' }),
+        chq({ vientri_id: '11', numero: '00001234', id_estado: '8' }),
+        chq({ vientri_id: '12', numero: '00005678', id_estado: '5' }),
+      ],
+      [],
+      cat,
+    )
+    expect(r.cheques.map((c) => c.clave).sort()).toEqual(['chq-11', 'chq-12'])
+    expect(r.resumen.duplicadosEstado5).toBe(1)
+    expect(r.cheques.find((c) => c.clave === 'chq-12')?.estado).toBe('otro')
+  })
+
   it('separa emitidos y recibidos por el librador, no por la tabla', () => {
     const r = armarCheques(
       [chq({ vientri_id: '1' }), chq({ vientri_id: '2', numero: 'E-CHEQ 00000002', librador_es_bacar: '1', id_estado: '10' })],

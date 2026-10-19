@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Fragment, useState } from 'react'
 import { BotonTraerVientri } from '../../components/finanzas/BotonTraerVientri'
+import { DescargarLimpiezaVientri } from '../../components/finanzas/DescargarLimpiezaVientri'
 import { FranjaVientri } from '../../components/finanzas/FranjaVientri'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import {
@@ -74,6 +75,7 @@ export function FinanzasVientriPage() {
     <div className="text-base">
       <FranjaVientri estado={estadoQ.data} cargando={estadoQ.isLoading} />
       <BotonTraerVientri />
+      <DescargarLimpiezaVientri />
 
       <div className="mb-4 flex flex-wrap gap-2" role="tablist">
         {PESTANAS.map((p) => (

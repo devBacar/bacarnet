@@ -231,12 +231,13 @@ export const ingestarBackupSalarioRrhh = onSchedule(
 )
 
 /**
- * Vientri → Bacarnet Finanzas: SIS5 deja cada mañana (~05:15) un zip en la carpeta de Drive Bacarnet_Vientri.
- * Corre 06:30 a 10:30, una vez por hora. Idempotente: si el zip más nuevo ya se importó, no hace nada.
+ * Vientri → Bacarnet Finanzas: Vientri hace su backup ~08:00; el servidor lo copia 09:30 y SIS5 deja ~10:00 un zip
+ * en la carpeta de Drive Bacarnet_Vientri. Corre 10:30 a 12:30, una vez por hora. Idempotente: si el zip más nuevo
+ * ya se importó, no hace nada.
  */
 export const importarVientriDiario = onSchedule(
   {
-    schedule: '30 6-10 * * *',
+    schedule: '30 10-12 * * *',
     timeZone: 'America/Argentina/Buenos_Aires',
     timeoutSeconds: 540,
     memory: '1GiB',

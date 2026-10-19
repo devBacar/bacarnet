@@ -140,3 +140,19 @@ export async function traerVientriAhora(): Promise<ResultadoTraerVientri> {
   if (!res.ok) throw new Error(body.error ?? body.mensaje ?? 'No se pudieron traer los datos de Vientri')
   return body
 }
+
+export interface ChequeParaLimpiar {
+  clave: string
+  direccion: 'emitido' | 'recibido'
+  numero: string
+  bancoNombre: string | null
+  montoCentavos: number
+  fechaVencimiento: string | null
+  estadoVientri: string
+  librador: string | null
+  motivo: string
+}
+
+export function fetchLimpiezaVientri() {
+  return vientriFetch<{ fechaDatos: string | null; desde: string | null; items: ChequeParaLimpiar[] }>('/limpieza')
+}

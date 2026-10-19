@@ -148,3 +148,20 @@ export async function tomarCandado(quien: string): Promise<boolean> {
 export async function soltarCandado(): Promise<void> {
   await adminDb().collection(VIENTRI_ESTADO).doc(CANDADO_DOC).delete()
 }
+
+const LIMPIEZA_DOC = 'limpieza'
+
+/** Cheques viejos que en Vientri siguen abiertos: listado para que Administración los corrija. */
+export async function guardarLimpieza(data: { fechaDatos: string; desde: string; items: object[] }): Promise<void> {
+  await adminDb().collection(VIENTRI_ESTADO).doc(LIMPIEZA_DOC).set({ ...data, actualizadoAt: FieldValue.serverTimestamp() })
+}
+
+export async function leerLimpieza(): Promise<{ fechaDatos: string | null; desde: string | null; items: Array<Record<string, unknown>> }> {
+  const snap = await adminDb().collection(VIENTRI_ESTADO).doc(LIMPIEZA_DOC).get()
+  const d = snap.data() ?? {}
+  return {
+    fechaDatos: typeof d.fechaDatos === 'string' ? d.fechaDatos : null,
+    desde: typeof d.desde === 'string' ? d.desde : null,
+    items: Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>) : [],
+  }
+}

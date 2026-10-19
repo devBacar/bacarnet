@@ -5,11 +5,14 @@
  */
 import { CarpetaInvalidaError, procesarCarpeta } from '../domain/procesar.js'
 import { ARCHIVOS_REQUERIDOS } from '../domain/control.js'
+import { aplicarVentana } from '../domain/ventana.js'
 import {
   cerrarImportacion,
   contarColeccion,
   crearImportacion,
   guardarEstado,
+  guardarLimpieza,
+  leerEstado,
   sincronizarColeccion,
   VIENTRI_CHEQUES,
   VIENTRI_PENDIENTES,
@@ -62,16 +65,26 @@ export async function importarVientri(opts: {
     return { ok: false, importacionId: null, fechaDatos: null, mensaje, simulado: simular }
   }
 
+  // Solo lo que le sirve a Finanzas: últimos 12 meses (ver domain/ventana.ts).
+  const ventana = aplicarVentana(proc.cheques, proc.pendientes, proc.control.fechaDatos)
+  const cheques = ventana.cheques
+  const pendientes = ventana.pendientes
+
   const resumen = {
     personas: proc.personas.length,
-    cheques: proc.cheques.length,
-    chequesEmitidos: proc.cheques.filter((c) => c.direccion === 'emitido').length,
-    chequesRecibidos: proc.cheques.filter((c) => c.direccion === 'recibido').length,
-    chequesEnCartera: proc.cheques.filter((c) => c.estado === 'en_cartera').length,
-    chequesARevisar: proc.cheques.filter((c) => c.revisar.length > 0).length,
-    pendientesPagar: proc.pendientes.filter((p) => p.lado === 'pagar').length,
-    pendientesCobrar: proc.pendientes.filter((p) => p.lado === 'cobrar').length,
-    pendientesRevisar: proc.pendientes.filter((p) => p.lado === 'revisar').length,
+    desde: ventana.desde,
+    chequesEnExportacion: proc.cheques.length,
+    cheques: cheques.length,
+    chequesEmitidos: cheques.filter((c) => c.direccion === 'emitido').length,
+    chequesRecibidos: cheques.filter((c) => c.direccion === 'recibido').length,
+    chequesEnCartera: cheques.filter((c) => c.estado === 'en_cartera').length,
+    chequesARevisar: cheques.filter((c) => c.revisar.length > 0).length,
+    chequesFueraDeVentana: ventana.fuera.cheques,
+    chequesParaLimpiar: ventana.limpieza.length,
+    pendientesPagar: pendientes.filter((p) => p.lado === 'pagar').length,
+    pendientesCobrar: pendientes.filter((p) => p.lado === 'cobrar').length,
+    pendientesRevisar: pendientes.filter((p) => p.lado === 'revisar').length,
+    pendientesFueraDeVentana: ventana.fuera.pendientes,
     cruceCheques: proc.resumenCheques,
   }
 
@@ -88,13 +101,15 @@ export async function importarVientri(opts: {
   }
 
   if (!opts.forzar) {
-    const actuales = await contarColeccion(VIENTRI_CHEQUES)
-    if (actuales > 0 && proc.cheques.length < actuales * PROPORCION_MINIMA) {
+    // Se compara el total de la exportación (antes de filtrar) con el de la importación anterior.
+    const anterior = await leerEstado()
+    const previo = Number(anterior?.resumen?.chequesEnExportacion) || (await contarColeccion(VIENTRI_CHEQUES))
+    if (previo > 0 && proc.cheques.length < previo * PROPORCION_MINIMA) {
       return {
         ok: false,
         importacionId: null,
         fechaDatos: proc.control.fechaDatos,
-        mensaje: `La exportación trae ${proc.cheques.length} cheques y hoy hay ${actuales}: parece incompleta. No se importó.`,
+        mensaje: `La exportación trae ${proc.cheques.length} cheques y la anterior traía ${previo}: parece incompleta. No se importó.`,
         simulado: simular,
         resumen,
       }
@@ -123,17 +138,18 @@ export async function importarVientri(opts: {
   conteos.cheques = await sincronizarColeccion({
     ...comunes,
     coleccion: VIENTRI_CHEQUES,
-    docs: proc.cheques.map((c) => ({ id: c.clave, data: { ...c, conRevisar: c.revisar.length > 0 } })),
+    docs: cheques.map((c) => ({ id: c.clave, data: { ...c, conRevisar: c.revisar.length > 0 } })),
   })
   conteos.pendientes = await sincronizarColeccion({
     ...comunes,
     coleccion: VIENTRI_PENDIENTES,
-    docs: proc.pendientes.map((p) => ({ id: p.clave, data: { ...p, conRevisar: p.revisar.length > 0 } })),
+    docs: pendientes.map((p) => ({ id: p.clave, data: { ...p, conRevisar: p.revisar.length > 0 } })),
   })
 
   const mensaje = `Importado: ${resumen.cheques} cheques, ${resumen.pendientesPagar} a pagar, ${resumen.pendientesCobrar} a cobrar.`
   if (!simular) {
     await cerrarImportacion(importacionId, { ok: true, mensaje, resumen, conteos })
+    await guardarLimpieza({ fechaDatos, desde: ventana.desde, items: ventana.limpieza })
     await guardarEstado({
       fechaDatos,
       archivo: opts.archivo ?? null,

@@ -5,7 +5,7 @@ import { leerEstado } from './services/vientri.repository.js'
 
 const ACTOR_PROGRAMADO = 'system:vientri-diario'
 
-/** En la última corrida (12:30), si los datos tienen más de 30 horas se avisa (queda como error en los logs). */
+/** En la última corrida (08:30), si los datos tienen más de 30 horas se avisa (queda como error en los logs). */
 export const HORAS_MAXIMAS = 30
 
 /**
@@ -21,13 +21,13 @@ export async function runScheduledVientri(ahora: Date = new Date()): Promise<voi
   }
 
   const horaArgentina = (ahora.getUTCHours() + 21) % 24
-  if (horaArgentina < 12) return
+  if (horaArgentina < 8) return
   const estado = await leerEstado()
   const horas = estado?.fechaDatos ? horasDesdeFechaDatos(estado.fechaDatos, ahora) : Number.POSITIVE_INFINITY
   if (horas > HORAS_MAXIMAS) {
     logError(
       '[finanzas/vientri] los datos de Vientri están atrasados',
-      new Error(`Fecha de los datos: ${estado?.fechaDatos ?? 'ninguna'}. Revisar el backup de Vientri (~08:00) y las tareas del servidor (09:30) y de SIS5 (09:45).`),
+      new Error(`Fecha de los datos: ${estado?.fechaDatos ?? 'ninguna'}. Revisar las tareas del servidor (02:00) y de SIS5 (05:00).`),
     )
   }
 }

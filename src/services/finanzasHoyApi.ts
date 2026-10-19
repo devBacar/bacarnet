@@ -17,6 +17,7 @@ export interface PagoHoy {
   urgencia: string
   vencido: boolean
   vencidoTexto: string | null
+  diasAtraso?: number
   aQuien: string
   concepto: string
   montoCentavos: number

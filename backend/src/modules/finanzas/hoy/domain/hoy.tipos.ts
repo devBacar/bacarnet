@@ -84,6 +84,8 @@ export interface PagoFilaHoy {
   urgencia: string
   vencido: boolean
   vencidoTexto: string | null
+  /** Días de atraso (0 si no está atrasado). */
+  diasAtraso?: number
   aQuien: string
   concepto: string
   montoCentavos: number

@@ -154,6 +154,7 @@ function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[])
     urgencia: row.urgencia ? URGENCIA_LABEL[row.urgencia] : 'Normal',
     vencido: dias > 0,
     vencidoTexto: dias > 0 ? textoHaceDias(dias, true) : null,
+    diasAtraso: dias,
     aQuien: row.proveedorONombre,
     concepto: row.concepto,
     montoCentavos: row.montoCentavos,
@@ -179,11 +180,11 @@ export function seleccionarPagos(compromisos: CompromisoHoy[], hoy: string, movi
     .map((row) => filaPago(row, hoy, movimientos))
 }
 
-/** Pagos atrasados: vencimiento real ya pasado. Primero los más viejos. */
+/** Pagos atrasados: vencimiento ya pasado. Primero los más recientes. */
 export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
   return compromisos
     .filter((row) => compromisoAbierto(row.estado) && !row.sinFecha && row.fechaVencimiento < hoy && row.montoCentavos > 0)
-    .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento) || porUrgenciaYNombre(a, b))
+    .sort((a, b) => b.fechaVencimiento.localeCompare(a.fechaVencimiento) || porUrgenciaYNombre(a, b))
     .map((row) => filaPago(row, hoy, movimientos))
 }
 

@@ -230,5 +230,22 @@ export const ingestarBackupSalarioRrhh = onSchedule(
   },
 )
 
+/**
+ * Vientri → Bacarnet Finanzas: SIS5 deja cada mañana (~05:15) un zip en la carpeta de Drive Bacarnet_Vientri.
+ * Corre 06:30 a 10:30, una vez por hora. Idempotente: si el zip más nuevo ya se importó, no hace nada.
+ */
+export const importarVientriDiario = onSchedule(
+  {
+    schedule: '30 6-10 * * *',
+    timeZone: 'America/Argentina/Buenos_Aires',
+    timeoutSeconds: 540,
+    memory: '1GiB',
+  },
+  async () => {
+    const { runScheduledVientri } = await import('./modules/finanzas/vientri/scheduledVientri.js')
+    await runScheduledVientri()
+  },
+)
+
 // Trigger Firestore pendiente de IAM Eventarc en prod; pendingUserSetup usa POST /api/users/apply-pending-setup.
 // export { applyPendingUserSetup } from './triggers/onUserCreated.js'

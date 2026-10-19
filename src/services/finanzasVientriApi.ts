@@ -80,6 +80,7 @@ export interface Pagina<T> {
 
 export interface EstadoVientri {
   fechaDatos: string | null
+  archivo?: string | null
   importadoAt: string | null
   importacionId: string | null
   ok: boolean
@@ -117,4 +118,25 @@ export function fetchChequesVientri(f: { direccion: 'emitido' | 'recibido'; esta
 
 export function fetchPendientesVientri(f: { lado: 'pagar' | 'cobrar' | 'revisar'; q?: string; page?: number }) {
   return vientriFetch<Pagina<VientriPendiente>>(`/pendientes${qs(f)}`)
+}
+
+export interface ResultadoTraerVientri {
+  estado: 'importado' | 'sin_novedades' | 'sin_archivo' | 'ocupado' | 'error'
+  mensaje: string
+  fechaDatos: string | null
+}
+
+/** Trae la última copia de Vientri desde Drive (si hay una nueva). Pide permiso de cheques. */
+export async function traerVientriAhora(): Promise<ResultadoTraerVientri> {
+  const user = auth.currentUser
+  if (!user) throw new Error('No autenticado')
+  const token = await user.getIdToken()
+  const res = await fetch(resolveApiUrl('/api/finanzas/vientri/traer-ahora'), {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const body = (await res.json().catch(() => null)) as (ResultadoTraerVientri & { error?: string }) | null
+  if (!body) throw new Error('No se pudieron traer los datos de Vientri')
+  if (!res.ok) throw new Error(body.error ?? body.mensaje ?? 'No se pudieron traer los datos de Vientri')
+  return body
 }

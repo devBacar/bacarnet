@@ -39,6 +39,8 @@ export async function importarVientri(opts: {
   actor: string
   simular?: boolean
   forzar?: boolean
+  /** Nombre del zip de Drive, si vino de ahí: sirve para no importar dos veces el mismo. */
+  archivo?: string
 }): Promise<ResultadoImportacion> {
   const simular = opts.simular === true
   const textos = new Map<string, string>()
@@ -134,6 +136,7 @@ export async function importarVientri(opts: {
     await cerrarImportacion(importacionId, { ok: true, mensaje, resumen, conteos })
     await guardarEstado({
       fechaDatos,
+      archivo: opts.archivo ?? null,
       importadoAt: new Date(),
       importacionId,
       ok: true,

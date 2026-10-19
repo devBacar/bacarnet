@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Fragment, useState } from 'react'
+import { BotonTraerVientri } from '../../components/finanzas/BotonTraerVientri'
 import { FranjaVientri } from '../../components/finanzas/FranjaVientri'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import {
@@ -23,7 +24,7 @@ const PESTANAS: Array<{ id: Pestana; label: string }> = [
 ]
 
 const FILTROS_RECIBIDOS: Array<EstadoChequeVientri | ''> = ['en_cartera', 'depositado', 'vendido', 'entregado', 'rechazado', '']
-const FILTROS_EMITIDOS: Array<EstadoChequeVientri | ''> = ['pendiente_debito', 'debitado', 'rechazado', 'anulado', '']
+const FILTROS_EMITIDOS: Array<EstadoChequeVientri | ''> = ['pendiente_debito', 'debitado', 'en_cartera', 'rechazado', 'anulado', '']
 
 const pesos = (c: number) => formatMoneyCentavos(c, 'ARS')
 
@@ -72,6 +73,7 @@ export function FinanzasVientriPage() {
   return (
     <div className="text-base">
       <FranjaVientri estado={estadoQ.data} cargando={estadoQ.isLoading} />
+      <BotonTraerVientri />
 
       <div className="mb-4 flex flex-wrap gap-2" role="tablist">
         {PESTANAS.map((p) => (

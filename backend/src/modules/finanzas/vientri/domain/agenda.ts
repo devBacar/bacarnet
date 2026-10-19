@@ -29,6 +29,7 @@ export interface DatosVientriAgenda {
     cuit: string | null
     totalCentavos: number
     fechaVencimiento: string
+    sinFechaDePago: boolean
   }
 }
 
@@ -45,6 +46,7 @@ export interface ExistenteAgenda {
   concepto: string
   nombre: string
   moneda: string | null
+  sinFecha?: boolean | null
 }
 
 /** Compromiso o cobro cargado a mano (sin origen Vientri), para avisar posibles duplicados. */
@@ -82,7 +84,7 @@ export function datosDesdePendiente(p: VientriPendienteDoc, fechaDatos: string):
     montoCentavos: p.pendienteCentavos,
     fecha,
     moneda: p.moneda === 'US' || p.moneda === 'USD' || p.moneda === 'U$S' ? 'USD' : 'ARS',
-    grupo: p.tipo === 'IMP' ? 'Impositivo' : 'Proveedores',
+    grupo: /^IMP$|impuesto/i.test(p.tipo ?? '') ? 'Impositivo' : 'Proveedores',
     vientri: {
       clave: p.clave,
       comprobante: p.comprobante,
@@ -90,15 +92,21 @@ export function datosDesdePendiente(p: VientriPendienteDoc, fechaDatos: string):
       cuit: p.persona?.cuit ?? null,
       totalCentavos: p.totalCentavos,
       fechaVencimiento: fecha,
+      // Vientri no tiene vencimiento propio: el "vencimiento" es la misma fecha de la factura.
+      sinFechaDePago: !p.fechaVencimiento || p.fechaVencimiento.slice(0, 10) === (p.fecha ?? '').slice(0, 10),
     },
   }
 }
+
+/** Saldos menores a esto son restos de redondeo en Vientri ($0,01, $0,04...): no son pagos ni cobros. */
+export const RESIDUO_CENTAVOS = 100_00
 
 export interface ResultadoPlanAgenda {
   operaciones: OperacionAgenda[]
   posiblesDuplicados: number
   /** Notas de crédito u otros saldos a favor (negativos): no entran a la Agenda. */
   saldosNegativos: { cantidad: number; centavos: number }
+  residuos: number
 }
 
 export function planAgenda(opts: {
@@ -122,12 +130,19 @@ export function planAgenda(opts: {
   const operaciones: OperacionAgenda[] = []
   const vistos = new Set<string>()
   const saldosNegativos = { cantidad: 0, centavos: 0 }
+  let residuos = 0
+  const clavesResiduo = new Set<string>()
 
   for (const p of opts.enVentana) {
     if (p.lado !== opts.lado) continue
     if (p.pendienteCentavos <= 0) {
       saldosNegativos.cantidad += 1
       saldosNegativos.centavos += p.pendienteCentavos
+      continue
+    }
+    if (p.pendienteCentavos < RESIDUO_CENTAVOS) {
+      residuos += 1
+      clavesResiduo.add(p.clave)
       continue
     }
     const id = idAgendaVientri(p.clave)
@@ -151,17 +166,19 @@ export function planAgenda(opts: {
       ex.montoCentavos !== datos.montoCentavos ||
       ex.concepto !== datos.concepto ||
       ex.nombre !== datos.nombre ||
-      (ex.moneda ?? 'ARS') !== datos.moneda
+      (ex.moneda ?? 'ARS') !== datos.moneda ||
+      (ex.sinFecha ?? false) !== datos.vientri.sinFechaDePago
     if (cambio) operaciones.push({ tipo: 'actualizar', id, datos, cambiarFecha })
   }
 
   for (const ex of opts.existentes) {
     if (vistos.has(ex.id) || !ex.abierto) continue
     const clave = ex.id.replace(/^vientri-/, '')
-    if (opts.clavesConSaldo.has(clave)) continue // sigue debiéndose, solo quedó fuera de los 12 meses
+    // Sigue debiéndose y solo quedó fuera de los 12 meses: no se toca. Un resto de redondeo sí se cierra.
+    if (opts.clavesConSaldo.has(clave) && !clavesResiduo.has(clave)) continue
     operaciones.push({ tipo: 'cerrar', id: ex.id })
   }
 
   const posiblesDuplicados = operaciones.filter((o) => o.tipo === 'crear' && o.posibleDuplicado).length
-  return { operaciones, saldosNegativos, posiblesDuplicados }
+  return { operaciones, saldosNegativos, posiblesDuplicados, residuos }
 }

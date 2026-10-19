@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PlazoChips } from '../../components/finanzas/agenda/PlazoChips'
-import { diaArgentina, enPlazo, type PlazoAgenda } from '../../components/finanzas/agenda/plazoAgenda'
+import { diaArgentina, enPlazo, esSinFecha, type PlazoAgenda } from '../../components/finanzas/agenda/plazoAgenda'
 import { Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -135,7 +135,7 @@ export function FinanzasAgendaPage() {
     [compromisosRaw],
   )
   const compromisos = useMemo(
-    () => compromisosTodos.filter((r) => enPlazo(r.fechaVencimiento, plazoPagos, hoy)),
+    () => compromisosTodos.filter((r) => enPlazo(r.fechaVencimiento, plazoPagos, hoy, esSinFecha({ vientri: r.vientri, fecha: r.fechaVencimiento }))),
     [compromisosTodos, plazoPagos, hoy],
   )
   const cobrosVista = useMemo(
@@ -143,7 +143,7 @@ export function FinanzasAgendaPage() {
     [cobrosRaw, vistaCobros],
   )
   const cobros = useMemo(
-    () => (vistaCobros === 'esperados' ? cobrosVista.filter((r) => enPlazo(r.fechaEsperada, plazoCobros, hoy)) : cobrosVista),
+    () => (vistaCobros === 'esperados' ? cobrosVista.filter((r) => enPlazo(r.fechaEsperada, plazoCobros, hoy, esSinFecha({ vientri: r.vientri, fecha: r.fechaEsperada }))) : cobrosVista),
     [cobrosVista, vistaCobros, plazoCobros, hoy],
   )
 
@@ -243,6 +243,7 @@ export function FinanzasAgendaPage() {
             <PlazoChips
               rows={compromisosTodos}
               fecha={(r) => r.fechaVencimiento}
+              sinFecha={(r) => esSinFecha({ vientri: r.vientri, fecha: r.fechaVencimiento })}
               moneda={(r) => (r.moneda === 'USD' ? 'USD' : 'ARS')}
               plazo={plazoPagos}
               onChange={setPlazoPagos}
@@ -302,6 +303,7 @@ export function FinanzasAgendaPage() {
               <PlazoChips
                 rows={cobrosVista}
                 fecha={(r) => r.fechaEsperada}
+                sinFecha={(r) => esSinFecha({ vientri: r.vientri, fecha: r.fechaEsperada })}
                 moneda={(r) => (r.moneda === 'USD' ? 'USD' : 'ARS')}
                 plazo={plazoCobros}
                 onChange={setPlazoCobros}

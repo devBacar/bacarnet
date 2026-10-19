@@ -73,6 +73,7 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
     medioPago: medioDe(data.medioPago),
     estado: data.estado,
     cuentaId: data.cuentaId ?? null,
+    sinFecha: data.vientri?.sinFechaDePago === true && fechaVencimiento === data.vientri.fechaVencimiento,
   }
 }
 
@@ -92,6 +93,7 @@ function mapCobro(id: string, data: CobroEsperadoDocument): CobroHoy | null {
     cuit: textoOpcional(data, 'cuit'),
     email: textoOpcional(data, 'email'),
     contraparte: textoOpcional(data, 'contraparte'),
+    sinFecha: data.vientri?.sinFechaDePago === true && fechaEsperada === data.vientri.fechaVencimiento,
   }
 }
 

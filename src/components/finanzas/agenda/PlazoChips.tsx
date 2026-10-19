@@ -5,6 +5,7 @@ import { enPlazo, PLAZOS, type PlazoAgenda } from './plazoAgenda'
 export function PlazoChips<T>({
   rows,
   fecha,
+  sinFecha,
   moneda,
   plazo,
   onChange,
@@ -12,6 +13,7 @@ export function PlazoChips<T>({
 }: {
   rows: T[]
   fecha: (row: T) => string | null | undefined
+  sinFecha?: (row: T) => boolean
   moneda: (row: T) => 'ARS' | 'USD'
   plazo: PlazoAgenda
   onChange: (p: PlazoAgenda) => void
@@ -20,7 +22,7 @@ export function PlazoChips<T>({
   return (
     <div className="mb-3 flex flex-wrap gap-2" role="tablist" aria-label="Plazo">
       {PLAZOS.map((p) => {
-        const filas = rows.filter((r) => enPlazo(fecha(r), p.id, hoy))
+        const filas = rows.filter((r) => enPlazo(fecha(r), p.id, hoy, sinFecha?.(r) ?? false))
         const pesos = filas.filter((r) => moneda(r) === 'ARS').reduce((s, r) => s + ((r as { montoCentavos?: number }).montoCentavos ?? 0), 0)
         const activo = plazo === p.id
         return (

@@ -14,6 +14,8 @@ export interface CompromisoHoy {
   medioPago: MedioPagoHoy
   estado: EstadoCompromisoHoy
   cuentaId: string | null
+  /** Factura de Vientri sin vencimiento cargado (y Finanzas todavía no le puso fecha de pago). */
+  sinFecha?: boolean
 }
 
 export interface CobroHoy {
@@ -27,6 +29,8 @@ export interface CobroHoy {
   cuit: string | null
   email: string | null
   contraparte: string | null
+  /** Factura de Vientri sin vencimiento cargado (y Finanzas todavía no le puso fecha). */
+  sinFecha?: boolean
 }
 
 export interface MovimientoHoy {
@@ -177,8 +181,14 @@ export interface HoyVista {
   saludo: string
   fecha: string
   vacio: boolean
+  /** Solo lo que vence hoy. */
   pagos: { totalCentavos: number; filas: PagoFilaHoy[] }
+  /** Vencimiento ya pasado: no entra en los totales del día. */
+  pagosAtrasados: { totalCentavos: number; filas: PagoFilaHoy[] }
+  /** Facturas de Vientri sin vencimiento: Finanzas les pone el día de pago. */
+  pagosSinFecha: { totalCentavos: number; filas: PagoFilaHoy[] }
   ingresos: { filas: IngresoFilaHoy[] }
+  cobrosSinFecha: { cantidad: number; totalCentavos: number }
   dia: {
     saldoInicialCentavos: number
     pagosCentavos: number

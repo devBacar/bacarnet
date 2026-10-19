@@ -59,6 +59,7 @@ export interface VientriEnAgendaItem {
   totalCentavos: number
   fechaVencimiento: string
   fechaDatos: string
+  sinFechaDePago?: boolean
 }
 
 export interface CobroAgendaItem {

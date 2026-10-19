@@ -31,7 +31,6 @@ import type {
 
 const ORDEN_BANCOS = ['Julio', 'Patagonia', 'Córdoba']
 const HORAS_SIN_FIRMA = 2
-const DIAS_ATRASO_RECLAMO = 3
 
 const URGENCIA_LABEL: Record<Exclude<UrgenciaHoy, null>, string> = {
   alta: 'Alta',
@@ -148,37 +147,51 @@ function rankUrgencia(urgencia: UrgenciaHoy): number {
   return 3
 }
 
+function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy {
+  const dias = row.fechaVencimiento < hoy && !row.sinFecha ? diasEntre(row.fechaVencimiento, hoy) : 0
+  return {
+    id: row.id,
+    urgencia: row.urgencia ? URGENCIA_LABEL[row.urgencia] : 'Normal',
+    vencido: dias > 0,
+    vencidoTexto: dias > 0 ? textoHaceDias(dias, true) : null,
+    aQuien: row.proveedorONombre,
+    concepto: row.concepto,
+    montoCentavos: row.montoCentavos,
+    comoPagar: MEDIO_LABEL[row.medioPago],
+    medioPago: row.medioPago,
+    proveedorONombre: row.proveedorONombre,
+    sugerenciasBanco: sugerirDebitos(row.montoCentavos, movimientos, hoy, row.cuentaId),
+  }
+}
+
+const porUrgenciaYNombre = (a: CompromisoHoy, b: CompromisoHoy) => {
+  const urgencia = rankUrgencia(a.urgencia) - rankUrgencia(b.urgencia)
+  if (urgencia !== 0) return urgencia
+  return a.proveedorONombre.localeCompare(b.proveedorONombre, 'es')
+}
+
+/** Pagos de hoy: solo lo que vence hoy (lo atrasado va aparte y no suma en el día). */
 export function seleccionarPagos(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
-  const filas = compromisos.filter(
-    (row) => compromisoAbierto(row.estado) && row.fechaVencimiento <= hoy && row.montoCentavos > 0,
-  )
-  filas.sort((a, b) => {
-    const vencidoA = a.fechaVencimiento < hoy ? 0 : 1
-    const vencidoB = b.fechaVencimiento < hoy ? 0 : 1
-    if (vencidoA !== vencidoB) return vencidoA - vencidoB
-    const diasA = hoy === a.fechaVencimiento ? 0 : diasEntre(a.fechaVencimiento, hoy)
-    const diasB = hoy === b.fechaVencimiento ? 0 : diasEntre(b.fechaVencimiento, hoy)
-    if (vencidoA === 0 && diasA !== diasB) return diasB - diasA
-    const urgencia = rankUrgencia(a.urgencia) - rankUrgencia(b.urgencia)
-    if (urgencia !== 0) return urgencia
-    return a.proveedorONombre.localeCompare(b.proveedorONombre, 'es')
-  })
-  return filas.map((row) => {
-    const dias = row.fechaVencimiento < hoy ? diasEntre(row.fechaVencimiento, hoy) : 0
-    return {
-      id: row.id,
-      urgencia: row.urgencia ? URGENCIA_LABEL[row.urgencia] : 'Normal',
-      vencido: dias > 0,
-      vencidoTexto: dias > 0 ? textoHaceDias(dias, true) : null,
-      aQuien: row.proveedorONombre,
-      concepto: row.concepto,
-      montoCentavos: row.montoCentavos,
-      comoPagar: MEDIO_LABEL[row.medioPago],
-      medioPago: row.medioPago,
-      proveedorONombre: row.proveedorONombre,
-      sugerenciasBanco: sugerirDebitos(row.montoCentavos, movimientos, hoy, row.cuentaId),
-    }
-  })
+  return compromisos
+    .filter((row) => compromisoAbierto(row.estado) && !row.sinFecha && row.fechaVencimiento === hoy && row.montoCentavos > 0)
+    .sort(porUrgenciaYNombre)
+    .map((row) => filaPago(row, hoy, movimientos))
+}
+
+/** Pagos atrasados: vencimiento real ya pasado. Primero los más viejos. */
+export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
+  return compromisos
+    .filter((row) => compromisoAbierto(row.estado) && !row.sinFecha && row.fechaVencimiento < hoy && row.montoCentavos > 0)
+    .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento) || porUrgenciaYNombre(a, b))
+    .map((row) => filaPago(row, hoy, movimientos))
+}
+
+/** Facturas sin vencimiento en Vientri: esperan que Finanzas les ponga el día de pago. */
+export function seleccionarPagosSinFecha(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
+  return compromisos
+    .filter((row) => compromisoAbierto(row.estado) && row.sinFecha === true && row.montoCentavos > 0)
+    .sort((a, b) => b.montoCentavos - a.montoCentavos)
+    .map((row) => filaPago(row, hoy, movimientos))
 }
 
 export function seleccionarIngresos(
@@ -186,7 +199,9 @@ export function seleccionarIngresos(
   movimientos: MovimientoHoy[],
   hoy: string,
 ): { filas: IngresoFilaHoy[]; llegados: Set<string> } {
-  const esperados = cobros.filter((row) => row.estado === 'esperado' && row.fechaEsperada <= hoy)
+  // Se buscan créditos para todo lo esperado hasta hoy (también lo atrasado), pero en "Cobros de hoy"
+  // se muestra lo de hoy y lo atrasado que ya llegó. Lo atrasado que no llegó va en la lista de atrasados.
+  const esperados = cobros.filter((row) => row.estado === 'esperado' && !row.sinFecha && row.fechaEsperada <= hoy)
   const asignados = emparejarCobrosConCreditos(esperados, movimientos, hoy)
   esperados.sort((a, b) => {
     const atrasadoA = a.fechaEsperada < hoy ? 0 : 1
@@ -213,7 +228,10 @@ export function seleccionarIngresos(
       textoReclamo: textoReclamo({ concepto, montoCentavos: row.montoCentavos }),
     }
   })
-  return { filas, llegados: new Set(asignados.keys()) }
+  return {
+    filas: filas.filter((fila) => !fila.atrasado || fila.llego),
+    llegados: new Set(asignados.keys()),
+  }
 }
 
 export function agruparBancos(cuentas: ArmarHoyInput['cuentas']): BancoFilaHoy[] {
@@ -290,7 +308,7 @@ export function armarSemana(input: {
   const cobrar = new Map(dias.map((dia) => [dia, 0]))
 
   for (const row of input.compromisos) {
-    if (!compromisoAbierto(row.estado)) continue
+    if (!compromisoAbierto(row.estado) || row.sinFecha || row.fechaVencimiento < input.hoy) continue
     const destino = diaDestino(row.fechaVencimiento, dias)
     if (!destino) continue
     pagar.set(destino, (pagar.get(destino) ?? 0) + row.montoCentavos)
@@ -301,7 +319,7 @@ export function armarSemana(input: {
     pagar.set(destino, (pagar.get(destino) ?? 0) + cheque.montoCentavos)
   }
   for (const row of input.cobros) {
-    if (row.estado !== 'esperado' || input.cobrosYaLlegados.has(row.id)) continue
+    if (row.estado !== 'esperado' || input.cobrosYaLlegados.has(row.id) || row.sinFecha || row.fechaEsperada < input.hoy) continue
     const destino = diaDestino(row.fechaEsperada, dias)
     if (!destino) continue
     cobrar.set(destino, (cobrar.get(destino) ?? 0) + row.montoCentavos)
@@ -341,9 +359,9 @@ export function armarSemana(input: {
 
 export function listarCobrosAtrasados(cobros: CobroHoy[], hoy: string, yaLlegados: Set<string>): CobroAtrasadoHoy[] {
   return cobros
-    .filter((row) => row.estado === 'esperado' && !yaLlegados.has(row.id))
+    .filter((row) => row.estado === 'esperado' && !yaLlegados.has(row.id) && !row.sinFecha && row.fechaEsperada < hoy)
     .map((row) => ({ row, dias: diasEntre(row.fechaEsperada, hoy) }))
-    .filter((item) => item.dias > DIAS_ATRASO_RECLAMO)
+    .filter((item) => item.dias > 0)
     .sort((a, b) => b.row.montoCentavos - a.row.montoCentavos)
     .map(({ row, dias }) => {
       const concepto = conceptoCobro(row)
@@ -392,6 +410,10 @@ export function transferenciasSinFirmar(transferencias: ArmarHoyInput['transfere
 export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const hoy = fechaHoyArgentina(input.now)
   const pagos = seleccionarPagos(input.compromisos, hoy, input.movimientos)
+  const pagosAtrasados = seleccionarPagosAtrasados(input.compromisos, hoy, input.movimientos)
+  const pagosSinFecha = seleccionarPagosSinFecha(input.compromisos, hoy, input.movimientos)
+  const cobrosSinFecha = input.cobros.filter((row) => row.estado === 'esperado' && row.sinFecha)
+  const suma = (filas: Array<{ montoCentavos: number }>) => filas.reduce((total, fila) => total + fila.montoCentavos, 0)
   const ingresos = seleccionarIngresos(input.cobros, input.movimientos, hoy)
   const bancos = agruparBancos(input.cuentas)
   const saldoInicialCentavos = bancos.reduce((total, banco) => total + banco.saldoAhoraCentavos, 0)
@@ -418,6 +440,8 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const chequesADebitar = armarChequesADebitar({ cheques: input.cheques, hoy, bancos })
   const vacio =
     pagos.length === 0 &&
+    pagosAtrasados.length === 0 &&
+    pagosSinFecha.length === 0 &&
     ingresos.filas.length === 0 &&
     semana.filas == null &&
     cobrosAtrasados.length === 0 &&
@@ -429,7 +453,10 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
     fecha: hoy,
     vacio,
     pagos: { totalCentavos: pagosDeCompromisos, filas: pagos },
+    pagosAtrasados: { totalCentavos: suma(pagosAtrasados), filas: pagosAtrasados },
+    pagosSinFecha: { totalCentavos: suma(pagosSinFecha), filas: pagosSinFecha },
     ingresos: { filas: ingresos.filas },
+    cobrosSinFecha: { cantidad: cobrosSinFecha.length, totalCentavos: suma(cobrosSinFecha) },
     dia: {
       saldoInicialCentavos,
       pagosCentavos,

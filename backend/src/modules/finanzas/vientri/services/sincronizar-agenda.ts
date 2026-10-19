@@ -49,6 +49,7 @@ async function leerExistentes(lado: LadoAgenda): Promise<Array<ExistenteAgenda &
           concepto: String(x.concepto ?? ''),
           nombre: String(x.proveedorONombre ?? ''),
           moneda: x.moneda ?? 'ARS',
+          sinFecha: x.vientri?.sinFechaDePago ?? null,
         }
       : {
           id: d.id,
@@ -61,6 +62,7 @@ async function leerExistentes(lado: LadoAgenda): Promise<Array<ExistenteAgenda &
           concepto: String(x.vientri?.comprobante ?? ''),
           nombre: String(x.clienteONombre ?? ''),
           moneda: x.moneda ?? 'ARS',
+          sinFecha: x.vientri?.sinFechaDePago ?? null,
         }
   })
 }
@@ -143,6 +145,7 @@ export interface ConteoAgenda {
   reabrir: number
   saldosNegativos: number
   posiblesDuplicados: number
+  residuos: number
 }
 
 export async function sincronizarAgenda(opts: {
@@ -167,6 +170,7 @@ export async function sincronizarAgenda(opts: {
       reabrir: 0,
       saldosNegativos: plan.saldosNegativos.cantidad,
       posiblesDuplicados: plan.posiblesDuplicados,
+      residuos: plan.residuos,
     }
     for (const op of plan.operaciones) conteo[op.tipo] += 1
     resultado[lado] = conteo

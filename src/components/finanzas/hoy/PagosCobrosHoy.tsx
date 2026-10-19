@@ -77,23 +77,34 @@ export function PagosHoy({
   onYaPague,
   onReprogramar,
   puedeOperar = true,
+  titulo = 'Pagos de hoy',
+  vacio = 'No hay pagos para hoy.',
+  ayuda = 'Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá.',
+  tour = 'hoy-pagos',
+  sinFecha = false,
 }: {
   pagos: HoyResponse['pagos']
   onPagar: (pago: PagoHoy) => void
   onYaPague: (pago: PagoHoy) => void
   onReprogramar: (pago: PagoHoy) => void
   puedeOperar?: boolean
+  titulo?: string
+  vacio?: string
+  ayuda?: string
+  tour?: string
+  /** Bandeja de facturas sin fecha: el botón principal es "Poner fecha". */
+  sinFecha?: boolean
 }) {
   const filas = [...pagos.filas].sort((a, b) => Number(b.vencido) - Number(a.vencido))
   return (
     <Tarjeta
-      tour="hoy-pagos"
-      titulo="Pagos de hoy"
+      tour={tour}
+      titulo={titulo}
       derecha={filas.length > 0 ? <Total centavos={pagos.totalCentavos} /> : undefined}
-      ayuda="Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá."
+      ayuda={ayuda}
     >
       {filas.length === 0 ? (
-        <Vacio texto="No hay pagos para hoy." />
+        <Vacio texto={vacio} />
       ) : (
         <Lista
           items={filas}
@@ -111,9 +122,15 @@ export function PagosHoy({
               centavos={pago.montoCentavos}
               accion={
                 puedeOperar ? (
-                  <button type="button" className={botonChico} data-tour="hoy-pagar" onClick={() => onPagar(pago)}>
-                    Pagar
-                  </button>
+                  sinFecha ? (
+                    <button type="button" className={botonChico} onClick={() => onReprogramar(pago)}>
+                      Poner fecha
+                    </button>
+                  ) : (
+                    <button type="button" className={botonChico} data-tour="hoy-pagar" onClick={() => onPagar(pago)}>
+                      Pagar
+                    </button>
+                  )
                 ) : undefined
               }
               tourMenu="hoy-pago-menu"
@@ -140,6 +157,7 @@ export function PagosHoy({
 export function CobrosHoy({
   ingresos,
   atrasados,
+  sinFecha,
   confirmandoId,
   onConfirmar,
   onEfectivo,
@@ -150,6 +168,7 @@ export function CobrosHoy({
 }: {
   ingresos: IngresoHoy[]
   atrasados: CobroAtrasadoHoy[]
+  sinFecha?: { cantidad: number; totalCentavos: number }
   confirmandoId: string | null
   onConfirmar: (ingreso: IngresoHoy) => void
   onEfectivo: (ingreso: IngresoHoy) => void
@@ -236,6 +255,12 @@ export function CobrosHoy({
             </li>
           ))}
         </ul>
+      ) : null}
+      {sinFecha && sinFecha.cantidad > 0 ? (
+        <p className="text-body-muted mt-3 border-t border-neutral-100 pt-2 text-[13px] dark:border-zinc-800">
+          {sinFecha.cantidad} {sinFecha.cantidad === 1 ? 'factura a cobrar' : 'facturas a cobrar'} sin fecha esperada en Vientri por{' '}
+          <Monto centavos={sinFecha.totalCentavos} className="text-heading" />. Las ves en Agenda › Cobros › Sin fecha.
+        </p>
       ) : null}
     </Tarjeta>
   )

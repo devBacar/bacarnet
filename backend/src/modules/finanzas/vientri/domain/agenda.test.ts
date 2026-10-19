@@ -98,3 +98,23 @@ describe('posibles duplicados con lo cargado a mano', () => {
     expect(r.operaciones[0]).toEqual(expect.objectContaining({ posibleDuplicado: { id: 'm1', descripcion: 'Alquiler - Inmobiliaria' } }))
   })
 })
+
+describe('fechas de pago, impuestos y residuos', () => {
+  it('marca sin fecha de pago cuando el vencimiento de Vientri es la fecha de la factura', () => {
+    expect(datosDesdePendiente(pend({ fecha: '2026-09-20', fechaVencimiento: '2026-09-20' }), base.fechaDatos).vientri.sinFechaDePago).toBe(true)
+    expect(datosDesdePendiente(pend({ fechaVencimiento: null }), base.fechaDatos).vientri.sinFechaDePago).toBe(true)
+    expect(datosDesdePendiente(pend({}), base.fechaDatos).vientri.sinFechaDePago).toBe(false)
+  })
+  it('manda los impuestos a Impositivo aunque Vientri traiga el nombre', () => {
+    expect(datosDesdePendiente(pend({ tipo: 'Impuesto' }), base.fechaDatos).grupo).toBe('Impositivo')
+  })
+  it('no carga restos de redondeo', () => {
+    const r = planAgenda({ ...base, enVentana: [pend({ pendienteCentavos: 4 })], clavesConSaldo: new Set(['c1']), existentes: [] })
+    expect(r.operaciones).toEqual([])
+    expect(r.residuos).toBe(1)
+  })
+  it('cierra un resto de redondeo que ya estaba cargado', () => {
+    const r = planAgenda({ ...base, enVentana: [pend({ pendienteCentavos: 4 })], clavesConSaldo: new Set(['c1']), existentes: [ex({})] })
+    expect(r.operaciones).toEqual([{ tipo: 'cerrar', id: 'vientri-c1' }])
+  })
+})

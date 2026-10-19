@@ -76,6 +76,8 @@ export interface CompromisoPagoDocument {
   /** 'vientri' si lo creó la importación diaria de Vientri; los cargados a mano no lo tienen. */
   origen?: 'vientri'
   vientri?: VientriEnAgenda
+  /** Si al crearlo había uno cargado a mano con el mismo importe y fecha cercana. */
+  posibleDuplicado?: { id: string; descripcion: string } | null
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string
@@ -96,6 +98,8 @@ export interface CobroEsperadoDocument {
   moneda?: 'ARS' | 'USD'
   origen?: 'vientri'
   vientri?: VientriEnAgenda
+  /** Si al crearlo había uno cargado a mano con el mismo importe y fecha cercana. */
+  posibleDuplicado?: { id: string; descripcion: string } | null
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string

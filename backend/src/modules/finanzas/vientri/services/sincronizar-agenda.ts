@@ -13,7 +13,9 @@ import {
   type DatosVientriAgenda,
   type ExistenteAgenda,
   type LadoAgenda,
+  type ManualAgenda,
   type OperacionAgenda,
+  type PosibleDuplicado,
 } from '../domain/agenda.js'
 import type { VientriPendienteDoc } from '../domain/tipos.js'
 import { VIENTRI_ESTADO } from './vientri.repository.js'
@@ -63,6 +65,23 @@ async function leerExistentes(lado: LadoAgenda): Promise<Array<ExistenteAgenda &
   })
 }
 
+async function leerManuales(lado: LadoAgenda): Promise<ManualAgenda[]> {
+  const coleccion = lado === 'pagar' ? COMPROMISOS_COLLECTION : COBROS_COLLECTION
+  const snap = await adminDb().collection(coleccion).get()
+  return snap.docs
+    .filter((d) => d.get('origen') !== 'vientri')
+    .map((d) => {
+      const x = d.data()
+      const nombre = String(x.proveedorONombre ?? x.clienteONombre ?? '')
+      return {
+        id: d.id,
+        fecha: tsADia(lado === 'pagar' ? x.fechaVencimiento : x.fechaEsperada),
+        montoCentavos: Number(x.montoCentavos) || 0,
+        descripcion: [x.concepto, nombre].filter(Boolean).join(' - '),
+      }
+    })
+}
+
 function camposVientri(lado: LadoAgenda, datos: DatosVientriAgenda, fechaDatos: string) {
   const vientri = { ...datos.vientri, fechaDatos }
   return lado === 'pagar'
@@ -70,9 +89,15 @@ function camposVientri(lado: LadoAgenda, datos: DatosVientriAgenda, fechaDatos: 
     : { clienteONombre: datos.nombre, montoCentavos: datos.montoCentavos, moneda: datos.moneda, vientri }
 }
 
-function documentoNuevo(lado: LadoAgenda, datos: DatosVientriAgenda, fechaDatos: string) {
+function documentoNuevo(lado: LadoAgenda, datos: DatosVientriAgenda, fechaDatos: string, duplicado: PosibleDuplicado | null) {
   const ahora = FieldValue.serverTimestamp()
-  const comunes = { origen: 'vientri', createdAt: ahora, updatedAt: ahora, createdBy: ACTOR_VIENTRI }
+  const comunes = {
+    origen: 'vientri',
+    posibleDuplicado: duplicado,
+    createdAt: ahora,
+    updatedAt: ahora,
+    createdBy: ACTOR_VIENTRI,
+  }
   if (lado === 'pagar') {
     return {
       ...camposVientri(lado, datos, fechaDatos),
@@ -117,6 +142,7 @@ export interface ConteoAgenda {
   cerrar: number
   reabrir: number
   saldosNegativos: number
+  posiblesDuplicados: number
 }
 
 export async function sincronizarAgenda(opts: {
@@ -132,8 +158,16 @@ export async function sincronizarAgenda(opts: {
     const clavesConSaldo = new Set(
       opts.todosLosPendientes.filter((p) => p.lado === lado && p.pendienteCentavos > 0).map((p) => p.clave),
     )
-    const plan = planAgenda({ lado, enVentana: opts.pendientesEnVentana, clavesConSaldo, existentes, fechaDatos: opts.fechaDatos })
-    const conteo: ConteoAgenda = { crear: 0, actualizar: 0, cerrar: 0, reabrir: 0, saldosNegativos: plan.saldosNegativos.cantidad }
+    const manuales = await leerManuales(lado)
+    const plan = planAgenda({ lado, enVentana: opts.pendientesEnVentana, clavesConSaldo, existentes, fechaDatos: opts.fechaDatos, manuales })
+    const conteo: ConteoAgenda = {
+      crear: 0,
+      actualizar: 0,
+      cerrar: 0,
+      reabrir: 0,
+      saldosNegativos: plan.saldosNegativos.cantidad,
+      posiblesDuplicados: plan.posiblesDuplicados,
+    }
     for (const op of plan.operaciones) conteo[op.tipo] += 1
     resultado[lado] = conteo
     if (opts.escribir) await aplicar(lado, plan.operaciones, estadoPorId, opts.fechaDatos)
@@ -165,7 +199,7 @@ async function aplicar(
     for (const op of operaciones.slice(i, i + 200)) {
       const ref = coleccion.doc(op.id)
       if (op.tipo === 'crear') {
-        batch.set(ref, documentoNuevo(lado, op.datos, fechaDatos))
+        batch.set(ref, documentoNuevo(lado, op.datos, fechaDatos, op.posibleDuplicado))
         batch.set(ref.collection(HISTORIAL_SUB).doc(), historial(null, abierto, `Cargado en Vientri: ${op.datos.concepto}`))
       } else if (op.tipo === 'actualizar') {
         const patch: Record<string, unknown> = { ...camposVientri(lado, op.datos, fechaDatos), updatedAt: ahora }

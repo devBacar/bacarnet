@@ -522,6 +522,11 @@ function CompromisosTable({
                       Vientri
                     </span>
                   ) : null}
+                  {row.posibleDuplicado ? (
+                    <span className="ml-2 inline-block rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100" title={`Hay uno cargado a mano con el mismo importe y fecha cercana: ${row.posibleDuplicado.descripcion}. Si es el mismo, borrá uno de los dos.`}>
+                      ¿Duplicado?
+                    </span>
+                  ) : null}
                   </div>
                   <div className="text-body-muted text-xs">{row.proveedorONombre}</div>
                   {row.estado === COMPROMISO_ESTADO_CONFECCIONADA ? (
@@ -877,6 +882,11 @@ function CobrosTable({
                     {row.origen === 'vientri' ? (
                     <span className="ml-2 inline-block rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100" title="Cargado en Vientri. El importe y el proveedor se corrigen en Vientri.">
                       Vientri
+                    </span>
+                  ) : null}
+                  {row.posibleDuplicado ? (
+                    <span className="ml-2 inline-block rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100" title={`Hay uno cargado a mano con el mismo importe y fecha cercana: ${row.posibleDuplicado.descripcion}. Si es el mismo, borrá uno de los dos.`}>
+                      ¿Duplicado?
                     </span>
                   ) : null}
                   </div>

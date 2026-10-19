@@ -33,7 +33,7 @@ describe('datosDesdePendiente', () => {
 describe('planAgenda', () => {
   it('crea lo nuevo y no toca lo que no cambió', () => {
     const r = planAgenda({ ...base, enVentana: [pend({}), pend({ clave: 'c2' })], clavesConSaldo: new Set(['c1', 'c2']), existentes: [ex({})] })
-    expect(r.operaciones).toEqual([expect.objectContaining({ tipo: 'crear', id: 'vientri-c2' })])
+    expect(r.operaciones).toEqual([expect.objectContaining({ tipo: 'crear', id: 'vientri-c2', posibleDuplicado: null })])
   })
 
   it('actualiza el saldo y la fecha si nadie la reprogramó', () => {
@@ -82,5 +82,19 @@ describe('planAgenda', () => {
     })
     expect(r.operaciones).toEqual([])
     expect(r.saldosNegativos).toEqual({ cantidad: 1, centavos: -50_00 })
+  })
+})
+
+describe('posibles duplicados con lo cargado a mano', () => {
+  it('avisa si hay uno a mano con el mismo importe y fecha cercana', () => {
+    const r = planAgenda({
+      ...base,
+      enVentana: [pend({ fechaVencimiento: '2026-10-20' }), pend({ clave: 'c3', pendienteCentavos: 7_00 })],
+      clavesConSaldo: new Set(['c1', 'c3']),
+      existentes: [],
+      manuales: [{ id: 'm1', fecha: '2026-10-10', montoCentavos: 1_000_00, descripcion: 'Alquiler - Inmobiliaria' }],
+    })
+    expect(r.posiblesDuplicados).toBe(1)
+    expect(r.operaciones[0]).toEqual(expect.objectContaining({ posibleDuplicado: { id: 'm1', descripcion: 'Alquiler - Inmobiliaria' } }))
   })
 })

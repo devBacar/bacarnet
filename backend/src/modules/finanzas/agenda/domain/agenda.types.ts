@@ -30,6 +30,17 @@ export type CompromisoEstado =
 
 export type CobroEstado = 'esperado' | 'confirmado' | 'incobrable'
 
+/** Datos que vienen de Vientri (solo en compromisos/cobros con origen 'vientri'). No se editan en Bacarnet. */
+export interface VientriEnAgenda {
+  clave: string
+  comprobante: string
+  tipo: string | null
+  cuit: string | null
+  totalCentavos: number
+  fechaVencimiento: string
+  fechaDatos: string
+}
+
 export interface CompromisoPagoDocument {
   concepto: string
   proveedorONombre: string
@@ -62,6 +73,9 @@ export interface CompromisoPagoDocument {
    * Ese monto ya no se puede pagar por otro lado hasta que se hagan o se rechacen.
    */
   transferenciasEnFirma?: Array<{ transferenciaId: string; montoCentavos: number }>
+  /** 'vientri' si lo creó la importación diaria de Vientri; los cargados a mano no lo tienen. */
+  origen?: 'vientri'
+  vientri?: VientriEnAgenda
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string
@@ -79,6 +93,9 @@ export interface CobroEsperadoDocument {
   cuentaId: string | null
   fechaConfirmado: Timestamp | null
   confirmadoPor: string | null
+  moneda?: 'ARS' | 'USD'
+  origen?: 'vientri'
+  vientri?: VientriEnAgenda
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string

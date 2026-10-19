@@ -87,3 +87,6 @@ scripts/sync-one-shot.mjs
 # Docs de análisis internos
 docs/analisis-*.md
 docs/plan-*.md
+
+# Resguardos de datos reales hechos por scripts (no se versionan)
+backend/scripts/resguardos/

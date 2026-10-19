@@ -480,7 +480,14 @@ function CompromisosTable({
                   </td>
                 ) : null}
                 <td className="px-3 py-3">
-                  <div className="font-medium">{row.concepto}</div>
+                  <div className="font-medium">
+                    {row.concepto}
+                    {row.origen === 'vientri' ? (
+                    <span className="ml-2 inline-block rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100" title="Cargado en Vientri. El importe y el proveedor se corrigen en Vientri.">
+                      Vientri
+                    </span>
+                  ) : null}
+                  </div>
                   <div className="text-body-muted text-xs">{row.proveedorONombre}</div>
                   {row.estado === COMPROMISO_ESTADO_CONFECCIONADA ? (
                     <p className="mt-2 max-w-md rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
@@ -830,14 +837,22 @@ function CobrosTable({
                   </td>
                 ) : null}
                 <td className="px-3 py-3">
-                  <div className="font-medium">{row.clienteONombre}</div>
+                  <div className="font-medium">
+                    {row.clienteONombre}
+                    {row.origen === 'vientri' ? (
+                    <span className="ml-2 inline-block rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100" title="Cargado en Vientri. El importe y el proveedor se corrigen en Vientri.">
+                      Vientri
+                    </span>
+                  ) : null}
+                  </div>
+                  {row.comprobante ? <div className="text-body-muted text-xs">{row.comprobante}</div> : null}
                   {vista === 'esperados' ? (
                     <VencimientoAlertTag alerta={row.alertaVencimiento} />
                   ) : row.urgenciaManual ? (
                     <div className="text-body-muted text-xs">Urgencia: {URGENCIA_LABEL[row.urgenciaManual]}</div>
                   ) : null}
                 </td>
-                <td className="px-3 py-3 tabular-nums">{formatMoneyCentavos(row.montoCentavos, 'ARS')}</td>
+                <td className="px-3 py-3 tabular-nums">{formatMoneyCentavos(row.montoCentavos, row.moneda ?? 'ARS')}</td>
                 <td className="px-3 py-3">
                   {formatFecha(
                     vista === 'cobrados'
@@ -960,6 +975,7 @@ function AltaAgendaModal({
   onSave: (body: Record<string, unknown>) => Promise<void>
 }) {
   const [saving, setSaving] = useState(false)
+  const deVientri = compromiso?.origen === 'vientri'
   const [form, setForm] = useState({
     concepto: compromiso?.concepto ?? '',
     proveedorONombre: compromiso?.proveedorONombre ?? '',
@@ -1053,12 +1069,19 @@ function AltaAgendaModal({
         <h2 className="text-heading text-lg font-semibold">
           {compromiso ? 'Editar compromiso' : tab === 'pagos' ? 'Nuevo compromiso de pago' : 'Nuevo cobro esperado'}
         </h2>
+        {deVientri ? (
+          <p className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+            Este pago se cargó en Vientri. El comprobante, el proveedor, el importe y la moneda se corrigen en Vientri y se
+            actualizan solos al día siguiente. Acá podés cambiar la fecha, la urgencia, el medio de pago, el grupo y la nota.
+          </p>
+        ) : null}
         <div className="mt-4 grid gap-3">
           {tab === 'pagos' ? (
             <>
               <FinanzasFormField label="Concepto" htmlFor="agenda-alta-concepto" tour="agenda-alta-concepto">
                 <input
                   id="agenda-alta-concepto"
+                  disabled={deVientri}
                   required
                   className={finanzasInputClass}
                   value={form.concepto}
@@ -1068,6 +1091,7 @@ function AltaAgendaModal({
               <FinanzasFormField label="Proveedor" htmlFor="agenda-alta-proveedor" tour="agenda-alta-proveedor">
                 <input
                   id="agenda-alta-proveedor"
+                  disabled={deVientri}
                   required
                   className={finanzasInputClass}
                   value={form.proveedorONombre}
@@ -1091,6 +1115,7 @@ function AltaAgendaModal({
               <FinanzasFormField label="Moneda" htmlFor="agenda-alta-moneda" tour="agenda-alta-moneda">
                 <select
                   id="agenda-alta-moneda"
+                  disabled={deVientri}
                   className={finanzasInputClass}
                   value={form.moneda}
                   onChange={(e) => setForm({ ...form, moneda: e.target.value })}
@@ -1149,6 +1174,7 @@ function AltaAgendaModal({
           <FinanzasFormField label="Monto" htmlFor="agenda-alta-monto" tour="agenda-alta-monto">
             <input
               id="agenda-alta-monto"
+                  disabled={deVientri}
               required
               className={finanzasInputClass}
               inputMode="decimal"

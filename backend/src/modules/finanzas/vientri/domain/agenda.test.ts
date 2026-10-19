@@ -1,0 +1,86 @@
+import { describe, expect, it } from 'vitest'
+import { datosDesdePendiente, planAgenda, type ExistenteAgenda } from './agenda.js'
+import type { VientriPendienteDoc } from './tipos.js'
+
+function pend(p: Partial<VientriPendienteDoc>): VientriPendienteDoc {
+  return {
+    clave: 'c1', vientriId: 1, lado: 'pagar', tipoId: 1, tipo: 'FCG', comprobante: 'FCG A 0001-00000001',
+    persona: { vientriId: 5, nombre: 'Proveedor Ficticio SRL', cuit: '30000000007' }, fecha: '2026-09-20',
+    fechaVencimiento: '2026-10-20', totalCentavos: 1_000_00, pendienteCentavos: 1_000_00, divisaId: 1, moneda: null,
+    cotizacion: 1, fechaProntoPago: null, descuentoProntoPago: null, cuotas: null, prestamo: false, revisar: [],
+    fecsys: null, ...p,
+  }
+}
+
+function ex(p: Partial<ExistenteAgenda>): ExistenteAgenda {
+  return {
+    id: 'vientri-c1', abierto: true, cerradoPorVientri: false, fecha: '2026-10-20', fechaVientri: '2026-10-20',
+    montoCentavos: 1_000_00, concepto: 'FCG A 0001-00000001', nombre: 'Proveedor Ficticio SRL', moneda: 'ARS', ...p,
+  }
+}
+
+const base = { lado: 'pagar' as const, fechaDatos: '2026-10-19T02:00:00' }
+
+describe('datosDesdePendiente', () => {
+  it('arma grupo y moneda', () => {
+    expect(datosDesdePendiente(pend({ tipo: 'IMP' }), base.fechaDatos).grupo).toBe('Impositivo')
+    expect(datosDesdePendiente(pend({}), base.fechaDatos).grupo).toBe('Proveedores')
+    expect(datosDesdePendiente(pend({ moneda: 'US' }), base.fechaDatos).moneda).toBe('USD')
+    expect(datosDesdePendiente(pend({ fechaVencimiento: null }), base.fechaDatos).fecha).toBe('2026-09-20')
+  })
+})
+
+describe('planAgenda', () => {
+  it('crea lo nuevo y no toca lo que no cambió', () => {
+    const r = planAgenda({ ...base, enVentana: [pend({}), pend({ clave: 'c2' })], clavesConSaldo: new Set(['c1', 'c2']), existentes: [ex({})] })
+    expect(r.operaciones).toEqual([expect.objectContaining({ tipo: 'crear', id: 'vientri-c2' })])
+  })
+
+  it('actualiza el saldo y la fecha si nadie la reprogramó', () => {
+    const r = planAgenda({
+      ...base,
+      enVentana: [pend({ pendienteCentavos: 400_00, fechaVencimiento: '2026-10-25' })],
+      clavesConSaldo: new Set(['c1']),
+      existentes: [ex({})],
+    })
+    expect(r.operaciones).toEqual([expect.objectContaining({ tipo: 'actualizar', cambiarFecha: true })])
+  })
+
+  it('respeta la fecha reprogramada en Bacarnet', () => {
+    const r = planAgenda({
+      ...base,
+      enVentana: [pend({ fechaVencimiento: '2026-10-25' })],
+      clavesConSaldo: new Set(['c1']),
+      existentes: [ex({ fecha: '2026-11-05' })],
+    })
+    expect(r.operaciones).toEqual([expect.objectContaining({ tipo: 'actualizar', cambiarFecha: false })])
+  })
+
+  it('cierra lo que ya no tiene saldo, pero no lo que solo quedó fuera de los 12 meses', () => {
+    const r = planAgenda({
+      ...base,
+      enVentana: [],
+      clavesConSaldo: new Set(['viejo']),
+      existentes: [ex({ id: 'vientri-c1' }), ex({ id: 'vientri-viejo' })],
+    })
+    expect(r.operaciones).toEqual([{ tipo: 'cerrar', id: 'vientri-c1' }])
+  })
+
+  it('reabre si lo cerró Vientri y volvió a tener saldo; respeta el cierre manual', () => {
+    const r1 = planAgenda({ ...base, enVentana: [pend({})], clavesConSaldo: new Set(['c1']), existentes: [ex({ abierto: false, cerradoPorVientri: true })] })
+    expect(r1.operaciones[0]?.tipo).toBe('reabrir')
+    const r2 = planAgenda({ ...base, enVentana: [pend({})], clavesConSaldo: new Set(['c1']), existentes: [ex({ abierto: false })] })
+    expect(r2.operaciones).toEqual([])
+  })
+
+  it('no mete saldos negativos (notas de crédito) ni el otro lado', () => {
+    const r = planAgenda({
+      ...base,
+      enVentana: [pend({ pendienteCentavos: -50_00 }), pend({ clave: 'cc', lado: 'cobrar' })],
+      clavesConSaldo: new Set(),
+      existentes: [],
+    })
+    expect(r.operaciones).toEqual([])
+    expect(r.saldosNegativos).toEqual({ cantidad: 1, centavos: -50_00 })
+  })
+})

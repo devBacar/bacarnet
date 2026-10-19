@@ -10,6 +10,7 @@ export const GRUPOS_COMPROMISO = [
   'Inversiones bursátiles',
   'Impositivo',
   'Gastos de personal',
+  'Proveedores',
   'Otros egresos',
 ] as const
 

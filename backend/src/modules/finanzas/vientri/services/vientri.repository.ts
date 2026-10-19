@@ -95,6 +95,8 @@ export async function guardarEstado(data: object): Promise<void> {
 
 export interface EstadoVientri {
   fechaDatos: string | null
+  /** Zip de Drive del que salió la última importación (null si vino de una carpeta local). */
+  archivo: string | null
   importadoAt: string | null
   importacionId: string | null
   ok: boolean
@@ -109,6 +111,7 @@ export async function leerEstado(): Promise<EstadoVientri | null> {
   const ts = d.importadoAt instanceof Timestamp ? d.importadoAt.toDate().toISOString() : null
   return {
     fechaDatos: typeof d.fechaDatos === 'string' ? d.fechaDatos : null,
+    archivo: typeof d.archivo === 'string' ? d.archivo : null,
     importadoAt: ts,
     importacionId: typeof d.importacionId === 'string' ? d.importacionId : null,
     ok: d.ok === true,
@@ -125,4 +128,40 @@ export async function listarPorCampos(
   for (const [campo, valor] of filtros) q = q.where(campo, '==', valor)
   const snap = await q.get()
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+}
+
+const CANDADO_DOC = 'candado'
+const CANDADO_MINUTOS = 15
+
+/** Evita dos importaciones a la vez (la programada y el botón). Vence solo a los 15 minutos. */
+export async function tomarCandado(quien: string): Promise<boolean> {
+  const ref = adminDb().collection(VIENTRI_ESTADO).doc(CANDADO_DOC)
+  return adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    const hasta = snap.exists ? snap.get('hasta') : null
+    if (hasta instanceof Timestamp && hasta.toMillis() > Date.now()) return false
+    tx.set(ref, { quien, hasta: Timestamp.fromMillis(Date.now() + CANDADO_MINUTOS * 60_000) })
+    return true
+  })
+}
+
+export async function soltarCandado(): Promise<void> {
+  await adminDb().collection(VIENTRI_ESTADO).doc(CANDADO_DOC).delete()
+}
+
+const LIMPIEZA_DOC = 'limpieza'
+
+/** Cheques viejos que en Vientri siguen abiertos: listado para que Administración los corrija. */
+export async function guardarLimpieza(data: { fechaDatos: string; desde: string; items: object[] }): Promise<void> {
+  await adminDb().collection(VIENTRI_ESTADO).doc(LIMPIEZA_DOC).set({ ...data, actualizadoAt: FieldValue.serverTimestamp() })
+}
+
+export async function leerLimpieza(): Promise<{ fechaDatos: string | null; desde: string | null; items: Array<Record<string, unknown>> }> {
+  const snap = await adminDb().collection(VIENTRI_ESTADO).doc(LIMPIEZA_DOC).get()
+  const d = snap.data() ?? {}
+  return {
+    fechaDatos: typeof d.fechaDatos === 'string' ? d.fechaDatos : null,
+    desde: typeof d.desde === 'string' ? d.desde : null,
+    items: Array.isArray(d.items) ? (d.items as Array<Record<string, unknown>>) : [],
+  }
 }

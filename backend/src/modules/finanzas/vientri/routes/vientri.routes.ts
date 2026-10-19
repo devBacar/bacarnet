@@ -1,12 +1,15 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
-import { leerEstado, listarPorCampos, VIENTRI_CHEQUES, VIENTRI_PENDIENTES } from '../services/vientri.repository.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { leerEstado, leerLimpieza, listarPorCampos, VIENTRI_CHEQUES, VIENTRI_PENDIENTES } from '../services/vientri.repository.js'
+import { traerVientriDesdeDrive } from '../services/traer-desde-drive.js'
 
 /**
  * Montado en /api/finanzas/vientri. Solo lectura: los datos se corrigen en Vientri.
  * GET /estado       fecha de los datos y resumen de la última importación
  * GET /cheques      ?direccion=recibido|emitido&estado=...&revisar=1&q=&page=
  * GET /pendientes   ?lado=pagar|cobrar|revisar&q=&page=
+ * GET /limpieza     cheques viejos que en Vientri siguen abiertos (para Administración)
+ * POST /traer-ahora trae la última copia de Vientri desde Drive (si hay una nueva). Pide finanzas_cheques.
  */
 export const finanzasVientriRouter = Router()
 finanzasVientriRouter.use(requireWorkspaceUser, requireViewFinanzas)
@@ -97,5 +100,26 @@ finanzasVientriRouter.get('/pendientes', async (req, res) => {
   } catch (err) {
     console.error('[finanzas/vientri] pendientes', err)
     res.status(500).json({ error: 'No se pudieron listar los pendientes de Vientri' })
+  }
+})
+
+finanzasVientriRouter.post('/traer-ahora', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const r = await traerVientriDesdeDrive({ origen: 'manual', actor: req.authedUser?.uid ?? 'desconocido' })
+    const { estado, mensaje } = r
+    const fechaDatos = 'fechaDatos' in r ? r.fechaDatos : null
+    res.status(r.estado === 'error' ? 500 : 200).json({ estado, mensaje, fechaDatos })
+  } catch (err) {
+    console.error('[finanzas/vientri] traer-ahora', err)
+    res.status(500).json({ error: 'No se pudieron traer los datos de Vientri' })
+  }
+})
+
+finanzasVientriRouter.get('/limpieza', async (_req, res) => {
+  try {
+    res.json(await leerLimpieza())
+  } catch (err) {
+    console.error('[finanzas/vientri] limpieza', err)
+    res.status(500).json({ error: 'No se pudo leer el listado de limpieza' })
   }
 })

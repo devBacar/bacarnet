@@ -25,6 +25,8 @@ export interface PagoHoy {
   proveedorONombre: string
   sugerenciasBanco: SugerenciaBanco[]
   moneda?: 'ARS' | 'USD'
+  /** La fecha se estimó según la historia del proveedor. */
+  estimada?: boolean
 }
 
 export interface IngresoHoy {
@@ -40,6 +42,7 @@ export interface IngresoHoy {
   movimientoId: string | null
   cuentaId: string | null
   textoReclamo: string
+  estimada?: boolean
 }
 
 export interface BancoHoy {
@@ -67,6 +70,7 @@ export interface CobroAtrasadoHoy {
   haceTexto: string
   email: string | null
   textoReclamo: string
+  estimada?: boolean
 }
 
 export interface ChequeADebitarHoy {

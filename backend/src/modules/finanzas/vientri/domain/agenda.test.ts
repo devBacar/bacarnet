@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { datosDesdePendiente, planAgenda, type ExistenteAgenda } from './agenda.js'
+import type { PlazosHistoricos } from './plazos.js'
 import type { VientriPendienteDoc } from './tipos.js'
 
 function pend(p: Partial<VientriPendienteDoc>): VientriPendienteDoc {
@@ -27,6 +28,55 @@ describe('datosDesdePendiente', () => {
     expect(datosDesdePendiente(pend({}), base.fechaDatos).grupo).toBe('Proveedores')
     expect(datosDesdePendiente(pend({ moneda: 'US' }), base.fechaDatos).moneda).toBe('USD')
     expect(datosDesdePendiente(pend({ fechaVencimiento: null }), base.fechaDatos).fecha).toBe('2026-09-20')
+  })
+})
+
+describe('fecha estimada', () => {
+  const plazos: PlazosHistoricos = {
+    porPersona: { pagar: new Map([[5, 40]]), cobrar: new Map() },
+    general: { pagar: 15, cobrar: 25 },
+  }
+
+  it('suma el plazo a la fecha de la factura solo si Vientri no tiene vencimiento', () => {
+    const sin = datosDesdePendiente(pend({ fechaVencimiento: null }), base.fechaDatos, { dias: 40, origen: 'historia' })
+    expect(sin.fecha).toBe('2026-10-30')
+    expect(sin.vientri).toMatchObject({
+      fechaVencimiento: '2026-10-30', sinFechaDePago: true, fechaEstimada: true, plazoDias: 40, plazoOrigen: 'historia',
+    })
+    const igual = datosDesdePendiente(pend({ fechaVencimiento: '2026-09-20' }), base.fechaDatos, { dias: 40, origen: 'general' })
+    expect(igual.vientri.fechaEstimada).toBe(true)
+    const con = datosDesdePendiente(pend({}), base.fechaDatos, { dias: 40, origen: 'historia' })
+    expect(con.fecha).toBe('2026-10-20')
+    expect(con.vientri).toMatchObject({ sinFechaDePago: false, fechaEstimada: false, plazoDias: null, plazoOrigen: null })
+    const sinPlazo = datosDesdePendiente(pend({ fechaVencimiento: null }), base.fechaDatos)
+    expect(sinPlazo.fecha).toBe('2026-09-20')
+    expect(sinPlazo.vientri.fechaEstimada).toBe(false)
+  })
+
+  it('planAgenda usa el plazo de la persona o el general', () => {
+    const r = planAgenda({
+      ...base,
+      enVentana: [
+        pend({ fechaVencimiento: null }),
+        pend({ clave: 'c2', persona: { vientriId: 99, nombre: 'Otro Ficticio SA', cuit: null }, fechaVencimiento: null }),
+      ],
+      clavesConSaldo: new Set(['c1', 'c2']),
+      existentes: [],
+      plazos,
+    })
+    expect(r.operaciones).toEqual([
+      expect.objectContaining({ datos: expect.objectContaining({ fecha: '2026-10-30' }) }),
+      expect.objectContaining({ datos: expect.objectContaining({ fecha: '2026-10-05' }) }),
+    ])
+  })
+
+  it('si la estimación cambia actualiza la fecha, salvo que Finanzas la haya reprogramado', () => {
+    const enVentana = [pend({ fechaVencimiento: null })]
+    const comun = { ...base, enVentana, clavesConSaldo: new Set(['c1']), plazos }
+    const noTocada = planAgenda({ ...comun, existentes: [ex({ fecha: '2026-10-10', fechaVientri: '2026-10-10' })] })
+    expect(noTocada.operaciones).toEqual([expect.objectContaining({ tipo: 'actualizar', cambiarFecha: true })])
+    const reprogramada = planAgenda({ ...comun, existentes: [ex({ fecha: '2026-12-01', fechaVientri: '2026-10-10' })] })
+    expect(reprogramada.operaciones).toEqual([expect.objectContaining({ tipo: 'actualizar', cambiarFecha: false })])
   })
 })
 

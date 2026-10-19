@@ -115,6 +115,7 @@ export function PagosHoy({
               detalle={
                 <>
                   {pago.concepto} · {pago.comoPagar}
+                  {pago.estimada ? ' · fecha estimada' : null}
                   {pago.urgencia !== 'Normal' ? ` · urgencia ${pago.urgencia.toLowerCase()}` : null}
                 </>
               }
@@ -202,6 +203,7 @@ export function CobrosHoy({
                   ) : (
                     <span className="text-amber-800 dark:text-amber-300">todavía no llegó</span>
                   )}
+                  {ingreso.estimada ? ' · fecha estimada' : null}
                 </>
               }
               etiqueta={ingreso.atrasado && ingreso.atrasadoTexto ? <Etiqueta tono="rojo">{ingreso.atrasadoTexto}</Etiqueta> : undefined}
@@ -244,7 +246,7 @@ export function CobrosHoy({
               <span className="min-w-0">
                 <span className="font-medium text-red-700 dark:text-red-300">Atrasado:</span>{' '}
                 <span className="text-heading">{cobro.cliente}</span>
-                <span className="text-body-muted"> · {cobro.haceTexto.toLowerCase()}</span>
+                <span className="text-body-muted"> · {cobro.haceTexto.toLowerCase()}{cobro.estimada ? ' · fecha estimada' : ''}</span>
               </span>
               <span className="flex shrink-0 items-center gap-2">
                 <Monto centavos={cobro.montoCentavos} className="text-heading" />

@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { PlazoChips } from '../../components/finanzas/agenda/PlazoChips'
-import { diaArgentina, enPlazo, esSinFecha, type PlazoAgenda } from '../../components/finanzas/agenda/plazoAgenda'
+import { diaArgentina, enPlazo, esFechaEstimada, esSinFecha, type PlazoAgenda } from '../../components/finanzas/agenda/plazoAgenda'
 import { Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -62,6 +62,18 @@ const URGENCIA_LABEL: Record<PrioridadUrgencia, string> = {
 function formatFecha(iso: string | null | undefined): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('es-AR')
+}
+
+/** Marca chica junto a la fecha cuando Vientri no la trae y se calculó con la historia. */
+function EtiquetaEstimada({ tipo }: { tipo: 'cliente' | 'proveedor' }) {
+  return (
+    <span
+      className="text-body-muted ml-1.5 text-xs"
+      title={`Según cuánto tarda este ${tipo} en pagar (historia de Vientri)`}
+    >
+      estimada
+    </span>
+  )
 }
 
 function filterCompromisosForVista(
@@ -562,6 +574,9 @@ function CompromisosTable({
                       ? row.fechaPago ?? row.updatedAt ?? null
                       : row.fechaVencimiento,
                   )}
+                  {vista !== 'pagados' && esFechaEstimada({ vientri: row.vientri, fecha: row.fechaVencimiento }) ? (
+                    <EtiquetaEstimada tipo="proveedor" />
+                  ) : null}
                 </td>
                 {vista === 'pendientes' ? (
                   <>
@@ -906,6 +921,9 @@ function CobrosTable({
                       ? row.fechaConfirmado ?? row.updatedAt ?? null
                       : row.fechaEsperada,
                   )}
+                  {vista !== 'cobrados' && esFechaEstimada({ vientri: row.vientri, fecha: row.fechaEsperada }) ? (
+                    <EtiquetaEstimada tipo="cliente" />
+                  ) : null}
                 </td>
                 <td className="px-3 py-3">
                   {row.cheque ? (

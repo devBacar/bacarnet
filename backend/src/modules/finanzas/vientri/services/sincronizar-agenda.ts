@@ -17,6 +17,7 @@ import {
   type OperacionAgenda,
   type PosibleDuplicado,
 } from '../domain/agenda.js'
+import type { PlazosHistoricos } from '../domain/plazos.js'
 import type { VientriPendienteDoc } from '../domain/tipos.js'
 import { VIENTRI_ESTADO } from './vientri.repository.js'
 
@@ -50,6 +51,7 @@ async function leerExistentes(lado: LadoAgenda): Promise<Array<ExistenteAgenda &
           nombre: String(x.proveedorONombre ?? ''),
           moneda: x.moneda ?? 'ARS',
           sinFecha: x.vientri?.sinFechaDePago ?? null,
+          fechaEstimada: x.vientri?.fechaEstimada ?? null,
         }
       : {
           id: d.id,
@@ -63,6 +65,7 @@ async function leerExistentes(lado: LadoAgenda): Promise<Array<ExistenteAgenda &
           nombre: String(x.clienteONombre ?? ''),
           moneda: x.moneda ?? 'ARS',
           sinFecha: x.vientri?.sinFechaDePago ?? null,
+          fechaEstimada: x.vientri?.fechaEstimada ?? null,
         }
   })
 }
@@ -153,6 +156,7 @@ export async function sincronizarAgenda(opts: {
   todosLosPendientes: VientriPendienteDoc[]
   fechaDatos: string
   escribir: boolean
+  plazos?: PlazosHistoricos
 }): Promise<Record<LadoAgenda, ConteoAgenda>> {
   const resultado = {} as Record<LadoAgenda, ConteoAgenda>
   for (const lado of ['pagar', 'cobrar'] as const) {
@@ -162,7 +166,7 @@ export async function sincronizarAgenda(opts: {
       opts.todosLosPendientes.filter((p) => p.lado === lado && p.pendienteCentavos > 0).map((p) => p.clave),
     )
     const manuales = await leerManuales(lado)
-    const plan = planAgenda({ lado, enVentana: opts.pendientesEnVentana, clavesConSaldo, existentes, fechaDatos: opts.fechaDatos, manuales })
+    const plan = planAgenda({ lado, enVentana: opts.pendientesEnVentana, clavesConSaldo, existentes, fechaDatos: opts.fechaDatos, manuales, plazos: opts.plazos })
     const conteo: ConteoAgenda = {
       crear: 0,
       actualizar: 0,

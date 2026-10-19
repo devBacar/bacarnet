@@ -60,6 +60,10 @@ export interface VientriEnAgendaItem {
   fechaVencimiento: string
   fechaDatos: string
   sinFechaDePago?: boolean
+  /** La fecha se estimó según lo que tarda este cliente/proveedor en pagar (historia de Vientri). */
+  fechaEstimada?: boolean
+  plazoDias?: number | null
+  plazoOrigen?: 'historia' | 'general' | null
 }
 
 export interface CobroAgendaItem {

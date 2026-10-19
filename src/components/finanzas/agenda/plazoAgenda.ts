@@ -52,8 +52,16 @@ export function enPlazo(
 
 /** Factura de Vientri sin vencimiento y sin fecha puesta por Finanzas. */
 export function esSinFecha(row: {
-  vientri?: { sinFechaDePago?: boolean; fechaVencimiento: string } | null
+  vientri?: { sinFechaDePago?: boolean; fechaEstimada?: boolean; fechaVencimiento: string } | null
   fecha: string | null | undefined
 }): boolean {
-  return row.vientri?.sinFechaDePago === true && !!row.fecha && diaArgentina(row.fecha) === row.vientri.fechaVencimiento
+  return row.vientri?.sinFechaDePago === true && row.vientri.fechaEstimada !== true && !!row.fecha && diaArgentina(row.fecha) === row.vientri.fechaVencimiento
+}
+
+/** Fecha calculada con lo que tarda esa persona en pagar o cobrar (y que Finanzas no cambió). */
+export function esFechaEstimada(row: {
+  vientri?: { fechaEstimada?: boolean; fechaVencimiento: string } | null
+  fecha: string | null | undefined
+}): boolean {
+  return row.vientri?.fechaEstimada === true && !!row.fecha && diaArgentina(row.fecha) === row.vientri.fechaVencimiento
 }

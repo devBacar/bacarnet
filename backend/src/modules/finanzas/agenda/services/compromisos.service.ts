@@ -105,6 +105,7 @@ export async function serializeCompromiso(id: string, data: CompromisoPagoDocume
     alertaVencimiento,
     origen: data.origen ?? null,
     vientri: data.vientri ?? null,
+    posibleDuplicado: data.posibleDuplicado ?? null,
     createdAt: agendaTimestampToIso(data.createdAt),
     updatedAt: agendaTimestampToIso(data.updatedAt),
   }

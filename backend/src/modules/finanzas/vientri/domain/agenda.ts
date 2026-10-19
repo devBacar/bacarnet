@@ -47,8 +47,25 @@ export interface ExistenteAgenda {
   moneda: string | null
 }
 
+/** Compromiso o cobro cargado a mano (sin origen Vientri), para avisar posibles duplicados. */
+export interface ManualAgenda {
+  id: string
+  /** AAAA-MM-DD */
+  fecha: string | null
+  montoCentavos: number
+  descripcion: string
+}
+
+export interface PosibleDuplicado {
+  id: string
+  descripcion: string
+}
+
+/** Mismo importe exacto y fechas a 30 días o menos: puede ser lo mismo cargado dos veces. */
+export const DIAS_DUPLICADO = 30
+
 export type OperacionAgenda =
-  | { tipo: 'crear'; id: string; datos: DatosVientriAgenda }
+  | { tipo: 'crear'; id: string; datos: DatosVientriAgenda; posibleDuplicado: PosibleDuplicado | null }
   | { tipo: 'actualizar'; id: string; datos: DatosVientriAgenda; cambiarFecha: boolean }
   | { tipo: 'reabrir'; id: string; datos: DatosVientriAgenda }
   | { tipo: 'cerrar'; id: string }
@@ -79,6 +96,7 @@ export function datosDesdePendiente(p: VientriPendienteDoc, fechaDatos: string):
 
 export interface ResultadoPlanAgenda {
   operaciones: OperacionAgenda[]
+  posiblesDuplicados: number
   /** Notas de crédito u otros saldos a favor (negativos): no entran a la Agenda. */
   saldosNegativos: { cantidad: number; centavos: number }
 }
@@ -91,7 +109,15 @@ export function planAgenda(opts: {
   clavesConSaldo: Set<string>
   existentes: ExistenteAgenda[]
   fechaDatos: string
+  manuales?: ManualAgenda[]
 }): ResultadoPlanAgenda {
+  const dia = (s: string) => Date.parse(`${s.slice(0, 10)}T12:00:00Z`) / 86_400_000
+  const buscarDuplicado = (datos: DatosVientriAgenda): PosibleDuplicado | null => {
+    const m = (opts.manuales ?? []).find(
+      (x) => x.montoCentavos === datos.montoCentavos && x.fecha !== null && Math.abs(dia(x.fecha) - dia(datos.fecha)) <= DIAS_DUPLICADO,
+    )
+    return m ? { id: m.id, descripcion: m.descripcion } : null
+  }
   const existentes = new Map(opts.existentes.map((e) => [e.id, e]))
   const operaciones: OperacionAgenda[] = []
   const vistos = new Set<string>()
@@ -109,7 +135,7 @@ export function planAgenda(opts: {
     const datos = datosDesdePendiente(p, opts.fechaDatos)
     const ex = existentes.get(id)
     if (!ex) {
-      operaciones.push({ tipo: 'crear', id, datos })
+      operaciones.push({ tipo: 'crear', id, datos, posibleDuplicado: buscarDuplicado(datos) })
       continue
     }
     if (!ex.abierto) {
@@ -136,5 +162,6 @@ export function planAgenda(opts: {
     operaciones.push({ tipo: 'cerrar', id: ex.id })
   }
 
-  return { operaciones, saldosNegativos }
+  const posiblesDuplicados = operaciones.filter((o) => o.tipo === 'crear' && o.posibleDuplicado).length
+  return { operaciones, saldosNegativos, posiblesDuplicados }
 }

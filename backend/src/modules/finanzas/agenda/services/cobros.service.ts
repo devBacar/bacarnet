@@ -48,6 +48,7 @@ export async function serializeCobro(id: string, data: CobroEsperadoDocument) {
     comprobante: data.vientri?.comprobante ?? null,
     origen: data.origen ?? null,
     vientri: data.vientri ?? null,
+    posibleDuplicado: data.posibleDuplicado ?? null,
     createdAt: agendaTimestampToIso(data.createdAt),
     updatedAt: agendaTimestampToIso(data.updatedAt),
   }

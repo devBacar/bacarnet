@@ -49,6 +49,7 @@ export interface CompromisoAgendaItem {
   /** 'vientri' si vino de la carga diaria de Vientri: comprobante, proveedor, importe y moneda no se editan acá. */
   origen?: 'vientri' | null
   vientri?: VientriEnAgendaItem | null
+  posibleDuplicado?: { id: string; descripcion: string } | null
 }
 
 export interface VientriEnAgendaItem {
@@ -77,6 +78,7 @@ export interface CobroAgendaItem {
   comprobante?: string | null
   origen?: 'vientri' | null
   vientri?: VientriEnAgendaItem | null
+  posibleDuplicado?: { id: string; descripcion: string } | null
 }
 
 export interface HistorialAgendaItem {

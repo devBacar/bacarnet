@@ -6,6 +6,7 @@
 import { CarpetaInvalidaError, procesarCarpeta } from '../domain/procesar.js'
 import { ARCHIVOS_REQUERIDOS } from '../domain/control.js'
 import { aplicarVentana } from '../domain/ventana.js'
+import { agendaVientriActivada, sincronizarAgenda } from './sincronizar-agenda.js'
 import {
   cerrarImportacion,
   contarColeccion,
@@ -146,9 +147,19 @@ export async function importarVientri(opts: {
     docs: pendientes.map((p) => ({ id: p.clave, data: { ...p, conRevisar: p.revisar.length > 0 } })),
   })
 
+  // Agenda: se calcula siempre; se escribe solo si está activada (vientriEstado/config.agenda) y no es simulación.
+  const agendaActiva = await agendaVientriActivada()
+  const agenda = await sincronizarAgenda({
+    pendientesEnVentana: pendientes,
+    todosLosPendientes: proc.pendientes,
+    fechaDatos,
+    escribir: agendaActiva && !simular,
+  })
+  const resumenFinal = { ...resumen, agenda: { activa: agendaActiva, ...agenda } }
+
   const mensaje = `Importado: ${resumen.cheques} cheques, ${resumen.pendientesPagar} a pagar, ${resumen.pendientesCobrar} a cobrar.`
   if (!simular) {
-    await cerrarImportacion(importacionId, { ok: true, mensaje, resumen, conteos })
+    await cerrarImportacion(importacionId, { ok: true, mensaje, resumen: resumenFinal, conteos })
     await guardarLimpieza({ fechaDatos, desde: ventana.desde, items: ventana.limpieza })
     await guardarEstado({
       fechaDatos,
@@ -157,8 +168,8 @@ export async function importarVientri(opts: {
       importacionId,
       ok: true,
       mensaje,
-      resumen: { ...resumen, tiposComprobante: proc.tiposComprobante.length },
+      resumen: { ...resumenFinal, tiposComprobante: proc.tiposComprobante.length },
     })
   }
-  return { ok: true, importacionId, fechaDatos, mensaje, simulado: simular, conteos, resumen }
+  return { ok: true, importacionId, fechaDatos, mensaje, simulado: simular, conteos, resumen: resumenFinal }
 }

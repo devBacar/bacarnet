@@ -46,6 +46,18 @@ export interface CompromisoAgendaItem {
   observacion?: string | null
   acumuladoCentavos?: number
   restanteCentavos?: number
+  /** 'vientri' si vino de la carga diaria de Vientri: comprobante, proveedor, importe y moneda no se editan acá. */
+  origen?: 'vientri' | null
+  vientri?: VientriEnAgendaItem | null
+}
+
+export interface VientriEnAgendaItem {
+  comprobante: string
+  tipo: string | null
+  cuit: string | null
+  totalCentavos: number
+  fechaVencimiento: string
+  fechaDatos: string
 }
 
 export interface CobroAgendaItem {
@@ -61,6 +73,10 @@ export interface CobroAgendaItem {
   fechaConfirmado: string | null
   updatedAt?: string | null
   alertaVencimiento: VencimientoAlerta
+  moneda?: 'ARS' | 'USD'
+  comprobante?: string | null
+  origen?: 'vientri' | null
+  vientri?: VientriEnAgendaItem | null
 }
 
 export interface HistorialAgendaItem {

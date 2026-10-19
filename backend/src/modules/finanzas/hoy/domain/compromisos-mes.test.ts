@@ -237,7 +237,7 @@ describe('planificado, acumulado y totales', () => {
       hoy: '2026-09-01',
       tipoCambio: null,
       feriados,
-      compromisos: [compromiso({ id: 'raro', grupo: 'Proveedores' })],
+      compromisos: [compromiso({ id: 'raro', grupo: 'Grupo inventado' })],
     })
     expect(planilla.grupos.find((grupo) => grupo.grupo === 'Otros egresos')?.filas).toHaveLength(1)
   })

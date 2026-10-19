@@ -183,7 +183,7 @@ function TablaCheques({ items, emitidos }: { items: VientriCheque[]; emitidos: b
             <th className="py-2 pr-3">Número</th>
             <th className="py-2 pr-3">Banco</th>
             <th className="py-2 pr-3">{emitidos ? 'Para' : 'De quién'}</th>
-            <th className="py-2 pr-3">Vence</th>
+            <th className="py-2 pr-3">Fecha de pago</th>
             <th className="py-2 pr-3 text-right">Importe</th>
             <th className="py-2 pr-3">Estado</th>
           </tr>

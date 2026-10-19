@@ -45,7 +45,7 @@ describe('campos de la planilla', () => {
   })
 
   it('rechaza un grupo que no está en la lista y una cuota cruzada', () => {
-    expect(() => leerGrupo('Proveedores', 'error')).toThrow(/grupo/)
+    expect(() => leerGrupo('Grupo inventado', 'error')).toThrow(/grupo/)
     expect(() => leerCuota(21, 20)).toThrow(/no puede pasar/)
     expect(() => leerCuota(2, null)).toThrow(/número y un total/)
   })

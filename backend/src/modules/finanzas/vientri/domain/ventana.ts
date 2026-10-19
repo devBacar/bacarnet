@@ -10,6 +10,8 @@ import type { VientriChequeDoc, VientriPendienteDoc } from './tipos.js'
 
 export const MESES_VENTANA = 12
 export const DIAS_PARA_DEPOSITAR = 30
+/** Un cheque propio con la fecha de pago pasada hace más de esto y sin débito en Vientri va al listado. */
+export const DIAS_SIN_DEBITO = 7
 
 const ESTADOS_ABIERTOS = new Set(['en_cartera', 'pendiente_debito'])
 
@@ -48,6 +50,20 @@ export interface ResultadoVentana {
   fuera: { cheques: number; pendientes: number }
 }
 
+function paraLimpiar(c: VientriChequeDoc, motivo: string): ChequeParaLimpiar {
+  return {
+    clave: c.clave,
+    direccion: c.direccion,
+    numero: c.numero,
+    bancoNombre: c.bancoNombre,
+    montoCentavos: c.montoCentavos,
+    fechaVencimiento: c.fechaVencimiento,
+    estadoVientri: c.estadoVientri,
+    librador: c.librador?.nombre ?? null,
+    motivo,
+  }
+}
+
 const fechaValida = (f: string | null): f is string => typeof f === 'string' && /^\d{4}-\d{2}-\d{2}/.test(f)
 
 export function aplicarVentana(
@@ -57,6 +73,7 @@ export function aplicarVentana(
 ): ResultadoVentana {
   const desde = restarMeses(fechaDatos, MESES_VENTANA)
   const limiteDeposito = restarDias(fechaDatos, DIAS_PARA_DEPOSITAR)
+  const limiteDebito = restarDias(fechaDatos, DIAS_SIN_DEBITO)
   const limpieza: ChequeParaLimpiar[] = []
   const chequesDentro: VientriChequeDoc[] = []
 
@@ -73,26 +90,29 @@ export function aplicarVentana(
           ...c,
           revisar: [...c.revisar, `Vencido para depositar: pasaron más de ${DIAS_PARA_DEPOSITAR} días de la fecha de pago`],
         })
+        limpieza.push(paraLimpiar(c, `En cartera, pero la fecha de pago pasó hace más de ${DIAS_PARA_DEPOSITAR} días`))
       } else {
+        if (
+          c.direccion === 'emitido' &&
+          c.estado === 'pendiente_debito' &&
+          fechaValida(c.fechaVencimiento) &&
+          c.fechaVencimiento < limiteDebito
+        ) {
+          limpieza.push(paraLimpiar(c, `Sin débito en Vientri y la fecha de pago pasó hace más de ${DIAS_SIN_DEBITO} días`))
+        }
         chequesDentro.push(c)
       }
       continue
     }
     if (ESTADOS_ABIERTOS.has(c.estado) && !c.baja) {
-      limpieza.push({
-        clave: c.clave,
-        direccion: c.direccion,
-        numero: c.numero,
-        bancoNombre: c.bancoNombre,
-        montoCentavos: c.montoCentavos,
-        fechaVencimiento: c.fechaVencimiento,
-        estadoVientri: c.estadoVientri,
-        librador: c.librador?.nombre ?? null,
-        motivo:
+      limpieza.push(
+        paraLimpiar(
+          c,
           c.estado === 'en_cartera'
-            ? 'Figura en cartera pero venció hace más de un año'
-            : 'Figura sin debitar pero venció hace más de un año',
-      })
+            ? 'Figura en cartera pero la fecha de pago pasó hace más de un año'
+            : 'Figura sin debitar pero la fecha de pago pasó hace más de un año',
+        ),
+      )
     }
   }
 

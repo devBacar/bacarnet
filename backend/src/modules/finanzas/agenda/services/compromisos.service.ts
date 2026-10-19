@@ -103,6 +103,8 @@ export async function serializeCompromiso(id: string, data: CompromisoPagoDocume
     }),
     enFirmaCentavos: montoEnFirmaCentavos(listarTransferenciasEnFirma(data.transferenciasEnFirma)),
     alertaVencimiento,
+    origen: data.origen ?? null,
+    vientri: data.vientri ?? null,
     createdAt: agendaTimestampToIso(data.createdAt),
     updatedAt: agendaTimestampToIso(data.updatedAt),
   }
@@ -536,6 +538,16 @@ export async function patchCompromisoAgenda(
   const current = await getCompromisoDocument(compromisoId)
   if (!current) throw new Error('Compromiso no encontrado')
   const cambios = leerEdicionCompromiso(body)
+  if (current.origen === 'vientri') {
+    const tocaDatosDeVientri =
+      (cambios.concepto != null && cambios.concepto !== current.concepto) ||
+      (cambios.proveedorONombre != null && cambios.proveedorONombre !== current.proveedorONombre) ||
+      (cambios.montoCentavos != null && cambios.montoCentavos !== current.montoCentavos) ||
+      (cambios.moneda != null && cambios.moneda !== (current.moneda ?? 'ARS'))
+    if (tocaDatosDeVientri) {
+      throw new Error('Este pago viene de Vientri: el comprobante, el proveedor, el importe y la moneda se corrigen en Vientri.')
+    }
+  }
   const bloqueado = current.estado === 'confeccionada_pendiente_autorizacion'
   if (
     bloqueado &&

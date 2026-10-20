@@ -239,25 +239,7 @@ export function CobrosHoy({
           )}
         />
       )}
-      {atrasados.length > 0 ? (
-        <ul className="mt-2 space-y-1 border-t border-neutral-100 pt-2 dark:border-zinc-800">
-          {atrasados.map((cobro) => (
-            <li key={cobro.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[13px]">
-              <span className="min-w-0">
-                <span className="font-medium text-red-700 dark:text-red-300">Atrasado:</span>{' '}
-                <span className="text-heading">{cobro.cliente}</span>
-                <span className="text-body-muted"> · {cobro.haceTexto.toLowerCase()}{cobro.estimada ? ' · fecha estimada' : ''}</span>
-              </span>
-              <span className="flex shrink-0 items-center gap-2">
-                <Monto centavos={cobro.montoCentavos} className="text-heading" />
-                <button type="button" className={linkChico} onClick={() => onReclamarAtrasado(cobro)}>
-                  Reclamar
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <AtrasadosCobro atrasados={atrasados} onReclamar={onReclamarAtrasado} />
       {sinFecha && sinFecha.cantidad > 0 ? (
         <p className="text-body-muted mt-3 border-t border-neutral-100 pt-2 text-[13px] dark:border-zinc-800">
           {sinFecha.cantidad} {sinFecha.cantidad === 1 ? 'factura a cobrar' : 'facturas a cobrar'} sin fecha esperada en Vientri por{' '}
@@ -265,5 +247,65 @@ export function CobrosHoy({
         </p>
       ) : null}
     </Tarjeta>
+  )
+}
+
+/** Cobros atrasados: los de hasta 30 días a la vista; los más viejos (casi siempre saldos chicos que quedaron
+ * abiertos en Vientri) se resumen en una línea y se despliegan si hace falta. */
+function AtrasadosCobro({
+  atrasados,
+  onReclamar,
+}: {
+  atrasados: CobroAtrasadoHoy[]
+  onReclamar: (cobro: CobroAtrasadoHoy) => void
+}) {
+  const [verRecientes, setVerRecientes] = useState(false)
+  const [verViejos, setVerViejos] = useState(false)
+  const recientes = atrasados.filter((c) => c.haceDias <= 30)
+  const viejos = atrasados.filter((c) => c.haceDias > 30)
+  const totalViejos = viejos.reduce((s, c) => s + c.montoCentavos, 0)
+  const fila = (cobro: CobroAtrasadoHoy) => (
+    <li key={cobro.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[13px]">
+              <span className="min-w-0">
+                <span className="font-medium text-red-700 dark:text-red-300">Atrasado:</span>{' '}
+                <span className="text-heading">{cobro.cliente}</span>
+                <span className="text-body-muted"> · {cobro.haceTexto.toLowerCase()}{cobro.estimada ? ' · fecha estimada' : ''}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <Monto centavos={cobro.montoCentavos} className="text-heading" />
+                <button type="button" className={linkChico} onClick={() => onReclamar(cobro)}>
+                  Reclamar
+                </button>
+              </span>
+    </li>
+  )
+  if (atrasados.length === 0) return null
+  const visibles = verRecientes ? recientes : recientes.slice(0, 8)
+  return (
+    <div className="mt-2 border-t border-neutral-100 pt-2 dark:border-zinc-800">
+      {recientes.length > 0 ? (
+        <>
+          <p className="text-heading mb-1 text-[13px] font-medium">
+            Atrasados hasta 30 días ({recientes.length}) · <Monto centavos={recientes.reduce((s, c) => s + c.montoCentavos, 0)} className="text-heading" />
+          </p>
+          <ul className="space-y-1">{visibles.map(fila)}</ul>
+          {recientes.length > visibles.length ? (
+            <button type="button" className={`${linkChico} mt-1`} onClick={() => setVerRecientes(true)}>
+              Ver todos ({recientes.length}) ›
+            </button>
+          ) : null}
+        </>
+      ) : null}
+      {viejos.length > 0 ? (
+        <div className="mt-2">
+          <button type="button" className={`${linkChico} text-left`} onClick={() => setVerViejos(!verViejos)}>
+            {verViejos ? '▾' : '▸'} {viejos.length} saldos de más de 30 días por{' '}
+            <Monto centavos={totalViejos} className="text-heading" />: casi siempre restos que quedaron abiertos en Vientri
+            (retenciones o diferencias). Revisalos con Administración.
+          </button>
+          {verViejos ? <ul className="mt-1 space-y-1">{viejos.map(fila)}</ul> : null}
+        </div>
+      ) : null}
+    </div>
   )
 }

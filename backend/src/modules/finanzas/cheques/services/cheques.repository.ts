@@ -1,14 +1,16 @@
-import { FieldValue, type DocumentData } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp, type DocumentData } from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import type {
   ChequeDireccion,
   ChequeDocument,
   ChequeEstado,
+  ChequeHistorialEstadoDocument,
   ChequeImportRow,
   ChequeOrigen,
 } from '../domain/cheque.types.js'
 
 export const CHEQUES_COLLECTION = 'cheques'
+const HISTORIAL_ESTADOS_SUB = 'historialEstados'
 
 const WRITE_CHUNK = 400
 
@@ -272,10 +274,30 @@ export async function getChequeById(id: string): Promise<ChequeListadoItem | nul
 export async function updateChequeEstado(input: {
   id: string
   estado: ChequeEstado
+  actorUid?: string | null
+  nota?: string | null
 }): Promise<void> {
-  await collection().doc(input.id).update({
-    estado: input.estado,
-    updatedAt: FieldValue.serverTimestamp(),
+  const ref = collection().doc(input.id)
+  const now = Timestamp.now()
+  await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) throw new Error('Cheque no encontrado')
+    const estadoAnterior = (snap.data()?.estado ?? null) as ChequeEstado | null
+    tx.update(ref, {
+      estado: input.estado,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    if (estadoAnterior !== input.estado) {
+      const entry: ChequeHistorialEstadoDocument = {
+        estadoAnterior,
+        estadoNuevo: input.estado,
+        origen: 'manual',
+        usuario: input.actorUid ?? null,
+        nota: input.nota?.trim() || null,
+        fecha: now,
+      }
+      tx.set(ref.collection(HISTORIAL_ESTADOS_SUB).doc(), entry)
+    }
   })
 }
 
@@ -331,13 +353,142 @@ export async function vincularChequeConMovimiento(input: {
   movimientoFecha: string
   fechaAcreditacion: string | null
 }): Promise<void> {
-  await collection().doc(input.chequeId).update({
-    movimientoBancarioId: input.movimientoBancarioId,
-    movimientoCuentaId: input.movimientoCuentaId,
-    movimientoFecha: input.movimientoFecha,
-    ...(input.fechaAcreditacion != null ? { fechaAcreditacion: input.fechaAcreditacion } : {}),
-    updatedAt: FieldValue.serverTimestamp(),
+  const ref = collection().doc(input.chequeId)
+  const now = Timestamp.now()
+  await adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) return
+    const estadoAnterior = (snap.data()?.estado ?? null) as ChequeEstado | null
+    const pasaADebitado = estadoAnterior === 'pendiente'
+    tx.update(ref, {
+      movimientoBancarioId: input.movimientoBancarioId,
+      movimientoCuentaId: input.movimientoCuentaId,
+      movimientoFecha: input.movimientoFecha,
+      ...(input.fechaAcreditacion != null ? { fechaAcreditacion: input.fechaAcreditacion } : {}),
+      ...(pasaADebitado ? { estado: 'debitado' as const, utilizado: true } : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+    if (pasaADebitado) {
+      const entry: ChequeHistorialEstadoDocument = {
+        estadoAnterior: 'pendiente',
+        estadoNuevo: 'debitado',
+        origen: 'reconciliacion',
+        usuario: null,
+        nota: `Debitado por movimiento bancario ${input.movimientoFecha} (${input.movimientoBancarioId})`,
+        fecha: now,
+      }
+      tx.set(ref.collection(HISTORIAL_ESTADOS_SUB).doc(), entry)
+    }
   })
+}
+
+export async function debitarChequesPendientesConMovimiento(): Promise<number> {
+  const snap = await collection().where('estado', '==', 'pendiente').get()
+  const conMovimiento = snap.docs.filter((doc) => Boolean(doc.data().movimientoBancarioId))
+  if (conMovimiento.length === 0) return 0
+
+  const db = adminDb()
+  const now = Timestamp.now()
+  for (let i = 0; i < conMovimiento.length; i += Math.floor(WRITE_CHUNK / 2)) {
+    const slice = conMovimiento.slice(i, i + Math.floor(WRITE_CHUNK / 2))
+    const batch = db.batch()
+    for (const doc of slice) {
+      const data = doc.data()
+      const movId = String(data.movimientoBancarioId ?? '')
+      const movFecha = typeof data.movimientoFecha === 'string' ? data.movimientoFecha : ''
+      batch.update(doc.ref, {
+        estado: 'debitado',
+        utilizado: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      const entry: ChequeHistorialEstadoDocument = {
+        estadoAnterior: 'pendiente',
+        estadoNuevo: 'debitado',
+        origen: 'reconciliacion',
+        usuario: null,
+        nota: `Debitado por movimiento bancario ${movFecha} (${movId})`.trim(),
+        fecha: now,
+      }
+      batch.set(doc.ref.collection(HISTORIAL_ESTADOS_SUB).doc(), entry)
+    }
+    await batch.commit()
+  }
+  return conMovimiento.length
+}
+
+export async function desvincularChequesFueraDeVentana(options: { dryRun: boolean }): Promise<{
+  evaluados: number
+  desvinculados: { chequeId: string; numero: string; estado: string; fechaPago: string; movFecha: string; diff: number; movDescripcion: string }[]
+}> {
+  const db = adminDb()
+  const movCol = db.collection('movimientosBancarios')
+  const snap = await collection().where('direccion', '==', 'emitido').get()
+  const vinculados = snap.docs.filter((d) => d.data().movimientoBancarioId)
+
+  function diffDias(isoA: string, isoB: string): number {
+    const a = new Date(isoA + 'T00:00:00Z')
+    const b = new Date(isoB + 'T00:00:00Z')
+    return (a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24)
+  }
+
+  const aDesvincular: { doc: FirebaseFirestore.DocumentSnapshot; movId: string; movExists: boolean; info: (typeof result)['desvinculados'][number] }[] = []
+  const result = { evaluados: vinculados.length, desvinculados: [] as { chequeId: string; numero: string; estado: string; fechaPago: string; movFecha: string; diff: number; movDescripcion: string }[] }
+
+  for (const doc of vinculados) {
+    const data = doc.data()!
+    const movId = String(data.movimientoBancarioId)
+    const movSnap = await movCol.doc(movId).get()
+    if (!movSnap.exists) {
+      aDesvincular.push({ doc, movId, movExists: false, info: { chequeId: doc.id, numero: String(data.numero ?? ''), estado: String(data.estado ?? ''), fechaPago: '', movFecha: '', diff: NaN, movDescripcion: 'MOV NO EXISTE' } })
+      continue
+    }
+    const mov = movSnap.data()!
+    const fechaPago = String(data.fechaPago ?? '')
+    const fechaProceso = String(mov.fechaProceso ?? '')
+    if (!fechaPago || !fechaProceso) continue
+    const diff = diffDias(fechaProceso, fechaPago)
+    if (diff < -1 || diff > 5) {
+      const info = { chequeId: doc.id, numero: String(data.numero ?? ''), estado: String(data.estado ?? ''), fechaPago, movFecha: fechaProceso, diff, movDescripcion: String(mov.descripcion ?? '') }
+      aDesvincular.push({ doc, movId, movExists: true, info })
+    }
+  }
+
+  result.desvinculados = aDesvincular.map((x) => x.info)
+  if (options.dryRun || aDesvincular.length === 0) return result
+
+  const now = Timestamp.now()
+  for (let i = 0; i < aDesvincular.length; i += Math.floor(WRITE_CHUNK / 2)) {
+    const slice = aDesvincular.slice(i, i + Math.floor(WRITE_CHUNK / 2))
+    const batch = db.batch()
+    for (const item of slice) {
+      const data = item.doc.data()!
+      const updates: Record<string, unknown> = {
+        movimientoBancarioId: FieldValue.delete(),
+        movimientoCuentaId: FieldValue.delete(),
+        movimientoFecha: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+      if (data.estado === 'debitado') {
+        updates.estado = 'pendiente'
+        const entry: ChequeHistorialEstadoDocument = {
+          estadoAnterior: 'debitado',
+          estadoNuevo: 'pendiente',
+          origen: 'reconciliacion',
+          usuario: null,
+          nota: 'Desvinculado: movimiento fuera de ventana -1/+5 días',
+          fecha: now,
+        }
+        batch.set(item.doc.ref.collection(HISTORIAL_ESTADOS_SUB).doc(), entry)
+      }
+      batch.update(item.doc.ref, updates)
+      if (item.movExists) {
+        batch.update(movCol.doc(item.movId), { reservadoPorChequeId: FieldValue.delete() })
+      }
+    }
+    await batch.commit()
+  }
+
+  return result
 }
 
 export async function resumenDiario(fecha: string): Promise<{

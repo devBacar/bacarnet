@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express'
 import { adminDb } from '../../lib/firebase/admin.js'
 import { logError } from '../../lib/log.js'
-import { resolveRoleForEmail } from './profileDefaults.js'
+import { resolveRoleForEmail, SUPER_ADMIN_PERMISSIONS } from './profileDefaults.js'
 
 /** Perfil del usuario autenticado desde Firestore Admin (misma DB que staging/emulador). */
 export async function getCurrentUserProfile(req: Request, res: Response): Promise<void> {
@@ -46,25 +46,28 @@ export async function getCurrentUserProfile(req: Request, res: Response): Promis
         data.accountStatus === 'active'
           ? data.accountStatus
           : 'active',
-      permissions: {
-        view_directory: permissionsRaw.view_directory === true,
-        view_drive: permissionsRaw.view_drive === true,
-        view_links: permissionsRaw.view_links === true,
-        manage_news: permissionsRaw.manage_news === true,
-        manage_links: permissionsRaw.manage_links === true,
-        manage_users: permissionsRaw.manage_users === true,
-        super_admin: permissionsRaw.super_admin === true,
-        rag_assistant: permissionsRaw.rag_assistant === true,
-        view_finanzas: permissionsRaw.view_finanzas === true,
-        finanzas_agenda: permissionsRaw.finanzas_agenda === true,
-        finanzas_cheques: permissionsRaw.finanzas_cheques === true,
-        finanzas_categorias: permissionsRaw.finanzas_categorias === true,
-        finanzas_transferencias: permissionsRaw.finanzas_transferencias === true,
-        finanzas_destinatarios: permissionsRaw.finanzas_destinatarios === true,
-        finanzas_saldos: permissionsRaw.finanzas_saldos === true,
-        manage_finanzas_caja: permissionsRaw.manage_finanzas_caja === true,
-        rrhh_detalle: permissionsRaw.rrhh_detalle === true,
-      },
+      permissions:
+        role === 'super_admin' || permissionsRaw.super_admin === true
+          ? { ...SUPER_ADMIN_PERMISSIONS }
+          : {
+              view_directory: permissionsRaw.view_directory === true,
+              view_drive: permissionsRaw.view_drive === true,
+              view_links: permissionsRaw.view_links === true,
+              manage_news: permissionsRaw.manage_news === true,
+              manage_links: permissionsRaw.manage_links === true,
+              manage_users: permissionsRaw.manage_users === true,
+              super_admin: permissionsRaw.super_admin === true,
+              rag_assistant: permissionsRaw.rag_assistant === true,
+              view_finanzas: permissionsRaw.view_finanzas === true,
+              finanzas_agenda: permissionsRaw.finanzas_agenda === true,
+              finanzas_cheques: permissionsRaw.finanzas_cheques === true,
+              finanzas_categorias: permissionsRaw.finanzas_categorias === true,
+              finanzas_transferencias: permissionsRaw.finanzas_transferencias === true,
+              finanzas_destinatarios: permissionsRaw.finanzas_destinatarios === true,
+              finanzas_saldos: permissionsRaw.finanzas_saldos === true,
+              manage_finanzas_caja: permissionsRaw.manage_finanzas_caja === true,
+              rrhh_detalle: permissionsRaw.rrhh_detalle === true,
+            },
       managedAreaIds: Array.isArray(data.managedAreaIds)
         ? data.managedAreaIds.filter((id): id is string => typeof id === 'string')
         : [],

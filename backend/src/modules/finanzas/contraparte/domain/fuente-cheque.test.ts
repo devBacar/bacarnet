@@ -28,6 +28,7 @@ function mov(partial: Partial<MovimientoCheque> = {}): MovimientoCheque {
     descripcion: 'ECHEQ CAMARA',
     codeDescriptionIb: null,
     voucherNumber: null,
+    correlativeNumber: null,
     categoriaNombre: null,
     ...partial,
   }
@@ -56,22 +57,22 @@ describe('contraparte desde cheques', () => {
     expect(resultado).toEqual([])
   })
 
-  it('si el número no alcanza, usa monto y fecha dentro de ventana de 30 días', () => {
-    const dentro = cheque({ id: 'dentro', direccion: 'emitido', numero: '1', fechaPago: '2026-09-15' })
-    const fuera = cheque({ id: 'fuera', direccion: 'emitido', numero: '2', fechaPago: '2026-08-20' })
+  it('si el número no alcanza, usa monto y fecha dentro de ventana de 5 días', () => {
+    const dentro = cheque({ id: 'dentro', direccion: 'emitido', numero: '1', fechaPago: '2026-09-28' })
+    const fuera = cheque({ id: 'fuera', direccion: 'emitido', numero: '2', fechaPago: '2026-09-20' })
     expect(chequesCandidatos(mov({ descripcion: 'CHEQUE CAMARA LOCAL' }), [dentro, fuera]).map((row) => row.id)).toEqual([
       'dentro',
     ])
     expect(chequesCandidatos(mov(), [dentro, { ...dentro, id: 'otro' }])).toEqual([])
   })
 
-  it('matchea por monto si el movimiento es hasta 5 días antes de fechaPago (rechazo temprano)', () => {
-    const ch = cheque({ id: 'f', direccion: 'emitido', numero: '1', fechaPago: '2026-10-05' })
+  it('matchea por monto si el movimiento es hasta 1 día antes de fechaPago', () => {
+    const ch = cheque({ id: 'f', direccion: 'emitido', numero: '1', fechaPago: '2026-10-02' })
     expect(chequesCandidatos(mov({ descripcion: 'CHEQUE CAMARA LOCAL', fechaProceso: '2026-10-01' }), [ch]).map((r) => r.id)).toEqual(['f'])
   })
 
-  it('no matchea por monto si el movimiento es más de 5 días antes de fechaPago', () => {
-    const futuro = cheque({ id: 'f', direccion: 'emitido', numero: '1', fechaPago: '2026-10-10' })
+  it('no matchea por monto si el movimiento es más de 1 día antes de fechaPago', () => {
+    const futuro = cheque({ id: 'f', direccion: 'emitido', numero: '1', fechaPago: '2026-10-05' })
     expect(chequesCandidatos(mov({ descripcion: 'CHEQUE CAMARA LOCAL', fechaProceso: '2026-10-01' }), [futuro])).toEqual([])
   })
 
@@ -152,6 +153,38 @@ describe('contraparte desde cheques', () => {
     expect(nombreContraparteCheque(recibido)).toBe('Cheque de Acme SA')
     expect(nombreContraparteCheque({ ...recibido, cliente: null })).toBe('Cheque de Juan Pérez')
     expect(nombreContraparteCheque({ ...recibido, cliente: '  ', emisor: '  ' })).toBeNull()
+  })
+
+  it('matchea por correlativeNumber cuando voucherNumber es null', () => {
+    const emitido = cheque({ id: 'e1', direccion: 'emitido', numero: '00055', montoCentavos: 999 })
+    const [unico] = chequesCandidatos(
+      mov({ voucherNumber: null, correlativeNumber: '55', montoCentavos: 999 }),
+      [emitido],
+    )
+    expect(unico?.id).toBe('e1')
+  })
+
+  it('prefiere voucherNumber sobre correlativeNumber', () => {
+    const porVoucher = cheque({ id: 'v', direccion: 'emitido', numero: '100', montoCentavos: 500 })
+    const porCorr = cheque({ id: 'c', direccion: 'emitido', numero: '200', montoCentavos: 500 })
+    const [unico] = chequesCandidatos(
+      mov({ voucherNumber: '100', correlativeNumber: '200', montoCentavos: 500 }),
+      [porVoucher, porCorr],
+    )
+    expect(unico?.id).toBe('v')
+  })
+
+  it('desempata por fecha más cercana cuando hay varios candidatos por monto', () => {
+    const cercano = cheque({ id: 'c', direccion: 'emitido', numero: '1', fechaPago: '2026-09-29' })
+    const lejano = cheque({ id: 'l', direccion: 'emitido', numero: '2', fechaPago: '2026-09-26' })
+    const [unico] = chequesCandidatos(mov({ descripcion: 'CHEQUE CAMARA LOCAL' }), [cercano, lejano])
+    expect(unico?.id).toBe('c')
+  })
+
+  it('no desempata si dos candidatos tienen la misma distancia en fecha', () => {
+    const a = cheque({ id: 'a', direccion: 'emitido', numero: '1', fechaPago: '2026-09-28' })
+    const b = cheque({ id: 'b', direccion: 'emitido', numero: '2', fechaPago: '2026-09-28' })
+    expect(chequesCandidatos(mov({ descripcion: 'CHEQUE CAMARA LOCAL' }), [a, b])).toEqual([])
   })
 
   it('un depósito por cámara también entra, y sin destinatario el nombre no inventa uno', () => {

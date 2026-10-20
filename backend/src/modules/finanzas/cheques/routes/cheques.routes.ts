@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { listChequesApi, getResumenDiario, importChequesExcel, ingresarChequesPegados } from '../services/cheques.service.js'
-import { getChequeById, updateChequeEstado } from '../services/cheques.repository.js'
+import { getChequeById, updateChequeEstado, desvincularChequesFueraDeVentana } from '../services/cheques.repository.js'
 import { reconciliarChequesConMovimientos } from '../services/reconciliar-cheques-movimientos.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import type { ChequeDireccion, ChequeEstado, ChequeOrigen, ChequeTipo } from '../domain/cheque.types.js'
@@ -124,9 +124,22 @@ const VALID_ESTADOS: ChequeEstado[] = [
 ]
 
 
-finanzasChequesRouter.post('/reconciliar', requireFinanzasPermiso('finanzas_cheques'), async (_req, res) => {
+finanzasChequesRouter.post('/desvincular-fuera-de-ventana', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
   try {
-    const result = await reconciliarChequesConMovimientos()
+    const dryRun = req.query.dryRun === '1'
+    const result = await desvincularChequesFueraDeVentana({ dryRun })
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/cheques] desvincular fuera de ventana', err)
+    const message = err instanceof Error ? err.message : 'No se pudo desvincular'
+    res.status(500).json({ error: message })
+  }
+})
+
+finanzasChequesRouter.post('/reconciliar', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const detalle = req.query.detalle === '1'
+    const result = await reconciliarChequesConMovimientos({ detalle })
     res.json(result)
   } catch (err) {
     console.error('[finanzas/cheques] reconciliar', err)
@@ -155,7 +168,11 @@ finanzasChequesRouter.patch('/:id/estado', requireFinanzasPermiso('finanzas_cheq
       res.status(400).json({ error: `estado inválido, debe ser uno de: ${VALID_ESTADOS.join(', ')}` })
       return
     }
-    await updateChequeEstado({ id: req.params.id, estado: estado as ChequeEstado })
+    await updateChequeEstado({
+      id: req.params.id,
+      estado: estado as ChequeEstado,
+      actorUid: req.authedUser?.uid ?? null,
+    })
     res.json({ ok: true })
   } catch (err) {
     console.error('[finanzas/cheques] update estado', err)

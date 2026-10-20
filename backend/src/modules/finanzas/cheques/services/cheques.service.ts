@@ -20,6 +20,7 @@ import {
   type ChequeListadoItem,
   type ChequesFiltro,
 } from './cheques.repository.js'
+import { reconciliarChequesConMovimientos } from './reconciliar-cheques-movimientos.js'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const PAGE_DEFAULT = 50
@@ -327,6 +328,11 @@ export async function ingresarChequesPegados(input: {
 
   const insertados = nuevos.length > 0 ? await insertCheques({ rows: nuevos, createdBy: input.actorUid }) : 0
   const actualizados = existentes.length > 0 ? await upsertCheques({ rows: existentes, createdBy: input.actorUid }) : 0
+  try {
+    await reconciliarChequesConMovimientos()
+  } catch (err) {
+    console.error('[finanzas/cheques] reconciliar post-ingresar', err)
+  }
   return { insertados, actualizados, ignorados, duplicados, errores, avisos }
 }
 
@@ -611,7 +617,7 @@ function inferEstadoEmitidoVientri(raw: string): ChequeEstado | null {
   if (norm.includes('rechazado')) return 'rechazado'
   if (norm.includes('pago confirmado') || norm.includes('resumen bancario')) return 'debitado'
   if (norm.includes('abonado')) return 'debitado'
-  if (norm.includes('pago a proveedor')) return 'debitado'
+  if (norm.includes('pago a proveedor')) return 'pendiente'
   if (!norm) return 'pendiente'
   return 'debitado'
 }
@@ -993,5 +999,10 @@ export async function importChequesExcel(input: {
 
   const insertados = nuevos.length > 0 ? await insertCheques({ rows: nuevos, createdBy: input.actorUid }) : 0
   const actualizados = existentes.length > 0 ? await upsertCheques({ rows: existentes, createdBy: input.actorUid }) : 0
+  try {
+    await reconciliarChequesConMovimientos()
+  } catch (err) {
+    console.error('[finanzas/cheques] reconciliar post-import', err)
+  }
   return { insertados, actualizados, ignorados, duplicados, errores, avisos }
 }

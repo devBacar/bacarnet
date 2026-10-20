@@ -100,3 +100,15 @@ export interface ChequeImportRow {
 
   fechaAcreditacion: string | null
 }
+
+export type ChequeHistorialOrigen = 'reconciliacion' | 'manual' | 'importacion'
+
+export interface ChequeHistorialEstadoDocument {
+  estadoAnterior: ChequeEstado | null
+  estadoNuevo: ChequeEstado
+  origen: ChequeHistorialOrigen
+  usuario: string | null
+  nota: string | null
+  fecha: Timestamp
+}
+

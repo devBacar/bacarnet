@@ -32,6 +32,7 @@ export interface MovimientoParaContraparte {
   descripcion: string
   codeDescriptionIb: string | null
   voucherNumber: string | null
+  correlativeNumber: string | null
   depositorDescription: string | null
   customerCuit: string | null
   categoriaId: string | null
@@ -115,25 +116,73 @@ export function resolverLote(
   )
 
   const elegiblesCheque = elegiblesAgenda.filter((mov) => !agendaMap.has(mov.id))
-  const chequeMap = emparejarUnico(elegiblesCheque, (mov) =>
-    conNombre(
-      chequesCandidatos(
-        {
-          tipo: mov.tipo,
-          montoCentavos: mov.montoCentavos,
-          fechaProceso: mov.fechaProceso,
-          descripcion: mov.descripcion,
-          codeDescriptionIb: mov.codeDescriptionIb,
-          voucherNumber: mov.voucherNumber,
-          categoriaNombre: mov.categoriaId ? (ctx.categorias.get(mov.categoriaId)?.nombre ?? null) : null,
-        },
-        ctx.cheques,
-      ).map((cheque) => ({
-        id: cheque.id,
-        contraparte: contraparteDeCheque(cheque),
-      })),
-    ),
+  const chequeMap = new Map<string, CandidatoConId>()
+  const chequesUsados = new Set<string>()
+  const elegiblesChequePorId = new Map(elegiblesCheque.map((mov) => [mov.id, mov]))
+
+  for (const cheque of ctx.cheques) {
+    if (!cheque.movimientoBancarioId) continue
+    chequesUsados.add(cheque.id)
+    if (!elegiblesChequePorId.has(cheque.movimientoBancarioId)) continue
+    const [unico] = conNombre([{ id: cheque.id, contraparte: contraparteDeCheque(cheque) }])
+    if (unico) chequeMap.set(cheque.movimientoBancarioId, unico)
+  }
+
+  const chequesSinVincular = ctx.cheques.filter((cheque) => !chequesUsados.has(cheque.id))
+  const chequePorNumeroMap = emparejarUnico(
+    elegiblesCheque.filter((mov) => !chequeMap.has(mov.id)),
+    (mov) =>
+      conNombre(
+        chequesCandidatos(
+          {
+            tipo: mov.tipo,
+            montoCentavos: mov.montoCentavos,
+            fechaProceso: mov.fechaProceso,
+            descripcion: mov.descripcion,
+            codeDescriptionIb: mov.codeDescriptionIb,
+            voucherNumber: mov.voucherNumber,
+            correlativeNumber: mov.correlativeNumber,
+            categoriaNombre: mov.categoriaId ? (ctx.categorias.get(mov.categoriaId)?.nombre ?? null) : null,
+          },
+          chequesSinVincular,
+          { soloNumero: true },
+        ).map((cheque) => ({
+          id: cheque.id,
+          contraparte: contraparteDeCheque(cheque),
+        })),
+      ),
   )
+  for (const [movId, cand] of chequePorNumeroMap) {
+    chequeMap.set(movId, cand)
+    chequesUsados.add(cand.id)
+  }
+
+  const chequesRestantes = ctx.cheques.filter((cheque) => !chequesUsados.has(cheque.id))
+  const chequeRestanteMap = emparejarUnico(
+    elegiblesCheque.filter((mov) => !chequeMap.has(mov.id)),
+    (mov) =>
+      conNombre(
+        chequesCandidatos(
+          {
+            tipo: mov.tipo,
+            montoCentavos: mov.montoCentavos,
+            fechaProceso: mov.fechaProceso,
+            descripcion: mov.descripcion,
+            codeDescriptionIb: mov.codeDescriptionIb,
+            voucherNumber: mov.voucherNumber,
+            correlativeNumber: mov.correlativeNumber,
+            categoriaNombre: mov.categoriaId ? (ctx.categorias.get(mov.categoriaId)?.nombre ?? null) : null,
+          },
+          chequesRestantes,
+        ).map((cheque) => ({
+          id: cheque.id,
+          contraparte: contraparteDeCheque(cheque),
+        })),
+      ),
+  )
+  for (const [movId, cand] of chequeRestanteMap) {
+    chequeMap.set(movId, cand)
+  }
 
   const elegiblesIb = elegiblesCheque.filter(
     (mov) => !chequeMap.has(mov.id) && movimientoPuedeVenirDeInterbanking(mov),

@@ -6,15 +6,18 @@ import { getAccessibleBoardIds, isSuperAdminUser, syncBoardName } from './boardA
 import { boardsFeatureConfigured } from './policy.js'
 import { getRrhhBoardFolderId } from '../rrhh/boardRrhhConfig.js'
 import { getFinanzasBoardFolderId } from '../finanzas/tablero/boardFinanzasConfig.js'
+import { getNegocioBoardFolderId } from '../tableros-negocio/boardNegocioConfig.js'
 import { getBoardsConfig } from './policy.js'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
-function tipoDeTablero(id: string): 'rrhh' | 'finanzas' | null {
+function tipoDeTablero(id: string): 'rrhh' | 'finanzas' | 'negocio' | null {
   const rrhh = getRrhhBoardFolderId()
   if (rrhh && id === rrhh) return 'rrhh'
   const finanzas = getFinanzasBoardFolderId()
   if (finanzas && id === finanzas) return 'finanzas'
+  const negocio = getNegocioBoardFolderId()
+  if (negocio && id === negocio) return 'negocio'
   return null
 }
 

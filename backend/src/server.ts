@@ -11,6 +11,7 @@ import { helpdeskRouter } from './modules/helpdesk/routes.js'
 import { stTicketsRouter } from './modules/stTickets/routes.js'
 import { finanzasRouter } from './modules/finanzas/routes/index.js'
 import { rrhhRouter } from './modules/rrhh/routes/rrhh.routes.js'
+import { tablerosNegocioRouter } from './modules/tableros-negocio/routes/negocio.routes.js'
 import {
   handleOfficeUploadStagingContentPreflight,
   serveOfficeUploadStagingContent,
@@ -75,6 +76,7 @@ app.use('/api/notifications', notificationsRouter)
 app.use('/api/approval-requests', approvalRequestsRouter)
 app.use('/api/finanzas', finanzasRouter)
 app.use('/api/rrhh', rrhhRouter)
+app.use('/api/tableros/negocio', tablerosNegocioRouter)
 
 app.use((_req, res) => {
   res.status(404).json({ error: 'No encontrado' })

@@ -42,6 +42,7 @@ import {
   FinanzasIndexRedirect,
   RrhhHorasExtraPage,
   TableroFinanzasPage,
+  NegocioBoard,
 } from '../pages'
 import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
 import { ProtectedRoute } from './ProtectedRoute'
@@ -120,6 +121,8 @@ export function AppRoutes() {
               <Route path="tableros/rrhh" element={<RrhhHorasExtraPage />} />
               {/* Tablero React de Finanzas: el acceso lo controla la API (mismo esquema que los demás tableros). */}
               <Route path="tableros/finanzas" element={<TableroFinanzasPage />} />
+              {/* Tablero React de Finanzas – Negocio: datos.json de la carpeta de Drive; acceso por la API. */}
+              <Route path="tableros/negocio" element={<NegocioBoard />} />
             </Route>
 
             <Route path="tableros/desarrollo-proyectos" element={<DesarrolloProyectosBoard />} />

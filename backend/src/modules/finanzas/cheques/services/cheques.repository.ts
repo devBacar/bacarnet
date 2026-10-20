@@ -491,6 +491,60 @@ export async function desvincularChequesFueraDeVentana(options: { dryRun: boolea
   return result
 }
 
+export async function corregirPagoProveedorDebitado(options: { dryRun: boolean }): Promise<{
+  evaluados: number
+  corregidos: { chequeId: string; numero: string; estadoBancario: string; fechaPago: string; tieneMovimiento: boolean }[]
+}> {
+  const snap = await collection()
+    .where('direccion', '==', 'emitido')
+    .where('estado', '==', 'debitado')
+    .get()
+
+  const candidatos = snap.docs.filter((doc) => {
+    const data = doc.data()
+    const eb = String(data.estadoBancario ?? '').toLowerCase()
+    return (eb.includes('pago a proveedor') || eb.includes('diferido')) && !data.movimientoBancarioId
+  })
+
+  const corregidos = candidatos.map((doc) => {
+    const data = doc.data()
+    return {
+      chequeId: doc.id,
+      numero: String(data.numero ?? ''),
+      estadoBancario: String(data.estadoBancario ?? ''),
+      fechaPago: String(data.fechaPago ?? ''),
+      tieneMovimiento: Boolean(data.movimientoBancarioId),
+    }
+  })
+
+  if (options.dryRun || candidatos.length === 0) return { evaluados: snap.size, corregidos }
+
+  const db = adminDb()
+  const now = Timestamp.now()
+  for (let i = 0; i < candidatos.length; i += Math.floor(WRITE_CHUNK / 2)) {
+    const slice = candidatos.slice(i, i + Math.floor(WRITE_CHUNK / 2))
+    const batch = db.batch()
+    for (const doc of slice) {
+      batch.update(doc.ref, {
+        estado: 'pendiente',
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      const entry: ChequeHistorialEstadoDocument = {
+        estadoAnterior: 'debitado',
+        estadoNuevo: 'pendiente',
+        origen: 'reconciliacion',
+        usuario: null,
+        nota: 'Corrección: "pago a proveedor" no es debitado sin movimiento bancario',
+        fecha: now,
+      }
+      batch.set(doc.ref.collection(HISTORIAL_ESTADOS_SUB).doc(), entry)
+    }
+    await batch.commit()
+  }
+
+  return { evaluados: snap.size, corregidos }
+}
+
 export async function resumenDiario(fecha: string): Promise<{
   cantidadACobrar: number
   totalACobrarCentavos: number

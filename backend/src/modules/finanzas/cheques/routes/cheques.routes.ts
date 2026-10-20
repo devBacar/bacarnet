@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { listChequesApi, getResumenDiario, importChequesExcel, ingresarChequesPegados } from '../services/cheques.service.js'
-import { getChequeById, updateChequeEstado, desvincularChequesFueraDeVentana } from '../services/cheques.repository.js'
+import { getChequeById, updateChequeEstado, desvincularChequesFueraDeVentana, corregirPagoProveedorDebitado } from '../services/cheques.repository.js'
 import { reconciliarChequesConMovimientos } from '../services/reconciliar-cheques-movimientos.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import type { ChequeDireccion, ChequeEstado, ChequeOrigen, ChequeTipo } from '../domain/cheque.types.js'
@@ -132,6 +132,18 @@ finanzasChequesRouter.post('/desvincular-fuera-de-ventana', requireFinanzasPermi
   } catch (err) {
     console.error('[finanzas/cheques] desvincular fuera de ventana', err)
     const message = err instanceof Error ? err.message : 'No se pudo desvincular'
+    res.status(500).json({ error: message })
+  }
+})
+
+finanzasChequesRouter.post('/corregir-pago-proveedor', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const dryRun = req.query.dryRun === '1'
+    const result = await corregirPagoProveedorDebitado({ dryRun })
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/cheques] corregir pago proveedor', err)
+    const message = err instanceof Error ? err.message : 'No se pudo corregir'
     res.status(500).json({ error: message })
   }
 })

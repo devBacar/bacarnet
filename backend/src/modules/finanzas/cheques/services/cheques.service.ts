@@ -618,6 +618,7 @@ function inferEstadoEmitidoVientri(raw: string): ChequeEstado | null {
   if (norm.includes('pago confirmado') || norm.includes('resumen bancario')) return 'debitado'
   if (norm.includes('abonado')) return 'debitado'
   if (norm.includes('pago a proveedor')) return 'pendiente'
+  if (norm.includes('diferido')) return 'pendiente'
   if (!norm) return 'pendiente'
   return 'debitado'
 }

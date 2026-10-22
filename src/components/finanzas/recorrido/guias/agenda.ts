@@ -166,7 +166,7 @@ export const GUIAS_AGENDA: Guia[] = [
         espera: 'agenda-planilla-detalle',
         titulo: 'Tocá un monto',
         texto: 'Tocá cualquier monto de la planilla.',
-        sinDatos: 'Este mes no hay compromisos cargados. Agregalos con «Agregar» o desde Compromisos de pago. Te cuento cómo sigue.',
+        sinDatos: 'Este mes no hay compromisos cargados. Agregalos con «Agregar» o desde Compromisos. Te cuento cómo sigue.',
       },
       {
         id: 'detalle',
@@ -196,7 +196,7 @@ export const GUIAS_AGENDA: Guia[] = [
         ruta: RUTA_HECHOS,
         selector: 'agenda-hechos-pestana',
         titulo: 'Pagos hechos',
-        texto: 'Dentro de Compromisos de pago, esta pestaña muestra lo que ya pagaste.',
+        texto: 'Dentro de Compromisos, esta pestaña muestra lo que ya pagaste.',
       },
       {
         id: 'lista',

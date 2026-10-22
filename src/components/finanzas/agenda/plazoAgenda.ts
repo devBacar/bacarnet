@@ -2,13 +2,43 @@
 export type PlazoAgenda = 'semana' | 'atrasados' | 'hoy' | 'proximos' | 'sinFecha' | 'todos'
 
 export const PLAZOS: Array<{ id: PlazoAgenda; label: string }> = [
-  { id: 'semana', label: 'Atrasados + próximos 7 días' },
   { id: 'atrasados', label: 'Atrasados' },
   { id: 'hoy', label: 'Hoy' },
   { id: 'proximos', label: 'Próximos 7 días' },
+  { id: 'semana', label: 'Atrasados + próximos 7 días' },
   { id: 'sinFecha', label: 'Sin fecha de pago' },
   { id: 'todos', label: 'Todos' },
 ]
+
+/** Los tres plazos que se muestran grandes, arriba de la lista. */
+export const PLAZOS_PRINCIPALES: PlazoAgenda[] = ['atrasados', 'hoy', 'proximos']
+
+export interface TotalesPlazo {
+  cantidad: number
+  ARS: number
+  USD: number
+}
+
+/** Cantidad e importes (en centavos, por moneda) de las filas que caen en el plazo. */
+export function totalesEnPlazo<T>(
+  rows: T[],
+  campos: {
+    fecha: (row: T) => string | null | undefined
+    sinFecha?: (row: T) => boolean
+    moneda: (row: T) => 'ARS' | 'USD'
+    monto: (row: T) => number
+  },
+  plazo: PlazoAgenda,
+  hoy: string,
+): TotalesPlazo {
+  const tot: TotalesPlazo = { cantidad: 0, ARS: 0, USD: 0 }
+  for (const r of rows) {
+    if (!enPlazo(campos.fecha(r), plazo, hoy, campos.sinFecha?.(r) ?? false)) continue
+    tot.cantidad += 1
+    tot[campos.moneda(r)] += campos.monto(r)
+  }
+  return tot
+}
 
 /** AAAA-MM-DD en Argentina. */
 export function diaArgentina(fecha: Date | string): string {

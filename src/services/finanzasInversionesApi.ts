@@ -1,0 +1,547 @@
+import { auth } from './firebase'
+import { resolveApiUrl } from './resolveApiUrl'
+
+/**
+ * Inversiones (/api/finanzas/inversiones). Personas que le prestan plata a BACAR.
+ * Montos en centavos. Fechas 'YYYY-MM-DD'. Tasas en porcentaje (45 = 45 %).
+ * Los tipos espejan backend/src/modules/finanzas/inversiones/domain/inversion.types.ts.
+ */
+
+export type MonedaInversion = 'ARS' | 'USD'
+export type BaseDias = 365 | 360 | 'reales'
+export type SistemaDevolucion = 'al_vencimiento' | 'americano' | 'frances' | 'aleman' | 'a_medida'
+export type Periodicidad = 'mensual' | 'bimestral' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'anual'
+export type ReferenciaTasa = 'plazo_fijo_30' | 'badlar' | 'tamar' | 'adelantos_empresas' | 'prestamos_empresas'
+export type IndiceAjuste = 'uva' | 'cer'
+export type Tasa =
+  | { tipo: 'fija'; tnaPct: number }
+  | { tipo: 'variable'; referencia: ReferenciaTasa; spreadPct: number; pisoPct?: number | null; techoPct?: number | null }
+  | { tipo: 'ajustable'; indice: IndiceAjuste; tnaPct: number }
+export type MedioIngreso = 'transferencia' | 'efectivo' | 'cheque'
+export type MedioDevolucion = 'transferencia_ars' | 'transferencia_usd' | 'efectivo' | 'cheque'
+export type FuenteTipoCambio = 'pactado' | 'bna_vendedor' | 'mep'
+export interface TipoCambioPactado {
+  /** Pesos por dólar en centavos (1.050,25 → 105025). */
+  centavosPorUsd: number
+  fuente: FuenteTipoCambio
+  fecha: string
+}
+export type EstadoInversion =
+  | 'borrador'
+  | 'pendiente_aprobacion'
+  | 'vigente'
+  | 'cancelada'
+  | 'precancelada'
+  | 'renovada'
+  | 'anulada'
+export type TipoCuota = 'normal' | 'precancelacion' | 'devolucion_parcial'
+export type EstadoCuota = 'pendiente' | 'parcial' | 'pagada' | 'atrasada' | 'anulada' | 'renovada'
+export type Penalidad =
+  | { tipo: 'ninguna' }
+  | { tipo: 'porcentaje_interes'; valorPct: number }
+  | { tipo: 'porcentaje_capital'; valorPct: number }
+  | { tipo: 'monto_fijo'; montoCentavos: number }
+export type TipoOperacion = 'precancelacion' | 'devolucion_parcial' | 'renovacion'
+export type ModalidadRenovacion = 'capital_e_intereses' | 'solo_capital' | 'monto'
+
+export interface Cuota {
+  numero: number
+  tipo: TipoCuota
+  fechaVencimiento: string
+  diasPeriodo: number
+  tasaAplicadaPct: number
+  capitalCentavos: number
+  interesCentavos: number
+  ajusteCentavos: number
+  penalidadCentavos: number
+  totalCentavos: number
+  saldoCapitalCentavos: number
+  estimada: boolean
+  anulada?: boolean
+  renovadaCentavos?: number
+  enPesos?: TipoCambioPactado | null
+  indiceValor?: number | null
+}
+
+/** Cuota con su situación en la Agenda (solo en inversiones aprobadas). */
+export interface CuotaDetalle extends Cuota {
+  estado: EstadoCuota
+  /** Id del compromiso en la Agenda: con este id se paga (Hoy / Agenda). null si todavía no está en la Agenda. */
+  compromisoId: string | null
+  /** Lo que hay que pagar en la moneda del compromiso (si la cuota en USD se paga en pesos, en pesos). */
+  aPagarCentavos: number
+  monedaPago: MonedaInversion
+  pagadoCentavos: number
+  restanteCentavos: number
+  /** Texto de cómo se pagó (si ya tiene pagos). */
+  comoSePago: string | null
+}
+
+export interface TotalesCronograma {
+  capitalCentavos: number
+  interesCentavos: number
+  ajusteCentavos: number
+  penalidadCentavos: number
+  totalCentavos: number
+}
+
+/** Lo que se carga en el formulario de alta o edición. */
+export interface CondicionesInput {
+  moneda: MonedaInversion
+  capitalCentavos: number
+  fechaAlta: string
+  sistema: SistemaDevolucion
+  periodicidad: Periodicidad
+  cantidadCuotas: number
+  fechaVencimiento: string | null
+  tasa: Tasa
+  /** null = la de la configuración. */
+  baseDias: BaseDias | null
+  cuotasAMedida?: Array<{ fecha: string; capitalCentavos: number; interesCentavos?: number | null }> | null
+  devolucionEnPesos?: TipoCambioPactado | null
+  medioIngresoPrevisto: MedioIngreso
+  mediosDevolucion: MedioDevolucion[]
+  /** null = la de la configuración. */
+  penalidadPrecancelacion: Penalidad | null
+}
+
+export interface InversionInput extends CondicionesInput {
+  inversorId: string
+  observaciones: string | null
+}
+
+export interface IngresoRegistrado {
+  id: string
+  medio: MedioIngreso
+  fecha: string
+  montoCentavos: number
+  cuentaId: string | null
+  cajaId: string | null
+  chequeId: string | null
+  movimientoId: string | null
+  nota: string | null
+  registradoPor: string
+  registradoPorNombre?: string | null
+  registradoAt: string
+  importado?: boolean
+}
+
+export interface Aprobacion {
+  solicitadaPor: string
+  solicitadaPorNombre?: string | null
+  solicitadaAt: string
+  resueltaPor: string | null
+  resueltaPorNombre?: string | null
+  resueltaAt: string | null
+  resultado: 'aprobada' | 'rechazada' | null
+  nota: string | null
+}
+
+export interface OperacionPendiente {
+  id: string
+  tipo: TipoOperacion
+  fecha: string
+  solicitadaPor: string
+  solicitadaPorNombre?: string | null
+  solicitadaAt: string
+  nota: string | null
+  penalidad?: Penalidad
+  montoCentavos?: number | null
+  modalidad?: ModalidadRenovacion
+  inversionNuevaId?: string | null
+  cronogramaPropuesto: Cuota[]
+  resumen: string
+}
+
+export interface Alertas {
+  porVencer: boolean
+  diasParaVencer: number | null
+  cuotasAtrasadas: number
+  proximaCuota: { numero: number; fecha: string; montoCentavos: number } | null
+  fechaFinal: string | null
+}
+
+export interface InversionResumen {
+  id: string
+  numero: string
+  inversorId: string
+  inversorNombre: string
+  estado: EstadoInversion
+  moneda: MonedaInversion
+  capitalCentavos: number
+  fechaAlta: string
+  fechaFinal: string | null
+  sistema: SistemaDevolucion
+  tasa: Tasa
+  /** Lo que falta devolver (capital + intereses de las cuotas abiertas). */
+  pendienteCentavos: number
+  /** Capital que todavía no entró. */
+  ingresoPendienteCentavos: number
+  alertas: Alertas
+  operacionPendiente: { tipo: TipoOperacion; fecha: string } | null
+  importada: boolean
+}
+
+export interface KpisInversiones {
+  /** Capital de las inversiones vigentes, por moneda. */
+  capitalVigente: Record<MonedaInversion, number>
+  /** Lo que falta pagar (cuotas abiertas), por moneda. */
+  aDevolver: Record<MonedaInversion, number>
+  /** Cuotas que vencen en los próximos 30 días. */
+  proximos30: { cantidad: number; porMoneda: Record<MonedaInversion, number> }
+  cuotasAtrasadas: number
+  paraAprobar: number
+  porVencer: number
+}
+
+export interface HistorialItem {
+  estadoAnterior: string | null
+  estadoNuevo: string
+  fecha: string
+  usuario: string
+  usuarioNombre?: string | null
+  nota: string | null
+}
+
+export interface InversionDetalle {
+  id: string
+  numero: string
+  inversorId: string
+  inversorNombre: string
+  estado: EstadoInversion
+  condiciones: CondicionesInput & { baseDias: BaseDias; penalidadPrecancelacion: Penalidad }
+  cronograma: CuotaDetalle[]
+  totales: TotalesCronograma
+  ingresos: IngresoRegistrado[]
+  /** Capital que tiene que entrar (descontado lo que viene de una renovación) y cuánto ya entró. */
+  ingresoEsperadoCentavos: number
+  ingresadoCentavos: number
+  aprobacion: Aprobacion | null
+  operacionPendiente: OperacionPendiente | null
+  renovacionDe: { inversionId: string; numero: string; capitalCentavos: number } | null
+  renovadaEn: { inversionId: string; numero: string } | null
+  alertas: Alertas
+  /** Conflictos con la Agenda que hay que revisar a mano. */
+  avisosAgenda: string[]
+  indiceAlta: number | null
+  observaciones: string | null
+  importada: boolean
+  historial: HistorialItem[]
+  createdAt: string | null
+  createdBy: string
+  permisos: {
+    editar: boolean
+    enviar: boolean
+    aprobar: boolean
+    registrarIngreso: boolean
+    operar: boolean
+    anular: boolean
+  }
+}
+
+export interface SimulacionResponse {
+  cronograma: Cuota[]
+  totales: TotalesCronograma
+  /** Ej.: "Las cuotas 3 a 12 usan la última BADLAR conocida: el monto puede cambiar". */
+  avisos: string[]
+  baseDias: BaseDias
+  indiceAlta: number | null
+}
+
+export type TipoPersona = 'humana' | 'juridica'
+
+export interface InversorDatos {
+  nombre: string
+  tipoPersona: TipoPersona | null
+  cuit: string | null
+  dni: string | null
+  email: string | null
+  telefono: string | null
+  domicilio: string | null
+  cbuArs: string | null
+  cuentaUsd: string | null
+  observaciones: string | null
+}
+
+export interface InversorResumen {
+  id: string
+  nombre: string
+  tipoPersona: TipoPersona | null
+  /** Solo los últimos 4 números: "…4567". */
+  documentoMascara: string | null
+  estado: 'activo' | 'inactivo'
+  inversionesVigentes: number
+  capitalVigente: Record<MonedaInversion, number>
+}
+
+export interface InversorFicha extends InversorDatos {
+  id: string
+  estado: 'activo' | 'inactivo'
+  inversiones: InversionResumen[]
+  createdAt: string | null
+  updatedAt: string | null
+}
+
+export interface ConfigInversiones {
+  baseDiasDefault: BaseDias
+  penalidadDefault: Penalidad
+  diasAvisoPorVencer: number
+}
+
+export interface ValorTasa {
+  clave: ReferenciaTasa | IndiceAjuste
+  nombre: string
+  /** Tasas: TNA en %. Índices: valor del índice. */
+  valor: number | null
+  fecha: string | null
+  /** Id de la serie en la API del BCRA. */
+  idVariable: number | null
+}
+
+export interface TasasResponse {
+  referencias: ValorTasa[]
+  indices: ValorTasa[]
+  actualizadoAt: string | null
+  /** Banda sugerida para la tasa que paga BACAR: piso = plazo fijo 30 días, techo = financiamiento alternativo. */
+  banda: { pisoPct: number | null; techoPct: number | null; texto: string }
+  error: string | null
+}
+
+export interface IngresoInput {
+  medio: MedioIngreso
+  fecha: string
+  montoCentavos: number
+  /** Transferencia: cuenta del banco. */
+  cuentaId?: string | null
+  /** Transferencia: movimiento del banco que la confirma (opcional). */
+  movimientoId?: string | null
+  /** Efectivo: caja principal donde entra. */
+  cajaId?: string | null
+  /** Cheque: se agrega a la cartera de Cheques. */
+  cheque?: {
+    tipo: 'echeq' | 'fisico'
+    numero: string
+    bancoEmisor: string | null
+    fechaPago: string
+    emisor: string
+    emisorCuit: string | null
+  } | null
+  nota?: string | null
+}
+
+export interface OperacionInput {
+  tipo: TipoOperacion
+  /** Precancelación y devolución parcial: el día que se devuelve. En renovación se ignora (es el vencimiento). */
+  fecha: string
+  montoCentavos?: number | null
+  penalidad?: Penalidad | null
+  modalidad?: ModalidadRenovacion
+  /** Renovación: condiciones de la inversión nueva (capital = lo renovado + plata nueva, si hay). */
+  nuevaInversion?: CondicionesInput | null
+  nota?: string | null
+}
+
+export interface ImportarFila {
+  fila: number
+  ok: boolean
+  errores: string[]
+  avisos: string[]
+  inversorNombre: string
+  inversorExistenteId: string | null
+  numeroPlanilla: string | null
+  moneda: MonedaInversion | null
+  capitalCentavos: number | null
+  fechaAlta: string | null
+  sistema: SistemaDevolucion | null
+  cantidadCuotas: number | null
+  cuotasPagadas: number
+  ingresoRegistrado: boolean
+  totales: TotalesCronograma | null
+}
+
+export interface ImportarVistaPrevia {
+  /** Se manda a /importar/confirmar para crear exactamente lo que se vio. Vence en 30 minutos. */
+  token: string
+  filas: ImportarFila[]
+  resumen: { total: number; ok: number; conErrores: number; inversoresNuevos: number }
+}
+
+export interface SemanaCruce {
+  desde: string
+  hasta: string
+  ingresos: { vientri: number; inversiones: number; otros: number }
+  egresos: { vientri: number; inversiones: number; otros: number }
+  neto: number
+  saldoProyectado: number
+}
+
+export interface CruceMoneda {
+  moneda: MonedaInversion
+  /** Saldo de hoy en los bancos (Interbanking) en esa moneda. */
+  saldoBancos: number
+  saldoFecha: string | null
+  /** Atrasado (antes de hoy) que todavía no se pagó / cobró. */
+  atrasado: { ingresos: number; egresos: number }
+  semanas: SemanaCruce[]
+  /** Primera semana en la que el saldo proyectado queda negativo. */
+  primeraSemanaNegativa: string | null
+}
+
+export interface CruceResponse {
+  monedas: CruceMoneda[]
+  generadoAt: string
+}
+
+async function invFetch(path: string, init?: RequestInit): Promise<Response> {
+  const user = auth.currentUser
+  if (!user) throw new Error('No autenticado')
+  const token = await user.getIdToken()
+  const headers = new Headers(init?.headers)
+  if (!(init?.body instanceof FormData)) headers.set('Content-Type', 'application/json')
+  headers.set('Authorization', `Bearer ${token}`)
+  return fetch(resolveApiUrl(`/api/finanzas/inversiones${path}`), { ...init, headers })
+}
+
+async function leer<T>(res: Response, fallback: string): Promise<T> {
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error ?? fallback)
+  }
+  return res.json() as Promise<T>
+}
+
+function post(path: string, body?: unknown, method = 'POST') {
+  return invFetch(path, { method, body: body === undefined ? undefined : JSON.stringify(body) })
+}
+
+// ── Inversiones ──────────────────────────────────────────────
+
+export async function fetchInversiones(): Promise<{ inversiones: InversionResumen[]; kpis: KpisInversiones }> {
+  return leer(await invFetch('/'), 'No pude traer las inversiones')
+}
+
+export async function fetchInversion(id: string): Promise<InversionDetalle> {
+  return leer(await invFetch(`/${encodeURIComponent(id)}`), 'No pude traer la inversión')
+}
+
+export async function simularInversion(input: CondicionesInput): Promise<SimulacionResponse> {
+  return leer(await post('/simular', input), 'No pude calcular las cuotas')
+}
+
+export async function crearInversion(input: InversionInput): Promise<InversionDetalle> {
+  return leer(await post('/', input), 'No pude guardar la inversión')
+}
+
+export async function editarInversion(id: string, input: InversionInput): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}`, input, 'PATCH'), 'No pude guardar los cambios')
+}
+
+export async function enviarAAprobacion(id: string, nota: string | null): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/enviar`, { nota }), 'No pude enviarla a aprobación')
+}
+
+export async function aprobarInversion(id: string, nota: string | null): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/aprobar`, { nota }), 'No pude aprobarla')
+}
+
+export async function rechazarInversion(id: string, motivo: string): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/rechazar`, { motivo }), 'No pude rechazarla')
+}
+
+export async function anularInversion(id: string, motivo: string): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/anular`, { motivo }), 'No pude anularla')
+}
+
+export async function registrarIngreso(id: string, input: IngresoInput): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/ingresos`, input), 'No pude registrar el ingreso')
+}
+
+/** Cuota en USD que se paga en pesos. tipoCambio null = vuelve a pagarse en dólares. */
+export async function cuotaEnPesos(id: string, numero: number, tipoCambio: TipoCambioPactado | null): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/cuotas/${numero}/en-pesos`, { tipoCambio }), 'No pude cambiar la moneda de la cuota')
+}
+
+export async function simularOperacion(id: string, input: OperacionInput): Promise<{ cronogramaPropuesto: Cuota[]; resumen: string; totales: TotalesCronograma; capitalRenovadoCentavos: number | null; nueva: SimulacionResponse | null }> {
+  return leer(await post(`/${encodeURIComponent(id)}/operaciones/simular`, input), 'No pude calcular la operación')
+}
+
+export async function solicitarOperacion(id: string, input: OperacionInput): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/operaciones`, input), 'No pude pedir la operación')
+}
+
+export async function aprobarOperacion(id: string, nota: string | null): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/operaciones/aprobar`, { nota }), 'No pude aprobar la operación')
+}
+
+export async function rechazarOperacion(id: string, motivo: string): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/operaciones/rechazar`, { motivo }), 'No pude rechazar la operación')
+}
+
+export async function sincronizarAgendaInversion(id: string): Promise<InversionDetalle> {
+  return leer(await post(`/${encodeURIComponent(id)}/sincronizar-agenda`), 'No pude actualizar la Agenda')
+}
+
+// ── Inversores ───────────────────────────────────────────────
+
+export async function fetchInversores(): Promise<InversorResumen[]> {
+  const data = await leer<{ inversores: InversorResumen[] }>(await invFetch('/inversores'), 'No pude traer los inversores')
+  return data.inversores
+}
+
+export async function fetchInversor(id: string): Promise<InversorFicha> {
+  return leer(await invFetch(`/inversores/${encodeURIComponent(id)}`), 'No pude traer la ficha')
+}
+
+export async function crearInversor(datos: InversorDatos): Promise<InversorFicha> {
+  return leer(await post('/inversores', datos), 'No pude guardar el inversor')
+}
+
+export async function editarInversor(id: string, datos: InversorDatos): Promise<InversorFicha> {
+  return leer(await post(`/inversores/${encodeURIComponent(id)}`, datos, 'PATCH'), 'No pude guardar los cambios')
+}
+
+export async function cambiarEstadoInversor(id: string, estado: 'activo' | 'inactivo'): Promise<InversorFicha> {
+  return leer(await post(`/inversores/${encodeURIComponent(id)}/estado`, { estado }), 'No pude cambiar el estado')
+}
+
+// ── Configuración y tasas ────────────────────────────────────
+
+export async function fetchConfigInversiones(): Promise<ConfigInversiones> {
+  return leer(await invFetch('/config'), 'No pude traer la configuración')
+}
+
+export async function guardarConfigInversiones(config: ConfigInversiones): Promise<ConfigInversiones> {
+  return leer(await post('/config', config, 'PUT'), 'No pude guardar la configuración')
+}
+
+export async function fetchTasas(): Promise<TasasResponse> {
+  return leer(await invFetch('/tasas'), 'No pude traer las tasas')
+}
+
+export async function actualizarTasas(): Promise<TasasResponse> {
+  return leer(await post('/tasas/actualizar'), 'No pude actualizar las tasas del BCRA')
+}
+
+// ── Importación ──────────────────────────────────────────────
+
+export async function descargarPlantillaImportacion(): Promise<Blob> {
+  const res = await invFetch('/importar/plantilla')
+  if (!res.ok) throw new Error('No pude descargar la plantilla')
+  return res.blob()
+}
+
+export async function vistaPreviaImportacion(archivo: File): Promise<ImportarVistaPrevia> {
+  const form = new FormData()
+  form.append('archivo', archivo)
+  return leer(await invFetch('/importar/vista-previa', { method: 'POST', body: form }), 'No pude leer la planilla')
+}
+
+export async function confirmarImportacion(token: string): Promise<{ creadas: number; inversoresNuevos: number; mensaje: string }> {
+  return leer(await post('/importar/confirmar', { token }), 'No pude importar la planilla')
+}
+
+// ── Cruce ────────────────────────────────────────────────────
+
+export async function fetchCruce(semanas = 12): Promise<CruceResponse> {
+  return leer(await invFetch(`/cruce?semanas=${semanas}`), 'No pude armar el cruce')
+}

@@ -138,12 +138,12 @@ describe('plan de Agenda', () => {
     expect(op.datos.medioPago).toBe('cheque')
   })
 
-  it('no toca lo que ya está en la misma versión y borra lo que ya no corresponde', () => {
+  it('no toca lo que ya está en la misma versión y anula lo que ya no corresponde', () => {
     const ops = planAgendaCuotas({ ...paraAgenda, cronograma: inv.cronograma.map((c) => (c.numero === 2 ? { ...c, anulada: true } : c)), versionCronograma: 2 }, [
       { id: idCompromisoCuota('abc', 1), estado: 'pendiente', montoCentavos: 100_000, pagadoCentavos: 0, versionCronograma: 2 },
       { id: idCompromisoCuota('abc', 2), estado: 'pendiente', montoCentavos: 1, pagadoCentavos: 0, versionCronograma: 1 },
     ])
-    expect(ops).toEqual([{ tipo: 'borrar', id: idCompromisoCuota('abc', 2) }])
+    expect(ops).toEqual([{ tipo: 'anular', id: idCompromisoCuota('abc', 2) }])
   })
 
   it('cuota en USD que se paga en pesos', () => {
@@ -164,5 +164,12 @@ describe('plan de Agenda', () => {
     expect(planCobroIngreso({ ...paraAgenda, ingresos: [ing] }, { estado: 'esperado', montoCentavos: 10_000_000 })).toEqual({ tipo: 'actualizar_monto', montoCentavos: 6_000_000 })
     expect(planCobroIngreso({ ...paraAgenda, ingresos: [{ ...ing, montoCentavos: 10_000_000 }] }, { estado: 'esperado', montoCentavos: 6_000_000 })).toEqual({ tipo: 'confirmar', montoCentavos: 10_000_000 })
     expect(planCobroIngreso({ ...paraAgenda, renovacionDe: { capitalCentavos: 10_000_000 } }, null)).toEqual({ tipo: 'nada' })
+  })
+})
+
+describe('penalidad con tope', () => {
+  it('no supera los intereses si Finanzas lo configuró así', () => {
+    expect(calcularPenalidad({ tipo: 'porcentaje_capital', valorPct: 10, topeIntereses: true }, 10_000, 50)).toBe(50)
+    expect(calcularPenalidad({ tipo: 'porcentaje_capital', valorPct: 10 }, 10_000, 50)).toBe(1_000)
   })
 })

@@ -143,3 +143,43 @@ describe('cuotaFrancesa', () => {
     expect(cuotaFrancesa(100, Array(12).fill(1 + i))).toBeCloseTo(clasica, 10)
   })
 })
+
+describe('casos de la planilla de Finanzas', () => {
+  it('"Cobra 1,5 %" sin vencimiento: intereses todos los meses y el capital no se devuelve en el cronograma', () => {
+    const cuotas = generarCronograma(
+      cond({ sistema: 'americano', sinVencimiento: true, tasa: { tipo: 'fija', tnaPct: 18, expresada: 'mensual' } }),
+      {},
+      null,
+      { hasta: '2026-06-30' },
+    )
+    expect(cuotas.map((c) => c.fechaVencimiento)).toEqual(['2026-02-15', '2026-03-15', '2026-04-15', '2026-05-15', '2026-06-15'])
+    expect(cuotas.every((c) => c.capitalCentavos === 0 && c.interesCentavos === 150_000)).toBe(true)
+    expect(cuotas.at(-1)!.saldoCapitalCentavos).toBe(10_000_000)
+  })
+
+  it('capitaliza con vencimiento: una sola cuota con el interés compuesto', () => {
+    const [c, ...resto] = generarCronograma(cond({ sistema: 'capitaliza', cantidadCuotas: 2, tasa: { tipo: 'fija', tnaPct: 18, expresada: 'mensual' } }))
+    expect(resto).toHaveLength(0)
+    expect(c!.fechaVencimiento).toBe('2026-03-15')
+    // 100.000 × 1,015 × 1,015 = 103.022,50
+    expect(c!.totalCentavos).toBe(10_302_250)
+  })
+
+  it('capitaliza sin vencimiento: no hay cuotas, la deuda crece', async () => {
+    const { deudaCapitalizadaAl } = await import('./cronograma.js')
+    const c = cond({ sistema: 'capitaliza', sinVencimiento: true, tasa: { tipo: 'fija', tnaPct: 18, expresada: 'mensual' } })
+    expect(generarCronograma(c, {}, null, { hasta: '2027-01-01' })).toEqual([])
+    expect(deudaCapitalizadaAl(c, '2026-03-15')).toBe(10_302_250)
+  })
+
+  it('acuerdo en cuotas fijas sin interés (francés con tasa 0)', () => {
+    const cuotas = generarCronograma(cond({ cantidadCuotas: 6, capitalCentavos: 600_000, tasa: { tipo: 'fija', tnaPct: 0 } }))
+    expect(cuotas.map((c) => c.totalCentavos)).toEqual([100_000, 100_000, 100_000, 100_000, 100_000, 100_000])
+  })
+
+  it('base 360 con días reales', () => {
+    const [c] = generarCronograma(cond({ sistema: 'al_vencimiento', fechaVencimiento: '2026-02-15', baseDias: '360_reales', tasa: { tipo: 'fija', tnaPct: 36 } }))
+    expect(c!.diasPeriodo).toBe(31)
+    expect(c!.interesCentavos).toBe(310_000)
+  })
+})

@@ -44,19 +44,24 @@ export interface InversionParaAgenda {
   fechaAlta: string
   ingresos: readonly IngresoRegistrado[]
   renovacionDe: { capitalCentavos: number } | null
+  /** Cuotas pagadas antes de cargarla (inversiones en curso). */
+  cuotasPrevias?: number
+  sinVencimiento?: boolean
 }
 
 export interface CompromisoExistente {
   id: string
   estado: string
+  /** Ya anulado antes: no se vuelve a anular. */
+  anulado?: boolean
   montoCentavos: number
   pagadoCentavos: number
   versionCronograma: number | null
 }
 
 export interface DatosCompromisoCuota {
-  cuotaNumero: number
-  cuotaTotal: number
+  cuotaNumero: number | null
+  cuotaTotal: number | null
   concepto: string
   proveedorONombre: string
   montoCentavos: number
@@ -70,7 +75,8 @@ export interface DatosCompromisoCuota {
 export type OperacionAgenda =
   | { tipo: 'crear'; id: string; datos: DatosCompromisoCuota }
   | { tipo: 'actualizar'; id: string; datos: DatosCompromisoCuota; quedaPagado: boolean }
-  | { tipo: 'borrar'; id: string }
+  /** La cuota ya no corresponde: el compromiso queda anulado (no se borra; la Agenda no lo muestra). */
+  | { tipo: 'anular'; id: string }
   | { tipo: 'conflicto'; id: string; motivo: string }
 
 export function medioDeAgenda(medios: readonly MedioDevolucion[]): 'transferencia' | 'cheque' | 'efectivo' {
@@ -98,20 +104,27 @@ export function planAgendaCuotas(inv: InversionParaAgenda, existentes: readonly 
   const deseados = new Map<string, DatosCompromisoCuota>()
   if (ESTADOS_CON_AGENDA.has(inv.estado)) {
     const vivas = inv.cronograma.filter((c) => !c.anulada)
-    const total = vivas.length
+    const previas = inv.cuotasPrevias ?? 0
+    const total = vivas.length + previas
     vivas.forEach((c, i) => {
       const { montoCentavos, moneda } = montoAPagar(c, inv.moneda)
       if (montoCentavos <= 0) return
       const tipo =
-        c.tipo === 'precancelacion' ? 'Precancelación' : c.tipo === 'devolucion_parcial' ? 'Devolución parcial' : `Cuota ${i + 1}/${total}`
+        c.tipo === 'precancelacion'
+          ? 'Devolución del capital'
+          : c.tipo === 'devolucion_parcial'
+            ? 'Devolución parcial'
+            : inv.sinVencimiento
+              ? `Intereses ${c.fechaVencimiento.slice(5, 7)}/${c.fechaVencimiento.slice(0, 4)}`
+              : `Cuota ${i + 1 + previas}/${total}`
       const obs: string[] = []
       if (c.capitalCentavos > 0) obs.push('incluye capital')
       if ((c.renovadaCentavos ?? 0) > 0) obs.push('parte renovada')
       if (c.enPesos) obs.push(`USD al tipo de cambio ${textoTipoCambio(c.enPesos)}`)
       if (c.estimada) obs.push('monto estimado: la tasa o el índice todavía no se conoce')
       deseados.set(idCompromisoCuota(inv.id, c.numero), {
-        cuotaNumero: i + 1,
-        cuotaTotal: total,
+        cuotaNumero: inv.sinVencimiento ? null : i + 1 + previas,
+        cuotaTotal: inv.sinVencimiento ? null : total,
         concepto: `Inversión ${inv.numero} · ${tipo}`,
         proveedorONombre: inv.inversorNombre,
         montoCentavos,
@@ -140,11 +153,11 @@ export function planAgendaCuotas(inv: InversionParaAgenda, existentes: readonly 
     ops.push({ tipo: 'actualizar', id, datos, quedaPagado: actual.pagadoCentavos >= datos.montoCentavos && actual.pagadoCentavos > 0 })
   }
   for (const e of existentes) {
-    if (deseados.has(e.id)) continue
+    if (deseados.has(e.id) || e.anulado) continue
     if (e.pagadoCentavos > 0 || e.estado === 'confeccionada_pendiente_autorizacion') {
       ops.push({ tipo: 'conflicto', id: e.id, motivo: 'Esta cuota ya no corresponde pero tiene pagos o una transferencia armada. Revisala a mano.' })
     } else {
-      ops.push({ tipo: 'borrar', id: e.id })
+      ops.push({ tipo: 'anular', id: e.id })
     }
   }
   return ops

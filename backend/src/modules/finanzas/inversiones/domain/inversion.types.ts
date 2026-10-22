@@ -8,10 +8,24 @@
 
 export type MonedaInversion = 'ARS' | 'USD'
 
-/** 365 y 'reales' cuentan los días del calendario; 360 usa meses de 30 días (30/360). */
-export type BaseDias = 365 | 360 | 'reales'
+/**
+ * Cómo se cuentan los días del interés. Lo elige Finanzas (valor por defecto en la configuración y por inversión).
+ * - 365: días del calendario / 365.
+ * - 360: meses de 30 días / 360 (con 12 % anual, cada mes paga justo 1 %).
+ * - '360_reales': días del calendario / 360.
+ * - 'reales': días del calendario / 365 o 366 si el año es bisiesto.
+ */
+export type BaseDias = 365 | 360 | '360_reales' | 'reales'
 
-export type SistemaDevolucion = 'al_vencimiento' | 'americano' | 'frances' | 'aleman' | 'a_medida'
+/**
+ * - al_vencimiento: todo junto al final.
+ * - americano: se pagan los intereses cada período ("cobra X %") y el capital al final (o nunca, si no tiene vencimiento).
+ * - frances: cuota pareja. Con tasa 0 son cuotas fijas iguales (los "acuerdos" de la planilla).
+ * - aleman: capital igual en cada cuota.
+ * - capitaliza: los intereses no se pagan, se suman a la deuda; se devuelve todo al final.
+ * - a_medida: fecha y capital de cada cuota cargados a mano o importados.
+ */
+export type SistemaDevolucion = 'al_vencimiento' | 'americano' | 'frances' | 'aleman' | 'capitaliza' | 'a_medida'
 
 export type Periodicidad = 'mensual' | 'bimestral' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'anual'
 
@@ -35,7 +49,8 @@ export type ReferenciaTasa =
 export type IndiceAjuste = 'uva' | 'cer'
 
 export type Tasa =
-  | { tipo: 'fija'; tnaPct: number }
+  /** expresada: cómo la cargó Finanzas. 'mensual' = tnaPct / 12 por mes (1,5 % mensual → tnaPct 18). */
+  | { tipo: 'fija'; tnaPct: number; expresada?: 'anual' | 'mensual' }
   | { tipo: 'variable'; referencia: ReferenciaTasa; spreadPct: number; pisoPct?: number | null; techoPct?: number | null }
   | { tipo: 'ajustable'; indice: IndiceAjuste; tnaPct: number }
 
@@ -123,11 +138,12 @@ export interface Aprobacion {
 
 export type TipoOperacion = 'precancelacion' | 'devolucion_parcial' | 'renovacion'
 
+/** topeIntereses: la penalidad no puede ser mayor que los intereses (el inversor, como mucho, pierde intereses). */
 export type Penalidad =
   | { tipo: 'ninguna' }
-  | { tipo: 'porcentaje_interes'; valorPct: number }
-  | { tipo: 'porcentaje_capital'; valorPct: number }
-  | { tipo: 'monto_fijo'; montoCentavos: number }
+  | { tipo: 'porcentaje_interes'; valorPct: number; topeIntereses?: boolean }
+  | { tipo: 'porcentaje_capital'; valorPct: number; topeIntereses?: boolean }
+  | { tipo: 'monto_fijo'; montoCentavos: number; topeIntereses?: boolean }
 
 export type ModalidadRenovacion =
   /** Se renueva capital + intereses de la última cuota. */
@@ -161,8 +177,15 @@ export interface CondicionesInversion {
   sistema: SistemaDevolucion
   periodicidad: Periodicidad
   cantidadCuotas: number
-  /** Solo en 'al_vencimiento' (y opcional en 'americano'): si no viene, se calcula por cuotas × periodicidad. */
+  /** Solo en 'al_vencimiento': si no viene, se calcula por cuotas × periodicidad. */
   fechaVencimiento: string | null
+  /**
+   * Sin fecha de devolución (mutuos que "cobran X %" todos los meses, o que capitalizan, hasta que se pida el capital).
+   * Las cuotas de intereses se generan hasta un horizonte y se extienden solas. Solo en 'americano' y 'capitaliza'.
+   */
+  sinVencimiento?: boolean
+  /** Inversiones en curso cargadas desde la planilla: cuántas cuotas ya se pagaron antes (para mostrar "cuota 42 de 67"). */
+  cuotasPrevias?: number
   tasa: Tasa
   baseDias: BaseDias
   /** Solo 'a_medida': fecha y capital de cada cuota (interés opcional; si falta se calcula). */
@@ -212,13 +235,16 @@ export interface InversorDatos {
 
 export interface ConfigInversiones {
   baseDiasDefault: BaseDias
+  /** Hasta cuántos meses hacia adelante se generan las cuotas de las inversiones sin vencimiento. */
+  horizonteMesesSinVencimiento: number
   penalidadDefault: Penalidad
   diasAvisoPorVencer: number
   ultimoNumero: number
 }
 
 export const CONFIG_INVERSIONES_DEFAULT: ConfigInversiones = {
-  baseDiasDefault: 365,
+  baseDiasDefault: 360,
+  horizonteMesesSinVencimiento: 12,
   penalidadDefault: { tipo: 'ninguna' },
   diasAvisoPorVencer: 30,
   ultimoNumero: 0,

@@ -33,7 +33,7 @@ export function diasDelPeriodo(base: BaseDias, desde: string, hasta: string): nu
 }
 
 export function divisorAnual(base: BaseDias, desde: string): number {
-  if (base === 360) return 360
+  if (base === 360 || base === '360_reales') return 360
   if (base === 365) return 365
   return esBisiesto(anioDe(desde)) ? 366 : 365
 }
@@ -60,8 +60,27 @@ function redondear(n: number, decimales: number): number {
   return Math.round(n * f) / f
 }
 
+export interface OpcionesCronograma {
+  /** Inversiones sin vencimiento: hasta qué fecha generar las cuotas de intereses. */
+  hasta?: string | null
+}
+
 /** Fechas de vencimiento de cada cuota según las condiciones. */
-export function fechasDeCuotas(cond: Pick<CondicionesInversion, 'sistema' | 'fechaAlta' | 'periodicidad' | 'cantidadCuotas' | 'fechaVencimiento' | 'cuotasAMedida'>): string[] {
+export function fechasDeCuotas(
+  cond: Pick<CondicionesInversion, 'sistema' | 'fechaAlta' | 'periodicidad' | 'cantidadCuotas' | 'fechaVencimiento' | 'cuotasAMedida' | 'sinVencimiento'>,
+  opciones: OpcionesCronograma = {},
+): string[] {
+  if (cond.sinVencimiento) {
+    if (!opciones.hasta) throw new Error('Falta hasta cuándo generar las cuotas de una inversión sin vencimiento')
+    const paso = MESES_POR_PERIODO[cond.periodicidad]
+    const fechas: string[] = []
+    for (let k = 1; k < 1000; k += 1) {
+      const f = sumarMeses(cond.fechaAlta, paso * k)
+      if (f > opciones.hasta) break
+      fechas.push(f)
+    }
+    return fechas
+  }
   if (cond.sistema === 'a_medida') {
     return (cond.cuotasAMedida ?? []).map((c) => c.fecha)
   }
@@ -87,6 +106,8 @@ export interface TramoInput {
   aMedida?: Array<{ capitalCentavos: number; interesCentavos?: number | null }> | null
   /** UVA/CER: índice del día del alta. */
   indiceAlta?: number | null
+  /** false = el capital no se devuelve en este cronograma (inversión sin vencimiento). */
+  devolverCapital?: boolean
 }
 
 interface Factor {
@@ -128,6 +149,11 @@ export function generarTramo(input: TramoInput, fuentes: FuentesTasas = {}): Cuo
     return { desde, hasta, tasa, i: ((tasa.tnaPct / 100) * dias) / divisorAnual(input.baseDias, desde) }
   })
 
+  if (input.sistema === 'capitaliza') {
+    return cuotaCapitalizada(input, factores, fuentes)
+  }
+
+  const devolver = input.devolverCapital !== false
   const cuotas: Cuota[] = []
   let saldo = input.saldoCentavos
   const capitalAleman = Math.floor(input.saldoCentavos / n)
@@ -142,7 +168,7 @@ export function generarTramo(input: TramoInput, fuentes: FuentesTasas = {}): Cuo
     switch (input.sistema) {
       case 'al_vencimiento':
       case 'americano':
-        capital = esUltima ? saldo : 0
+        capital = esUltima && devolver ? saldo : 0
         break
       case 'aleman':
         capital = esUltima ? saldo : Math.min(capitalAleman, saldo)
@@ -187,6 +213,55 @@ export function generarTramo(input: TramoInput, fuentes: FuentesTasas = {}): Cuo
 }
 
 /**
+ * Capitaliza: el interés de cada período se suma a la deuda y no se paga.
+ * Queda una sola cuota al final con el capital y todo el interés acumulado.
+ */
+function cuotaCapitalizada(input: TramoInput, factores: Factor[], fuentes: FuentesTasas): Cuota[] {
+  let deuda = input.saldoCentavos
+  for (const f of factores) deuda += Math.round(deuda * f.i)
+  const primero = factores[0]!
+  const ultimo = factores.at(-1)!
+  const interes = deuda - input.saldoCentavos
+  const cuota: Cuota = {
+    numero: input.numeroInicial,
+    tipo: 'normal',
+    fechaVencimiento: ultimo.hasta,
+    diasPeriodo: diasDelPeriodo(input.baseDias, primero.desde, ultimo.hasta),
+    tasaAplicadaPct: primero.tasa.tnaPct,
+    capitalCentavos: input.saldoCentavos,
+    interesCentavos: interes,
+    ajusteCentavos: 0,
+    penalidadCentavos: 0,
+    totalCentavos: deuda,
+    saldoCapitalCentavos: 0,
+    estimada: factores.some((f) => f.tasa.estimada),
+  }
+  if (input.tasa.tipo === 'ajustable') return aplicarAjuste([cuota], input.indiceAlta ?? null, fuentes)
+  return [cuota]
+}
+
+/** Deuda de una inversión que capitaliza a una fecha (capital + intereses sumados período a período). */
+export function deudaCapitalizadaAl(
+  cond: Pick<CondicionesInversion, 'capitalCentavos' | 'fechaAlta' | 'periodicidad' | 'tasa' | 'baseDias'>,
+  fecha: string,
+  fuentes: FuentesTasas = {},
+): number {
+  const paso = MESES_POR_PERIODO[cond.periodicidad]
+  let deuda = cond.capitalCentavos
+  let desde = cond.fechaAlta
+  for (let k = 1; k < 1000; k += 1) {
+    const hasta = sumarMeses(cond.fechaAlta, paso * k)
+    const corte = hasta > fecha ? fecha : hasta
+    const tasa = tasaDelPeriodo(cond.tasa, desde, fuentes)
+    const interes = interesSimple(deuda, tasa.tnaPct, cond.baseDias, desde, corte)
+    if (hasta > fecha) return Math.round(deuda + interes)
+    deuda += Math.round(interes)
+    desde = hasta
+  }
+  return deuda
+}
+
+/**
  * Cuota constante para que el saldo llegue a cero, con un factor (1 + i) por período.
  * C = S · Π f / Σ_j Π_{l>j} f
  */
@@ -225,10 +300,18 @@ export function generarCronograma(
   cond: CondicionesInversion,
   fuentes: FuentesTasas = {},
   indiceAlta: number | null = null,
+  opciones: OpcionesCronograma = {},
 ): Cuota[] {
   if (cond.tasa.tipo === 'ajustable' && cond.moneda !== 'ARS') {
     throw new Error('UVA y CER solo se usan en inversiones en pesos')
   }
+  if (cond.sinVencimiento && cond.sistema !== 'americano' && cond.sistema !== 'capitaliza') {
+    throw new Error('Sin vencimiento solo se usa cuando se pagan los intereses o cuando capitaliza')
+  }
+  // Capitaliza sin vencimiento: no hay nada que pagar hasta que se pida la devolución.
+  if (cond.sinVencimiento && cond.sistema === 'capitaliza') return []
+  const fechas = fechasDeCuotas(cond, opciones)
+  if (cond.sinVencimiento && fechas.length === 0) return []
   return generarTramo(
     {
       sistema: cond.sistema,
@@ -236,8 +319,9 @@ export function generarCronograma(
       tasa: cond.tasa,
       inicio: cond.fechaAlta,
       saldoCentavos: cond.capitalCentavos,
-      fechas: fechasDeCuotas(cond),
+      fechas,
       numeroInicial: 1,
+      devolverCapital: !cond.sinVencimiento,
       aMedida: cond.cuotasAMedida?.map((c) => ({ capitalCentavos: c.capitalCentavos, interesCentavos: c.interesCentavos ?? null })) ?? null,
       indiceAlta,
     },

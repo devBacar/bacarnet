@@ -8,13 +8,15 @@ import { resolveApiUrl } from './resolveApiUrl'
  */
 
 export type MonedaInversion = 'ARS' | 'USD'
-export type BaseDias = 365 | 360 | 'reales'
-export type SistemaDevolucion = 'al_vencimiento' | 'americano' | 'frances' | 'aleman' | 'a_medida'
+/** 365 · 360 (meses de 30 días) · '360_reales' (días del calendario / 360) · 'reales' (/365 o 366). */
+export type BaseDias = 365 | 360 | '360_reales' | 'reales'
+export type SistemaDevolucion = 'al_vencimiento' | 'americano' | 'frances' | 'aleman' | 'capitaliza' | 'a_medida'
 export type Periodicidad = 'mensual' | 'bimestral' | 'trimestral' | 'cuatrimestral' | 'semestral' | 'anual'
 export type ReferenciaTasa = 'plazo_fijo_30' | 'badlar' | 'tamar' | 'adelantos_empresas' | 'prestamos_empresas'
 export type IndiceAjuste = 'uva' | 'cer'
 export type Tasa =
-  | { tipo: 'fija'; tnaPct: number }
+  /** expresada 'mensual': Finanzas la cargó por mes (1,5 % mensual → tnaPct 18). */
+  | { tipo: 'fija'; tnaPct: number; expresada?: 'anual' | 'mensual' }
   | { tipo: 'variable'; referencia: ReferenciaTasa; spreadPct: number; pisoPct?: number | null; techoPct?: number | null }
   | { tipo: 'ajustable'; indice: IndiceAjuste; tnaPct: number }
 export type MedioIngreso = 'transferencia' | 'efectivo' | 'cheque'
@@ -36,11 +38,12 @@ export type EstadoInversion =
   | 'anulada'
 export type TipoCuota = 'normal' | 'precancelacion' | 'devolucion_parcial'
 export type EstadoCuota = 'pendiente' | 'parcial' | 'pagada' | 'atrasada' | 'anulada' | 'renovada'
+/** topeIntereses: la penalidad no puede superar los intereses. */
 export type Penalidad =
   | { tipo: 'ninguna' }
-  | { tipo: 'porcentaje_interes'; valorPct: number }
-  | { tipo: 'porcentaje_capital'; valorPct: number }
-  | { tipo: 'monto_fijo'; montoCentavos: number }
+  | { tipo: 'porcentaje_interes'; valorPct: number; topeIntereses?: boolean }
+  | { tipo: 'porcentaje_capital'; valorPct: number; topeIntereses?: boolean }
+  | { tipo: 'monto_fijo'; montoCentavos: number; topeIntereses?: boolean }
 export type TipoOperacion = 'precancelacion' | 'devolucion_parcial' | 'renovacion'
 export type ModalidadRenovacion = 'capital_e_intereses' | 'solo_capital' | 'monto'
 
@@ -94,6 +97,10 @@ export interface CondicionesInput {
   periodicidad: Periodicidad
   cantidadCuotas: number
   fechaVencimiento: string | null
+  /** Sin fecha de devolución: solo con sistema 'americano' (cobra intereses) o 'capitaliza'. */
+  sinVencimiento?: boolean
+  /** Inversión en curso: cuotas ya pagadas antes de cargarla (para mostrar "cuota 42 de 67"). */
+  cuotasPrevias?: number
   tasa: Tasa
   /** null = la de la configuración. */
   baseDias: BaseDias | null
@@ -175,6 +182,8 @@ export interface InversionResumen {
   tasa: Tasa
   /** Lo que falta devolver (capital + intereses de las cuotas abiertas). */
   pendienteCentavos: number
+  /** Lo que se le debe hoy: capital que falta devolver + intereses capitalizados (la columna "Deuda" de la planilla). */
+  deudaHoyCentavos: number
   /** Capital que todavía no entró. */
   ingresoPendienteCentavos: number
   alertas: Alertas
@@ -221,6 +230,7 @@ export interface InversionDetalle {
   renovacionDe: { inversionId: string; numero: string; capitalCentavos: number } | null
   renovadaEn: { inversionId: string; numero: string } | null
   alertas: Alertas
+  deudaHoyCentavos: number
   /** Conflictos con la Agenda que hay que revisar a mano. */
   avisosAgenda: string[]
   indiceAlta: number | null
@@ -284,6 +294,8 @@ export interface InversorFicha extends InversorDatos {
 
 export interface ConfigInversiones {
   baseDiasDefault: BaseDias
+  /** Meses hacia adelante que se generan las cuotas de intereses de las inversiones sin vencimiento. */
+  horizonteMesesSinVencimiento: number
   penalidadDefault: Penalidad
   diasAvisoPorVencer: number
 }
@@ -341,6 +353,17 @@ export interface OperacionInput {
   nota?: string | null
 }
 
+/**
+ * Importación de las inversiones en curso desde la planilla de compromisos de Finanzas
+ * (hojas "Compromisos MM.AAAA", grupos "INVERSORES DOLARES" e "INVERSORES PESOS").
+ * Cada fila se propone como una inversión en curso que queda "Para aprobar":
+ * - "Cobra X%" → paga intereses del X % mensual, sin vencimiento (sistema 'americano').
+ * - "Capitaliza X%" → el X % mensual se suma a la deuda, sin vencimiento (sistema 'capitaliza').
+ * - "k de N" sin % → cuotas fijas: lo que falta de la deuda en N − k cuotas iguales (francés con tasa 0).
+ * - Si no se puede deducir: a medida, con aviso para revisarla.
+ * Capital = la columna Deuda. Las cuotas arrancan el mes siguiente al de la hoja (el mes de la hoja ya está en Compromisos del mes).
+ * El capital ya había entrado: se registra como ingreso importado (sin movimiento de caja ni cheque).
+ */
 export interface ImportarFila {
   fila: number
   ok: boolean
@@ -348,15 +371,23 @@ export interface ImportarFila {
   avisos: string[]
   inversorNombre: string
   inversorExistenteId: string | null
-  numeroPlanilla: string | null
+  /** Lo que decía la planilla, tal cual. */
+  observacionPlanilla: string | null
+  cuotaPlanilla: string | null
+  importeMesCentavos: number | null
   moneda: MonedaInversion | null
   capitalCentavos: number | null
   fechaAlta: string | null
   sistema: SistemaDevolucion | null
+  sinVencimiento: boolean
+  tasaMensualPct: number | null
   cantidadCuotas: number | null
   cuotasPagadas: number
-  ingresoRegistrado: boolean
+  /** Texto en palabras de cómo se va a cargar. Ej.: "Paga 1,5 % por mes sobre US$ 81.778,63, sin fecha de devolución". */
+  interpretacion: string
   totales: TotalesCronograma | null
+  /** El usuario la puede destildar en la vista previa. */
+  incluir: boolean
 }
 
 export interface ImportarVistaPrevia {
@@ -530,14 +561,17 @@ export async function descargarPlantillaImportacion(): Promise<Blob> {
   return res.blob()
 }
 
-export async function vistaPreviaImportacion(archivo: File): Promise<ImportarVistaPrevia> {
+/** hoja: nombre de la hoja (por defecto, la del mes más reciente). */
+export async function vistaPreviaImportacion(archivo: File, hoja?: string | null): Promise<ImportarVistaPrevia & { hojas: string[]; hoja: string }> {
   const form = new FormData()
   form.append('archivo', archivo)
+  if (hoja) form.append('hoja', hoja)
   return leer(await invFetch('/importar/vista-previa', { method: 'POST', body: form }), 'No pude leer la planilla')
 }
 
-export async function confirmarImportacion(token: string): Promise<{ creadas: number; inversoresNuevos: number; mensaje: string }> {
-  return leer(await post('/importar/confirmar', { token }), 'No pude importar la planilla')
+/** filas: números de fila a importar (las que quedaron tildadas). */
+export async function confirmarImportacion(token: string, filas: number[]): Promise<{ creadas: number; inversoresNuevos: number; mensaje: string }> {
+  return leer(await post('/importar/confirmar', { token, filas }), 'No pude importar la planilla')
 }
 
 // ── Cruce ────────────────────────────────────────────────────

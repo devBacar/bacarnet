@@ -39,16 +39,21 @@ function verificarSinPagos(cuotas: readonly Cuota[], pagos: readonly PagosDeCuot
 }
 
 export function calcularPenalidad(penalidad: Penalidad, capitalCentavos: number, interesCentavos: number): number {
+  let monto: number
   switch (penalidad.tipo) {
     case 'ninguna':
       return 0
     case 'porcentaje_interes':
-      return Math.round((interesCentavos * penalidad.valorPct) / 100)
+      monto = Math.round((interesCentavos * penalidad.valorPct) / 100)
+      break
     case 'porcentaje_capital':
-      return Math.round((capitalCentavos * penalidad.valorPct) / 100)
+      monto = Math.round((capitalCentavos * penalidad.valorPct) / 100)
+      break
     case 'monto_fijo':
-      return penalidad.montoCentavos
+      monto = penalidad.montoCentavos
+      break
   }
+  return penalidad.topeIntereses ? Math.min(monto, Math.max(0, interesCentavos)) : monto
 }
 
 interface Devengado {

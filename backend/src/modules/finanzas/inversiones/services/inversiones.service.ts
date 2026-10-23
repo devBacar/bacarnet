@@ -11,7 +11,7 @@ import { registerMovimiento } from '../../cajachica/services/caja.service.js'
 import { getCajaDoc } from '../../cajachica/services/caja.repository.js'
 import { aplicarCuotaEnPesos, aplicarIngreso, extenderSinVencimiento, validarIngreso } from '../domain/ingresos.js'
 import { transicionConAgenda } from './agenda-inversiones.js'
-import { movimientoCajaPorClave } from './inversiones.repository.js'
+import { cerrarReservaCaja, movimientoCajaPorClave, reservarIngresoCaja } from './inversiones.repository.js'
 import {
   compromisosDeCuotas,
   getInversionDoc,
@@ -313,17 +313,25 @@ export async function registrarIngreso(id: string, raw: unknown, user: AuthedUse
     if (!caja) throw new ErrorValidacion('No encontré esa caja.')
     if (caja.moneda !== inv.moneda) throw new ErrorValidacion('La caja elegida es de otra moneda.')
     const clave = claveCaja(id, pedido.clave)
-    cajaMovimientoId = await movimientoCajaPorClave(clave)
-    if (!cajaMovimientoId) {
+    const reserva = await reservarIngresoCaja(id, pedido.clave)
+    if (reserva.tipo === 'hecha') {
+      cajaMovimientoId = reserva.cajaMovimientoId
+    } else {
+      // Una reserva cortada a mitad de camino pudo haber llegado a cargar la caja: se busca antes de cargar.
+      cajaMovimientoId = await movimientoCajaPorClave(clave)
       try {
-        const mov = await registerMovimiento({
-          user,
-          cajaId: pedido.cajaId,
-          body: { tipo: 'ingreso', concepto: `Inversión ${inv.numero} · ${inv.inversorNombre}`, montoCentavos: pedido.montoCentavos, fecha: pedido.fecha },
-          operacionVinculadaId: clave,
-        })
-        cajaMovimientoId = mov.id
+        if (!cajaMovimientoId) {
+          const mov = await registerMovimiento({
+            user,
+            cajaId: pedido.cajaId,
+            body: { tipo: 'ingreso', concepto: `Inversión ${inv.numero} · ${inv.inversorNombre}`, montoCentavos: pedido.montoCentavos, fecha: pedido.fecha },
+            operacionVinculadaId: clave,
+          })
+          cajaMovimientoId = mov.id
+        }
+        await cerrarReservaCaja(id, pedido.clave, cajaMovimientoId)
       } catch (err) {
+        await cerrarReservaCaja(id, pedido.clave, null)
         throw new ErrorValidacion(err instanceof Error ? err.message : 'No pude cargar el movimiento en la caja.')
       }
     }

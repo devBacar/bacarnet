@@ -5,6 +5,7 @@ import { listarPagos, restanteAPagarCentavos } from '../../agenda/domain/pago-co
 import { idCompromisoCuota } from '../domain/agenda-plan.js'
 import type { InversionDocumentBase, MonedaInversion } from '../domain/inversion.types.js'
 import type { CompromisoDeCuota } from '../domain/vista.js'
+import { ErrorValidacion } from '../domain/validar.js'
 import { INVERSIONES_COLLECTION } from './inversores.repository.js'
 
 const HISTORIAL_SUB = 'historialEstados'
@@ -80,4 +81,38 @@ export async function compromisosDeCuotas(
 export async function movimientoCajaPorClave(clave: string): Promise<string | null> {
   const snap = await adminDb().collection(MOVIMIENTOS_COLLECTION).where('operacionVinculadaId', '==', clave).limit(1).get()
   return snap.empty ? null : snap.docs[0].id
+}
+
+const RESERVAS_SUB = 'ingresoReservas'
+/** Una reserva "en curso" más vieja que esto se considera cortada y se puede retomar. */
+const RESERVA_VENCE_MS = 2 * 60 * 1000
+
+export type ReservaCaja =
+  | { tipo: 'nueva' }
+  | { tipo: 'hecha'; cajaMovimientoId: string }
+
+/**
+ * Reserva la clave de un ingreso en efectivo antes de tocar la caja, en una transacción:
+ * así dos pedidos con la misma clave (doble clic, reintento) nunca cargan dos movimientos.
+ * - no existía o falló antes → queda "en curso" y el que llamó carga la caja.
+ * - ya tiene movimiento → se reusa.
+ * - otro pedido la está cargando → error claro.
+ */
+export async function reservarIngresoCaja(inversionId: string, clave: string, ahoraMs = Date.now()): Promise<ReservaCaja> {
+  const ref = adminDb().collection(INVERSIONES_COLLECTION).doc(inversionId).collection(RESERVAS_SUB).doc(clave)
+  return adminDb().runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    const d = snap.data() as { estado?: string; cajaMovimientoId?: string | null; desdeMs?: number } | undefined
+    if (d?.estado === 'hecha' && d.cajaMovimientoId) return { tipo: 'hecha', cajaMovimientoId: d.cajaMovimientoId }
+    if (d?.estado === 'en_curso' && ahoraMs - (d.desdeMs ?? 0) < RESERVA_VENCE_MS) {
+      throw new ErrorValidacion('Este ingreso ya se está registrando. Esperá unos segundos y actualizá la pantalla.')
+    }
+    tx.set(ref, { estado: 'en_curso', cajaMovimientoId: null, desdeMs: ahoraMs })
+    return { tipo: 'nueva' }
+  })
+}
+
+export async function cerrarReservaCaja(inversionId: string, clave: string, cajaMovimientoId: string | null): Promise<void> {
+  const ref = adminDb().collection(INVERSIONES_COLLECTION).doc(inversionId).collection(RESERVAS_SUB).doc(clave)
+  await ref.set(cajaMovimientoId ? { estado: 'hecha', cajaMovimientoId } : { estado: 'fallida', cajaMovimientoId: null })
 }

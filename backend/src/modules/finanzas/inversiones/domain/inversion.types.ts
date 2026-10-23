@@ -216,6 +216,8 @@ export interface InversionDocumentBase extends CondicionesInversion {
   indiceAlta: number | null
   observaciones: string | null
   importada: boolean
+  /** Cuotas que no se pudieron reescribir en la Agenda (tienen pagos): hay que revisarlas a mano. */
+  avisosAgenda?: string[]
 }
 
 export type TipoPersona = 'humana' | 'juridica'

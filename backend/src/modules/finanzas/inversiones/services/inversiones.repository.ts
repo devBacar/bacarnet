@@ -4,7 +4,6 @@ import { listarPagos, restanteAPagarCentavos } from '../../agenda/domain/pago-co
 import { idCompromisoCuota } from '../domain/agenda-plan.js'
 import type { InversionDocumentBase, MonedaInversion } from '../domain/inversion.types.js'
 import type { CompromisoDeCuota } from '../domain/vista.js'
-import { NoEncontrado } from '../domain/validar.js'
 import { INVERSIONES_COLLECTION } from './inversores.repository.js'
 
 const HISTORIAL_SUB = 'historialEstados'
@@ -36,24 +35,6 @@ export async function guardarInversionDoc(
   batch.set(ref.collection(HISTORIAL_SUB).doc(), historial)
   await batch.commit()
   return ref.id
-}
-
-/**
- * Lee la inversión dentro de una transacción y guarda lo que decida `decidir`.
- * Si otro pedido la cambió en el medio, Firestore reintenta y `decidir` vuelve a validar con el estado nuevo.
- */
-export async function actualizarInversionTx(
-  id: string,
-  decidir: (actual: InversionDocumentBase) => { data: InversionDocumentBase; historial: HistorialEstadoDocument },
-): Promise<void> {
-  const ref = adminDb().collection(INVERSIONES_COLLECTION).doc(id)
-  await adminDb().runTransaction(async (tx) => {
-    const snap = await tx.get(ref)
-    if (!snap.exists) throw new NoEncontrado('No encontré esa inversión.')
-    const { data, historial } = decidir(snap.data() as InversionDocumentBase)
-    tx.set(ref, data)
-    tx.set(ref.collection(HISTORIAL_SUB).doc(), historial)
-  })
 }
 
 export async function listHistorial(id: string): Promise<HistorialEstadoDocument[]> {

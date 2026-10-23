@@ -7,8 +7,8 @@ import type { CondicionesInversion, ConfigInversiones, EstadoInversion, Inversio
 import { ESTADO_INVERSION_TEXTO } from '../domain/seguimiento.js'
 import { ErrorValidacion, NoEncontrado, numeroInversion, validarTransicion } from '../domain/validar.js'
 import { alertasVista, cuotasVista, deudaHoyCentavos, kpisDe, resumenInversion, type CompromisoDeCuota } from '../domain/vista.js'
+import { transicionConAgenda } from './agenda-inversiones.js'
 import {
-  actualizarInversionTx,
   compromisosDeCuotas,
   getInversionDoc,
   guardarInversionDoc,
@@ -120,7 +120,7 @@ export async function detalleInversion(id: string, user: AuthedUser) {
     renovadaEn: inv.renovadaEn,
     alertas: alertasVista(inv, cuotas, hoy, config.diasAvisoPorVencer),
     deudaHoyCentavos: deudaHoyCentavos(inv, cuotas, hoy),
-    avisosAgenda: [],
+    avisosAgenda: inv.avisosAgenda ?? [],
     indiceAlta: inv.indiceAlta,
     observaciones: inv.observaciones,
     importada: inv.importada,
@@ -187,7 +187,7 @@ export async function editarInversion(id: string, raw: unknown, user: AuthedUser
   const inversor = await inversorDe(raw)
   const cronograma = cronogramaDe(cond, config, hoyArgentina())
   const observaciones = notaDe((raw as Record<string, unknown>).observaciones)
-  await actualizarInversionTx(id, (inv) => {
+  await transicionConAgenda(id, user.uid, (inv) => {
     if (inv.estado !== 'borrador') throw new ErrorValidacion('Solo se puede editar mientras es borrador.')
     return {
       data: { ...inv, ...cond, ...inversor, cronograma, versionCronograma: inv.versionCronograma + 1, observaciones },
@@ -205,7 +205,7 @@ async function cambiarEstado(
   nota: string | null,
   cambios: (inv: InversionDocumentBase) => Partial<InversionDocumentBase> = () => ({}),
 ) {
-  await actualizarInversionTx(id, (inv) => {
+  await transicionConAgenda(id, user.uid, (inv) => {
     validarTransicion(inv.estado, desde, ESTADO_INVERSION_TEXTO)
     return { data: { ...inv, ...cambios(inv), estado: hacia }, historial: historial(inv.estado, hacia, user, nota) }
   })

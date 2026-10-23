@@ -28,6 +28,7 @@ function inv(parcial: Partial<InversionParaCuenta> & Pick<InversionParaCuenta, '
     capitalCentavos: 1_000_000,
     fechaFinal: '2027-01-15',
     cronograma: [],
+    inversorNombre: 'Inversor Test',
     ...parcial,
   }
 }
@@ -321,5 +322,178 @@ describe('cuentaInversor', () => {
     expect(cuenta.kpisPorMoneda).toEqual([])
     expect(cuenta.calendario).toEqual([])
     expect(cuenta.inversionesVigentes).toEqual([])
+  })
+
+  it('calcula pagado, a pagar total, cuotas pendientes, atrasado, proximos 30 y retenciones a retener', () => {
+    const cuenta = cuentaInversor(
+      [
+        inv({
+          id: 'a',
+          numero: 'INV-1',
+          moneda: 'ARS',
+          inversorNombre: 'Juan Perez',
+          cronograma: [
+            cuota({ // Cuota 1: Pagada, antes de hoy
+              numero: 1,
+              fechaVencimiento: '2026-10-01',
+              estado: 'pagada',
+              aPagarCentavos: 100_000,
+              restanteCentavos: 0,
+              interesCentavos: 10_000,
+              retencionCentavos: 1_000,
+            }),
+            cuota({ // Cuota 2: Parcial, vencida
+              numero: 2,
+              fechaVencimiento: '2026-10-20', // Vencida
+              estado: 'parcial',
+              aPagarCentavos: 100_000,
+              restanteCentavos: 60_000, // 40_000 pagado
+              interesCentavos: 15_000,
+              retencionCentavos: 2_000,
+            }),
+            cuota({ // Cuota 3: Pendiente, en los próximos 30 días
+              numero: 3,
+              fechaVencimiento: '2026-11-15', // Entre hoy y hoy+30 ('2026-11-22')
+              estado: 'pendiente',
+              aPagarCentavos: 100_000,
+              restanteCentavos: 100_000,
+              interesCentavos: 20_000,
+              retencionCentavos: 3_000,
+            }),
+            cuota({ // Cuota 4: Pendiente, fuera de los próximos 30 días
+              numero: 4,
+              fechaVencimiento: '2026-11-25', // Fuera de hoy+30
+              estado: 'pendiente',
+              aPagarCentavos: 100_000,
+              restanteCentavos: 100_000,
+              interesCentavos: 25_000,
+              retencionCentavos: 4_000,
+            }),
+            cuota({ // Cuota 5: Anulada (debe ser ignorada)
+              numero: 5,
+              fechaVencimiento: '2026-12-01',
+              estado: 'anulada',
+              aPagarCentavos: 100_000,
+              restanteCentavos: 100_000,
+              interesCentavos: 5_000,
+              retencionCentavos: 500,
+            }),
+          ],
+        }),
+        inv({ // Second investment in USD
+          id: 'b',
+          numero: 'INV-2',
+          moneda: 'USD',
+          cronograma: [
+            cuota({ // Cuota USD: Parcial, en los próximos 30 días
+              numero: 1,
+              fechaVencimiento: '2026-11-05',
+              estado: 'parcial',
+              monedaPago: 'USD',
+              aPagarCentavos: 20_000,
+              restanteCentavos: 10_000, // 10_000 pagado
+              interesCentavos: 1_000,
+              retencionCentavos: 500,
+            }),
+          ],
+        }),
+      ],
+      '2026-10-23', // Hoy
+    )
+
+    // ARS KPIs
+    const kpisArs = cuenta.kpisPorMoneda.find(k => k.moneda === 'ARS')
+    expect(kpisArs).toBeDefined()
+    expect(kpisArs?.pagadoCentavos).toBe(100_000 + 40_000) // Cuota 1 (100k) + Cuota 2 (40k)
+    expect(kpisArs?.aPagarTotalCentavos).toBe(60_000 + 100_000 + 100_000) // Cuota 2 (60k) + Cuota 3 (100k) + Cuota 4 (100k)
+    expect(kpisArs?.cuotasPendientes).toBe(3) // Cuota 2, 3, 4
+    expect(kpisArs?.atrasado).toEqual({ cantidad: 1, montoCentavos: 60_000 }) // Cuota 2
+    expect(kpisArs?.proximos30Centavos).toBe(100_000) // Cuota 3 (fechaVencimiento: '2026-11-15', hoy: '2026-10-23', hoy+30: '2026-11-22')
+    expect(kpisArs?.retencionesARetenerCentavos).toBe(2_000 + 3_000 + 4_000) // Cuota 2, 3, 4
+
+    // USD KPIs
+    const kpisUsd = cuenta.kpisPorMoneda.find(k => k.moneda === 'USD')
+    expect(kpisUsd).toBeDefined()
+    expect(kpisUsd?.pagadoCentavos).toBe(10_000) // Cuota USD (10k)
+    expect(kpisUsd?.aPagarTotalCentavos).toBe(10_000) // Cuota USD (10k)
+    expect(kpisUsd?.cuotasPendientes).toBe(1) // Cuota USD
+    expect(kpisUsd?.atrasado).toEqual({ cantidad: 0, montoCentavos: 0 })
+    expect(kpisUsd?.proximos30Centavos).toBe(10_000) // Cuota USD ('2026-11-05' is between '2026-10-23' and '2026-11-22')
+    expect(kpisUsd?.retencionesARetenerCentavos).toBe(500)
+
+    // Calendar propagation of inversorNombre
+    const calendarCuota = cuenta.calendario.flatMap(m => m.cuotas).find(c => c.inversionId === 'a')
+    expect(calendarCuota?.inversorNombre).toBe('Juan Perez')
+  })
+
+  it('calcula vencimientos de contrato para inversiones vigentes en los próximos 60 días', () => {
+    const cuenta = cuentaInversor(
+      [
+        inv({
+          id: 'v1',
+          numero: 'INV-V1',
+          moneda: 'ARS',
+          fechaFinal: '2026-11-15', // Dentro de 60 días (hoy+60 = 2026-12-22)
+          capitalCentavos: 100_000,
+        }),
+        inv({
+          id: 'v2',
+          numero: 'INV-V2',
+          moneda: 'USD',
+          fechaFinal: '2026-12-01', // Dentro de 60 días
+          capitalCentavos: 200_000,
+        }),
+        inv({
+          id: 'v3',
+          numero: 'INV-V3',
+          moneda: 'ARS',
+          fechaFinal: '2027-01-01', // Fuera de 60 días
+          capitalCentavos: 300_000,
+        }),
+        inv({
+          id: 'v4',
+          numero: 'INV-V4',
+          moneda: 'ARS',
+          fechaFinal: null, // Sin fecha final
+          capitalCentavos: 400_000,
+        }),
+        inv({
+          id: 'nv',
+          numero: 'INV-NV',
+          moneda: 'ARS',
+          estado: 'pendiente_aprobacion', // No vigente
+          fechaFinal: '2026-11-10',
+          capitalCentavos: 500_000,
+        }),
+        inv({
+          id: 'pasada',
+          numero: 'INV-PASADA',
+          moneda: 'ARS',
+          fechaFinal: '2026-10-20', // Fecha final pasada
+          capitalCentavos: 600_000,
+        }),
+      ],
+      '2026-10-23', // Hoy
+    )
+
+    expect(cuenta.vencimientosContrato).toHaveLength(2)
+    expect(cuenta.vencimientosContrato[0]).toMatchObject({
+      id: 'v1',
+      numero: 'INV-V1',
+      fechaFinal: '2026-11-15',
+      moneda: 'ARS',
+      capitalCentavos: 100_000,
+    })
+    expect(cuenta.vencimientosContrato[1]).toMatchObject({
+      id: 'v2',
+      numero: 'INV-V2',
+      fechaFinal: '2026-12-01',
+      moneda: 'USD',
+      capitalCentavos: 200_000,
+    })
+
+    // Asegura que estén ordenados por fechaFinal
+    expect(cuenta.vencimientosContrato[0].fechaFinal).toBe('2026-11-15')
+    expect(cuenta.vencimientosContrato[1].fechaFinal).toBe('2026-12-01')
   })
 })

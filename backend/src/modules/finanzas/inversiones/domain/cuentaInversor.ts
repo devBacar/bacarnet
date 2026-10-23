@@ -1,3 +1,5 @@
+import { compararYmd, sumarDias } from './fechas.js'
+
 /**
  * Cuenta del inversor: KPIs y calendario de cuotas a partir de inversiones vigentes
  * y de sus cuotas (ya alineadas con la Agenda: monto neto = aPagarCentavos).
@@ -39,6 +41,7 @@ export type InversionParaCuenta = {
   fechaFinal: string | null
   tasaTexto?: string
   cronograma: readonly CuotaParaCuenta[]
+  inversorNombre?: string
 }
 
 export type KpisMoneda = {
@@ -50,6 +53,12 @@ export type KpisMoneda = {
   retencionesAnioCentavos: number
   inversionesVigentes: number
   proximoVencimiento: { fecha: string; montoCentavos: number; monedaPago: MonedaCuenta } | null
+  pagadoCentavos: number
+  aPagarTotalCentavos: number
+  cuotasPendientes: number
+  atrasado: { cantidad: number; montoCentavos: number }
+  proximos30Centavos: number
+  retencionesARetenerCentavos: number
 }
 
 export type CuotaCalendario = {
@@ -61,6 +70,7 @@ export type CuotaCalendario = {
   montoNetoCentavos: number
   monedaPago: MonedaCuenta
   estado: EstadoCuotaCalendario
+  inversorNombre?: string
 }
 
 export type MesCalendario = {
@@ -83,6 +93,13 @@ export type CuentaInversor = {
     fechaFinal: string | null
     tasaTexto?: string
   }>
+  vencimientosContrato: Array<{
+    id: string
+    numero: string
+    fechaFinal: string
+    moneda: MonedaCuenta
+    capitalCentavos: number
+  }>
 }
 
 const ABIERTAS: ReadonlySet<EstadoCuotaEntrada> = new Set(['pendiente', 'parcial', 'atrasada'])
@@ -96,6 +113,12 @@ function ceroKpis(moneda: MonedaCuenta): KpisMoneda {
     retencionesAnioCentavos: 0,
     inversionesVigentes: 0,
     proximoVencimiento: null,
+    pagadoCentavos: 0,
+    aPagarTotalCentavos: 0,
+    cuotasPendientes: 0,
+    atrasado: { cantidad: 0, montoCentavos: 0 },
+    proximos30Centavos: 0,
+    retencionesARetenerCentavos: 0,
   }
 }
 
@@ -106,7 +129,14 @@ function tieneDatos(k: KpisMoneda): boolean {
     k.interesesAPagarCentavos > 0 ||
     k.retencionesAnioCentavos > 0 ||
     k.inversionesVigentes > 0 ||
-    k.proximoVencimiento != null
+    k.proximoVencimiento != null ||
+    k.pagadoCentavos > 0 ||
+    k.aPagarTotalCentavos > 0 ||
+    k.cuotasPendientes > 0 ||
+    k.atrasado.cantidad > 0 ||
+    k.atrasado.montoCentavos > 0 ||
+    k.proximos30Centavos > 0 ||
+    k.retencionesARetenerCentavos > 0
   )
 }
 
@@ -142,6 +172,9 @@ export function cuentaInversor(
   const anio = anioCurso ?? Number(hoy.slice(0, 4))
   const prefijoAnio = `${anio}-`
 
+  const hoyMas30 = sumarDias(hoy, 30)
+  const hoyMas60 = sumarDias(hoy, 60)
+
   const vigentes = inversiones.filter((inv) => inv.estado === 'vigente')
 
   const porMoneda: Record<MonedaCuenta, KpisMoneda> = {
@@ -154,19 +187,51 @@ export function cuentaInversor(
     { ARS: null, USD: null }
 
   const filasCalendario: CuotaCalendario[] = []
+  const vencimientosContrato: CuentaInversor['vencimientosContrato'] = []
 
   for (const inv of vigentes) {
     const k = porMoneda[inv.moneda]
     k.inversionesVigentes += 1
     k.capitalVigenteCentavos += inv.capitalCentavos
 
+    if (
+      inv.fechaFinal &&
+      compararYmd(inv.fechaFinal, hoy) >= 0 &&
+      compararYmd(inv.fechaFinal, hoyMas60) <= 0
+    ) {
+      vencimientosContrato.push({
+        id: inv.id,
+        numero: inv.numero,
+        fechaFinal: inv.fechaFinal,
+        moneda: inv.moneda,
+        capitalCentavos: inv.capitalCentavos,
+      })
+    }
+
     for (const c of inv.cronograma) {
       if (c.estado === 'anulada' || c.estado === 'renovada') continue
 
       if (c.estado === 'pagada') {
         k.interesesPagadosCentavos += c.interesCentavos
+        k.pagadoCentavos += c.aPagarCentavos - c.restanteCentavos
       } else if (ABIERTAS.has(c.estado)) {
         k.interesesAPagarCentavos += c.interesCentavos
+        k.cuotasPendientes += 1
+        // Parcial: lo ya pagado también cuenta como pagado.
+        k.pagadoCentavos += c.aPagarCentavos - c.restanteCentavos
+        k.aPagarTotalCentavos += c.restanteCentavos
+
+        if (compararYmd(c.fechaVencimiento, hoy) < 0) {
+          k.atrasado.cantidad += 1
+          k.atrasado.montoCentavos += c.restanteCentavos
+        }
+
+        if (compararYmd(c.fechaVencimiento, hoy) >= 0 && compararYmd(c.fechaVencimiento, hoyMas30) <= 0) {
+          k.proximos30Centavos += c.restanteCentavos
+        }
+
+        k.retencionesARetenerCentavos += c.retencionCentavos
+
         const monto = c.restanteCentavos > 0 ? c.restanteCentavos : c.aPagarCentavos
         const actual = proximoPorMoneda[inv.moneda]
         if (
@@ -196,6 +261,7 @@ export function cuentaInversor(
           montoNetoCentavos: c.aPagarCentavos,
           monedaPago: c.monedaPago,
           estado: estadoUi,
+          inversorNombre: inv.inversorNombre,
         })
       }
     }
@@ -204,6 +270,8 @@ export function cuentaInversor(
   for (const m of ['ARS', 'USD'] as const) {
     porMoneda[m].proximoVencimiento = proximoPorMoneda[m]
   }
+
+  vencimientosContrato.sort((a, b) => compararYmd(a.fechaFinal, b.fechaFinal))
 
   const kpisPorMoneda = (['ARS', 'USD'] as const)
     .map((m) => porMoneda[m])
@@ -238,5 +306,6 @@ export function cuentaInversor(
       fechaFinal: inv.fechaFinal,
       tasaTexto: inv.tasaTexto,
     })),
+    vencimientosContrato,
   }
 }

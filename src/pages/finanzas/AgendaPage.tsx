@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { PlazoChips } from '../../components/finanzas/agenda/PlazoChips'
+import { AgendaResumen, type CamposAgenda } from '../../components/finanzas/agenda/AgendaResumen'
 import { diaArgentina, enPlazo, esFechaEstimada, esSinFecha, type PlazoAgenda } from '../../components/finanzas/agenda/plazoAgenda'
 import { Plus } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -97,6 +97,20 @@ const TRANSFERENCIA_CONFECCIONADA_MSG =
 const CANCELAR_TRANSFERENCIA_AVISO =
   '⚠️ Esto NO cancela la transferencia en Interbanking. Solo la marca como cancelada acá, en BacarNet. Si la transferencia sigue activa en la plataforma de Interbanking, andá ahí a cancelarla también — de lo contrario, alguien podría autorizarla igual sin saber que acá la dimos por cancelada.'
 
+const CAMPOS_EGRESO: CamposAgenda<CompromisoAgendaItem> = {
+  fecha: (r) => r.fechaVencimiento,
+  sinFecha: (r) => esSinFecha({ vientri: r.vientri, fecha: r.fechaVencimiento }),
+  moneda: (r) => (r.moneda === 'USD' ? 'USD' : 'ARS'),
+  monto: (r) => (typeof r.restanteCentavos === 'number' ? r.restanteCentavos : r.montoCentavos),
+}
+
+const CAMPOS_INGRESO: CamposAgenda<CobroAgendaItem> = {
+  fecha: (r) => r.fechaEsperada,
+  sinFecha: (r) => esSinFecha({ vientri: r.vientri, fecha: r.fechaEsperada }),
+  moneda: (r) => (r.moneda === 'USD' ? 'USD' : 'ARS'),
+  monto: (r) => r.montoCentavos,
+}
+
 function filterCobrosForVista(rows: CobroAgendaItem[], vista: CobrosAgendaVista): CobroAgendaItem[] {
   if (vista === 'cobrados') return rows.filter((r) => r.estado === 'confirmado')
   return rows.filter((r) => r.estado === 'esperado')
@@ -130,7 +144,14 @@ export function FinanzasAgendaPage() {
   const { data: compromisosRaw = [], isLoading: loadingPagos } = useQuery({
     queryKey: ['finanzas', 'agenda', 'compromisos', 'pendientes'],
     queryFn: () => fetchCompromisosAgenda('pendientes'),
-    enabled: Boolean(user) && tab === 'pagos' && vistaPagos === 'pendientes',
+    enabled: Boolean(user) && (tab === 'pagos' || tab === 'cobros'),
+  })
+
+  /** Cobros esperados: alimentan los KPIs de ingresos aunque se esté mirando la pestaña de compromisos. */
+  const { data: cobrosEsperadosRaw = [] } = useQuery({
+    queryKey: ['finanzas', 'agenda', 'cobros', 'esperados'],
+    queryFn: () => fetchCobrosAgenda('esperados'),
+    enabled: Boolean(user) && (tab === 'pagos' || tab === 'cobros'),
   })
 
   const { data: cobrosRaw = [], isLoading: loadingCobros } = useQuery({
@@ -139,24 +160,24 @@ export function FinanzasAgendaPage() {
     enabled: Boolean(user) && tab === 'cobros',
   })
 
-  const [plazoPagos, setPlazoPagos] = useState<PlazoAgenda>('semana')
-  const [plazoCobros, setPlazoCobros] = useState<PlazoAgenda>('semana')
+  /** Un solo plazo para compromisos y cobros, así los KPIs y las listas dicen lo mismo. */
+  const [plazo, setPlazo] = useState<PlazoAgenda>('semana')
   const hoy = diaArgentina(new Date())
   const compromisosTodos = useMemo(
     () => filterCompromisosForVista(compromisosRaw, 'pendientes'),
     [compromisosRaw],
   )
   const compromisos = useMemo(
-    () => compromisosTodos.filter((r) => enPlazo(r.fechaVencimiento, plazoPagos, hoy, esSinFecha({ vientri: r.vientri, fecha: r.fechaVencimiento }))),
-    [compromisosTodos, plazoPagos, hoy],
+    () => compromisosTodos.filter((r) => enPlazo(r.fechaVencimiento, plazo, hoy, esSinFecha({ vientri: r.vientri, fecha: r.fechaVencimiento }))),
+    [compromisosTodos, plazo, hoy],
   )
   const cobrosVista = useMemo(
     () => filterCobrosForVista(cobrosRaw, vistaCobros),
     [cobrosRaw, vistaCobros],
   )
   const cobros = useMemo(
-    () => (vistaCobros === 'esperados' ? cobrosVista.filter((r) => enPlazo(r.fechaEsperada, plazoCobros, hoy, esSinFecha({ vientri: r.vientri, fecha: r.fechaEsperada }))) : cobrosVista),
-    [cobrosVista, vistaCobros, plazoCobros, hoy],
+    () => (vistaCobros === 'esperados' ? cobrosVista.filter((r) => enPlazo(r.fechaEsperada, plazo, hoy, esSinFecha({ vientri: r.vientri, fecha: r.fechaEsperada }))) : cobrosVista),
+    [cobrosVista, vistaCobros, plazo, hoy],
   )
 
   const { data: cuentasData } = useQuery({
@@ -164,6 +185,10 @@ export function FinanzasAgendaPage() {
     queryFn: fetchFinanzasCuentas,
     enabled: Boolean(user),
   })
+
+  const cobrosEsperados = useMemo(() => filterCobrosForVista(cobrosEsperadosRaw, 'esperados'), [cobrosEsperadosRaw])
+  const muestraResumen =
+    (tab === 'pagos' && vistaPagos === 'pendientes') || (tab === 'cobros' && vistaCobros === 'esperados')
 
   const cuentas = cuentasData?.cuentas ?? []
   const permisos = usePermisosFinanzas()
@@ -209,7 +234,7 @@ export function FinanzasAgendaPage() {
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
-          {botonTab('pagos', 'Compromisos de pago')}
+          {botonTab('pagos', 'Compromisos')}
           {botonTab('cobros', 'Cobros esperados')}
           {botonTab('planilla', 'Planilla del mes')}
         </div>
@@ -226,13 +251,25 @@ export function FinanzasAgendaPage() {
         ) : null}
       </div>
 
+      {muestraResumen ? (
+        <AgendaResumen
+          egresos={compromisosTodos}
+          camposEgreso={CAMPOS_EGRESO}
+          ingresos={cobrosEsperados}
+          camposIngreso={CAMPOS_INGRESO}
+          plazo={plazo}
+          onChange={setPlazo}
+          hoy={hoy}
+        />
+      ) : null}
+
       {tab === 'planilla' ? (
         <div data-tour="agenda-planilla" className="min-w-0">
         <CompromisosMes
           onPagar={(compromisoId) => {
             const row = pendientesPlanilla.find((item) => item.id === compromisoId)
             if (row) setPagarDesdePlanilla(row)
-            else toast('Ese compromiso no está pendiente. Buscalo en Compromisos de pago.')
+            else toast('Ese compromiso no está pendiente. Buscalo en Compromisos.')
           }}
         />
         </div>
@@ -252,15 +289,6 @@ export function FinanzasAgendaPage() {
             <LoadingBlock />
           ) : (
             <>
-            <PlazoChips
-              rows={compromisosTodos}
-              fecha={(r) => r.fechaVencimiento}
-              sinFecha={(r) => esSinFecha({ vientri: r.vientri, fecha: r.fechaVencimiento })}
-              moneda={(r) => (r.moneda === 'USD' ? 'USD' : 'ARS')}
-              plazo={plazoPagos}
-              onChange={setPlazoPagos}
-              hoy={hoy}
-            />
             <CompromisosTable
               rows={compromisos}
               vista="pendientes"
@@ -311,17 +339,6 @@ export function FinanzasAgendaPage() {
             <LoadingBlock />
           ) : (
             <>
-            {vistaCobros === 'esperados' ? (
-              <PlazoChips
-                rows={cobrosVista}
-                fecha={(r) => r.fechaEsperada}
-                sinFecha={(r) => esSinFecha({ vientri: r.vientri, fecha: r.fechaEsperada })}
-                moneda={(r) => (r.moneda === 'USD' ? 'USD' : 'ARS')}
-                plazo={plazoCobros}
-                onChange={setPlazoCobros}
-                hoy={hoy}
-              />
-            ) : null}
             <CobrosTable
               rows={cobros}
               vista={vistaCobros}

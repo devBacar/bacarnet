@@ -40,6 +40,8 @@ const FRASES_FINANZAS: { clave: keyof FlagsPermisosFinanzas; texto: string }[] =
   { clave: 'finanzas_transferencias', texto: 'transferencias' },
   { clave: 'finanzas_destinatarios', texto: 'destinatarios' },
   { clave: 'finanzas_saldos', texto: 'saldos' },
+  { clave: 'finanzas_inversiones', texto: 'inversores' },
+  { clave: 'finanzas_inversiones_aprobar', texto: 'aprobar inversiones' },
   { clave: 'manage_finanzas_caja', texto: 'cajas' },
 ]
 
@@ -111,6 +113,18 @@ export const INTERRUPTORES_FINANZAS: {
     clave: 'finanzas_saldos',
     titulo: 'Saldos y descubierto',
     ayuda: 'Cambiar el descubierto, el saldo cargado a mano y guardar el historial.',
+    pideVer: true,
+  },
+  {
+    clave: 'finanzas_inversiones',
+    titulo: 'Inversores',
+    ayuda: 'Ver y cargar inversores, inversiones y pagos de cuotas. Incluye datos personales.',
+    pideVer: true,
+  },
+  {
+    clave: 'finanzas_inversiones_aprobar',
+    titulo: 'Aprobar inversiones',
+    ayuda: 'Solo el Líder de Finanzas: aprobar o rechazar inversiones nuevas.',
     pideVer: true,
   },
   {

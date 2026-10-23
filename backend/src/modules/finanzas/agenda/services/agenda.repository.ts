@@ -30,7 +30,7 @@ export function timestampFromDate(date: Date): Timestamp {
   return Timestamp.fromDate(date)
 }
 
-function defaultCompromisoFields(): Pick<
+export function defaultCompromisoFields(): Pick<
   CompromisoPagoDocument,
   | 'cuentaId'
   | 'fechaPago'
@@ -67,7 +67,7 @@ function defaultCompromisoFields(): Pick<
   }
 }
 
-function defaultCobroFields(): Pick<
+export function defaultCobroFields(): Pick<
   CobroEsperadoDocument,
   'cuentaId' | 'fechaConfirmado' | 'confirmadoPor' | 'prioridad' | 'urgenciaManual'
 > {
@@ -205,14 +205,20 @@ export async function getCobroDocument(id: string): Promise<CobroEsperadoDocumen
   return snap.data() as CobroEsperadoDocument
 }
 
+/** Sin los anulados (baja lógica): no aparecen en la Agenda, Hoy ni el tablero. */
 export async function listAllCompromisos(): Promise<Array<{ id: string; data: CompromisoPagoDocument }>> {
   const snap = await adminDb().collection(COMPROMISOS_COLLECTION).get()
-  return snap.docs.map((d) => ({ id: d.id, data: d.data() as CompromisoPagoDocument }))
+  return snap.docs
+    .map((d) => ({ id: d.id, data: d.data() as CompromisoPagoDocument }))
+    .filter(({ data }) => data.anulado !== true)
 }
 
+/** Sin los anulados (baja lógica). */
 export async function listAllCobros(): Promise<Array<{ id: string; data: CobroEsperadoDocument }>> {
   const snap = await adminDb().collection(COBROS_COLLECTION).get()
-  return snap.docs.map((d) => ({ id: d.id, data: d.data() as CobroEsperadoDocument }))
+  return snap.docs
+    .map((d) => ({ id: d.id, data: d.data() as CobroEsperadoDocument }))
+    .filter(({ data }) => data.anulado !== true)
 }
 
 export async function listCompromisoHistorial(compromisoId: string) {
@@ -312,7 +318,7 @@ export async function listCompromisosPendientes(): Promise<
     }))
 }
 
-function timestampDiaArgentina(ymd: string): Timestamp {
+export function timestampDiaArgentina(ymd: string): Timestamp {
   return Timestamp.fromDate(new Date(`${ymd}T12:00:00-03:00`))
 }
 

@@ -26,6 +26,8 @@ export const EXTERNAL_PENDING_PERMISSIONS = {
   finanzas_transferencias: false,
   finanzas_destinatarios: false,
   finanzas_saldos: false,
+  finanzas_inversiones: false,
+  finanzas_inversiones_aprobar: false,
   manage_finanzas_caja: false,
   rrhh_detalle: false,
 } as const
@@ -46,6 +48,8 @@ export const DEFAULT_PERMISSIONS = {
   finanzas_transferencias: false,
   finanzas_destinatarios: false,
   finanzas_saldos: false,
+  finanzas_inversiones: false,
+  finanzas_inversiones_aprobar: false,
   manage_finanzas_caja: false,
   rrhh_detalle: false,
 } as const
@@ -66,6 +70,8 @@ export const SUPER_ADMIN_PERMISSIONS = {
   finanzas_transferencias: true,
   finanzas_destinatarios: true,
   finanzas_saldos: true,
+  finanzas_inversiones: true,
+  finanzas_inversiones_aprobar: true,
   manage_finanzas_caja: true,
   rrhh_detalle: true,
 } as const

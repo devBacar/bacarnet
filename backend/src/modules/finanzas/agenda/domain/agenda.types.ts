@@ -47,6 +47,30 @@ export interface VientriEnAgenda {
   plazoOrigen?: 'historia' | 'general' | null
 }
 
+/** De dónde salió el compromiso o el cobro. Sin el campo: cargado a mano en Bacarnet. */
+export type OrigenAgenda = 'vientri' | 'inversiones' | 'planilla'
+
+/** Cuota de una inversión (solo con origen 'inversiones'). Monto, fecha y moneda se cambian desde Inversiones. */
+export interface InversionEnAgenda {
+  inversionId: string
+  numero: string
+  cuotaNumero: number | null
+  /** Para no reescribir el compromiso si el cronograma no cambió (respeta lo que se reprogramó en la Agenda). */
+  versionCronograma: number
+}
+
+/** Fila importada de la planilla de compromisos de Finanzas (solo con origen 'planilla'). */
+export interface PlanillaEnAgenda {
+  /** 'YYYY-MM' de la hoja. */
+  mes: string
+  hoja: string
+  fila: number
+  /** Clave estable de la fila (grupo + concepto) para reimportar sin duplicar. */
+  clave: string
+  importadoAt: string
+  importadoPor: string
+}
+
 export interface CompromisoPagoDocument {
   concepto: string
   proveedorONombre: string
@@ -80,8 +104,17 @@ export interface CompromisoPagoDocument {
    */
   transferenciasEnFirma?: Array<{ transferenciaId: string; montoCentavos: number }>
   /** 'vientri' si lo creó la importación diaria de Vientri; los cargados a mano no lo tienen. */
-  origen?: 'vientri'
+  origen?: OrigenAgenda
   vientri?: VientriEnAgenda
+  inversion?: InversionEnAgenda
+  planilla?: PlanillaEnAgenda
+  /**
+   * Anulado: ya no corresponde (ej. cuota de una inversión devuelta antes). No se borra (baja lógica, REGLAS 5.1);
+   * listAllCompromisos no lo devuelve, así que no aparece en la Agenda, Hoy ni el tablero.
+   */
+  anulado?: boolean
+  anuladoAt?: Timestamp | null
+  anuladoMotivo?: string | null
   /** Si al crearlo había uno cargado a mano con el mismo importe y fecha cercana. */
   posibleDuplicado?: { id: string; descripcion: string } | null
   createdAt: Timestamp
@@ -102,8 +135,12 @@ export interface CobroEsperadoDocument {
   fechaConfirmado: Timestamp | null
   confirmadoPor: string | null
   moneda?: 'ARS' | 'USD'
-  origen?: 'vientri'
+  origen?: OrigenAgenda
   vientri?: VientriEnAgenda
+  inversion?: { inversionId: string; numero: string } | null
+  /** Concepto libre (lo usan los cobros de Inversiones y los de Hoy). */
+  concepto?: string | null
+  anulado?: boolean
   /** Si al crearlo había uno cargado a mano con el mismo importe y fecha cercana. */
   posibleDuplicado?: { id: string; descripcion: string } | null
   createdAt: Timestamp

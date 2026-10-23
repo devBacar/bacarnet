@@ -549,6 +549,18 @@ export async function patchCompromisoAgenda(
       throw new Error('Este pago viene de Vientri: el comprobante, el proveedor, el importe y la moneda se corrigen en Vientri.')
     }
   }
+  if (current.origen === 'inversiones') {
+    const tocaDatosDeLaInversion =
+      (cambios.concepto != null && cambios.concepto !== current.concepto) ||
+      (cambios.proveedorONombre != null && cambios.proveedorONombre !== current.proveedorONombre) ||
+      (cambios.montoCentavos != null && cambios.montoCentavos !== current.montoCentavos) ||
+      (cambios.moneda != null && cambios.moneda !== (current.moneda ?? 'ARS')) ||
+      (cambios.fechaVencimiento != null &&
+        cambios.fechaVencimiento.toISOString().slice(0, 10) !== current.fechaVencimiento.toDate().toISOString().slice(0, 10))
+    if (tocaDatosDeLaInversion) {
+      throw new Error('Es una cuota de Inversores: el importe, la fecha y el inversor se cambian desde Inversores. Acá se paga o se pasa de día.')
+    }
+  }
   const bloqueado = current.estado === 'confeccionada_pendiente_autorizacion'
   if (
     bloqueado &&

@@ -17,6 +17,8 @@ export interface FlagsPermisosFinanzas {
   finanzas_transferencias: boolean
   finanzas_destinatarios: boolean
   finanzas_saldos: boolean
+  finanzas_inversiones: boolean
+  finanzas_inversiones_aprobar: boolean
   manage_finanzas_caja: boolean
 }
 
@@ -28,6 +30,8 @@ const CLAVES: (keyof FlagsPermisosFinanzas)[] = [
   'finanzas_transferencias',
   'finanzas_destinatarios',
   'finanzas_saldos',
+  'finanzas_inversiones',
+  'finanzas_inversiones_aprobar',
   'manage_finanzas_caja',
 ]
 
@@ -39,6 +43,8 @@ const SIN_ACCESO: FlagsPermisosFinanzas = {
   finanzas_transferencias: false,
   finanzas_destinatarios: false,
   finanzas_saldos: false,
+  finanzas_inversiones: false,
+  finanzas_inversiones_aprobar: false,
   manage_finanzas_caja: false,
 }
 
@@ -64,6 +70,8 @@ export function permisosDePerfil(perfil: PerfilFinanzasFijo): FlagsPermisosFinan
     finanzas_transferencias: true,
     finanzas_destinatarios: true,
     finanzas_saldos: true,
+    finanzas_inversiones: true,
+    finanzas_inversiones_aprobar: true,
     manage_finanzas_caja: true,
   }
 }
@@ -77,6 +85,8 @@ export function flagsFinanzasDe(permissions: Partial<UserPermissions> | null | u
     finanzas_transferencias: permissions?.finanzas_transferencias === true,
     finanzas_destinatarios: permissions?.finanzas_destinatarios === true,
     finanzas_saldos: permissions?.finanzas_saldos === true,
+    finanzas_inversiones: permissions?.finanzas_inversiones === true,
+    finanzas_inversiones_aprobar: permissions?.finanzas_inversiones_aprobar === true,
     manage_finanzas_caja: permissions?.manage_finanzas_caja === true,
   }
 }
@@ -104,6 +114,8 @@ export function apagarFinanzasSinVista(permissions: UserPermissions): UserPermis
     finanzas_transferencias: false,
     finanzas_destinatarios: false,
     finanzas_saldos: false,
+    finanzas_inversiones: false,
+    finanzas_inversiones_aprobar: false,
   }
 }
 

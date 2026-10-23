@@ -48,6 +48,8 @@ function permisosParaGuardar(permissions: UserPermissions): PendingUserSetupPerm
     finanzas_transferencias: listos.finanzas_transferencias === true,
     finanzas_destinatarios: listos.finanzas_destinatarios === true,
     finanzas_saldos: listos.finanzas_saldos === true,
+    finanzas_inversiones: listos.finanzas_inversiones === true,
+    finanzas_inversiones_aprobar: listos.finanzas_inversiones_aprobar === true,
     manage_finanzas_caja: listos.manage_finanzas_caja === true,
   }
 }

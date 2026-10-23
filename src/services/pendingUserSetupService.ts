@@ -28,6 +28,8 @@ const CLAVES_PERMISO_OPCIONAL = [
   'finanzas_transferencias',
   'finanzas_destinatarios',
   'finanzas_saldos',
+  'finanzas_inversiones',
+  'finanzas_inversiones_aprobar',
   'manage_finanzas_caja',
 ] as const
 
@@ -43,6 +45,8 @@ export interface PendingUserSetupPermissions {
   finanzas_transferencias?: boolean
   finanzas_destinatarios?: boolean
   finanzas_saldos?: boolean
+  finanzas_inversiones?: boolean
+  finanzas_inversiones_aprobar?: boolean
   manage_finanzas_caja?: boolean
 }
 

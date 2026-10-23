@@ -32,6 +32,8 @@ const CLAVES_PERMISO: (keyof UserPermissions)[] = [
   'finanzas_transferencias',
   'finanzas_destinatarios',
   'finanzas_saldos',
+  'finanzas_inversiones',
+  'finanzas_inversiones_aprobar',
   'manage_finanzas_caja',
   'rrhh_detalle',
 ]

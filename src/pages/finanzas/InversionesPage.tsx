@@ -2,6 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { KpisInversiones } from '../../components/finanzas/inversiones/KpisInversiones'
+import { PestanaConfiguracion } from '../../components/finanzas/inversiones/PestanaConfiguracion'
+import { PestanaImportar } from '../../components/finanzas/inversiones/PestanaImportar'
+import { PestanaInversores } from '../../components/finanzas/inversiones/PestanaInversores'
 import { TablaInversiones } from '../../components/finanzas/inversiones/TablaInversiones'
 import { useAuth } from '../../context'
 import { fetchInversiones } from '../../services/finanzasInversionesApi'
@@ -33,18 +36,12 @@ function LoadingBlock() {
   )
 }
 
-function Proximamente({ texto }: { texto: string }) {
-  return (
-    <p className="text-body-muted rounded-2xl border border-dashed border-neutral-300 px-4 py-10 text-center text-sm dark:border-zinc-700">
-      {texto}. Próximamente.
-    </p>
-  )
-}
-
 export function InversionesPage() {
   const { user } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = tabInicial(searchParams.get('tab'))
+
+  const listaActiva = tab === 'inversiones' || tab === 'para_aprobar'
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['finanzas', 'inversiones'],
@@ -98,36 +95,34 @@ export function InversionesPage() {
         {botonTab('configuracion', 'Configuración')}
       </div>
 
-      {isLoading ? (
-        <LoadingBlock />
-      ) : isError ? (
-        <p className="text-danger text-sm">
-          {error instanceof Error ? error.message : 'No pude traer las inversiones'}
-        </p>
-      ) : (
-        <>
-          {tab === 'inversiones' || tab === 'para_aprobar' ? (
-            <>
-              {kpis ? <KpisInversiones kpis={kpis} /> : null}
-              {tab === 'inversiones' ? (
-                <TablaInversiones
-                  filas={inversiones}
-                  vacio="Todavía no hay inversiones cargadas. Cuando cargues una o importes la planilla, van a aparecer acá."
-                />
-              ) : (
-                <TablaInversiones
-                  filas={paraAprobar}
-                  vacio="No hay inversiones esperando aprobación. Cuando alguien mande una a aprobar, va a aparecer acá."
-                />
-              )}
-            </>
-          ) : null}
+      {listaActiva ? (
+        isLoading ? (
+          <LoadingBlock />
+        ) : isError ? (
+          <p className="text-danger text-sm">
+            {error instanceof Error ? error.message : 'No pude traer las inversiones'}
+          </p>
+        ) : (
+          <>
+            {kpis ? <KpisInversiones kpis={kpis} /> : null}
+            {tab === 'inversiones' ? (
+              <TablaInversiones
+                filas={inversiones}
+                vacio="Todavía no hay inversiones cargadas. Cuando cargues una o importes la planilla, van a aparecer acá."
+              />
+            ) : (
+              <TablaInversiones
+                filas={paraAprobar}
+                vacio="No hay inversiones esperando aprobación. Cuando alguien mande una a aprobar, va a aparecer acá."
+              />
+            )}
+          </>
+        )
+      ) : null}
 
-          {tab === 'inversores' ? <Proximamente texto="La lista de inversores" /> : null}
-          {tab === 'importar' ? <Proximamente texto="La importación de la planilla" /> : null}
-          {tab === 'configuracion' ? <Proximamente texto="La configuración" /> : null}
-        </>
-      )}
+      {tab === 'inversores' ? <PestanaInversores /> : null}
+      {tab === 'importar' ? <PestanaImportar /> : null}
+      {tab === 'configuracion' ? <PestanaConfiguracion /> : null}
     </>
   )
 }

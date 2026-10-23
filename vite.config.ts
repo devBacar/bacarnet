@@ -17,6 +17,10 @@ export default defineConfig({
         __dirname,
         'backend/src/modules/helpdesk/schedulingConstants.ts',
       ),
+      '@intranet/cuenta-inversor': resolve(
+        __dirname,
+        'backend/src/modules/finanzas/inversiones/domain/cuentaInversor.ts',
+      ),
     },
   },
   server: {

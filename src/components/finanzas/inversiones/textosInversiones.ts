@@ -3,6 +3,7 @@ import type {
   SistemaDevolucion,
   Tasa,
 } from '../../../services/finanzasInversionesApi'
+import type { EstadoCuotaCalendario } from './cuentaInversor'
 
 /** Estados en palabras simples (pantallas para gerentes). */
 export const TEXTO_ESTADO: Record<EstadoInversion, string> = {
@@ -13,6 +14,44 @@ export const TEXTO_ESTADO: Record<EstadoInversion, string> = {
   precancelada: 'Devuelta antes',
   renovada: 'Renovada',
   anulada: 'Anulada',
+}
+
+/** Ficha / cuenta del inversor (letra grande, sin jerga). */
+export const TEXTOS_FICHA = {
+  verFicha: 'Ver ficha',
+  tituloCuenta: 'Ficha del inversor',
+  editarDatos: 'Editar datos',
+  cerrar: 'Cerrar',
+  cargando: 'Cargando la ficha…',
+  sinContacto: 'Sin datos de contacto cargados.',
+  kpisEnPesos: 'En pesos',
+  kpisEnDolares: 'En dólares',
+  capitalVigente: 'Capital vigente',
+  interesesPagados: 'Intereses pagados',
+  interesesAPagar: 'Intereses a pagar',
+  retencionesAnio: 'Retención de Ganancias (RG 830) del año',
+  inversionesVigentes: 'Inversiones vigentes',
+  proximoVencimiento: 'Próximo vencimiento',
+  sinProximo: 'Ninguno pendiente',
+  calendarioTitulo: 'Calendario de cuotas',
+  calendarioVacio: 'No hay cuotas de inversiones vigentes.',
+  colFecha: 'Fecha',
+  colInversion: 'Inversión',
+  colMontoNeto: 'Monto neto',
+  colEstado: 'Estado',
+  verInversion: 'Ver inversión',
+  inversionesTitulo: 'Inversiones vigentes',
+  inversionesVacio: 'Este inversor no tiene inversiones en curso.',
+  colEstadoInv: 'Estado',
+  colCapital: 'Capital',
+  colTasa: 'Tasa',
+  colVencimiento: 'Vencimiento',
+} as const
+
+export const TEXTO_ESTADO_CUOTA_CALENDARIO: Record<EstadoCuotaCalendario, string> = {
+  pagada: 'Pagada',
+  pendiente: 'Pendiente',
+  vencida: 'Vencida',
 }
 
 /** Cómo se devuelve la plata, en palabras. */

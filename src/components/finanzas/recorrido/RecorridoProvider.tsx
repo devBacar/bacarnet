@@ -54,6 +54,8 @@ export function RecorridoProvider({ children }: { children: ReactNode }) {
       transferencias: puede.transferencias,
       destinatarios: puede.destinatarios,
       saldos: puede.saldos,
+      inversiones: puede.inversiones,
+      aprobarInversiones: puede.aprobarInversiones,
       liderCajas: puede.liderCajas,
     }),
     [
@@ -64,6 +66,8 @@ export function RecorridoProvider({ children }: { children: ReactNode }) {
       puede.transferencias,
       puede.destinatarios,
       puede.saldos,
+      puede.inversiones,
+      puede.aprobarInversiones,
       puede.liderCajas,
     ],
   )

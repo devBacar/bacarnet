@@ -233,12 +233,27 @@ export interface InversorDatos {
   observaciones: string | null
 }
 
+/**
+ * Retención de Ganancias sobre los intereses que se le pagan al inversor (RG 830).
+ * Finanzas decide si la aplica y carga las alícuotas; Bacarnet no trae valores propios.
+ */
+export interface RetencionGanancias {
+  activa: boolean
+  /** % para inversores inscriptos en Ganancias. */
+  alicuotaInscriptoPct: number | null
+  /** % para inversores no inscriptos. */
+  alicuotaNoInscriptoPct: number | null
+  /** Por debajo de este interés mensual no se retiene. */
+  minimoNoSujetoCentavos: number | null
+}
+
 export interface ConfigInversiones {
   baseDiasDefault: BaseDias
   /** Hasta cuántos meses hacia adelante se generan las cuotas de las inversiones sin vencimiento. */
   horizonteMesesSinVencimiento: number
   penalidadDefault: Penalidad
   diasAvisoPorVencer: number
+  retencionGanancias: RetencionGanancias
   ultimoNumero: number
 }
 
@@ -247,6 +262,7 @@ export const CONFIG_INVERSIONES_DEFAULT: ConfigInversiones = {
   horizonteMesesSinVencimiento: 12,
   penalidadDefault: { tipo: 'ninguna' },
   diasAvisoPorVencer: 30,
+  retencionGanancias: { activa: false, alicuotaInscriptoPct: null, alicuotaNoInscriptoPct: null, minimoNoSujetoCentavos: null },
   ultimoNumero: 0,
 }
 

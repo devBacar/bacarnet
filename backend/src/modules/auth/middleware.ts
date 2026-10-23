@@ -21,6 +21,10 @@ export interface AuthedUserPermissions {
   finanzas_destinatarios?: boolean
   /** Descubierto, saldo manual, reinicio USD e historial de posición. */
   finanzas_saldos?: boolean
+  /** Inversores: ver y operar inversiones y ver los datos de los inversores. */
+  finanzas_inversiones?: boolean
+  /** Inversores: aprobar o rechazar inversiones (Líder de Finanzas). */
+  finanzas_inversiones_aprobar?: boolean
   /** Líder de caja chica: crear cajas, reasignar responsable, aprobar rendiciones. */
   manage_finanzas_caja?: boolean
   manage_users?: boolean
@@ -36,6 +40,8 @@ export type FinanzasPermisoClave =
   | 'finanzas_transferencias'
   | 'finanzas_destinatarios'
   | 'finanzas_saldos'
+  | 'finanzas_inversiones'
+  | 'finanzas_inversiones_aprobar'
 
 export const MENSAJE_FINANZAS_PERMISO: Record<FinanzasPermisoClave, string> = {
   finanzas_agenda:
@@ -50,6 +56,10 @@ export const MENSAJE_FINANZAS_PERMISO: Record<FinanzasPermisoClave, string> = {
     'No tenés permiso para administrar destinatarios. Pedíselo a quien administra los usuarios.',
   finanzas_saldos:
     'No tenés permiso para cambiar saldos y descubiertos. Pedíselo a quien administra los usuarios.',
+  finanzas_inversiones:
+    'No tenés permiso para ver u operar Inversores. Pedíselo a quien administra los usuarios.',
+  finanzas_inversiones_aprobar:
+    'Solo el Líder de Finanzas puede aprobar o rechazar inversiones.',
 }
 
 function permisoVerdadero(raw: Record<string, unknown>, clave: string): boolean {
@@ -71,6 +81,8 @@ export function permisosDesdePerfil(permissionsRaw: unknown): AuthedUserPermissi
     finanzas_transferencias: permisoVerdadero(raw, 'finanzas_transferencias'),
     finanzas_destinatarios: permisoVerdadero(raw, 'finanzas_destinatarios'),
     finanzas_saldos: permisoVerdadero(raw, 'finanzas_saldos'),
+    finanzas_inversiones: permisoVerdadero(raw, 'finanzas_inversiones'),
+    finanzas_inversiones_aprobar: permisoVerdadero(raw, 'finanzas_inversiones_aprobar'),
     manage_finanzas_caja: permisoVerdadero(raw, 'manage_finanzas_caja'),
     manage_users: permisoVerdadero(raw, 'manage_users'),
     rag_assistant: permisoVerdadero(raw, 'rag_assistant'),

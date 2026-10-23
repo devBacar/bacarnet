@@ -72,3 +72,8 @@ export function fechaCorta(ymd: string): string {
   const [anio, mes, dia] = partes(ymd)
   return `${dia}/${mes}/${anio}`
 }
+
+/** Fecha de hoy en Argentina, 'YYYY-MM-DD'. */
+export function hoyArgentina(now = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
+}

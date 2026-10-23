@@ -4,7 +4,7 @@ import {
   requireViewFinanzas,
   requireWorkspaceUser,
 } from '../../../auth/middleware.js'
-import { ErrorValidacion } from '../domain/validar.js'
+import { ErrorValidacion, NoEncontrado } from '../domain/validar.js'
 import {
   cambiarEstadoInversor,
   crearInversor,
@@ -13,8 +13,18 @@ import {
   guardarConfig,
   leerConfig,
   listarInversores,
-  NoEncontrado,
 } from '../services/inversores.service.js'
+import {
+  anularInversion,
+  aprobarInversion,
+  crearInversion,
+  detalleInversion,
+  editarInversion,
+  enviarAAprobacion,
+  listarInversiones,
+  rechazarInversion,
+  simular,
+} from '../services/inversiones.service.js'
 
 export const finanzasInversionesRouter = Router()
 
@@ -93,5 +103,79 @@ finanzasInversionesRouter.put('/config', requireFinanzasPermiso('finanzas_invers
     res.json(await guardarConfig(req.body, req.authedUser!.uid))
   } catch (err) {
     responderError(res, err, 'No pude guardar la configuración', 'guardar config')
+  }
+})
+
+finanzasInversionesRouter.post('/simular', async (req, res) => {
+  try {
+    res.json(await simular(req.body))
+  } catch (err) {
+    responderError(res, err, 'No pude calcular las cuotas', 'simular')
+  }
+})
+
+// ── Inversiones (después de las rutas fijas) ──────────────────
+
+finanzasInversionesRouter.get('/', async (_req, res) => {
+  try {
+    res.json(await listarInversiones())
+  } catch (err) {
+    responderError(res, err, 'No pude traer las inversiones', 'listar')
+  }
+})
+
+finanzasInversionesRouter.post('/', async (req, res) => {
+  try {
+    res.status(201).json(await crearInversion(req.body, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude guardar la inversión', 'crear')
+  }
+})
+
+finanzasInversionesRouter.get('/:id', async (req, res) => {
+  try {
+    res.json(await detalleInversion(req.params.id, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude traer la inversión', 'detalle')
+  }
+})
+
+finanzasInversionesRouter.patch('/:id', async (req, res) => {
+  try {
+    res.json(await editarInversion(req.params.id, req.body, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude guardar los cambios', 'editar')
+  }
+})
+
+finanzasInversionesRouter.post('/:id/enviar', async (req, res) => {
+  try {
+    res.json(await enviarAAprobacion(req.params.id, req.body?.nota, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude enviarla a aprobación', 'enviar')
+  }
+})
+
+finanzasInversionesRouter.post('/:id/aprobar', requireFinanzasPermiso('finanzas_inversiones_aprobar'), async (req, res) => {
+  try {
+    res.json(await aprobarInversion(req.params.id, req.body?.nota, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude aprobarla', 'aprobar')
+  }
+})
+
+finanzasInversionesRouter.post('/:id/rechazar', requireFinanzasPermiso('finanzas_inversiones_aprobar'), async (req, res) => {
+  try {
+    res.json(await rechazarInversion(req.params.id, req.body?.motivo, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude rechazarla', 'rechazar')
+  }
+})
+
+finanzasInversionesRouter.post('/:id/anular', async (req, res) => {
+  try {
+    res.json(await anularInversion(req.params.id, req.body?.motivo, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude anularla', 'anular')
   }
 })

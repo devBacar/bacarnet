@@ -1,6 +1,7 @@
 import type { ConfigInversiones, InversionDocumentBase, MonedaInversion } from '../domain/inversion.types.js'
 import { enmascarar } from '../domain/textos.js'
-import { ErrorValidacion, validarConfig, validarInversorDatos } from '../domain/validar.js'
+import { ErrorValidacion, NoEncontrado, validarConfig, validarInversorDatos } from '../domain/validar.js'
+import { resumenesDeInversiones } from './inversiones.service.js'
 import {
   actualizarInversorDoc,
   crearInversorDoc,
@@ -14,8 +15,6 @@ import {
   type EstadoInversor,
   type InversorDocument,
 } from './inversores.repository.js'
-
-export class NoEncontrado extends Error {}
 
 function capitalVigenteDe(inversiones: InversionDocumentBase[]): Record<MonedaInversion, number> {
   const total: Record<MonedaInversion, number> = { ARS: 0, USD: 0 }
@@ -51,7 +50,7 @@ export async function listarInversores() {
 }
 
 export async function fichaInversor(id: string) {
-  const d = await getInversorDoc(id)
+  const [d, { items }] = await Promise.all([getInversorDoc(id), resumenesDeInversiones(id)])
   if (!d) throw new NoEncontrado('No encontré ese inversor.')
   return {
     id,
@@ -66,7 +65,7 @@ export async function fichaInversor(id: string) {
     cuentaUsd: d.cuentaUsd ?? null,
     observaciones: d.observaciones ?? null,
     estado: d.estado,
-    inversiones: [],
+    inversiones: items.map((i) => i.resumen),
     createdAt: isoDe(d.createdAt),
     updatedAt: isoDe(d.updatedAt),
   }

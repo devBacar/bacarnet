@@ -3,6 +3,9 @@ import type { BaseDias, ConfigInversiones, InversorDatos, Penalidad, TipoPersona
 /** Error con mensaje para mostrar tal cual en pantalla. */
 export class ErrorValidacion extends Error {}
 
+/** No existe lo que se pidió (404). */
+export class NoEncontrado extends Error {}
+
 function texto(valor: unknown, max = 300): string | null {
   if (valor === null || valor === undefined) return null
   if (typeof valor !== 'string') throw new ErrorValidacion('Hay un dato que no es texto.')

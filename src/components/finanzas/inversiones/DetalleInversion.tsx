@@ -253,7 +253,7 @@ export function DetalleInversion({ id }: { id: string }) {
           onClick={() => navigate('/finanzas/inversiones')}
           className="text-sm font-medium text-brand-primary hover:underline"
         >
-          ← Volver a Inversores
+          ← Cerrar
         </button>
         <p className="text-danger mt-4 text-sm">
           {error instanceof Error ? error.message : 'No pude traer la inversión'}
@@ -339,7 +339,7 @@ export function DetalleInversion({ id }: { id: string }) {
             onClick={() => navigate('/finanzas/inversiones')}
             className="text-sm font-medium text-brand-primary hover:underline"
           >
-            ← Volver a Inversores
+            ← Cerrar
           </button>
           <h1 className="text-heading mt-2 text-2xl font-bold tracking-tight">{d.numero}</h1>
           <button

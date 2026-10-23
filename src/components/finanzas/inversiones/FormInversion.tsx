@@ -619,7 +619,7 @@ export function FormInversion(props: Props) {
               aria-label="Tasa por mes o anual"
               value={form.tasaExpresada}
               onChange={(e) => set('tasaExpresada', e.target.value as TasaExpresada)}
-              className={finanzasInputClass}
+              className={`${finanzasInputClass} !w-auto shrink-0`}
             >
               <option value="mensual">Por mes</option>
               <option value="anual">Anual</option>

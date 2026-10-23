@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { DetalleInversion } from '../../components/finanzas/inversiones/DetalleInversion'
 import { FormInversion } from '../../components/finanzas/inversiones/FormInversion'
@@ -81,24 +81,6 @@ export function InversionesPage() {
     </button>
   )
 
-  if (id) {
-    return <DetalleInversion id={id} />
-  }
-
-  if (nuevaAbierta) {
-    return (
-      <FormInversion
-        modo="nuevo"
-        onCerrar={() => setNuevaAbierta(false)}
-        onGuardado={(detalle) => {
-          setNuevaAbierta(false)
-          void refetch()
-          navigate(`/finanzas/inversiones/${detalle.id}`)
-        }}
-      />
-    )
-  }
-
   const nParaAprobar = kpis?.paraAprobar ?? paraAprobar.length
 
   return (
@@ -157,6 +139,71 @@ export function InversionesPage() {
       {tab === 'inversores' ? <PestanaInversores /> : null}
       {tab === 'importar' ? <PestanaImportar /> : null}
       {tab === 'configuracion' ? <PestanaConfiguracion /> : null}
+      {nuevaAbierta ? (
+        <Popup onCerrar={() => setNuevaAbierta(false)} cerrarSoloConBoton>
+          <FormInversion
+            modo="nuevo"
+            onCerrar={() => setNuevaAbierta(false)}
+            onGuardado={(detalle) => {
+              setNuevaAbierta(false)
+              void refetch()
+              navigate(`/finanzas/inversiones/${detalle.id}`)
+            }}
+          />
+        </Popup>
+      ) : null}
+      {id ? (
+        <Popup onCerrar={() => navigate('/finanzas/inversiones')}>
+          <DetalleInversion id={id} />
+        </Popup>
+      ) : null}
     </>
+  )
+}
+
+/** Nueva inversión y detalle (aprobar, pagar, PDF) se abren como popup sobre el listado. */
+function Popup({
+  children,
+  onCerrar,
+  cerrarSoloConBoton = false,
+}: {
+  children: ReactNode
+  onCerrar: () => void
+  /** Formularios: ni Escape ni el clic afuera cierran, para no perder lo cargado. */
+  cerrarSoloConBoton?: boolean
+}) {
+  useEffect(() => {
+    if (cerrarSoloConBoton) return
+    const alTeclear = (e: KeyboardEvent) => {
+      // Si hay otro modal abierto encima (pagar, rechazar…), Escape lo cierra a él y no al detalle.
+      if (e.key === 'Escape' && document.querySelectorAll('.fixed.inset-0').length <= 1) onCerrar()
+    }
+    window.addEventListener('keydown', alTeclear)
+    return () => window.removeEventListener('keydown', alTeclear)
+  }, [onCerrar, cerrarSoloConBoton])
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-6"
+      onMouseDown={(e) => {
+        if (!cerrarSoloConBoton && e.target === e.currentTarget) onCerrar()
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full max-w-5xl rounded-2xl bg-white p-4 shadow-xl sm:p-6 dark:bg-zinc-900"
+      >
+        <button
+          type="button"
+          onClick={onCerrar}
+          aria-label="Cerrar"
+          className="text-body-muted absolute right-3 top-3 rounded-lg px-2 py-1 text-lg hover:bg-neutral-100 dark:hover:bg-zinc-800"
+        >
+          ×
+        </button>
+        {children}
+      </div>
+    </div>
   )
 }

@@ -38,6 +38,7 @@ import {
   FinanzasCajasPage,
   FinanzasChequesPage,
   FinanzasVientriPage,
+  InversionesPage,
   FinanzasLayout,
   FinanzasIndexRedirect,
   RrhhHorasExtraPage,
@@ -98,6 +99,8 @@ export function AppRoutes() {
                   <Route path="extractos" element={<FinanzasExtractosPage />} />
                   <Route path="cheques" element={<FinanzasChequesPage />} />
                   <Route path="vientri" element={<FinanzasVientriPage />} />
+                  <Route path="inversiones" element={<InversionesPage />} />
+                  <Route path="inversiones/:id" element={<InversionesPage />} />
                 </Route>
                 <Route path="cajas" element={<FinanzasCajasPage />} />
                 <Route path="cajachica" element={<Navigate to="/finanzas/cajas" replace />} />

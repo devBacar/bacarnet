@@ -122,6 +122,7 @@ const FILTRO_CHEQUE_VACIO: Omit<ChequesFiltro, 'direccion' | 'desde' | 'hasta'> 
   estado: null,
   tipo: null,
   vinculacion: null,
+  comprobante: null,
   q: null,
 }
 

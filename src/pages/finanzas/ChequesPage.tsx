@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDownLeft, ArrowUpRight, ClipboardPaste, Search, Upload } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { fetchMovimientoById, type MovimientoListItem } from '../../services/finanzasMovimientosApi'
 import toast from 'react-hot-toast'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
@@ -67,12 +67,14 @@ export function FinanzasChequesPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [movDetalle, setMovDetalle] = useState<MovimientoListItem | null>(null)
   const [movCargando, setMovCargando] = useState(false)
+  const [expandido, setExpandido] = useState<string | null>(null)
 
   const [direccion, setDireccion] = useState<ChequeDireccion | ''>('')
   const [origen, setOrigen] = useState<ChequeOrigen | ''>('')
   const [estado, setEstado] = useState<ChequeEstado | ''>('')
   const [tipo, setTipo] = useState<ChequeTipo | ''>('')
   const [vinculacion, setVinculacion] = useState<'' | 'vinculado' | 'sin_vincular'>('')
+  const [comprobante, setComprobante] = useState<'' | 'con_comprobante' | 'sin_comprobante'>('')
   const { desde: mesDesde, hasta: mesHasta } = mesActual()
   const [desde, setDesde] = useState(() => {
     try { return sessionStorage.getItem('cheques_desde') ?? mesDesde } catch { return mesDesde }
@@ -94,7 +96,7 @@ export function FinanzasChequesPage() {
   }, [busqueda])
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ['finanzas', 'cheques', direccion, origen, estado, tipo, vinculacion, desde, hasta, q, page],
+    queryKey: ['finanzas', 'cheques', direccion, origen, estado, tipo, vinculacion, comprobante, desde, hasta, q, page],
     queryFn: () =>
       fetchCheques({
         direccion,
@@ -102,6 +104,7 @@ export function FinanzasChequesPage() {
         estado,
         tipo,
         vinculacion,
+        comprobante,
         desde: desde || undefined,
         hasta: hasta || undefined,
         q: q || undefined,
@@ -362,6 +365,18 @@ export function FinanzasChequesPage() {
             <option value="sin_vincular">Sin movimiento</option>
           </select>
         </label>
+        <label className="text-sm">
+          <span className="text-body-muted mb-1 block">Comprobante</span>
+          <select
+            className={finanzasInputClass}
+            value={comprobante}
+            onChange={(e) => cambiarFiltro(() => setComprobante(e.target.value as '' | 'con_comprobante' | 'sin_comprobante'))}
+          >
+            <option value="">Todos</option>
+            <option value="con_comprobante">Con comprobante</option>
+            <option value="sin_comprobante">Sin comprobante</option>
+          </select>
+        </label>
       </div>
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <label className="text-sm" data-tour="cheques-filtro-desde">
@@ -428,8 +443,14 @@ export function FinanzasChequesPage() {
               </tr>
             </thead>
             <tbody>
-              {(data?.cheques ?? []).map((ch) => (
-                <tr key={ch.id} className="border-t border-subtle">
+              {(data?.cheques ?? []).map((ch) => {
+                const colCount = 10 + (!direccion ? 1 : 0) + (direccion !== 'emitido' ? 1 : 0)
+                return (
+                <Fragment key={ch.id}>
+                <tr
+                  className={`border-t border-subtle cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50 ${expandido === ch.id ? 'bg-neutral-50 dark:bg-neutral-800/50' : ''}`}
+                  onClick={() => setExpandido(expandido === ch.id ? null : ch.id)}
+                >
                   {!direccion ? (
                     <td className="px-3 py-2">
                       <DireccionBadge direccion={ch.direccion} />
@@ -480,7 +501,8 @@ export function FinanzasChequesPage() {
                         type="button"
                         className="inline-flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50"
                         title={`Ver movimiento del ${ch.movimientoFecha ?? ''}`}
-                        onClick={async () => {
+                        onClick={async (e) => {
+                          e.stopPropagation()
                           setMovCargando(true)
                           try {
                             const mov = await fetchMovimientoById(ch.movimientoBancarioId!)
@@ -499,7 +521,37 @@ export function FinanzasChequesPage() {
                     {ch.observaciones || '—'}
                   </td>
                 </tr>
-              ))}
+                {expandido === ch.id ? (
+                  <tr className="bg-neutral-50 dark:bg-neutral-900">
+                    <td colSpan={colCount} className="px-6 py-3 text-sm">
+                      <div className="flex flex-wrap gap-x-8 gap-y-1">
+                        <span><span className="text-body-muted">Firmado por:</span> {ch.emisor || '—'}{ch.emisorCuit ? ` (CUIT ${ch.emisorCuit})` : ''}</span>
+                        {ch.direccion === 'recibido' ? (
+                          <span><span className="text-body-muted">Recibido el</span> {ch.fechaRecibido ? formatFecha(ch.fechaRecibido) : '—'} <span className="text-body-muted">de</span> {ch.endosante || '—'}</span>
+                        ) : null}
+                        <span><span className="text-body-muted">Entregado el</span> {ch.fechaEntregado ? formatFecha(ch.fechaEntregado) : '—'} <span className="text-body-muted">a</span> {ch.destinatario || '—'}</span>
+                        {ch.estadoBancario ? (
+                          <span><span className="text-body-muted">Estado en Vientri:</span> {ch.estadoBancario}</span>
+                        ) : null}
+                        {ch.vientriEstadoPrevio ? (
+                          <span><span className="text-body-muted">Estado previo:</span> {ch.vientriEstadoPrevio}</span>
+                        ) : null}
+                        {ch.vientriCmpIngreso ? (
+                          <span><span className="text-body-muted">Cmp. ingreso:</span> #{ch.vientriCmpIngreso}</span>
+                        ) : null}
+                        {ch.vientriCmpSalida ? (
+                          <span><span className="text-body-muted">Cmp. salida:</span> #{ch.vientriCmpSalida}</span>
+                        ) : null}
+                        {ch.fechaAcreditacion ? (
+                          <span><span className="text-body-muted">Acreditación:</span> {formatFecha(ch.fechaAcreditacion)}</span>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
+                </Fragment>
+                )
+              })}
             </tbody>
           </table>
           {(data?.cheques.length ?? 0) === 0 ? (

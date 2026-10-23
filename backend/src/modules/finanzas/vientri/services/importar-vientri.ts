@@ -3,6 +3,7 @@
  * Escribe SOLO en colecciones propias (vientri*). No toca cheques, agenda ni movimientos existentes.
  * Bacarnet nunca escribe en Vientri ni se conecta a su servidor: solo lee los CSV.
  */
+import { sincronizarChequesDesdeVientri } from '../../cheques/services/sincronizar-desde-vientri.js'
 import { CarpetaInvalidaError, procesarCarpeta } from '../domain/procesar.js'
 import { ARCHIVOS_REQUERIDOS } from '../domain/control.js'
 import { aplicarVentana } from '../domain/ventana.js'
@@ -171,6 +172,13 @@ export async function importarVientri(opts: {
       mensaje,
       resumen: { ...resumenFinal, tiposComprobante: proc.tiposComprobante.length },
     })
+
+    try {
+      const syncResult = await sincronizarChequesDesdeVientri(opts.actor)
+      console.log('[importar-vientri] sync cheques:', syncResult.insertados, 'ins', syncResult.actualizados, 'upd')
+    } catch (err) {
+      console.error('[importar-vientri] sync cheques falló (la importación se completó)', err)
+    }
   }
   return { ok: true, importacionId, fechaDatos, mensaje, simulado: simular, conteos, resumen: resumenFinal }
 }

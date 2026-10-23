@@ -20,6 +20,7 @@ import {
   type ChequeListadoItem,
   type ChequesFiltro,
 } from './cheques.repository.js'
+import { reconciliarChequesConMovimientos } from './reconciliar-cheques-movimientos.js'
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const PAGE_DEFAULT = 50
@@ -33,6 +34,7 @@ export interface ChequesListadoQuery {
   estado?: string
   tipo?: string
   vinculacion?: string
+  comprobante?: string
   desde?: string
   hasta?: string
   q?: string
@@ -99,12 +101,19 @@ function validVinculacion(raw: string | undefined): 'vinculado' | 'sin_vincular'
   return raw
 }
 
+function validComprobante(raw: string | undefined): 'con_comprobante' | 'sin_comprobante' | null {
+  if (!raw) return null
+  if (raw !== 'con_comprobante' && raw !== 'sin_comprobante') throw new Error(`comprobante inválido: ${raw}`)
+  return raw
+}
+
 export async function listChequesApi(query: ChequesListadoQuery): Promise<ChequesListadoResponse> {
   const direccion = validDireccion(query.direccion?.trim())
   const origen = validOrigen(query.origen?.trim())
   const estado = validEstado(query.estado?.trim())
   const tipo = validTipo(query.tipo?.trim())
   const vinculacion = validVinculacion(query.vinculacion?.trim())
+  const comprobante = validComprobante(query.comprobante?.trim())
   const q = query.q?.trim() || null
   const desde = query.desde?.trim() || null
   const hasta = query.hasta?.trim() || null
@@ -115,8 +124,8 @@ export async function listChequesApi(query: ChequesListadoQuery): Promise<Cheque
   const page = parsePositiveInt(query.page, 1, 10_000)
   const limit = parsePositiveInt(query.limit, PAGE_DEFAULT, PAGE_MAX)
   const offset = (page - 1) * limit
-  const filtro: ChequesFiltro = { direccion, origen, estado, tipo, vinculacion, desde, hasta, q }
-  const baseFiltro = { origen, estado, tipo, vinculacion, desde, hasta, q }
+  const filtro: ChequesFiltro = { direccion, origen, estado, tipo, vinculacion, comprobante, desde, hasta, q }
+  const baseFiltro = { origen, estado, tipo, vinculacion, comprobante, desde, hasta, q }
 
   const [total, totalCentavos, porDireccion, cheques] = await Promise.all([
     countChequesFiltrados(filtro),
@@ -327,6 +336,11 @@ export async function ingresarChequesPegados(input: {
 
   const insertados = nuevos.length > 0 ? await insertCheques({ rows: nuevos, createdBy: input.actorUid }) : 0
   const actualizados = existentes.length > 0 ? await upsertCheques({ rows: existentes, createdBy: input.actorUid }) : 0
+  try {
+    await reconciliarChequesConMovimientos()
+  } catch (err) {
+    console.error('[finanzas/cheques] reconciliar post-ingresar', err)
+  }
   return { insertados, actualizados, ignorados, duplicados, errores, avisos }
 }
 
@@ -611,7 +625,8 @@ function inferEstadoEmitidoVientri(raw: string): ChequeEstado | null {
   if (norm.includes('rechazado')) return 'rechazado'
   if (norm.includes('pago confirmado') || norm.includes('resumen bancario')) return 'debitado'
   if (norm.includes('abonado')) return 'debitado'
-  if (norm.includes('pago a proveedor')) return 'debitado'
+  if (norm.includes('pago a proveedor')) return 'pendiente'
+  if (norm.includes('diferido')) return 'pendiente'
   if (!norm) return 'pendiente'
   return 'debitado'
 }
@@ -993,5 +1008,10 @@ export async function importChequesExcel(input: {
 
   const insertados = nuevos.length > 0 ? await insertCheques({ rows: nuevos, createdBy: input.actorUid }) : 0
   const actualizados = existentes.length > 0 ? await upsertCheques({ rows: existentes, createdBy: input.actorUid }) : 0
+  try {
+    await reconciliarChequesConMovimientos()
+  } catch (err) {
+    console.error('[finanzas/cheques] reconciliar post-import', err)
+  }
   return { insertados, actualizados, ignorados, duplicados, errores, avisos }
 }

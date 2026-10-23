@@ -31,6 +31,8 @@ export interface ChequeParaContraparte {
   emisor: string | null
   cliente: string | null
   destinatario: string | null
+  movimientoBancarioId?: string | null
+  estado?: string | null
 }
 
 export interface MovimientoCheque {
@@ -40,6 +42,7 @@ export interface MovimientoCheque {
   descripcion: string
   codeDescriptionIb: string | null
   voucherNumber: string | null
+  correlativeNumber: string | null
   categoriaNombre: string | null
 }
 
@@ -104,40 +107,71 @@ function porMontoYFecha(mov: MovimientoCheque, cheques: readonly ChequeParaContr
     const base = fechaBaseDeposito(cheque)
     if (!base || !mov.fechaProceso) return false
     const diff = diffDias(mov.fechaProceso, base)
-    return diff >= -5 && diff <= 30
+    const maxDias = cheque.estado === 'rechazado' ? 15 : 5
+    return diff >= -1 && diff <= maxDias
   })
+}
+
+function matchPorNumero(
+  ref: string | null,
+  delLado: readonly ChequeParaContraparte[],
+  montoCentavos: number,
+): ChequeParaContraparte[] | null {
+  const digits = numeroComparable(ref)
+  if (!digits) return null
+
+  const exacto = delLado.filter(
+    (cheque) => numeroComparable(cheque.numero) === digits && cheque.montoCentavos === montoCentavos,
+  )
+  if (exacto.length === 1) return exacto
+
+  if (digits.length >= 6) {
+    const porSufijo = delLado.filter((cheque) => {
+      const nd = numeroComparable(cheque.numero)
+      return nd !== null && nd.length > digits.length && nd.endsWith(digits) && cheque.montoCentavos === montoCentavos
+    })
+    if (porSufijo.length === 1) return porSufijo
+  }
+
+  return null
 }
 
 /**
  * Primero por número exacto (voucher contra `numero`, solo dígitos y sin ceros a la izquierda).
  * Si no alcanza, por sufijo: cheques físicos usan número largo (ej. 305-001-5000-04142765)
  * pero el banco reporta solo los últimos dígitos como voucher (ej. 4142765).
- * Último recurso: monto exacto y fecha del movimiento dentro de la ventana -5/+30 días.
+ * Si el voucher es null, prueba con correlativeNumber como referencia alternativa.
+ * Último recurso: monto exacto y fecha del movimiento dentro de la ventana -1/+5 días;
+ * si hay varios candidatos por monto, se queda con el más cercano en fecha.
  */
 export function chequesCandidatos(
   mov: MovimientoCheque,
   cheques: readonly ChequeParaContraparte[],
+  options?: { soloNumero?: boolean },
 ): ChequeParaContraparte[] {
   const direccion = claseMovimientoCheque(mov)
   if (!direccion) return []
   const delLado = cheques.filter((cheque) => cheque.direccion === direccion)
-  const voucher = numeroComparable(mov.voucherNumber)
-  if (voucher) {
-    const porNumero = delLado.filter(
-      (cheque) => numeroComparable(cheque.numero) === voucher && cheque.montoCentavos === mov.montoCentavos,
-    )
-    if (porNumero.length === 1) return porNumero
 
-    if (voucher.length >= 6) {
-      const porSufijo = delLado.filter((cheque) => {
-        const nd = numeroComparable(cheque.numero)
-        return nd !== null && nd.length > voucher.length && nd.endsWith(voucher) && cheque.montoCentavos === mov.montoCentavos
-      })
-      if (porSufijo.length === 1) return porSufijo
-    }
-  }
+  const porVoucher = matchPorNumero(mov.voucherNumber, delLado, mov.montoCentavos)
+  if (porVoucher) return porVoucher
+
+  const porCorrelative = matchPorNumero(mov.correlativeNumber, delLado, mov.montoCentavos)
+  if (porCorrelative) return porCorrelative
+
+  if (options?.soloNumero) return []
+
   const porMonto = porMontoYFecha(mov, delLado)
-  return porMonto.length === 1 ? porMonto : []
+  if (porMonto.length === 1) return porMonto
+  if (porMonto.length > 1 && mov.fechaProceso) {
+    const conDiff = porMonto.map((cheque) => ({
+      cheque,
+      diff: Math.abs(diffDias(mov.fechaProceso, fechaBaseDeposito(cheque))),
+    }))
+    conDiff.sort((a, b) => a.diff - b.diff)
+    if (conDiff[0].diff < conDiff[1].diff) return [conDiff[0].cheque]
+  }
+  return []
 }
 
 export function nombreContraparteCheque(cheque: ChequeParaContraparte): string | null {

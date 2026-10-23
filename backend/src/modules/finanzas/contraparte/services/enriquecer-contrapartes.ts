@@ -370,6 +370,10 @@ function mapCheque(id: string, data: DocumentData): ChequeParaContraparte | null
     emisor: typeof data.emisor === 'string' ? data.emisor : null,
     cliente: typeof data.cliente === 'string' ? data.cliente : null,
     destinatario: typeof data.destinatario === 'string' ? data.destinatario : null,
+    movimientoBancarioId:
+      typeof data.movimientoBancarioId === 'string' && data.movimientoBancarioId
+        ? data.movimientoBancarioId
+        : null,
   }
 }
 
@@ -404,6 +408,7 @@ function mapMovimiento(id: string, data: DocumentData): MovimientoParaContrapart
     descripcion: typeof data.descripcion === 'string' ? data.descripcion : '',
     codeDescriptionIb: typeof data.codeDescriptionIb === 'string' && data.codeDescriptionIb ? data.codeDescriptionIb : null,
     voucherNumber: voucherComoTexto(data.voucherNumber),
+    correlativeNumber: voucherComoTexto(data.correlativeNumber),
     depositorDescription:
       typeof data.depositorDescription === 'string' && data.depositorDescription ? data.depositorDescription : null,
     customerCuit: typeof data.customerCuit === 'string' && data.customerCuit ? data.customerCuit : null,

@@ -7,6 +7,7 @@ import {
   type MovimientoCheque,
 } from '../../contraparte/domain/fuente-cheque.js'
 import {
+  debitarChequesPendientesConMovimiento,
   listChequesSinVincular,
   vincularChequeConMovimiento,
 } from './cheques.repository.js'
@@ -16,15 +17,34 @@ export interface ReconciliacionChequesResultado {
   vinculados: number
   sinCandidato: number
   multiples: number
+  diagnostico?: DiagnosticoItem[]
 }
 
-export async function reconciliarChequesConMovimientos(): Promise<ReconciliacionChequesResultado> {
+export interface DiagnosticoItem {
+  movId: string
+  descripcion: string
+  montoCentavos: number
+  fechaProceso: string
+  voucherNumber: number | null
+  correlativeNumber: number | null
+  clase: 'emitido' | 'recibido'
+  candidatos: number
+  razon: 'vinculado' | 'sin_candidato' | 'multiples' | 'ocupado'
+}
+
+export async function reconciliarChequesConMovimientos(
+  options?: { detalle?: boolean },
+): Promise<ReconciliacionChequesResultado> {
+  const detalle = options?.detalle ?? false
   const resultado: ReconciliacionChequesResultado = {
     revisados: 0,
     vinculados: 0,
     sinCandidato: 0,
     multiples: 0,
   }
+  const diagnostico: DiagnosticoItem[] = []
+
+  await debitarChequesPendientesConMovimiento()
 
   const [recibidosSinVincular, emitidosSinVincular] = await Promise.all([
     listChequesSinVincular('recibido'),
@@ -42,6 +62,7 @@ export async function reconciliarChequesConMovimientos(): Promise<Reconciliacion
       emisor: c.emisor,
       cliente: c.cliente,
       destinatario: c.destinatario,
+      estado: c.estado,
     })),
     ...emitidosSinVincular.map((c) => ({
       id: c.id,
@@ -53,6 +74,7 @@ export async function reconciliarChequesConMovimientos(): Promise<Reconciliacion
       emisor: c.emisor,
       cliente: c.cliente,
       destinatario: c.destinatario,
+      estado: c.estado,
     })),
   ]
 
@@ -79,6 +101,14 @@ export async function reconciliarChequesConMovimientos(): Promise<Reconciliacion
   }
 
   const ocupados = new Set<string>()
+  const movsVinculados = new Set<string>()
+
+  const movimientosCheque: {
+    id: string
+    data: MovimientoBancarioDocument
+    clase: 'emitido' | 'recibido'
+    movParaMatch: MovimientoCheque
+  }[] = []
 
   for (const mov of movimientos) {
     const clase = claseMovimientoCheque({
@@ -89,36 +119,32 @@ export async function reconciliarChequesConMovimientos(): Promise<Reconciliacion
     })
     if (!clase) continue
 
-    resultado.revisados += 1
+    movimientosCheque.push({
+      id: mov.id,
+      data: mov.data,
+      clase,
+      movParaMatch: {
+        tipo: mov.data.tipo,
+        montoCentavos: mov.data.montoCentavos,
+        fechaProceso: mov.data.fechaProceso,
+        descripcion: mov.data.descripcion,
+        codeDescriptionIb: mov.data.codeDescriptionIb,
+        voucherNumber: mov.data.voucherNumber != null ? String(mov.data.voucherNumber) : null,
+        correlativeNumber: mov.data.correlativeNumber != null ? String(mov.data.correlativeNumber) : null,
+        categoriaNombre: mov.data.categoriaId ?? null,
+      },
+    })
+  }
 
-    const movParaMatch: MovimientoCheque = {
-      tipo: mov.data.tipo,
-      montoCentavos: mov.data.montoCentavos,
-      fechaProceso: mov.data.fechaProceso,
-      descripcion: mov.data.descripcion,
-      codeDescriptionIb: mov.data.codeDescriptionIb,
-      voucherNumber: mov.data.voucherNumber != null ? String(mov.data.voucherNumber) : null,
-      categoriaNombre: mov.data.categoriaId ?? null,
-    }
+  resultado.revisados = movimientosCheque.length
 
-    const candidatos = chequesCandidatos(movParaMatch, cheques)
-
-    if (candidatos.length === 0) {
-      resultado.sinCandidato += 1
-      continue
-    }
-
-    if (candidatos.length > 1) {
-      resultado.multiples += 1
-      continue
-    }
+  // Pasada 1: matchear primero por número (voucher / correlative) y descartar esos cheques
+  for (const mov of movimientosCheque) {
+    const disponibles = cheques.filter((c) => !ocupados.has(c.id))
+    const candidatos = chequesCandidatos(mov.movParaMatch, disponibles, { soloNumero: true })
+    if (candidatos.length !== 1) continue
 
     const cheque = candidatos[0]
-    if (ocupados.has(cheque.id)) {
-      resultado.multiples += 1
-      continue
-    }
-
     const fechaAcreditacion = cheque.direccion === 'recibido' ? mov.data.fechaProceso : null
 
     await vincularChequeConMovimiento({
@@ -134,7 +160,75 @@ export async function reconciliarChequesConMovimientos(): Promise<Reconciliacion
     })
 
     ocupados.add(cheque.id)
+    movsVinculados.add(mov.id)
     resultado.vinculados += 1
+  }
+
+  // Pasada 2: con los movimientos y cheques que quedaron sin matchear, buscar en los disponibles
+  for (const mov of movimientosCheque) {
+    if (movsVinculados.has(mov.id)) continue
+
+    const disponibles = cheques.filter((c) => !ocupados.has(c.id))
+    const candidatos = chequesCandidatos(mov.movParaMatch, disponibles)
+
+    if (candidatos.length === 0) {
+      resultado.sinCandidato += 1
+      if (detalle) {
+        diagnostico.push({
+          movId: mov.id,
+          descripcion: mov.data.descripcion,
+          montoCentavos: mov.data.montoCentavos,
+          fechaProceso: mov.data.fechaProceso,
+          voucherNumber: mov.data.voucherNumber ?? null,
+          correlativeNumber: mov.data.correlativeNumber ?? null,
+          clase: mov.clase,
+          candidatos: 0,
+          razon: 'sin_candidato',
+        })
+      }
+      continue
+    }
+
+    if (candidatos.length > 1) {
+      resultado.multiples += 1
+      if (detalle) {
+        diagnostico.push({
+          movId: mov.id,
+          descripcion: mov.data.descripcion,
+          montoCentavos: mov.data.montoCentavos,
+          fechaProceso: mov.data.fechaProceso,
+          voucherNumber: mov.data.voucherNumber ?? null,
+          correlativeNumber: mov.data.correlativeNumber ?? null,
+          clase: mov.clase,
+          candidatos: candidatos.length,
+          razon: 'multiples',
+        })
+      }
+      continue
+    }
+
+    const cheque = candidatos[0]
+    const fechaAcreditacion = cheque.direccion === 'recibido' ? mov.data.fechaProceso : null
+
+    await vincularChequeConMovimiento({
+      chequeId: cheque.id,
+      movimientoBancarioId: mov.id,
+      movimientoCuentaId: mov.data.cuentaId,
+      movimientoFecha: mov.data.fechaProceso,
+      fechaAcreditacion,
+    })
+
+    await movimientosBancariosCollection().doc(mov.id).update({
+      reservadoPorChequeId: cheque.id,
+    })
+
+    ocupados.add(cheque.id)
+    movsVinculados.add(mov.id)
+    resultado.vinculados += 1
+  }
+
+  if (detalle) {
+    resultado.diagnostico = diagnostico
   }
 
   return resultado

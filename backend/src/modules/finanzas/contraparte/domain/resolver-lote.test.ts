@@ -31,6 +31,7 @@ function mov(partial: Partial<MovimientoParaContraparte> = {}): MovimientoParaCo
     descripcion: 'TF.DB.PAG.PROV.',
     codeDescriptionIb: null,
     voucherNumber: null,
+    correlativeNumber: null,
     depositorDescription: null,
     customerCuit: null,
     categoriaId: null,
@@ -254,5 +255,39 @@ describe('resolver el lote', () => {
       }),
     )
     expect(conAgenda[0]?.contraparte.origen).toBe('agenda')
+  })
+
+  it('descarta de la lista los cheques que ya matchearon para que el restante matchee con el que queda', () => {
+    const chPorVoucher = {
+      id: 'ch-1',
+      numero: '55',
+      direccion: 'emitido' as const,
+      montoCentavos: 150000,
+      fechaEmision: '2026-09-01',
+      fechaPago: '2026-09-28',
+      emisor: null,
+      cliente: null,
+      destinatario: 'Flete Sur',
+    }
+    const chSinVoucher = {
+      id: 'ch-2',
+      numero: '66',
+      direccion: 'emitido' as const,
+      montoCentavos: 150000,
+      fechaEmision: '2026-09-01',
+      fechaPago: '2026-09-28',
+      emisor: null,
+      cliente: null,
+      destinatario: 'Taller Norte',
+    }
+    const resultados = resolverLote(
+      [
+        mov({ id: 'm-sin-voucher', descripcion: 'CHEQUE CAMARA LOCAL', voucherNumber: null }),
+        mov({ id: 'm-con-voucher', descripcion: 'ECHEQ CAMARA', voucherNumber: '55' }),
+      ],
+      ctx({ cheques: [chPorVoucher, chSinVoucher] }),
+    )
+    expect(resultados.find((r) => r.id === 'm-con-voucher')?.contraparte.nombre).toBe('Cheque N.º 55 a Flete Sur')
+    expect(resultados.find((r) => r.id === 'm-sin-voucher')?.contraparte.nombre).toBe('Cheque N.º 66 a Taller Norte')
   })
 })

@@ -65,6 +65,25 @@ export interface ChequeDocument {
   /** Fecha real de acreditación: del Excel en emitidos, del movimiento en recibidos. */
   fechaAcreditacion?: string | null
 
+  /** true si este cheque fue creado o actualizado desde vientriCheques. */
+  vientriSync?: boolean
+  /** Última vez que se sincronizó desde Vientri. */
+  vientriSyncAt?: Timestamp | null
+  /** Clave del doc en vientriCheques (ej. chq-123, oca-456). */
+  vientriClave?: string | null
+  /** ID del comprobante de ingreso en Vientri. */
+  vientriCmpIngreso?: number | null
+  /** ID del comprobante de salida en Vientri. */
+  vientriCmpSalida?: number | null
+  /** Nota de débito por rechazo en Vientri. */
+  vientriCmpNdRechazo?: number | null
+  /** Comprobante del pago del banco en Vientri. */
+  vientriCmpPagoBanco?: number | null
+  /** Estado anterior en Vientri (label legible). */
+  vientriEstadoPrevio?: string | null
+  /** ID del motivo de rechazo en Vientri. */
+  vientriMotivoRechazoId?: number | null
+
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string
@@ -100,3 +119,15 @@ export interface ChequeImportRow {
 
   fechaAcreditacion: string | null
 }
+
+export type ChequeHistorialOrigen = 'reconciliacion' | 'manual' | 'importacion' | 'vientri'
+
+export interface ChequeHistorialEstadoDocument {
+  estadoAnterior: ChequeEstado | null
+  estadoNuevo: ChequeEstado
+  origen: ChequeHistorialOrigen
+  usuario: string | null
+  nota: string | null
+  fecha: Timestamp
+}
+

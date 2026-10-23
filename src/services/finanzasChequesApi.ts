@@ -54,6 +54,10 @@ export interface ChequeListItem {
   movimientoCuentaId: string | null
   movimientoFecha: string | null
   fechaAcreditacion: string | null
+  vientriSync: boolean
+  vientriEstadoPrevio: string | null
+  vientriCmpIngreso: number | null
+  vientriCmpSalida: number | null
 }
 
 export interface ChequesListResponse {
@@ -78,6 +82,7 @@ export interface ChequesListFilters {
   estado?: ChequeEstado | ''
   tipo?: ChequeTipo | ''
   vinculacion?: 'vinculado' | 'sin_vincular' | ''
+  comprobante?: 'con_comprobante' | 'sin_comprobante' | ''
   desde?: string
   hasta?: string
   q?: string
@@ -130,6 +135,7 @@ export async function fetchCheques(filters: ChequesListFilters): Promise<Cheques
   if (filters.estado) params.set('estado', filters.estado)
   if (filters.tipo) params.set('tipo', filters.tipo)
   if (filters.vinculacion) params.set('vinculacion', filters.vinculacion)
+  if (filters.comprobante) params.set('comprobante', filters.comprobante)
   if (filters.q) params.set('q', filters.q)
   if (filters.desde) params.set('desde', filters.desde)
   if (filters.hasta) params.set('hasta', filters.hasta)

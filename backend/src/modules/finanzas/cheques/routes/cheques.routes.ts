@@ -1,8 +1,9 @@
 import { Router } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { listChequesApi, getResumenDiario, importChequesExcel, ingresarChequesPegados } from '../services/cheques.service.js'
-import { getChequeById, updateChequeEstado } from '../services/cheques.repository.js'
+import { getChequeById, updateChequeEstado, desvincularChequesFueraDeVentana, corregirPagoProveedorDebitado } from '../services/cheques.repository.js'
 import { reconciliarChequesConMovimientos } from '../services/reconciliar-cheques-movimientos.js'
+import { sincronizarChequesDesdeVientri } from '../services/sincronizar-desde-vientri.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import type { ChequeDireccion, ChequeEstado, ChequeOrigen, ChequeTipo } from '../domain/cheque.types.js'
 
@@ -19,6 +20,7 @@ finanzasChequesRouter.get('/', async (req, res) => {
       estado: one(req.query.estado),
       tipo: one(req.query.tipo),
       vinculacion: one(req.query.vinculacion),
+      comprobante: one(req.query.comprobante),
       desde: one(req.query.desde),
       hasta: one(req.query.hasta),
       q: one(req.query.q),
@@ -124,9 +126,50 @@ const VALID_ESTADOS: ChequeEstado[] = [
 ]
 
 
-finanzasChequesRouter.post('/reconciliar', requireFinanzasPermiso('finanzas_cheques'), async (_req, res) => {
+finanzasChequesRouter.post('/desvincular-fuera-de-ventana', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
   try {
-    const result = await reconciliarChequesConMovimientos()
+    const dryRun = req.query.dryRun === '1'
+    const result = await desvincularChequesFueraDeVentana({ dryRun })
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/cheques] desvincular fuera de ventana', err)
+    const message = err instanceof Error ? err.message : 'No se pudo desvincular'
+    res.status(500).json({ error: message })
+  }
+})
+
+finanzasChequesRouter.post('/corregir-pago-proveedor', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const dryRun = req.query.dryRun === '1'
+    const result = await corregirPagoProveedorDebitado({ dryRun })
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/cheques] corregir pago proveedor', err)
+    const message = err instanceof Error ? err.message : 'No se pudo corregir'
+    res.status(500).json({ error: message })
+  }
+})
+
+finanzasChequesRouter.post('/sincronizar-vientri', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  const actorUid = req.authedUser?.uid
+  if (!actorUid) {
+    res.status(401).json({ error: 'No autenticado' })
+    return
+  }
+  try {
+    const result = await sincronizarChequesDesdeVientri(actorUid)
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/cheques] sincronizar-vientri', err)
+    const message = err instanceof Error ? err.message : 'No se pudo sincronizar desde Vientri'
+    res.status(500).json({ error: message })
+  }
+})
+
+finanzasChequesRouter.post('/reconciliar', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const detalle = req.query.detalle === '1'
+    const result = await reconciliarChequesConMovimientos({ detalle })
     res.json(result)
   } catch (err) {
     console.error('[finanzas/cheques] reconciliar', err)
@@ -155,7 +198,11 @@ finanzasChequesRouter.patch('/:id/estado', requireFinanzasPermiso('finanzas_cheq
       res.status(400).json({ error: `estado inválido, debe ser uno de: ${VALID_ESTADOS.join(', ')}` })
       return
     }
-    await updateChequeEstado({ id: req.params.id, estado: estado as ChequeEstado })
+    await updateChequeEstado({
+      id: req.params.id,
+      estado: estado as ChequeEstado,
+      actorUid: req.authedUser?.uid ?? null,
+    })
     res.json({ ok: true })
   } catch (err) {
     console.error('[finanzas/cheques] update estado', err)

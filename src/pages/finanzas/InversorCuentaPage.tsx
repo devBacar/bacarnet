@@ -8,6 +8,27 @@ import { FichaInversorModal } from '../../components/finanzas/inversiones/FichaI
 import { FormInversion } from '../../components/finanzas/inversiones/FormInversion'
 import { Popup } from '../../components/finanzas/inversiones/PopupInversiones'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
+import { TEXTO_ESTADO } from '../../components/finanzas/inversiones/textosInversiones'
+import type { EstadoInversion } from '../../services/finanzasInversionesApi'
+
+const CHIP_ESTADO: Record<EstadoInversion, string> = {
+  borrador: 'bg-neutral-100 text-neutral-700 dark:bg-zinc-800 dark:text-zinc-300',
+  pendiente_aprobacion: 'bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200',
+  vigente: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200',
+  cancelada: 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200',
+  precancelada: 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200',
+  renovada: 'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-200',
+  anulada: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200',
+}
+
+function iniciales(nombre: string): string {
+  return nombre
+    .split(/[\s/-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]!.toUpperCase())
+    .join('')
+}
 import {
   enlaceDocumentoInversion,
   fetchCuentaInversor,
@@ -131,47 +152,70 @@ export function InversorCuentaPage() {
   return (
     <>
       <div className="space-y-6">
-        <div>
-          <button
-            type="button"
-            onClick={() => navigate('/finanzas/inversiones?tab=inversores')}
-            className="text-sm font-medium text-brand-primary hover:underline"
-          >
-            ← Volver a Inversores
-          </button>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-heading mt-2 text-2xl font-bold tracking-tight">{ficha.nombre}</h1>
-              <p className="text-body-muted mt-1 text-sm">
-                {[ficha.cuit, ficha.dni, ficha.email, ficha.telefono]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
-              {ficha.cbuArs ? (
-                <p className="text-body-muted mt-1 text-sm">CBU ARS: {ficha.cbuArs}</p>
-              ) : null}
-              {ficha.cuentaUsd ? (
-                <p className="text-body-muted mt-1 text-sm">Cuenta USD: {ficha.cuentaUsd}</p>
-              ) : null}
+        <button
+          type="button"
+          onClick={() => navigate('/finanzas/inversiones?tab=inversores')}
+          className="text-sm font-medium text-brand-primary hover:underline"
+        >
+          ← Volver a Inversores
+        </button>
+        <header className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-neutral-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-primary text-xl font-bold text-white">
+              {iniciales(ficha.nombre)}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setEditandoInversor(true)}
-                className="rounded-xl border border-neutral-200 px-4 py-2 text-sm font-medium hover:bg-neutral-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-              >
-                Editar datos
-              </button>
-              <button
-                type="button"
-                onClick={() => setNuevaInversionAbierta(true)}
-                className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white hover:opacity-90"
-              >
-                Nueva inversión
-              </button>
+            <div className="min-w-0">
+              <p className="text-body-muted text-xs font-semibold uppercase tracking-wide">Cuenta del inversor</p>
+              <h1 className="text-heading text-2xl font-bold tracking-tight">{ficha.nombre}</h1>
+              <dl className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm">
+                {(
+                  [
+                    ['CUIT', ficha.cuit],
+                    ['DNI', ficha.dni],
+                    ['Email', ficha.email],
+                    ['Teléfono', ficha.telefono],
+                    ['CBU pesos', ficha.cbuArs],
+                    ['Cuenta dólares', ficha.cuentaUsd],
+                  ] as const
+                )
+                  .filter(([, v]) => Boolean(v))
+                  .map(([k, v]) => (
+                    <div key={k} className="flex gap-1.5">
+                      <dt className="text-body-muted">{k}:</dt>
+                      <dd className="text-heading font-medium">{v}</dd>
+                    </div>
+                  ))}
+              </dl>
+              {ficha.inscriptoGanancias != null ? (
+                <span
+                  className={`mt-2 inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                    ficha.inscriptoGanancias
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+                      : 'bg-amber-100 text-amber-900 dark:bg-amber-900/50 dark:text-amber-200'
+                  }`}
+                >
+                  {ficha.inscriptoGanancias ? 'Inscripto en Ganancias' : 'No inscripto en Ganancias'}
+                </span>
+              ) : null}
             </div>
           </div>
-        </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setEditandoInversor(true)}
+              className="rounded-xl border border-neutral-300 px-4 py-2.5 text-sm font-medium hover:bg-neutral-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            >
+              Editar datos
+            </button>
+            <button
+              type="button"
+              onClick={() => setNuevaInversionAbierta(true)}
+              className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+            >
+              + Nueva inversión
+            </button>
+          </div>
+        </header>
 
         <CuentaPanel
           cuenta={cuenta}
@@ -198,8 +242,12 @@ export function InversorCuentaPage() {
                   {ficha.inversiones.map((inv) => (
                     <tr key={inv.id}>
                       <td className="px-4 py-3 font-medium">{inv.numero}</td>
-                      <td className="px-4 py-3">{inv.estado}</td>
-                      <td className="px-4 py-3">{inv.moneda}</td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${CHIP_ESTADO[inv.estado]}`}>
+                          {TEXTO_ESTADO[inv.estado]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">{inv.moneda === 'USD' ? 'Dólares' : 'Pesos'}</td>
                       <td className="px-4 py-3 text-right tabular-nums">
                         {formatMoneyCentavos(inv.capitalCentavos, inv.moneda)}
                       </td>
@@ -209,7 +257,7 @@ export function InversorCuentaPage() {
                           onClick={() => setInversionAbierta(inv.id)}
                           className="rounded-xl border border-neutral-200 px-3 py-2 text-base font-medium hover:bg-neutral-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
                         >
-                          Ver detalle
+                          {inv.estado === 'pendiente_aprobacion' ? 'Revisar y aprobar' : 'Ver detalle'}
                         </button>
                       </td>
                     </tr>

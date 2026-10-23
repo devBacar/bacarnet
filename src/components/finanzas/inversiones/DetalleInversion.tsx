@@ -265,6 +265,11 @@ export function DetalleInversion({ id }: { id: string }) {
   const d = data
   const moneda = d.condiciones.moneda
   const faltaIngresar = Math.max(0, d.ingresoEsperadoCentavos - d.ingresadoCentavos)
+  // RG 830 se calcula por cuota: si dos cuotas con retención caen el mismo mes, el mínimo no imponible podría ser mensual.
+  const mesesConRetencion = d.cronograma
+    .filter((c) => c.retencionCentavos > 0)
+    .map((c) => c.fechaVencimiento.slice(0, 7))
+  const mesesRepetidos = [...new Set(mesesConRetencion.filter((m, i) => mesesConRetencion.indexOf(m) !== i))]
 
   const correrAccion = async (tarea: () => Promise<InversionDetalle>) => {
     setErrorAccion(null)
@@ -283,8 +288,20 @@ export function DetalleInversion({ id }: { id: string }) {
 
   const abrirDoc = async (docId: string) => {
     try {
-      const { url } = await enlaceDocumentoInversion(id, docId)
-      window.open(url, '_blank', 'noopener,noreferrer')
+      // La pestaña se abre antes del await: si se abre después, el navegador la bloquea como popup.
+      const pestana = window.open('', '_blank')
+      try {
+        const { url } = await enlaceDocumentoInversion(id, docId)
+        if (pestana) {
+          pestana.opener = null
+          pestana.location.href = url
+        } else {
+          window.open(url, '_blank', 'noopener,noreferrer')
+        }
+      } catch (e) {
+        pestana?.close()
+        throw e
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No pude abrir el documento')
     }
@@ -447,6 +464,12 @@ export function DetalleInversion({ id }: { id: string }) {
 
       <section>
         <h2 className="text-heading text-sm font-semibold">Cronograma</h2>
+        {mesesRepetidos.length > 0 ? (
+          <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            Hay dos o más cuotas con retención en el mismo mes ({mesesRepetidos.join(', ')}). La retención de
+            Ganancias se calcula por cuota: revisala con el contador.
+          </p>
+        ) : null}
         <div className="mt-2 overflow-x-auto rounded-2xl border border-neutral-200 dark:border-zinc-800">
           <table className="min-w-full text-sm">
             <thead className="bg-neutral-50 dark:bg-zinc-950/80">

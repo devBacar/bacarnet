@@ -110,6 +110,15 @@ export interface Cuota {
   indiceValor?: number | null
 }
 
+export interface ChequeRecibido {
+  tipo: 'echeq' | 'fisico'
+  numero: string
+  bancoEmisor: string | null
+  fechaPago: string
+  emisor: string
+  emisorCuit: string | null
+}
+
 export interface IngresoRegistrado {
   id: string
   medio: MedioIngreso
@@ -120,8 +129,13 @@ export interface IngresoRegistrado {
   cajaId: string | null
   chequeId: string | null
   movimientoId: string | null
+  /** Efectivo: movimiento de la caja donde entró. */
+  cajaMovimientoId?: string | null
+  /** Cheque: datos del cheque recibido (el alta en la cartera de Cheques se conecta más adelante). */
+  cheque?: ChequeRecibido | null
   nota: string | null
   registradoPor: string
+  registradoPorNombre?: string | null
   registradoAt: string
   /** Vino de la planilla importada (no generó movimiento de caja ni cheque). */
   importado?: boolean

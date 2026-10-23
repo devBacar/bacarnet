@@ -117,6 +117,15 @@ export interface InversionInput extends CondicionesInput {
   observaciones: string | null
 }
 
+export interface ChequeRecibido {
+  tipo: 'echeq' | 'fisico'
+  numero: string
+  bancoEmisor: string | null
+  fechaPago: string
+  emisor: string
+  emisorCuit: string | null
+}
+
 export interface IngresoRegistrado {
   id: string
   medio: MedioIngreso
@@ -126,6 +135,10 @@ export interface IngresoRegistrado {
   cajaId: string | null
   chequeId: string | null
   movimientoId: string | null
+  /** Efectivo: movimiento de la caja donde entró. */
+  cajaMovimientoId?: string | null
+  /** Cheque: datos del cheque recibido (el alta en la cartera de Cheques se conecta más adelante). */
+  cheque?: ChequeRecibido | null
   nota: string | null
   registradoPor: string
   registradoPorNombre?: string | null
@@ -335,6 +348,8 @@ export interface TasasResponse {
 }
 
 export interface IngresoInput {
+  /** Clave única de esta carga (la genera el formulario una vez): si se manda dos veces, no se registra dos veces. */
+  clave: string
   medio: MedioIngreso
   fecha: string
   montoCentavos: number
@@ -345,14 +360,7 @@ export interface IngresoInput {
   /** Efectivo: caja principal donde entra. */
   cajaId?: string | null
   /** Cheque: se agrega a la cartera de Cheques. */
-  cheque?: {
-    tipo: 'echeq' | 'fisico'
-    numero: string
-    bancoEmisor: string | null
-    fechaPago: string
-    emisor: string
-    emisorCuit: string | null
-  } | null
+  cheque?: ChequeRecibido | null
   nota?: string | null
 }
 

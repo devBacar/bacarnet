@@ -4,10 +4,14 @@ import { horizonteSinVencimiento, validarCondiciones } from '../domain/condicion
 import { generarCronograma, totalesDe } from '../domain/cronograma.js'
 import { hoyArgentina } from '../domain/fechas.js'
 import type { CondicionesInversion, ConfigInversiones, EstadoInversion, InversionDocumentBase } from '../domain/inversion.types.js'
-import { ESTADO_INVERSION_TEXTO } from '../domain/seguimiento.js'
+import { ESTADO_INVERSION_TEXTO, estadoAlTerminar } from '../domain/seguimiento.js'
 import { ErrorValidacion, NoEncontrado, numeroInversion, validarTransicion } from '../domain/validar.js'
 import { alertasVista, cuotasVista, deudaHoyCentavos, kpisDe, resumenInversion, type CompromisoDeCuota } from '../domain/vista.js'
+import { registerMovimiento } from '../../cajachica/services/caja.service.js'
+import { getCajaDoc } from '../../cajachica/services/caja.repository.js'
+import { aplicarCuotaEnPesos, aplicarIngreso, extenderSinVencimiento, validarIngreso } from '../domain/ingresos.js'
 import { transicionConAgenda } from './agenda-inversiones.js'
+import { movimientoCajaPorClave } from './inversiones.repository.js'
 import {
   compromisosDeCuotas,
   getInversionDoc,
@@ -79,9 +83,36 @@ export async function listarInversiones() {
   return { inversiones: items.map((i) => i.resumen), kpis: kpisDe(items, hoy) }
 }
 
+/**
+ * Al abrir una vigente: extiende las sin vencimiento hasta el horizonte y,
+ * si ya no debe nada, la pasa a cancelada / precancelada / renovada.
+ */
+async function mantenerVigente(id: string, inv: InversionDocumentBase, config: ConfigInversiones, hoy: string, user: AuthedUser): Promise<void> {
+  if (inv.estado !== 'vigente') return
+  const extendida = extenderSinVencimiento(inv, cronogramaDe(inv, config, hoy))
+  if (extendida) {
+    await transicionConAgenda(id, user.uid, (actual) => ({
+      data: extenderSinVencimiento(actual, cronogramaDe(actual, config, hoy)) ?? actual,
+      historial: null,
+    }))
+    return
+  }
+  const compromisos = (await compromisosDeCuotas([{ id, data: inv }])).get(id) ?? new Map()
+  const cuotas = cuotasVista(id, inv, compromisos, hoy)
+  const final = estadoAlTerminar({ estado: inv.estado, cronograma: inv.cronograma, estados: new Map(cuotas.map((c) => [c.numero, c.estado])) })
+  if (!final) return
+  await transicionConAgenda(id, user.uid, (actual) =>
+    actual.estado === 'vigente'
+      ? { data: { ...actual, estado: final }, historial: historial('vigente', final, user, 'Se pagaron todas las cuotas') }
+      : { data: actual, historial: null },
+  )
+}
+
 export async function detalleInversion(id: string, user: AuthedUser) {
-  const [inv, config, hist] = await Promise.all([cargar(id), getConfigInversiones(), listHistorial(id)])
+  const config = await getConfigInversiones()
   const hoy = hoyArgentina()
+  await mantenerVigente(id, await cargar(id), config, hoy, user)
+  const [inv, hist] = await Promise.all([cargar(id), listHistorial(id)])
   const compromisos = (await compromisosDeCuotas([{ id, data: inv }])).get(id) ?? new Map()
   const cuotas = cuotasVista(id, inv, compromisos, hoy)
   const abierta = inv.estado === 'borrador' || inv.estado === 'pendiente_aprobacion'
@@ -258,4 +289,58 @@ export function anularInversion(id: string, rawMotivo: unknown, user: AuthedUser
   const motivo = notaDe(rawMotivo)
   if (!motivo) throw new ErrorValidacion('Contá por qué se anula.')
   return cambiarEstado(id, user, ['borrador', 'pendiente_aprobacion'], 'anulada', motivo)
+}
+
+/** Clave del movimiento de caja de un ingreso: con ella se reconoce un reintento. */
+function claveCaja(inversionId: string, clave: string): string {
+  return `inv-${inversionId}-ing-${clave}`
+}
+
+/**
+ * Registra la plata que entró (REGLAS: el ingreso se registra cuando entra de verdad, no al aprobar).
+ * Efectivo: primero el movimiento en la caja (si ya existe con esta clave, se reusa) y después,
+ * en una transacción, el ingreso en la inversión y el cobro de la Agenda. Repetir con la misma clave no duplica.
+ */
+export async function registrarIngreso(id: string, raw: unknown, user: AuthedUser) {
+  const pedido = validarIngreso(raw)
+  const inv = await cargar(id)
+  // Valida antes de tocar la caja (dentro de la transacción se vuelve a validar).
+  aplicarIngreso(inv, pedido, { uid: user.uid, nombre: user.displayName, ahoraIso: new Date().toISOString() }, null)
+
+  let cajaMovimientoId: string | null = null
+  if (pedido.medio === 'efectivo' && pedido.cajaId) {
+    const caja = await getCajaDoc(pedido.cajaId)
+    if (!caja) throw new ErrorValidacion('No encontré esa caja.')
+    if (caja.moneda !== inv.moneda) throw new ErrorValidacion('La caja elegida es de otra moneda.')
+    const clave = claveCaja(id, pedido.clave)
+    cajaMovimientoId = await movimientoCajaPorClave(clave)
+    if (!cajaMovimientoId) {
+      try {
+        const mov = await registerMovimiento({
+          user,
+          cajaId: pedido.cajaId,
+          body: { tipo: 'ingreso', concepto: `Inversión ${inv.numero} · ${inv.inversorNombre}`, montoCentavos: pedido.montoCentavos, fecha: pedido.fecha },
+          operacionVinculadaId: clave,
+        })
+        cajaMovimientoId = mov.id
+      } catch (err) {
+        throw new ErrorValidacion(err instanceof Error ? err.message : 'No pude cargar el movimiento en la caja.')
+      }
+    }
+  }
+
+  await transicionConAgenda(id, user.uid, (actual) => {
+    const { data, nuevo } = aplicarIngreso(actual, pedido, { uid: user.uid, nombre: user.displayName, ahoraIso: new Date().toISOString() }, cajaMovimientoId)
+    return { data, historial: nuevo ? historial(actual.estado, actual.estado, user, `Ingreso por ${pedido.medio}`) : null }
+  })
+  return detalleInversion(id, user)
+}
+
+export async function cuotaEnPesos(id: string, numero: number, rawTipoCambio: unknown, user: AuthedUser) {
+  if (!Number.isInteger(numero) || numero < 1) throw new ErrorValidacion('No encontré esa cuota.')
+  await transicionConAgenda(id, user.uid, (actual) => ({
+    data: aplicarCuotaEnPesos(actual, numero, rawTipoCambio),
+    historial: historial(actual.estado, actual.estado, user, rawTipoCambio ? `Cuota ${numero} se paga en pesos` : `Cuota ${numero} vuelve a dólares`),
+  }))
+  return detalleInversion(id, user)
 }

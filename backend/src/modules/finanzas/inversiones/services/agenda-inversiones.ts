@@ -140,8 +140,7 @@ export async function transicionConAgenda(
         tx.set(ref.collection(HISTORIAL_SUB).doc(), historialAgenda(null, 'pendiente', uid, `Cuota de la inversión ${data.numero}`))
       } else if (op.tipo === 'actualizar') {
         const antes = porId.get(op.id)?.estado ?? null
-        // Si con el monto nuevo ya alcanza lo pagado queda pagada; si no, vuelve a pendiente.
-        const estado = op.quedaPagado ? 'pagado' : 'pendiente'
+        const estado = 'pendiente'
         tx.update(ref, { ...camposCuota(id, data, numero, op.datos), estado, updatedAt: ahora })
         tx.set(ref.collection(HISTORIAL_SUB).doc(), historialAgenda(antes, estado, uid, `Cambió el cronograma de la inversión ${data.numero}`))
       } else if (op.tipo === 'anular') {

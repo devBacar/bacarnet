@@ -18,11 +18,13 @@ import {
   anularInversion,
   aprobarInversion,
   crearInversion,
+  cuotaEnPesos,
   detalleInversion,
   editarInversion,
   enviarAAprobacion,
   listarInversiones,
   rechazarInversion,
+  registrarIngreso,
   simular,
 } from '../services/inversiones.service.js'
 
@@ -177,5 +179,21 @@ finanzasInversionesRouter.post('/:id/anular', async (req, res) => {
     res.json(await anularInversion(req.params.id, req.body?.motivo, req.authedUser!))
   } catch (err) {
     responderError(res, err, 'No pude anularla', 'anular')
+  }
+})
+
+finanzasInversionesRouter.post('/:id/ingresos', async (req, res) => {
+  try {
+    res.json(await registrarIngreso(req.params.id, req.body, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude registrar el ingreso', 'ingreso')
+  }
+})
+
+finanzasInversionesRouter.post('/:id/cuotas/:numero/en-pesos', async (req, res) => {
+  try {
+    res.json(await cuotaEnPesos(req.params.id, Number(req.params.numero), req.body?.tipoCambio ?? null, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude cambiar la moneda de la cuota', 'en pesos')
   }
 })

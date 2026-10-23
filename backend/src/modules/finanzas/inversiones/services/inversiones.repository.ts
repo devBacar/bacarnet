@@ -1,5 +1,6 @@
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { COMPROMISOS_COLLECTION } from '../../agenda/services/agenda.repository.js'
+import { MOVIMIENTOS_COLLECTION } from '../../cajachica/services/caja.repository.js'
 import { listarPagos, restanteAPagarCentavos } from '../../agenda/domain/pago-compromiso.js'
 import { idCompromisoCuota } from '../domain/agenda-plan.js'
 import type { InversionDocumentBase, MonedaInversion } from '../domain/inversion.types.js'
@@ -73,4 +74,10 @@ export async function compromisosDeCuotas(
     porInversion.set(inversionId, mapa)
   })
   return porInversion
+}
+
+/** Movimiento de caja ya cargado para un ingreso (reintento o doble clic). */
+export async function movimientoCajaPorClave(clave: string): Promise<string | null> {
+  const snap = await adminDb().collection(MOVIMIENTOS_COLLECTION).where('operacionVinculadaId', '==', clave).limit(1).get()
+  return snap.empty ? null : snap.docs[0].id
 }

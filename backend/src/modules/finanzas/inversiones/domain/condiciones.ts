@@ -73,7 +73,7 @@ function validarTasa(raw: unknown): Tasa {
   throw new ErrorValidacion('El tipo de tasa no es válido.')
 }
 
-function validarTipoCambio(raw: unknown): TipoCambioPactado | null {
+export function validarTipoCambio(raw: unknown): TipoCambioPactado | null {
   if (raw === null || raw === undefined) return null
   const r = raw as Record<string, unknown>
   return {

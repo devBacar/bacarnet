@@ -74,7 +74,8 @@ export interface DatosCompromisoCuota {
 
 export type OperacionAgenda =
   | { tipo: 'crear'; id: string; datos: DatosCompromisoCuota }
-  | { tipo: 'actualizar'; id: string; datos: DatosCompromisoCuota; quedaPagado: boolean }
+  /** Solo cuotas sin pagos: quedan pendientes con los datos nuevos. */
+  | { tipo: 'actualizar'; id: string; datos: DatosCompromisoCuota }
   /** La cuota ya no corresponde: el compromiso queda anulado (no se borra; la Agenda no lo muestra). */
   | { tipo: 'anular'; id: string }
   | { tipo: 'conflicto'; id: string; motivo: string }
@@ -146,11 +147,14 @@ export function planAgendaCuotas(inv: InversionParaAgenda, existentes: readonly 
       continue
     }
     if (actual.versionCronograma === inv.versionCronograma) continue
-    if (actual.pagadoCentavos > datos.montoCentavos) {
-      ops.push({ tipo: 'conflicto', id, motivo: 'Ya se pagó más de lo que ahora corresponde a esta cuota. Revisalo a mano.' })
+    // Una cuota con pagos (o pagada) no se reescribe nunca: si cambió, se avisa para revisarla a mano.
+    if (actual.pagadoCentavos > 0 || actual.estado === 'pagado') {
+      if (actual.montoCentavos !== datos.montoCentavos) {
+        ops.push({ tipo: 'conflicto', id, motivo: 'Esta cuota ya tiene pagos y el cronograma nuevo le cambia el importe. Revisala a mano.' })
+      }
       continue
     }
-    ops.push({ tipo: 'actualizar', id, datos, quedaPagado: actual.pagadoCentavos >= datos.montoCentavos && actual.pagadoCentavos > 0 })
+    ops.push({ tipo: 'actualizar', id, datos })
   }
   for (const e of existentes) {
     if (deseados.has(e.id) || e.anulado) continue

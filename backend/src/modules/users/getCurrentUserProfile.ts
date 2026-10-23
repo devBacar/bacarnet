@@ -62,6 +62,8 @@ export async function getCurrentUserProfile(req: Request, res: Response): Promis
         finanzas_transferencias: permissionsRaw.finanzas_transferencias === true,
         finanzas_destinatarios: permissionsRaw.finanzas_destinatarios === true,
         finanzas_saldos: permissionsRaw.finanzas_saldos === true,
+        finanzas_inversiones: permissionsRaw.finanzas_inversiones === true,
+        finanzas_inversiones_aprobar: permissionsRaw.finanzas_inversiones_aprobar === true,
         manage_finanzas_caja: permissionsRaw.manage_finanzas_caja === true,
         rrhh_detalle: permissionsRaw.rrhh_detalle === true,
       },

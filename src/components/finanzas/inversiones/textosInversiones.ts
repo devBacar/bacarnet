@@ -1,0 +1,80 @@
+import type {
+  EstadoInversion,
+  SistemaDevolucion,
+  Tasa,
+} from '../../../services/finanzasInversionesApi'
+
+/** Estados en palabras simples (pantallas para gerentes). */
+export const TEXTO_ESTADO: Record<EstadoInversion, string> = {
+  borrador: 'Borrador',
+  pendiente_aprobacion: 'Para aprobar',
+  vigente: 'Vigente',
+  cancelada: 'Terminada',
+  precancelada: 'Devuelta antes',
+  renovada: 'Renovada',
+  anulada: 'Anulada',
+}
+
+/** Cómo se devuelve la plata, en palabras. */
+export const TEXTO_SISTEMA: Record<SistemaDevolucion, string> = {
+  americano: 'Paga intereses por mes',
+  capitaliza: 'Capitaliza',
+  frances: 'Cuotas fijas',
+  aleman: 'Cuotas con capital igual',
+  al_vencimiento: 'Todo al final',
+  a_medida: 'A medida',
+}
+
+export function textoEstado(estado: EstadoInversion): string {
+  return TEXTO_ESTADO[estado]
+}
+
+export function textoSistema(sistema: SistemaDevolucion): string {
+  return TEXTO_SISTEMA[sistema]
+}
+
+/**
+ * Tasa en palabras. Si la cargaron por mes (expresada 'mensual'), se muestra el % mensual
+ * (tnaPct / 12). Si no, el % anual. Nunca se dice «plazo fijo».
+ */
+export function textoTasa(tasa: Tasa): string {
+  if (tasa.tipo === 'fija') {
+    if (tasa.expresada === 'mensual') {
+      const mensual = tasa.tnaPct / 12
+      return `${formatPct(mensual)} % por mes`
+    }
+    return `${formatPct(tasa.tnaPct)} % anual`
+  }
+  if (tasa.tipo === 'variable') {
+    const spread = tasa.spreadPct === 0 ? '' : ` + ${formatPct(tasa.spreadPct)} %`
+    return `${textoReferencia(tasa.referencia)}${spread}`
+  }
+  return `${formatPct(tasa.tnaPct)} % anual + ${textoIndice(tasa.indice)}`
+}
+
+function formatPct(n: number): string {
+  return n.toLocaleString('es-AR', { maximumFractionDigits: 4 })
+}
+
+function textoReferencia(ref: string): string {
+  switch (ref) {
+    case 'plazo_fijo_30':
+      return 'Tasa de referencia 30 días'
+    case 'badlar':
+      return 'BADLAR'
+    case 'tamar':
+      return 'TAMAR'
+    case 'adelantos_empresas':
+      return 'Adelantos a empresas'
+    case 'prestamos_empresas':
+      return 'Préstamos a empresas'
+    default:
+      return 'Tasa variable'
+  }
+}
+
+function textoIndice(indice: string): string {
+  if (indice === 'uva') return 'UVA'
+  if (indice === 'cer') return 'CER'
+  return 'ajuste'
+}

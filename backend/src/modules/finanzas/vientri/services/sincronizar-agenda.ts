@@ -74,7 +74,8 @@ async function leerManuales(lado: LadoAgenda): Promise<ManualAgenda[]> {
   const coleccion = lado === 'pagar' ? COMPROMISOS_COLLECTION : COBROS_COLLECTION
   const snap = await adminDb().collection(coleccion).get()
   return snap.docs
-    .filter((d) => d.get('origen') !== 'vientri')
+    // Lo de Inversores tiene su propio id y nunca es un duplicado de una factura de Vientri.
+    .filter((d) => d.get('origen') !== 'vientri' && d.get('origen') !== 'inversiones' && d.get('anulado') !== true)
     .map((d) => {
       const x = d.data()
       const nombre = String(x.proveedorONombre ?? x.clienteONombre ?? '')

@@ -10,6 +10,11 @@ export interface FinanzasNavItem {
   enabled?: boolean
   /** Una línea, en palabras, de para qué sirve la pantalla. */
   ayuda?: string
+  /**
+   * Si está, el ítem solo se muestra con ese permiso efectivo
+   * (ver useFinanzasNavItems / usePermisosFinanzas).
+   */
+  requiere?: 'inversiones'
 }
 
 export const FINANZAS_NAV_ITEMS: FinanzasNavItem[] = [
@@ -66,6 +71,13 @@ export const FINANZAS_NAV_ITEMS: FinanzasNavItem[] = [
     label: 'Vientri',
     enabled: true,
     ayuda: 'Lo que se cargó en Vientri: cheques y facturas pendientes. Solo para ver; se corrige en Vientri.',
+  },
+  {
+    to: '/finanzas/inversiones',
+    label: 'Inversores',
+    enabled: true,
+    requiere: 'inversiones',
+    ayuda: 'Personas que le prestan plata a BACAR: inversiones, cuotas y pagos.',
   },
   // Fases futuras — habilitar cuando exista la ruta:
   // { to: '/finanzas/creditos', label: 'Créditos', enabled: false },

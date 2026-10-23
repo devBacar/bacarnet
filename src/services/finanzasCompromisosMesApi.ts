@@ -12,6 +12,7 @@ export const GRUPOS_COMPROMISO = [
   'Gastos de personal',
   'Proveedores',
   'Otros egresos',
+  'COM',
 ] as const
 
 export type GrupoCompromiso = (typeof GRUPOS_COMPROMISO)[number]

@@ -15,6 +15,7 @@ import { finanzasExtractosRouter } from '../extractos/routes/extractos.routes.js
 import { finanzasChequesRouter } from '../cheques/routes/cheques.routes.js'
 import { finanzasTableroRouter } from '../tablero/routes/tablero.routes.js'
 import { finanzasVientriRouter } from '../vientri/routes/vientri.routes.js'
+import { finanzasInversionesRouter } from '../inversiones/routes/inversiones.routes.js'
 
 export const finanzasRouter = Router()
 
@@ -34,3 +35,4 @@ finanzasRouter.use('/extractos', finanzasExtractosRouter)
 finanzasRouter.use('/cheques', finanzasChequesRouter)
 finanzasRouter.use('/tablero', finanzasTableroRouter)
 finanzasRouter.use('/vientri', finanzasVientriRouter)
+finanzasRouter.use('/inversiones', finanzasInversionesRouter)

@@ -80,6 +80,8 @@ export interface UserPermissions {
   finanzas_destinatarios: boolean
   /** Descubierto, saldo cargado a mano e historial de saldos. */
   finanzas_saldos: boolean
+  finanzas_inversiones: boolean
+  finanzas_inversiones_aprobar: boolean
   /** Líder de cajas (crear cajas, fondear, aprobar cierres). */
   manage_finanzas_caja: boolean
   /** RRHH: ver horas extra agregadas por área y la proyección (perfil Directorio). */
@@ -192,6 +194,8 @@ export const DEFAULT_PERMISSIONS: UserPermissions = {
   finanzas_transferencias: false,
   finanzas_destinatarios: false,
   finanzas_saldos: false,
+  finanzas_inversiones: false,
+  finanzas_inversiones_aprobar: false,
   manage_finanzas_caja: false,
   rrhh_detalle: false,
 }
@@ -218,6 +222,8 @@ export const SUPER_ADMIN_PERMISSIONS: UserPermissions = {
   finanzas_transferencias: true,
   finanzas_destinatarios: true,
   finanzas_saldos: true,
+  finanzas_inversiones: true,
+  finanzas_inversiones_aprobar: true,
   manage_finanzas_caja: true,
   rrhh_detalle: true,
 }
@@ -238,6 +244,8 @@ export const EXTERNAL_PENDING_PERMISSIONS: UserPermissions = {
   finanzas_transferencias: false,
   finanzas_destinatarios: false,
   finanzas_saldos: false,
+  finanzas_inversiones: false,
+  finanzas_inversiones_aprobar: false,
   manage_finanzas_caja: false,
   rrhh_detalle: false,
 }
@@ -258,6 +266,8 @@ export const EXTERNAL_APPROVED_PERMISSIONS: UserPermissions = {
   finanzas_transferencias: false,
   finanzas_destinatarios: false,
   finanzas_saldos: false,
+  finanzas_inversiones: false,
+  finanzas_inversiones_aprobar: false,
   manage_finanzas_caja: false,
   rrhh_detalle: false,
 }
@@ -394,6 +404,8 @@ export interface PermisosFinanzasEfectivos {
   transferencias: boolean
   destinatarios: boolean
   saldos: boolean
+  inversiones: boolean
+  aprobarInversiones: boolean
   liderCajas: boolean
 }
 
@@ -405,6 +417,8 @@ const SIN_PERMISOS_FINANZAS: PermisosFinanzasEfectivos = {
   transferencias: false,
   destinatarios: false,
   saldos: false,
+  inversiones: false,
+  aprobarInversiones: false,
   liderCajas: false,
 }
 
@@ -422,6 +436,8 @@ export function permisosFinanzasDe(
       transferencias: true,
       destinatarios: true,
       saldos: true,
+      inversiones: true,
+      aprobarInversiones: true,
       liderCajas: true,
     }
   }
@@ -435,6 +451,8 @@ export function permisosFinanzasDe(
     transferencias: ver && flags.finanzas_transferencias === true,
     destinatarios: ver && flags.finanzas_destinatarios === true,
     saldos: ver && flags.finanzas_saldos === true,
+    inversiones: ver && flags.finanzas_inversiones === true,
+    aprobarInversiones: ver && flags.finanzas_inversiones_aprobar === true,
     liderCajas: flags.manage_finanzas_caja === true,
   }
 }
@@ -496,6 +514,8 @@ function mapDocToUserProfile(uid: string, data: DocumentData): UserProfile {
       finanzas_transferencias: permissions.finanzas_transferencias === true,
       finanzas_destinatarios: permissions.finanzas_destinatarios === true,
       finanzas_saldos: permissions.finanzas_saldos === true,
+      finanzas_inversiones: permissions.finanzas_inversiones === true,
+      finanzas_inversiones_aprobar: permissions.finanzas_inversiones_aprobar === true,
       manage_finanzas_caja: permissions.manage_finanzas_caja === true,
       rrhh_detalle: permissions.rrhh_detalle === true,
     },

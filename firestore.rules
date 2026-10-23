@@ -161,6 +161,23 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Finanzas / Inversores: datos personales y de deuda. Solo el backend (Admin SDK) lee y escribe.
+    match /inversores/{id} {
+      allow read, write: if false;
+    }
+    match /inversiones/{id}/{document=**} {
+      allow read, write: if false;
+    }
+    match /inversiones/{id} {
+      allow read, write: if false;
+    }
+    match /finanzasConfig/{id} {
+      allow read, write: if false;
+    }
+    match /inversionesImportaciones/{id} {
+      allow read, write: if false;
+    }
+
     // Perfiles de usuario y permisos
     match /users/{userId} {
       allow get: if isVerifiedAuth()

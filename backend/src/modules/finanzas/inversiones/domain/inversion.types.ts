@@ -143,8 +143,10 @@ export interface IngresoRegistrado {
 
 export interface Aprobacion {
   solicitadaPor: string
+  solicitadaPorNombre?: string | null
   solicitadaAt: string
   resueltaPor: string | null
+  resueltaPorNombre?: string | null
   resueltaAt: string | null
   resultado: 'aprobada' | 'rechazada' | null
   nota: string | null
@@ -232,6 +234,9 @@ export interface InversionDocumentBase extends CondicionesInversion {
   importada: boolean
   /** Cuotas que no se pudieron reescribir en la Agenda (tienen pagos): hay que revisarlas a mano. */
   avisosAgenda?: string[]
+  /** Importadas de la planilla: primer mes en que aparece y pagos mes a mes ("pagos según planilla"). */
+  inicioPlanilla?: string | null
+  historialPlanilla?: Array<{ mes: string; fecha: string; montoCentavos: number }>
 }
 
 export type TipoPersona = 'humana' | 'juridica'

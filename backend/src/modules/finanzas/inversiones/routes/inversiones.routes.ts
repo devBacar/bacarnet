@@ -4,7 +4,7 @@ import {
   requireViewFinanzas,
   requireWorkspaceUser,
 } from '../../../auth/middleware.js'
-import { ErrorValidacion, NoEncontrado } from '../domain/validar.js'
+import { EnCurso, ErrorValidacion, NoEncontrado } from '../domain/validar.js'
 import {
   cambiarEstadoInversor,
   crearInversor,
@@ -27,6 +27,8 @@ import {
   registrarIngreso,
   simular,
 } from '../services/inversiones.service.js'
+import { confirmar, vistaPrevia } from '../services/importar-planilla.service.js'
+import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 
 export const finanzasInversionesRouter = Router()
 
@@ -39,6 +41,10 @@ finanzasInversionesRouter.use(
 function responderError(res: Response, err: unknown, fallback: string, contexto: string): void {
   if (err instanceof ErrorValidacion) {
     res.status(400).json({ error: err.message })
+    return
+  }
+  if (err instanceof EnCurso) {
+    res.status(409).json({ error: err.message })
     return
   }
   if (err instanceof NoEncontrado) {
@@ -113,6 +119,25 @@ finanzasInversionesRouter.post('/simular', async (req, res) => {
     res.json(await simular(req.body))
   } catch (err) {
     responderError(res, err, 'No pude calcular las cuotas', 'simular')
+  }
+})
+
+// Importar la planilla de compromisos (inversores en curso). Crea todo "Para aprobar".
+finanzasInversionesRouter.post('/importar/vista-previa', async (req, res) => {
+  try {
+    const { file, fields } = await parseMultipartUpload(req)
+    if (!file) throw new ErrorValidacion('Elegí el archivo de la planilla.')
+    res.json(await vistaPrevia(file.buffer, fields.hoja?.trim() || null, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude leer la planilla', 'importar vista previa')
+  }
+})
+
+finanzasInversionesRouter.post('/importar/confirmar', async (req, res) => {
+  try {
+    res.json(await confirmar(req.body?.token, req.body?.filas, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude importar', 'importar confirmar')
   }
 })
 

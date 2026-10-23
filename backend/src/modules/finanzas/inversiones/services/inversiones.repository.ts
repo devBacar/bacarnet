@@ -5,7 +5,7 @@ import { listarPagos, restanteAPagarCentavos } from '../../agenda/domain/pago-co
 import { idCompromisoCuota } from '../domain/agenda-plan.js'
 import type { InversionDocumentBase, MonedaInversion } from '../domain/inversion.types.js'
 import type { CompromisoDeCuota } from '../domain/vista.js'
-import { ErrorValidacion } from '../domain/validar.js'
+import { EnCurso } from '../domain/validar.js'
 import { INVERSIONES_COLLECTION } from './inversores.repository.js'
 
 const HISTORIAL_SUB = 'historialEstados'
@@ -105,7 +105,7 @@ export async function reservarIngresoCaja(inversionId: string, clave: string, ah
     const d = snap.data() as { estado?: string; cajaMovimientoId?: string | null; desdeMs?: number } | undefined
     if (d?.estado === 'hecha' && d.cajaMovimientoId) return { tipo: 'hecha', cajaMovimientoId: d.cajaMovimientoId }
     if (d?.estado === 'en_curso' && ahoraMs - (d.desdeMs ?? 0) < RESERVA_VENCE_MS) {
-      throw new ErrorValidacion('Este ingreso ya se está registrando. Esperá unos segundos y actualizá la pantalla.')
+      throw new EnCurso('Este ingreso ya se está registrando. Esperá unos segundos y actualizá la pantalla.')
     }
     tx.set(ref, { estado: 'en_curso', cajaMovimientoId: null, desdeMs: ahoraMs })
     return { tipo: 'nueva' }

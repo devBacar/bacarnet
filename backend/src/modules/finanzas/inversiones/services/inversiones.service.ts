@@ -155,6 +155,8 @@ export async function detalleInversion(id: string, user: AuthedUser) {
     indiceAlta: inv.indiceAlta,
     observaciones: inv.observaciones,
     importada: inv.importada,
+    inicioPlanilla: inv.inicioPlanilla ?? null,
+    historialPlanilla: inv.historialPlanilla ?? [],
     historial: hist,
     createdAt: hist.at(-1)?.fecha ?? null,
     createdBy: hist.at(-1)?.usuario ?? '',

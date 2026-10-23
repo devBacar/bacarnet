@@ -249,6 +249,9 @@ export interface InversionDetalle {
   indiceAlta: number | null
   observaciones: string | null
   importada: boolean
+  /** Importadas de la planilla: primer mes en que aparece y pagos mes a mes ("pagos según planilla"). */
+  inicioPlanilla?: string | null
+  historialPlanilla?: Array<{ mes: string; fecha: string; montoCentavos: number }>
   historial: HistorialItem[]
   createdAt: string | null
   createdBy: string
@@ -411,12 +414,20 @@ export interface ImportarFila {
   totales: TotalesCronograma | null
   /** El usuario la puede destildar en la vista previa. */
   incluir: boolean
+  /** Historial encontrado en las hojas anteriores. */
+  desdeMes: string | null
+  mesesEncontrados: number
+  pagosEncontrados: number
+  /** Ya se importó antes (re-importar no la duplica). */
+  yaImportada: boolean
 }
 
 export interface ImportarVistaPrevia {
   /** Se manda a /importar/confirmar para crear exactamente lo que se vio. Vence en 30 minutos. */
   token: string
   filas: ImportarFila[]
+  /** Problemas al leer alguna hoja. */
+  avisos: string[]
   resumen: { total: number; ok: number; conErrores: number; inversoresNuevos: number }
 }
 

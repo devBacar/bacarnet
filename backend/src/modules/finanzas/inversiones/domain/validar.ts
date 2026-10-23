@@ -3,6 +3,9 @@ import type { BaseDias, ConfigInversiones, EstadoInversion, InversorDatos, Penal
 /** Error con mensaje para mostrar tal cual en pantalla. */
 export class ErrorValidacion extends Error {}
 
+/** Otro pedido igual está en curso (409): la pantalla puede reintentar. */
+export class EnCurso extends Error {}
+
 /** No existe lo que se pidió (404). */
 export class NoEncontrado extends Error {}
 

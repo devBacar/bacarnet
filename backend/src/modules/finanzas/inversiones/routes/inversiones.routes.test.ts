@@ -3,6 +3,8 @@ import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 import type { NextFunction, Request, Response } from 'express'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { detalleInversion, simular } from '../services/inversiones.service.js'
+import { finanzasInversionesRouter } from './inversiones.routes.js'
 
 /**
  * Permisos de las rutas de Inversores. El usuario se simula con el header x-permisos
@@ -50,8 +52,6 @@ vi.mock('../services/inversiones.service.js', () => ({
   anularInversion: vi.fn(async () => ({})),
 }))
 
-const { finanzasInversionesRouter } = await import('./inversiones.routes.js')
-const { simular, detalleInversion } = await import('../services/inversiones.service.js')
 
 let server: Server
 let base = ''

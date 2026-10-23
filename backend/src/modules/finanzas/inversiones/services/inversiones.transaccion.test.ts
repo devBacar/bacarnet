@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { ErrorValidacion } from '../domain/validar.js'
+import { anularInversion, aprobarInversion } from './inversiones.service.js'
 
 /**
  * Carrera: la inversión cambió entre que se pidió la acción y se escribe.
@@ -22,8 +24,6 @@ vi.mock('../../../../lib/firebase/admin.js', () => ({
   }),
 }))
 
-const { anularInversion, aprobarInversion } = await import('./inversiones.service.js')
-const { ErrorValidacion } = await import('../domain/validar.js')
 
 const lider = { uid: 'u1', displayName: 'Líder', permissions: { finanzas_inversiones_aprobar: true } } as never
 

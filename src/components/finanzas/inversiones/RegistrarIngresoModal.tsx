@@ -22,6 +22,15 @@ function sleep(ms: number) {
   return new Promise((r) => window.setTimeout(r, ms))
 }
 
+/**
+ * Clave única de la carga. crypto.randomUUID solo existe en https o localhost:
+ * en staging por http://IP se usa getRandomValues (32 hex, cumple lo que pide el backend).
+ */
+function claveNueva(): string {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 /** 409 EnCurso: el mensaje del backend incluye esta frase. */
 function esConflictoEnCurso(err: unknown): boolean {
   return err instanceof Error && err.message.includes('ya se está registrando')
@@ -60,7 +69,7 @@ export function RegistrarIngresoModal({
   onClose,
   onGuardado,
 }: Props) {
-  const claveRef = useRef(crypto.randomUUID())
+  const claveRef = useRef(claveNueva())
   const [medio, setMedio] = useState<MedioIngreso>('transferencia')
   const [fecha, setFecha] = useState(hoyLocal())
   const [monto, setMonto] = useState(

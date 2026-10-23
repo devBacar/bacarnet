@@ -5,9 +5,16 @@ import { generarCronograma, totalesDe } from '../domain/cronograma.js'
 import { hoyArgentina } from '../domain/fechas.js'
 import type { CondicionesInversion, ConfigInversiones, EstadoInversion, InversionDocumentBase } from '../domain/inversion.types.js'
 import { ESTADO_INVERSION_TEXTO } from '../domain/seguimiento.js'
-import { ErrorValidacion, NoEncontrado, numeroInversion } from '../domain/validar.js'
+import { ErrorValidacion, NoEncontrado, numeroInversion, validarTransicion } from '../domain/validar.js'
 import { alertasVista, cuotasVista, deudaHoyCentavos, kpisDe, resumenInversion, type CompromisoDeCuota } from '../domain/vista.js'
-import { compromisosDeCuotas, getInversionDoc, guardarInversionDoc, listHistorial, type HistorialEstadoDocument } from './inversiones.repository.js'
+import {
+  actualizarInversionTx,
+  compromisosDeCuotas,
+  getInversionDoc,
+  guardarInversionDoc,
+  listHistorial,
+  type HistorialEstadoDocument,
+} from './inversiones.repository.js'
 import { getConfigInversiones, getInversorDoc, listInversionesDocs, siguienteNumeroInversion } from './inversores.repository.js'
 
 function puedeAprobar(user: AuthedUser): boolean {
@@ -175,20 +182,18 @@ export async function crearInversion(raw: unknown, user: AuthedUser) {
 }
 
 export async function editarInversion(id: string, raw: unknown, user: AuthedUser) {
-  const inv = await cargar(id)
-  if (inv.estado !== 'borrador') throw new ErrorValidacion('Solo se puede editar mientras es borrador.')
   const config = await getConfigInversiones()
   const cond = validarCondiciones(raw, config)
   const inversor = await inversorDe(raw)
-  const data: InversionDocumentBase = {
-    ...inv,
-    ...cond,
-    ...inversor,
-    cronograma: cronogramaDe(cond, config, hoyArgentina()),
-    versionCronograma: inv.versionCronograma + 1,
-    observaciones: notaDe((raw as Record<string, unknown>).observaciones),
-  }
-  await guardarInversionDoc(id, data, historial('borrador', 'borrador', user, 'Editada'))
+  const cronograma = cronogramaDe(cond, config, hoyArgentina())
+  const observaciones = notaDe((raw as Record<string, unknown>).observaciones)
+  await actualizarInversionTx(id, (inv) => {
+    if (inv.estado !== 'borrador') throw new ErrorValidacion('Solo se puede editar mientras es borrador.')
+    return {
+      data: { ...inv, ...cond, ...inversor, cronograma, versionCronograma: inv.versionCronograma + 1, observaciones },
+      historial: historial('borrador', 'borrador', user, 'Editada'),
+    }
+  })
   return detalleInversion(id, user)
 }
 
@@ -200,11 +205,10 @@ async function cambiarEstado(
   nota: string | null,
   cambios: (inv: InversionDocumentBase) => Partial<InversionDocumentBase> = () => ({}),
 ) {
-  const inv = await cargar(id)
-  if (!desde.includes(inv.estado)) {
-    throw new ErrorValidacion(`No se puede: la inversión está "${ESTADO_INVERSION_TEXTO[inv.estado]}".`)
-  }
-  await guardarInversionDoc(id, { ...inv, ...cambios(inv), estado: hacia }, historial(inv.estado, hacia, user, nota))
+  await actualizarInversionTx(id, (inv) => {
+    validarTransicion(inv.estado, desde, ESTADO_INVERSION_TEXTO)
+    return { data: { ...inv, ...cambios(inv), estado: hacia }, historial: historial(inv.estado, hacia, user, nota) }
+  })
   return detalleInversion(id, user)
 }
 

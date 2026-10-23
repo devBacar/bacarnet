@@ -1,4 +1,4 @@
-import type { BaseDias, ConfigInversiones, InversorDatos, Penalidad, TipoPersona } from './inversion.types.js'
+import type { BaseDias, ConfigInversiones, EstadoInversion, InversorDatos, Penalidad, TipoPersona } from './inversion.types.js'
 
 /** Error con mensaje para mostrar tal cual en pantalla. */
 export class ErrorValidacion extends Error {}
@@ -134,6 +134,15 @@ export function configConDefaults(guardada: Partial<ConfigInversiones> | undefin
     ...(guardada ?? {}),
     retencionGanancias: { ...defaults.retencionGanancias, ...(guardada?.retencionGanancias ?? {}) },
   }
+}
+
+/** Corta si la inversión ya no está en un estado desde el que se puede hacer el cambio. */
+export function validarTransicion(
+  actual: EstadoInversion,
+  desde: readonly EstadoInversion[],
+  textoEstado: Record<EstadoInversion, string>,
+): void {
+  if (!desde.includes(actual)) throw new ErrorValidacion(`No se puede: la inversión está "${textoEstado[actual]}".`)
 }
 
 /** "INV-0007" */

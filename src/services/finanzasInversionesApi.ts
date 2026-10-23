@@ -565,6 +565,38 @@ export async function sincronizarAgendaInversion(id: string): Promise<InversionD
   return leer(await post(`/${encodeURIComponent(id)}/sincronizar-agenda`), 'No pude actualizar la Agenda')
 }
 
+// ── Documentos ───────────────────────────────────────────────
+
+/** Sube un PDF (mutuo / pagaré / otro). Campo archivo + tipo, como la vista previa de importación. */
+export async function subirDocumentoInversion(
+  id: string,
+  archivo: File,
+  tipo: DocumentoInversion['tipo'],
+): Promise<InversionDetalle> {
+  const form = new FormData()
+  form.append('archivo', archivo)
+  form.append('tipo', tipo)
+  return leer(
+    await invFetch(`/${encodeURIComponent(id)}/documentos`, { method: 'POST', body: form }),
+    'No pude adjuntar el documento',
+  )
+}
+
+/** Enlace temporal para abrir el PDF en una pestaña nueva. */
+export async function enlaceDocumentoInversion(id: string, docId: string): Promise<{ url: string }> {
+  return leer(
+    await invFetch(`/${encodeURIComponent(id)}/documentos/${encodeURIComponent(docId)}`),
+    'No pude abrir el documento',
+  )
+}
+
+export async function quitarDocumentoInversion(id: string, docId: string): Promise<InversionDetalle> {
+  return leer(
+    await post(`/${encodeURIComponent(id)}/documentos/${encodeURIComponent(docId)}/quitar`),
+    'No pude quitar el documento',
+  )
+}
+
 // ── Inversores ───────────────────────────────────────────────
 
 export async function fetchInversores(): Promise<InversorResumen[]> {

@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { DetalleInversion } from '../../components/finanzas/inversiones/DetalleInversion'
+import { FormInversion } from '../../components/finanzas/inversiones/FormInversion'
 import { KpisInversiones } from '../../components/finanzas/inversiones/KpisInversiones'
 import { PestanaConfiguracion } from '../../components/finanzas/inversiones/PestanaConfiguracion'
 import { PestanaImportar } from '../../components/finanzas/inversiones/PestanaImportar'
@@ -38,15 +40,18 @@ function LoadingBlock() {
 
 export function InversionesPage() {
   const { user } = useAuth()
+  const { id } = useParams<{ id?: string }>()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = tabInicial(searchParams.get('tab'))
+  const [nuevaAbierta, setNuevaAbierta] = useState(false)
 
   const listaActiva = tab === 'inversiones' || tab === 'para_aprobar'
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['finanzas', 'inversiones'],
     queryFn: fetchInversiones,
-    enabled: Boolean(user),
+    enabled: Boolean(user) && !id && !nuevaAbierta,
   })
 
   const inversiones = data?.inversiones ?? []
@@ -64,27 +69,56 @@ export function InversionesPage() {
     setSearchParams(next, { replace: true })
   }
 
-  const botonTab = (id: Tab, texto: string) => (
+  const botonTab = (tabId: Tab, texto: string) => (
     <button
       type="button"
-      onClick={() => ir(id)}
+      onClick={() => ir(tabId)}
       className={`rounded-lg px-4 py-2 text-sm font-medium ${
-        tab === id ? 'bg-brand-primary text-white' : 'text-body-muted'
+        tab === tabId ? 'bg-brand-primary text-white' : 'text-body-muted'
       }`}
     >
       {texto}
     </button>
   )
 
+  if (id) {
+    return <DetalleInversion id={id} />
+  }
+
+  if (nuevaAbierta) {
+    return (
+      <FormInversion
+        modo="nuevo"
+        onCerrar={() => setNuevaAbierta(false)}
+        onGuardado={(detalle) => {
+          setNuevaAbierta(false)
+          void refetch()
+          navigate(`/finanzas/inversiones/${detalle.id}`)
+        }}
+      />
+    )
+  }
+
   const nParaAprobar = kpis?.paraAprobar ?? paraAprobar.length
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="text-heading text-2xl font-bold tracking-tight sm:text-3xl">Inversores</h1>
-        <p className="text-body-muted mt-2 max-w-2xl text-sm">
-          Personas que le prestan plata a BACAR: inversiones, cuotas y pagos.
-        </p>
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-heading text-2xl font-bold tracking-tight sm:text-3xl">Inversores</h1>
+          <p className="text-body-muted mt-2 max-w-2xl text-sm">
+            Personas que le prestan plata a BACAR: inversiones, cuotas y pagos.
+          </p>
+        </div>
+        {tab === 'inversiones' || tab === 'para_aprobar' ? (
+          <button
+            type="button"
+            onClick={() => setNuevaAbierta(true)}
+            className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white hover:opacity-90"
+          >
+            Nueva inversión
+          </button>
+        ) : null}
       </header>
 
       <div className="mb-4 inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">

@@ -6,6 +6,7 @@ import { confirmar, vistaPrevia } from './importar-planilla.service.js'
 /** Firestore en memoria: lo justo para la importación. Datos inventados. */
 const base = new Map<string, Record<string, unknown>>()
 const inversores: Array<{ id: string; data: { nombreNormalizado: string } }> = []
+let cola: Promise<unknown> = Promise.resolve()
 
 function ref(path: string): Record<string, unknown> {
   return {
@@ -23,6 +24,16 @@ vi.mock('../../../../lib/firebase/admin.js', () => ({
       doc: (id: string) => ref(`${c}/${id}`),
       where: () => ({ get: async () => ({ docs: [...base.keys()].filter((k) => k.split('/').length === 2 && k.startsWith(`${c}/`)).map((k) => ({ id: k.split('/')[1] })) }) }),
     }),
+    runTransaction: (fn: (tx: unknown) => Promise<unknown>) => {
+      const turno = cola.then(() =>
+        fn({
+          get: async (r: { path: string }) => ({ exists: base.has(r.path), data: () => base.get(r.path) }),
+          update: (r: { path: string }, d: Record<string, unknown>) => void base.set(r.path, { ...base.get(r.path), ...d }),
+        }),
+      )
+      cola = turno.catch(() => undefined)
+      return turno
+    },
     batch: () => {
       const ops: Array<() => void> = []
       return {
@@ -43,9 +54,9 @@ vi.mock('./inversores.repository.js', async (original) => ({
   ...(await original<typeof import('./inversores.repository.js')>()),
   getConfigInversiones: async () => CONFIG_INVERSIONES_DEFAULT,
   listInversoresDocs: async () => inversores,
-  crearInversorDoc: async (datos: { nombre: string }) => {
-    const id = `inv${inversores.length + 1}`
-    inversores.push({ id, data: { nombreNormalizado: datos.nombre.toLowerCase() } })
+  crearInversorDoc: async (datos: { nombre: string }, _uid: string, idFijo?: string) => {
+    const id = idFijo ?? `inv${inversores.length + 1}`
+    if (!inversores.some((i) => i.id === id)) inversores.push({ id, data: { nombreNormalizado: datos.nombre.toLowerCase() } })
     return id
   },
   siguienteNumeroInversion: async () => ++numero,
@@ -95,6 +106,18 @@ describe('importar la planilla', () => {
     expect(segunda).toMatchObject({ creadas: 0, inversoresNuevos: 0 })
     expect([...base.keys()].filter((k) => /^inversiones\/[^/]+$/.test(k))).toHaveLength(1)
     expect(inversores).toHaveLength(2)
+  })
+
+  it('dos confirmar a la vez con la misma vista previa: uno solo importa', async () => {
+    base.clear()
+    inversores.length = 0
+    const vp = await vistaPrevia(planilla(), null, user)
+    const filas = vp.filas.map((f) => f.fila)
+    const r = await Promise.allSettled([confirmar(vp.token, filas, user), confirmar(vp.token, filas, user)])
+    expect(r.filter((x) => x.status === 'fulfilled')).toHaveLength(1)
+    expect(String((r.find((x) => x.status === 'rejected') as PromiseRejectedResult).reason.message)).toContain('ya se confirmó')
+    expect(inversores).toHaveLength(2)
+    expect(inversores.every((i) => i.id.startsWith('pla-'))).toBe(true)
   })
 
   it('la vista previa vence y es de quien la armó', async () => {

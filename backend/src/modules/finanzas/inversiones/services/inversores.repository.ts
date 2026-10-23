@@ -48,8 +48,10 @@ export async function getInversorDoc(id: string): Promise<InversorDocument | nul
   return snap.exists ? (snap.data() as InversorDocument) : null
 }
 
-export async function crearInversorDoc(datos: InversorDatos, uid: string): Promise<string> {
-  const ref = adminDb().collection(INVERSORES_COLLECTION).doc()
+/** Con `id` fijo usa create(): si ya existe (otro pedido lo creó en el medio) devuelve ese mismo id. */
+export async function crearInversorDoc(datos: InversorDatos, uid: string, id?: string): Promise<string> {
+  const col = adminDb().collection(INVERSORES_COLLECTION)
+  const ref = id ? col.doc(id) : col.doc()
   const ahora = Timestamp.now()
   const doc: InversorDocument = {
     ...datos,
@@ -60,7 +62,15 @@ export async function crearInversorDoc(datos: InversorDatos, uid: string): Promi
     createdBy: uid,
     updatedBy: uid,
   }
-  await ref.set(doc)
+  if (!id) {
+    await ref.set(doc)
+    return ref.id
+  }
+  try {
+    await ref.create(doc)
+  } catch (err) {
+    if ((err as { code?: number }).code !== 6) throw err
+  }
   return ref.id
 }
 

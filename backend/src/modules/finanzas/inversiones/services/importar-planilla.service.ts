@@ -160,10 +160,17 @@ export async function vistaPrevia(archivo: Buffer, hojaElegida: string | null, u
 export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedUser) {
   if (typeof token !== 'string' || !token) throw new ErrorValidacion('Falta la vista previa. Volvé a subir la planilla.')
   if (!Array.isArray(filasRaw) || filasRaw.some((f) => typeof f !== 'number')) throw new ErrorValidacion('Elegí qué filas importar.')
-  const snap = await adminDb().collection(IMPORTACIONES_COLLECTION).doc(token).get()
-  const guardada = snap.data() as { propuestas: Propuesta[]; venceMs: number; creadoPor: string } | undefined
-  if (!guardada || guardada.venceMs < Date.now()) throw new ErrorValidacion('La vista previa venció. Volvé a subir la planilla.')
-  if (guardada.creadoPor !== user.uid) throw new ErrorValidacion('Esa vista previa la armó otra persona. Volvé a subir la planilla.')
+  // Solo se usa lo guardado en la vista previa: del navegador llegan únicamente los números de fila elegidos.
+  // La vista previa es de un solo uso: una transacción la marca como consumida (doble clic → error claro).
+  const tokenRef = adminDb().collection(IMPORTACIONES_COLLECTION).doc(token)
+  const guardada = await adminDb().runTransaction(async (tx) => {
+    const d = (await tx.get(tokenRef)).data() as { propuestas: Propuesta[]; venceMs: number; creadoPor: string; consumida?: boolean } | undefined
+    if (!d || d.venceMs < Date.now()) throw new ErrorValidacion('La vista previa venció. Volvé a subir la planilla.')
+    if (d.creadoPor !== user.uid) throw new ErrorValidacion('Esa vista previa la armó otra persona. Volvé a subir la planilla.')
+    if (d.consumida) throw new ErrorValidacion('Esta importación ya se confirmó. Para volver a importar, subí la planilla de nuevo.')
+    tx.update(tokenRef, { consumida: true })
+    return d
+  })
   const elegidas = guardada.propuestas.filter((p) => (filasRaw as number[]).includes(p.fila))
 
   const config = await getConfigInversiones()
@@ -180,6 +187,7 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
       inversorId = await crearInversorDoc(
         { nombre: p.inversorNombre, tipoPersona: null, cuit: null, dni: null, email: null, telefono: null, domicilio: null, cbuArs: null, cuentaUsd: null, observaciones: 'Creado desde la planilla de compromisos' },
         user.uid,
+        `pla-${clave.replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`,
       )
       porNombre.set(clave, inversorId)
       inversoresNuevos += 1

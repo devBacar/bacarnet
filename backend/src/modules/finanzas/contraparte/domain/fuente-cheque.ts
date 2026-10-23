@@ -32,6 +32,7 @@ export interface ChequeParaContraparte {
   cliente: string | null
   destinatario: string | null
   movimientoBancarioId?: string | null
+  estado?: string | null
 }
 
 export interface MovimientoCheque {
@@ -106,7 +107,8 @@ function porMontoYFecha(mov: MovimientoCheque, cheques: readonly ChequeParaContr
     const base = fechaBaseDeposito(cheque)
     if (!base || !mov.fechaProceso) return false
     const diff = diffDias(mov.fechaProceso, base)
-    return diff >= -1 && diff <= 5
+    const maxDias = cheque.estado === 'rechazado' ? 15 : 5
+    return diff >= -1 && diff <= maxDias
   })
 }
 

@@ -42,6 +42,19 @@ export interface VientriChequeDoc {
   entregadoPor: PersonaRef | null
   entregadoA: PersonaRef | null
   destinatario: string | null
+  /** ID del comprobante con el que ingresó (recibo, OP). */
+  idCmpIngreso: number | null
+  /** ID del comprobante con el que salió (pago, depósito). */
+  idCmpSalida: number | null
+  /** Nota de débito por rechazo. */
+  idCmpNdRechazo: number | null
+  /** Comprobante del pago del banco. */
+  idCmpPagoBanco: number | null
+  /** Estado previo al actual (ej. antes de ser rechazado). */
+  estadoPrevioId: number | null
+  /** Motivo de rechazo. */
+  motivoRechazoId: number | null
+
   /** De qué tablas de Vientri salió: Chq, CHQOCA o las dos. */
   fuentes: Array<'Chq' | 'CHQOCA'>
   vientriChqId: number | null

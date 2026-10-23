@@ -45,6 +45,11 @@ export interface ChequeListadoItem {
   movimientoCuentaId: string | null
   movimientoFecha: string | null
   fechaAcreditacion: string | null
+  vientriSync: boolean
+  vientriClave: string | null
+  vientriEstadoPrevio: string | null
+  vientriCmpIngreso: number | null
+  vientriCmpSalida: number | null
 }
 
 function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
@@ -75,6 +80,11 @@ function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
     movimientoCuentaId: typeof data.movimientoCuentaId === 'string' ? data.movimientoCuentaId : null,
     movimientoFecha: typeof data.movimientoFecha === 'string' ? data.movimientoFecha : null,
     fechaAcreditacion: typeof data.fechaAcreditacion === 'string' ? data.fechaAcreditacion : null,
+    vientriSync: data.vientriSync === true,
+    vientriClave: typeof data.vientriClave === 'string' ? data.vientriClave : null,
+    vientriEstadoPrevio: typeof data.vientriEstadoPrevio === 'string' ? data.vientriEstadoPrevio : null,
+    vientriCmpIngreso: typeof data.vientriCmpIngreso === 'number' ? data.vientriCmpIngreso : null,
+    vientriCmpSalida: typeof data.vientriCmpSalida === 'number' ? data.vientriCmpSalida : null,
   }
 }
 
@@ -86,6 +96,7 @@ export interface ChequesFiltro {
   desde: string | null
   hasta: string | null
   vinculacion: 'vinculado' | 'sin_vincular' | null
+  comprobante: 'con_comprobante' | 'sin_comprobante' | null
   q: string | null
 }
 
@@ -104,6 +115,11 @@ function matchVinculacion(data: FirebaseFirestore.DocumentData, vinculacion: 'vi
   return vinculacion === 'vinculado' ? Boolean(data.movimientoBancarioId) : !data.movimientoBancarioId
 }
 
+function matchComprobante(data: FirebaseFirestore.DocumentData, comprobante: 'con_comprobante' | 'sin_comprobante'): boolean {
+  const tiene = Boolean(data.vientriCmpSalida) || Boolean(data.vientriCmpIngreso)
+  return comprobante === 'con_comprobante' ? tiene : !tiene
+}
+
 function matchBusqueda(data: FirebaseFirestore.DocumentData, q: string): boolean {
   const norm = q.toLowerCase()
   const fields = [data.numero, data.emisor, data.emisorCuit, data.cliente, data.destinatario]
@@ -116,13 +132,18 @@ async function loadFiltradoInMemory(filtro: ChequesFiltro): Promise<FirebaseFire
   return snap.docs.filter((doc) => {
     const data = doc.data()
     if (filtro.vinculacion && !matchVinculacion(data, filtro.vinculacion)) return false
+    if (filtro.comprobante && !matchComprobante(data, filtro.comprobante)) return false
     if (filtro.q && !matchBusqueda(data, filtro.q)) return false
     return true
   })
 }
 
+function needsInMemory(filtro: ChequesFiltro): boolean {
+  return Boolean(filtro.vinculacion || filtro.comprobante || filtro.q)
+}
+
 export async function countChequesFiltrados(filtro: ChequesFiltro): Promise<number> {
-  if (filtro.vinculacion || filtro.q) return (await loadFiltradoInMemory(filtro)).length
+  if (needsInMemory(filtro)) return (await loadFiltradoInMemory(filtro)).length
   const query = applyFiltro(collection(), filtro)
   const snap = await query.count().get()
   return snap.data().count
@@ -133,7 +154,7 @@ export async function pageCheques(input: {
   offset: number
   limit: number
 }): Promise<ChequeListadoItem[]> {
-  if (input.filtro.vinculacion || input.filtro.q) {
+  if (needsInMemory(input.filtro)) {
     const docs = await loadFiltradoInMemory(input.filtro)
     return docs.slice(input.offset, input.offset + input.limit).map((doc) => toListadoItem(doc.id, doc.data()))
   }
@@ -146,7 +167,7 @@ export async function pageCheques(input: {
 }
 
 export async function sumChequesCentavos(filtro: ChequesFiltro): Promise<number> {
-  if (filtro.vinculacion || filtro.q) {
+  if (needsInMemory(filtro)) {
     const docs = await loadFiltradoInMemory(filtro)
     return docs.reduce((sum, doc) => {
       const v = doc.data().montoCentavos
@@ -164,7 +185,7 @@ export async function sumChequesPorDireccion(filtro: Omit<ChequesFiltro, 'direcc
   recibidosCentavos: number
   emitidosCentavos: number
 }> {
-  if (filtro.vinculacion || filtro.q) {
+  if (filtro.vinculacion || filtro.comprobante || filtro.q) {
     const [recDocs, emDocs] = await Promise.all([
       loadFiltradoInMemory({ ...filtro, direccion: 'recibido' }),
       loadFiltradoInMemory({ ...filtro, direccion: 'emitido' }),
@@ -321,7 +342,7 @@ export async function marcarChequeEndosado(input: {
 
 export async function listChequesSinVincular(
   direccion: ChequeDireccion,
-): Promise<{ id: string; numero: string; montoCentavos: number; fechaEmision: string; fechaPago: string; emisor: string; cliente: string | null; destinatario: string | null }[]> {
+): Promise<{ id: string; numero: string; montoCentavos: number; fechaEmision: string; fechaPago: string; emisor: string; cliente: string | null; destinatario: string | null; estado: string | null }[]> {
   const snap = await collection()
     .where('direccion', '==', direccion)
     .get()
@@ -342,6 +363,7 @@ export async function listChequesSinVincular(
         emisor: String(data.emisor ?? ''),
         cliente: typeof data.cliente === 'string' ? data.cliente : null,
         destinatario: typeof data.destinatario === 'string' ? data.destinatario : null,
+        estado: typeof data.estado === 'string' ? data.estado : null,
       }
     })
 }

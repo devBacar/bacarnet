@@ -3,6 +3,7 @@ import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } fro
 import { listChequesApi, getResumenDiario, importChequesExcel, ingresarChequesPegados } from '../services/cheques.service.js'
 import { getChequeById, updateChequeEstado, desvincularChequesFueraDeVentana, corregirPagoProveedorDebitado } from '../services/cheques.repository.js'
 import { reconciliarChequesConMovimientos } from '../services/reconciliar-cheques-movimientos.js'
+import { sincronizarChequesDesdeVientri } from '../services/sincronizar-desde-vientri.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import type { ChequeDireccion, ChequeEstado, ChequeOrigen, ChequeTipo } from '../domain/cheque.types.js'
 
@@ -19,6 +20,7 @@ finanzasChequesRouter.get('/', async (req, res) => {
       estado: one(req.query.estado),
       tipo: one(req.query.tipo),
       vinculacion: one(req.query.vinculacion),
+      comprobante: one(req.query.comprobante),
       desde: one(req.query.desde),
       hasta: one(req.query.hasta),
       q: one(req.query.q),
@@ -144,6 +146,22 @@ finanzasChequesRouter.post('/corregir-pago-proveedor', requireFinanzasPermiso('f
   } catch (err) {
     console.error('[finanzas/cheques] corregir pago proveedor', err)
     const message = err instanceof Error ? err.message : 'No se pudo corregir'
+    res.status(500).json({ error: message })
+  }
+})
+
+finanzasChequesRouter.post('/sincronizar-vientri', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  const actorUid = req.authedUser?.uid
+  if (!actorUid) {
+    res.status(401).json({ error: 'No autenticado' })
+    return
+  }
+  try {
+    const result = await sincronizarChequesDesdeVientri(actorUid)
+    res.json(result)
+  } catch (err) {
+    console.error('[finanzas/cheques] sincronizar-vientri', err)
+    const message = err instanceof Error ? err.message : 'No se pudo sincronizar desde Vientri'
     res.status(500).json({ error: message })
   }
 })

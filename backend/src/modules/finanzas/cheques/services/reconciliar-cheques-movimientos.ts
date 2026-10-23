@@ -62,6 +62,7 @@ export async function reconciliarChequesConMovimientos(
       emisor: c.emisor,
       cliente: c.cliente,
       destinatario: c.destinatario,
+      estado: c.estado,
     })),
     ...emitidosSinVincular.map((c) => ({
       id: c.id,
@@ -73,6 +74,7 @@ export async function reconciliarChequesConMovimientos(
       emisor: c.emisor,
       cliente: c.cliente,
       destinatario: c.destinatario,
+      estado: c.estado,
     })),
   ]
 

@@ -119,6 +119,19 @@ export interface ChequeRecibido {
   emisorCuit: string | null
 }
 
+export interface DocumentoInversion {
+  id: string
+  tipo: 'mutuo' | 'pagare' | 'otro'
+  nombre: string
+  storagePath: string
+  bytes: number
+  subidoPor: string
+  subidoPorNombre: string | null
+  subidoAt: string
+  /** Baja lógica: no se borra el archivo. */
+  quitado?: boolean
+}
+
 export interface IngresoRegistrado {
   id: string
   medio: MedioIngreso
@@ -237,6 +250,8 @@ export interface InversionDocumentBase extends CondicionesInversion {
   /** Importadas de la planilla: primer mes en que aparece y pagos mes a mes ("pagos según planilla"). */
   inicioPlanilla?: string | null
   historialPlanilla?: Array<{ mes: string; fecha: string; montoCentavos: number }>
+  /** Mutuo, pagaré u otros PDF firmados. */
+  documentos?: DocumentoInversion[]
 }
 
 export type TipoPersona = 'humana' | 'juridica'
@@ -251,6 +266,8 @@ export interface InversorDatos {
   domicilio: string | null
   cbuArs: string | null
   cuentaUsd: string | null
+  /** Para la retención de Ganancias (RG 830). null = no se sabe (se usa la alícuota de no inscripto). */
+  inscriptoGanancias?: boolean | null
   observaciones: string | null
 }
 

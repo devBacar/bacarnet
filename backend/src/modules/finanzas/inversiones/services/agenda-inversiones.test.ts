@@ -40,6 +40,11 @@ vi.mock('../../../../lib/firebase/admin.js', () => ({
   }),
 }))
 
+
+vi.mock('./inversores.repository.js', async (original) => ({
+  ...(await original<typeof import('./inversores.repository.js')>()),
+  getConfigInversiones: async () => (await import('../domain/inversion.types.js')).CONFIG_INVERSIONES_DEFAULT,
+}))
 function pendiente(): InversionDocumentBase {
   const cond = validarCondiciones(
     {

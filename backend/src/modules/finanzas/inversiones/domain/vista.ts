@@ -27,6 +27,8 @@ export interface CuotaVista extends Cuota {
   pagadoCentavos: number
   restanteCentavos: number
   comoSePago: string | null
+  /** Retención de Ganancias de la cuota (0 si no corresponde). */
+  retencionCentavos: number
 }
 
 const ABIERTAS: ReadonlySet<EstadoCuota> = new Set(['pendiente', 'parcial', 'atrasada'])
@@ -36,6 +38,7 @@ export function cuotasVista(
   inv: Pick<InversionDocumentBase, 'cronograma' | 'moneda' | 'estado'>,
   compromisos: ReadonlyMap<number, CompromisoDeCuota>,
   hoy: string,
+  retencion: (c: Cuota) => number = () => 0,
 ): CuotaVista[] {
   const enAgenda = inv.estado !== 'borrador' && inv.estado !== 'pendiente_aprobacion' && inv.estado !== 'anulada'
   return inv.cronograma.map((c) => {
@@ -43,7 +46,8 @@ export function cuotasVista(
     const pago: PagoEnAgenda | undefined = comp
       ? { numero: c.numero, compromisoId: idCompromisoCuota(inversionId, c.numero), estado: comp.estado, montoCentavos: comp.montoCentavos, pagadoCentavos: comp.pagadoCentavos }
       : undefined
-    const { montoCentavos, moneda } = montoAPagar(c, inv.moneda)
+    const retenido = retencion(c)
+    const { montoCentavos, moneda } = montoAPagar({ ...c, totalCentavos: c.totalCentavos - retenido }, inv.moneda)
     const aPagar = comp?.montoCentavos ?? montoCentavos
     const pagado = comp?.pagadoCentavos ?? 0
     const estado = enAgenda ? estadoDeCuota(c, pago, hoy) : c.anulada ? 'anulada' : 'pendiente'
@@ -56,6 +60,7 @@ export function cuotasVista(
       pagadoCentavos: pagado,
       restanteCentavos: estado === 'pagada' || estado === 'anulada' ? 0 : Math.max(0, aPagar - pagado),
       comoSePago: comp?.comoSePago ?? null,
+      retencionCentavos: retenido,
     }
   })
 }

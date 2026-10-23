@@ -78,6 +78,8 @@ export interface CuotaDetalle extends Cuota {
   restanteCentavos: number
   /** Texto de cómo se pagó (si ya tiene pagos). */
   comoSePago: string | null
+  /** Retención de Ganancias (RG 830) de la cuota; aPagarCentavos ya la descuenta. */
+  retencionCentavos: number
 }
 
 export interface TotalesCronograma {
@@ -124,6 +126,19 @@ export interface ChequeRecibido {
   fechaPago: string
   emisor: string
   emisorCuit: string | null
+}
+
+export interface DocumentoInversion {
+  id: string
+  tipo: 'mutuo' | 'pagare' | 'otro'
+  nombre: string
+  storagePath: string
+  bytes: number
+  subidoPor: string
+  subidoPorNombre: string | null
+  subidoAt: string
+  /** Baja lógica: no se borra el archivo. */
+  quitado?: boolean
 }
 
 export interface IngresoRegistrado {
@@ -252,6 +267,8 @@ export interface InversionDetalle {
   /** Importadas de la planilla: primer mes en que aparece y pagos mes a mes ("pagos según planilla"). */
   inicioPlanilla?: string | null
   historialPlanilla?: Array<{ mes: string; fecha: string; montoCentavos: number }>
+  /** Sin storagePath: para verlo se pide el enlace a /:id/documentos/:docId. */
+  documentos: Array<Omit<DocumentoInversion, 'storagePath'>>
   historial: HistorialItem[]
   createdAt: string | null
   createdBy: string
@@ -286,6 +303,8 @@ export interface InversorDatos {
   domicilio: string | null
   cbuArs: string | null
   cuentaUsd: string | null
+  /** Para la retención de Ganancias (RG 830). null = no se sabe (se usa la alícuota de no inscripto). */
+  inscriptoGanancias?: boolean | null
   observaciones: string | null
 }
 

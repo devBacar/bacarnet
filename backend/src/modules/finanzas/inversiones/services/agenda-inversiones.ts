@@ -18,9 +18,10 @@ import {
   type InversionParaAgenda,
 } from '../domain/agenda-plan.js'
 import type { InversionDocumentBase } from '../domain/inversion.types.js'
+import { retencionDeCuota } from '../domain/retencion.js'
 import { NoEncontrado } from '../domain/validar.js'
 import type { HistorialEstadoDocument } from './inversiones.repository.js'
-import { INVERSIONES_COLLECTION } from './inversores.repository.js'
+import { getConfigInversiones, INVERSIONES_COLLECTION, INVERSORES_COLLECTION } from './inversores.repository.js'
 
 const HISTORIAL_SUB = 'historialEstados'
 
@@ -94,6 +95,8 @@ export async function transicionConAgenda(
   const compromisos = db.collection(COMPROMISOS_COLLECTION)
   const cobroRef = db.collection(COBROS_COLLECTION).doc(idCobroIngreso(id))
 
+  const config = await getConfigInversiones()
+
   return db.runTransaction(async (tx: Transaction) => {
     // 1) Lecturas (Firestore exige leer todo antes de escribir).
     const snap = await tx.get(invRef)
@@ -102,7 +105,9 @@ export async function transicionConAgenda(
     const { data, historial } = decidir(actual)
     const numeros = new Set([...actual.cronograma, ...data.cronograma].map((c) => c.numero))
     const refs: DocumentReference[] = [...numeros].map((n) => compromisos.doc(idCompromisoCuota(id, n)))
-    const [cobroSnap, ...compSnaps] = await tx.getAll(cobroRef, ...refs)
+    const inversorRef = db.collection(INVERSORES_COLLECTION).doc(data.inversorId)
+    const [cobroSnap, inversorSnap, ...compSnaps] = await tx.getAll(cobroRef, inversorRef, ...refs)
+    const inscripto = inversorSnap.exists ? (inversorSnap.get('inscriptoGanancias') as boolean | null | undefined) : null
     // Los anulados no cuentan: si la cuota vuelve a corresponder, se crea de nuevo encima.
     const existentes = compSnaps
       .filter((s) => s.exists && s.get('anulado') !== true)
@@ -110,7 +115,7 @@ export async function transicionConAgenda(
     const porId = new Map(existentes.map((e) => [e.id, e]))
 
     // 2) Planes (puros, ver agenda-plan.ts).
-    const inv = paraAgenda(id, data)
+    const inv = { ...paraAgenda(id, data), retencion: (c: Parameters<typeof retencionDeCuota>[0]) => retencionDeCuota(c, config.retencionGanancias, inscripto) }
     const ops = planAgendaCuotas(inv, existentes)
     const cobro = planCobroIngreso(
       inv,

@@ -66,3 +66,12 @@ describe('planAgendaCuotas: las cuotas con pagos no se tocan', () => {
     ])
   })
 })
+
+describe('planAgendaCuotas: retención de Ganancias', () => {
+  it('la cuota en la Agenda va por el neto y lo anota en la observación', () => {
+    const c = { ...cuota(1, 1_000), capitalCentavos: 0, interesCentavos: 1_000 }
+    const ops = planAgendaCuotas({ ...inv([c], 1), retencion: () => 60 }, [])
+    expect(ops[0]).toMatchObject({ tipo: 'crear', datos: { montoCentavos: 940 } })
+    expect((ops[0] as { datos: { observacion: string } }).datos.observacion).toContain('retención de Ganancias')
+  })
+})

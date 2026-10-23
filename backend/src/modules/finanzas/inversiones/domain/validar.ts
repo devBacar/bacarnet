@@ -50,6 +50,7 @@ export function validarInversorDatos(raw: unknown): InversorDatos {
     domicilio: texto(r.domicilio, 200),
     cbuArs: soloDigitos(r.cbuArs, 'CBU', [22]),
     cuentaUsd: texto(r.cuentaUsd, 100),
+    inscriptoGanancias: r.inscriptoGanancias === true ? true : r.inscriptoGanancias === false ? false : null,
     observaciones: texto(r.observaciones, 1000),
   }
 }

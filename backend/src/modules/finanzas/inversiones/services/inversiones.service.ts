@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto'
 import { isSuperAdminUser, type AuthedUser } from '../../../auth/middleware.js'
 import { capitalEsperadoCentavos, ingresadoCentavos } from '../domain/agenda-plan.js'
 import { horizonteSinVencimiento, validarCondiciones } from '../domain/condiciones.js'
 import { generarCronograma, totalesDe } from '../domain/cronograma.js'
 import { hoyArgentina } from '../domain/fechas.js'
 import type { CondicionesInversion, ConfigInversiones, EstadoInversion, InversionDocumentBase } from '../domain/inversion.types.js'
+import { agregarDocumento, documentosVisibles, quitarDocumento, tipoDocumento, validarPdf } from '../domain/documentos.js'
+import { retencionDeCuota } from '../domain/retencion.js'
+import { enlaceDocumento, guardarDocumento } from './documentos.storage.js'
 import { ESTADO_INVERSION_TEXTO, estadoAlTerminar } from '../domain/seguimiento.js'
 import { ErrorValidacion, NoEncontrado, numeroInversion, validarTransicion } from '../domain/validar.js'
 import { alertasVista, cuotasVista, deudaHoyCentavos, kpisDe, resumenInversion, type CompromisoDeCuota } from '../domain/vista.js'
@@ -113,8 +117,9 @@ export async function detalleInversion(id: string, user: AuthedUser) {
   const hoy = hoyArgentina()
   await mantenerVigente(id, await cargar(id), config, hoy, user)
   const [inv, hist] = await Promise.all([cargar(id), listHistorial(id)])
-  const compromisos = (await compromisosDeCuotas([{ id, data: inv }])).get(id) ?? new Map()
-  const cuotas = cuotasVista(id, inv, compromisos, hoy)
+  const [compromisosPorId, inversor] = await Promise.all([compromisosDeCuotas([{ id, data: inv }]), getInversorDoc(inv.inversorId)])
+  const compromisos = compromisosPorId.get(id) ?? new Map()
+  const cuotas = cuotasVista(id, inv, compromisos, hoy, (c) => retencionDeCuota(c, config.retencionGanancias, inversor?.inscriptoGanancias))
   const abierta = inv.estado === 'borrador' || inv.estado === 'pendiente_aprobacion'
   return {
     id,
@@ -157,6 +162,7 @@ export async function detalleInversion(id: string, user: AuthedUser) {
     importada: inv.importada,
     inicioPlanilla: inv.inicioPlanilla ?? null,
     historialPlanilla: inv.historialPlanilla ?? [],
+    documentos: documentosVisibles(inv),
     historial: hist,
     createdAt: hist.at(-1)?.fecha ?? null,
     createdBy: hist.at(-1)?.usuario ?? '',
@@ -351,6 +357,47 @@ export async function cuotaEnPesos(id: string, numero: number, rawTipoCambio: un
   await transicionConAgenda(id, user.uid, (actual) => ({
     data: aplicarCuotaEnPesos(actual, numero, rawTipoCambio),
     historial: historial(actual.estado, actual.estado, user, rawTipoCambio ? `Cuota ${numero} se paga en pesos` : `Cuota ${numero} vuelve a dólares`),
+  }))
+  return detalleInversion(id, user)
+}
+
+export async function subirDocumento(
+  id: string,
+  archivo: { buffer: Buffer; fileName: string } | null,
+  tipoRaw: unknown,
+  user: AuthedUser,
+) {
+  validarPdf(archivo)
+  const inv = await cargar(id)
+  if (inv.estado === 'anulada') throw new ErrorValidacion('La inversión está anulada.')
+  const storagePath = await guardarDocumento(id, archivo!.buffer)
+  const doc = {
+    id: randomUUID(),
+    tipo: tipoDocumento(tipoRaw),
+    nombre: archivo!.fileName.slice(0, 150) || 'documento.pdf',
+    storagePath,
+    bytes: archivo!.buffer.length,
+    subidoPor: user.uid,
+    subidoPorNombre: user.displayName,
+    subidoAt: new Date().toISOString(),
+  }
+  await transicionConAgenda(id, user.uid, (actual) => ({
+    data: agregarDocumento(actual, doc),
+    historial: historial(actual.estado, actual.estado, user, `Se adjuntó ${doc.tipo === 'otro' ? 'un documento' : `el ${doc.tipo === 'pagare' ? 'pagaré' : 'mutuo'}`}: ${doc.nombre}`),
+  }))
+  return detalleInversion(id, user)
+}
+
+export async function enlaceDeDocumento(id: string, docId: string): Promise<{ url: string }> {
+  const doc = (await cargar(id)).documentos?.find((d) => d.id === docId && !d.quitado)
+  if (!doc) throw new NoEncontrado('No encontré ese documento.')
+  return { url: await enlaceDocumento(doc.storagePath) }
+}
+
+export async function quitarDocumentoDe(id: string, docId: string, user: AuthedUser) {
+  await transicionConAgenda(id, user.uid, (actual) => ({
+    data: quitarDocumento(actual, docId),
+    historial: historial(actual.estado, actual.estado, user, 'Se quitó un documento'),
   }))
   return detalleInversion(id, user)
 }

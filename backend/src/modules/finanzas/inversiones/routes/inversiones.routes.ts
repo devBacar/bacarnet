@@ -24,8 +24,11 @@ import {
   enviarAAprobacion,
   listarInversiones,
   rechazarInversion,
+  enlaceDeDocumento,
+  quitarDocumentoDe,
   registrarIngreso,
   simular,
+  subirDocumento,
 } from '../services/inversiones.service.js'
 import { confirmar, vistaPrevia } from '../services/importar-planilla.service.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
@@ -220,5 +223,30 @@ finanzasInversionesRouter.post('/:id/cuotas/:numero/en-pesos', async (req, res) 
     res.json(await cuotaEnPesos(req.params.id, Number(req.params.numero), req.body?.tipoCambio ?? null, req.authedUser!))
   } catch (err) {
     responderError(res, err, 'No pude cambiar la moneda de la cuota', 'en pesos')
+  }
+})
+
+finanzasInversionesRouter.post('/:id/documentos', async (req, res) => {
+  try {
+    const { file, fields } = await parseMultipartUpload(req)
+    res.json(await subirDocumento(req.params.id, file ? { buffer: file.buffer, fileName: file.originalname } : null, fields.tipo, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude adjuntar el documento', 'subir documento')
+  }
+})
+
+finanzasInversionesRouter.get('/:id/documentos/:docId', async (req, res) => {
+  try {
+    res.json(await enlaceDeDocumento(req.params.id, req.params.docId))
+  } catch (err) {
+    responderError(res, err, 'No pude abrir el documento', 'ver documento')
+  }
+})
+
+finanzasInversionesRouter.post('/:id/documentos/:docId/quitar', async (req, res) => {
+  try {
+    res.json(await quitarDocumentoDe(req.params.id, req.params.docId, req.authedUser!))
+  } catch (err) {
+    responderError(res, err, 'No pude quitar el documento', 'quitar documento')
   }
 })

@@ -63,6 +63,7 @@ export async function fichaInversor(id: string) {
     domicilio: d.domicilio ?? null,
     cbuArs: d.cbuArs ?? null,
     cuentaUsd: d.cuentaUsd ?? null,
+    inscriptoGanancias: d.inscriptoGanancias ?? null,
     observaciones: d.observaciones ?? null,
     estado: d.estado,
     inversiones: items.map((i) => i.resumen),

@@ -25,6 +25,11 @@ vi.mock('../../../../lib/firebase/admin.js', () => ({
 }))
 
 
+vi.mock('./inversores.repository.js', async (original) => ({
+  ...(await original<typeof import('./inversores.repository.js')>()),
+  getConfigInversiones: async () => (await import('../domain/inversion.types.js')).CONFIG_INVERSIONES_DEFAULT,
+}))
+
 const lider = { uid: 'u1', displayName: 'Líder', permissions: { finanzas_inversiones_aprobar: true } } as never
 
 describe('cambios de estado dentro de una transacción', () => {

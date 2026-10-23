@@ -180,80 +180,88 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
   let creadas = 0
   let yaEstaban = 0
 
-  for (const p of elegidas) {
-    const clave = normalizarNombre(p.inversorNombre)
-    let inversorId = porNombre.get(clave)
-    if (!inversorId) {
-      inversorId = await crearInversorDoc(
-        { nombre: p.inversorNombre, tipoPersona: null, cuit: null, dni: null, email: null, telefono: null, domicilio: null, cbuArs: null, cuentaUsd: null, observaciones: 'Creado desde la planilla de compromisos' },
-        user.uid,
-        `pla-${clave.replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`,
-      )
-      porNombre.set(clave, inversorId)
-      inversoresNuevos += 1
-    }
-    if (!p.condiciones) continue
+  try {
+    for (const p of elegidas) {
+      const clave = normalizarNombre(p.inversorNombre)
+      let inversorId = porNombre.get(clave)
+      if (!inversorId) {
+        inversorId = await crearInversorDoc(
+          { nombre: p.inversorNombre, tipoPersona: null, cuit: null, dni: null, email: null, telefono: null, domicilio: null, cbuArs: null, cuentaUsd: null, observaciones: 'Creado desde la planilla de compromisos' },
+          user.uid,
+          `pla-${clave.replace(/[^a-z0-9]+/g, '-').slice(0, 60)}`,
+        )
+        porNombre.set(clave, inversorId)
+        inversoresNuevos += 1
+      }
+      if (!p.condiciones) continue
 
-    const ref = adminDb().collection(INVERSIONES_COLLECTION).doc(p.id)
-    if ((await ref.get()).exists) {
-      yaEstaban += 1
-      continue
+      const ref = adminDb().collection(INVERSIONES_COLLECTION).doc(p.id)
+      if ((await ref.get()).exists) {
+        yaEstaban += 1
+        continue
+      }
+      const cond = p.condiciones
+      const ahora = new Date().toISOString()
+      const data: InversionDocumentBase = {
+        ...cond,
+        numero: numeroInversion(await siguienteNumeroInversion()),
+        inversorId,
+        inversorNombre: p.inversorNombre,
+        estado: 'pendiente_aprobacion',
+        cronograma: generarCronograma(cond, {}, null, { hasta: cond.sinVencimiento ? horizonteSinVencimiento(hoy, config) : null }),
+        ingresos: [
+          {
+            id: 'importado',
+            medio: 'transferencia',
+            fecha: cond.fechaAlta,
+            montoCentavos: cond.capitalCentavos,
+            cuentaId: null,
+            cajaId: null,
+            chequeId: null,
+            movimientoId: null,
+            nota: 'El capital ya había entrado (según la planilla).',
+            registradoPor: user.uid,
+            registradoPorNombre: user.displayName,
+            registradoAt: ahora,
+            importado: true,
+          },
+        ],
+        aprobacion: { solicitadaPor: user.uid, solicitadaPorNombre: user.displayName, solicitadaAt: ahora, resueltaPor: null, resueltaPorNombre: null, resueltaAt: null, resultado: null, nota: 'Importada de la planilla' },
+        operacionPendiente: null,
+        renovacionDe: null,
+        renovadaEn: null,
+        versionCronograma: 1,
+        indiceAlta: null,
+        observaciones: [p.observacionPlanilla, p.cuotaPlanilla && p.cuotaPlanilla !== '-' ? `Cuota en la planilla: ${p.cuotaPlanilla}` : null].filter(Boolean).join(' · ') || null,
+        importada: true,
+        inicioPlanilla: p.inicioPlanilla,
+        historialPlanilla: p.historialPlanilla,
+      }
+      // create(): si otro pedido la creó en el medio, falla y se cuenta como "ya estaba".
+      try {
+        const batch = adminDb().batch()
+        batch.create(ref, data)
+        batch.set(ref.collection('historialEstados').doc(), {
+          estadoAnterior: null,
+          estadoNuevo: 'pendiente_aprobacion',
+          fecha: ahora,
+          usuario: user.uid,
+          usuarioNombre: user.displayName,
+          nota: `Importada de la planilla (desde ${p.inicioPlanilla})`,
+        })
+        await batch.commit()
+        creadas += 1
+      } catch (err) {
+        if ((err as { code?: number }).code === 6) yaEstaban += 1
+        else throw err
+      }
     }
-    const cond = p.condiciones
-    const ahora = new Date().toISOString()
-    const data: InversionDocumentBase = {
-      ...cond,
-      numero: numeroInversion(await siguienteNumeroInversion()),
-      inversorId,
-      inversorNombre: p.inversorNombre,
-      estado: 'pendiente_aprobacion',
-      cronograma: generarCronograma(cond, {}, null, { hasta: cond.sinVencimiento ? horizonteSinVencimiento(hoy, config) : null }),
-      ingresos: [
-        {
-          id: 'importado',
-          medio: 'transferencia',
-          fecha: cond.fechaAlta,
-          montoCentavos: cond.capitalCentavos,
-          cuentaId: null,
-          cajaId: null,
-          chequeId: null,
-          movimientoId: null,
-          nota: 'El capital ya había entrado (según la planilla).',
-          registradoPor: user.uid,
-          registradoPorNombre: user.displayName,
-          registradoAt: ahora,
-          importado: true,
-        },
-      ],
-      aprobacion: { solicitadaPor: user.uid, solicitadaPorNombre: user.displayName, solicitadaAt: ahora, resueltaPor: null, resueltaPorNombre: null, resueltaAt: null, resultado: null, nota: 'Importada de la planilla' },
-      operacionPendiente: null,
-      renovacionDe: null,
-      renovadaEn: null,
-      versionCronograma: 1,
-      indiceAlta: null,
-      observaciones: [p.observacionPlanilla, p.cuotaPlanilla && p.cuotaPlanilla !== '-' ? `Cuota en la planilla: ${p.cuotaPlanilla}` : null].filter(Boolean).join(' · ') || null,
-      importada: true,
-      inicioPlanilla: p.inicioPlanilla,
-      historialPlanilla: p.historialPlanilla,
-    }
-    // create(): si otro pedido la creó en el medio, falla y se cuenta como "ya estaba".
-    try {
-      const batch = adminDb().batch()
-      batch.create(ref, data)
-      batch.set(ref.collection('historialEstados').doc(), {
-        estadoAnterior: null,
-        estadoNuevo: 'pendiente_aprobacion',
-        fecha: ahora,
-        usuario: user.uid,
-        usuarioNombre: user.displayName,
-        nota: `Importada de la planilla (desde ${p.inicioPlanilla})`,
-      })
-      await batch.commit()
-      creadas += 1
-    } catch (err) {
-      if ((err as { code?: number }).code === 6) yaEstaban += 1
-      else throw err
-    }
+  } catch (err) {
+    // La vista previa ya quedó usada: re-importar es seguro (ids fijos), lo ya creado no se duplica.
+    console.error('[finanzas/inversiones] importar confirmar', err)
+    throw new ErrorValidacion(
+      `Se cortó la importación (${creadas} inversiones ya quedaron cargadas). Volvé a cargar la planilla y confirmá de nuevo: lo que ya entró no se duplica.`,
+    )
   }
 
   const partes = [`${creadas} inversiones quedaron para aprobar`, `${inversoresNuevos} inversores nuevos`]

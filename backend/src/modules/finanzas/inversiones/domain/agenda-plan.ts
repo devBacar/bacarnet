@@ -47,6 +47,8 @@ export interface InversionParaAgenda {
   /** Cuotas pagadas antes de cargarla (inversiones en curso). */
   cuotasPrevias?: number
   sinVencimiento?: boolean
+  /** Retención de Ganancias de cada cuota (en la moneda de la inversión). La Agenda muestra lo que se le paga: el neto. */
+  retencion?: (c: Cuota) => number
 }
 
 export interface CompromisoExistente {
@@ -108,7 +110,8 @@ export function planAgendaCuotas(inv: InversionParaAgenda, existentes: readonly 
     const previas = inv.cuotasPrevias ?? 0
     const total = vivas.length + previas
     vivas.forEach((c, i) => {
-      const { montoCentavos, moneda } = montoAPagar(c, inv.moneda)
+      const retenido = inv.retencion?.(c) ?? 0
+      const { montoCentavos, moneda } = montoAPagar({ ...c, totalCentavos: c.totalCentavos - retenido }, inv.moneda)
       if (montoCentavos <= 0) return
       const tipo =
         c.tipo === 'precancelacion'
@@ -122,6 +125,7 @@ export function planAgendaCuotas(inv: InversionParaAgenda, existentes: readonly 
       if (c.capitalCentavos > 0) obs.push('incluye capital')
       if ((c.renovadaCentavos ?? 0) > 0) obs.push('parte renovada')
       if (c.enPesos) obs.push(`USD al tipo de cambio ${textoTipoCambio(c.enPesos)}`)
+      if (retenido > 0) obs.push(`neto de retención de Ganancias ${(retenido / 100).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`)
       if (c.estimada) obs.push('monto estimado: la tasa o el índice todavía no se conoce')
       deseados.set(idCompromisoCuota(inv.id, c.numero), {
         cuotaNumero: inv.sinVencimiento ? null : i + 1 + previas,

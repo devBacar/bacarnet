@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../context'
 import { fetchInversores, type InversorResumen } from '../../../services/finanzasInversionesApi'
 import { FinanzasFormField, finanzasInputClass } from '../FinanzasFormField'
@@ -26,6 +27,7 @@ function CapitalVigente({ capital }: { capital: InversorResumen['capitalVigente'
 }
 
 export function PestanaInversores() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const [busqueda, setBusqueda] = useState('')
   const [modal, setModal] = useState<
@@ -115,7 +117,7 @@ export function PestanaInversores() {
                 <td className="px-4 py-3">
                   <button
                     type="button"
-                    onClick={() => setModal({ modo: 'cuenta', id: row.id })}
+                    onClick={() => navigate(`/finanzas/inversiones/inversores/${row.id}`)}
                     className="rounded-xl bg-brand-primary px-4 py-2.5 text-base font-medium text-white hover:opacity-90"
                   >
                     {TEXTOS_FICHA.verFicha}

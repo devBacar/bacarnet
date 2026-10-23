@@ -1,15 +1,17 @@
 import { useQuery } from '@tanstack/react-query'
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { CuentaPanel } from '../../components/finanzas/inversiones/CuentaPanel'
 import { DetalleInversion } from '../../components/finanzas/inversiones/DetalleInversion'
 import { FormInversion } from '../../components/finanzas/inversiones/FormInversion'
 import { KpisInversiones } from '../../components/finanzas/inversiones/KpisInversiones'
+import { Popup } from '../../components/finanzas/inversiones/PopupInversiones'
 import { PestanaConfiguracion } from '../../components/finanzas/inversiones/PestanaConfiguracion'
 import { PestanaImportar } from '../../components/finanzas/inversiones/PestanaImportar'
 import { PestanaInversores } from '../../components/finanzas/inversiones/PestanaInversores'
 import { TablaInversiones } from '../../components/finanzas/inversiones/TablaInversiones'
 import { useAuth } from '../../context'
-import { fetchInversiones } from '../../services/finanzasInversionesApi'
+import { fetchCuentaGeneral, fetchInversiones } from '../../services/finanzasInversionesApi'
 
 type Tab =
   | 'inversiones'
@@ -17,17 +19,47 @@ type Tab =
   | 'inversores'
   | 'importar'
   | 'configuracion'
+  | 'cuenta'
 
 function tabInicial(valor: string | null): Tab {
   if (
     valor === 'para_aprobar' ||
     valor === 'inversores' ||
     valor === 'importar' ||
-    valor === 'configuracion'
+    valor === 'configuracion' ||
+    valor === 'cuenta'
   ) {
     return valor
   }
   return 'inversiones'
+}
+
+function CuentaGeneral() {
+  const navigate = useNavigate()
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['finanzas', 'inversiones', 'cuenta', 'general'],
+    queryFn: fetchCuentaGeneral,
+  })
+
+  if (isLoading) {
+    return <LoadingBlock />
+  }
+
+  if (isError || !data) {
+    return (
+      <p className="text-danger text-sm">
+        {error instanceof Error ? error.message : 'No pude traer la cuenta general'}
+      </p>
+    )
+  }
+
+  return (
+    <CuentaPanel
+      cuenta={data}
+      general
+      onVerInversion={(id) => navigate(`/finanzas/inversiones/${id}`)}
+    />
+  )
 }
 
 function LoadingBlock() {
@@ -106,6 +138,7 @@ export function InversionesPage() {
       <div className="mb-4 inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
         {botonTab('inversiones', 'Inversiones')}
         {botonTab('para_aprobar', `Para aprobar (${nParaAprobar})`)}
+        {botonTab('cuenta', 'Cuenta general')}
         {botonTab('inversores', 'Inversores')}
         {botonTab('importar', 'Importar planilla')}
         {botonTab('configuracion', 'Configuración')}
@@ -136,6 +169,7 @@ export function InversionesPage() {
         )
       ) : null}
 
+      {tab === 'cuenta' ? <CuentaGeneral /> : null}
       {tab === 'inversores' ? <PestanaInversores /> : null}
       {tab === 'importar' ? <PestanaImportar /> : null}
       {tab === 'configuracion' ? <PestanaConfiguracion /> : null}
@@ -158,52 +192,5 @@ export function InversionesPage() {
         </Popup>
       ) : null}
     </>
-  )
-}
-
-/** Nueva inversión y detalle (aprobar, pagar, PDF) se abren como popup sobre el listado. */
-function Popup({
-  children,
-  onCerrar,
-  cerrarSoloConBoton = false,
-}: {
-  children: ReactNode
-  onCerrar: () => void
-  /** Formularios: ni Escape ni el clic afuera cierran, para no perder lo cargado. */
-  cerrarSoloConBoton?: boolean
-}) {
-  useEffect(() => {
-    if (cerrarSoloConBoton) return
-    const alTeclear = (e: KeyboardEvent) => {
-      // Si hay otro modal abierto encima (pagar, rechazar…), Escape lo cierra a él y no al detalle.
-      if (e.key === 'Escape' && document.querySelectorAll('.fixed.inset-0').length <= 1) onCerrar()
-    }
-    window.addEventListener('keydown', alTeclear)
-    return () => window.removeEventListener('keydown', alTeclear)
-  }, [onCerrar, cerrarSoloConBoton])
-
-  return (
-    <div
-      className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-black/40 p-3 sm:p-6"
-      onMouseDown={(e) => {
-        if (!cerrarSoloConBoton && e.target === e.currentTarget) onCerrar()
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        className="relative w-full max-w-5xl rounded-2xl bg-white p-4 shadow-xl sm:p-6 dark:bg-zinc-900"
-      >
-        <button
-          type="button"
-          onClick={onCerrar}
-          aria-label="Cerrar"
-          className="text-body-muted absolute right-3 top-3 rounded-lg px-2 py-1 text-lg hover:bg-neutral-100 dark:hover:bg-zinc-800"
-        >
-          ×
-        </button>
-        {children}
-      </div>
-    </div>
   )
 }

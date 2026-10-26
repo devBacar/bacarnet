@@ -13,6 +13,7 @@ import { FinanzasFormField, finanzasInputClass } from '../../components/finanzas
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import { PagosHechos } from '../../components/finanzas/agenda/PagosHechos'
 import { CompromisosMes } from '../../components/finanzas/hoy/CompromisosMes'
+import { ProveedoresFinancierosPanel } from '../../components/finanzas/hoy/compromisosMes/ProveedoresFinancierosPanel'
 import { parseMontoEsArACentavos } from '../../components/finanzas/montoEsAr'
 import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
@@ -238,17 +239,20 @@ export function FinanzasAgendaPage() {
           {botonTab('cobros', 'Cobros esperados')}
           {botonTab('planilla', 'Planilla del mes')}
         </div>
-        {puedeAlta ? (
-          <button
-            type="button"
-            data-tour="agenda-nuevo"
-            onClick={() => setShowAlta(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
-          >
-            <Plus className="h-4 w-4" />
-            {tab === 'pagos' ? 'Nuevo compromiso' : 'Nuevo cobro'}
-          </button>
-        ) : null}
+        <div className="inline-flex items-center gap-3">
+          {tab === 'pagos' ? <ProveedoresFinancierosPanel /> : null}
+          {puedeAlta ? (
+            <button
+              type="button"
+              data-tour="agenda-nuevo"
+              onClick={() => setShowAlta(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
+            >
+              <Plus className="h-4 w-4" />
+              {tab === 'pagos' ? 'Nuevo compromiso' : 'Nuevo cobro'}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {muestraResumen ? (

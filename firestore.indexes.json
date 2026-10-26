@@ -210,6 +210,24 @@
         },
         {
           "fieldPath": "fechaProceso",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "cuentaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "categoriaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fechaProceso",
           "order": "DESCENDING"
         }
       ]

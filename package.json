@@ -29,6 +29,8 @@
     "test:rules:helpdesk": "node scripts/test-helpdesk-rules.mjs",
     "functions:build": "npm --prefix backend run build",
     "functions:serve": "npm --prefix backend run build && npx firebase emulators:start --only functions --project bacar-web",
+    "emu": "npm --prefix backend run build && npx firebase emulators:start --project bacar-web --import .emulator-data --export-on-exit .emulator-data",
+    "emu:export": "npx firebase emulators:export .emulator-data --project bacar-web",
     "token:test": "node backend/scripts/get-test-token.mjs",
     "test:drive:trash": "node backend/scripts/test-drive-trash.mjs",
     "test:drive:classification": "node backend/scripts/test-drive-classification.mjs",

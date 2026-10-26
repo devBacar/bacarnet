@@ -27,7 +27,7 @@ function historialTexto(fila: ImportarFila): string {
 
 export function PestanaImportar() {
   const queryClient = useQueryClient()
-  const puedeAprobar = usePermisosFinanzas().finanzas_inversiones_aprobar
+  const puedeAprobar = usePermisosFinanzas().aprobarInversiones
   const inputRef = useRef<HTMLInputElement>(null)
   const [archivo, setArchivo] = useState<File | null>(null)
   const [vista, setVista] = useState<Vista | null>(null)

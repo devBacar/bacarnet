@@ -63,6 +63,8 @@ const mocks = vi.hoisted(() => ({
   reservarIngresoCaja: vi.fn(),
   cerrarReservaCaja: vi.fn(),
   movimientoCajaPorClave: vi.fn(),
+  reservasCajaHechas: vi.fn(),
+  movimientoCajaDatos: vi.fn(),
 }))
 
 vi.mock('../../../../lib/firebase/admin.js', () => ({
@@ -86,6 +88,8 @@ vi.mock('./inversiones.repository.js', async (original) => ({
   reservarIngresoCaja: mocks.reservarIngresoCaja,
   cerrarReservaCaja: mocks.cerrarReservaCaja,
   movimientoCajaPorClave: mocks.movimientoCajaPorClave,
+  reservasCajaHechas: mocks.reservasCajaHechas,
+  movimientoCajaDatos: mocks.movimientoCajaDatos,
 }))
 
 vi.mock('./inversores.repository.js', async (original) => ({
@@ -125,10 +129,14 @@ beforeEach(() => {
   mocks.reservarIngresoCaja.mockReset()
   mocks.cerrarReservaCaja.mockReset()
   mocks.movimientoCajaPorClave.mockReset()
+  mocks.reservasCajaHechas.mockReset()
+  mocks.movimientoCajaDatos.mockReset()
   mocks.getCajaDoc.mockResolvedValue({ id: 'caja-1', moneda: 'ARS', estado: 'activa', tipo: 'principal', nombre: 'Caja ARS' })
   mocks.reservarIngresoCaja.mockResolvedValue({ tipo: 'nueva' })
   mocks.cerrarReservaCaja.mockResolvedValue(undefined)
   mocks.movimientoCajaPorClave.mockResolvedValue(null)
+  mocks.reservasCajaHechas.mockResolvedValue([])
+  mocks.movimientoCajaDatos.mockResolvedValue(null)
 })
 
 describe('aprobarInversion con ingreso opcional', () => {

@@ -116,3 +116,32 @@ export async function cerrarReservaCaja(inversionId: string, clave: string, caja
   const ref = adminDb().collection(INVERSIONES_COLLECTION).doc(inversionId).collection(RESERVAS_SUB).doc(clave)
   await ref.set(cajaMovimientoId ? { estado: 'hecha', cajaMovimientoId } : { estado: 'fallida', cajaMovimientoId: null })
 }
+
+/** Reservas ya cerradas con movimiento (reintento con otra clave puede reusarlas si el ingreso no se grabó). */
+export async function reservasCajaHechas(
+  inversionId: string,
+): Promise<Array<{ clave: string; cajaMovimientoId: string }>> {
+  const snap = await adminDb().collection(INVERSIONES_COLLECTION).doc(inversionId).collection(RESERVAS_SUB).get()
+  const out: Array<{ clave: string; cajaMovimientoId: string }> = []
+  for (const d of snap.docs) {
+    const data = d.data() as { estado?: string; cajaMovimientoId?: string | null }
+    if (data.estado === 'hecha' && typeof data.cajaMovimientoId === 'string' && data.cajaMovimientoId) {
+      out.push({ clave: d.id, cajaMovimientoId: data.cajaMovimientoId })
+    }
+  }
+  return out
+}
+
+/** Datos del movimiento para comparar una reserva huérfana con el pedido actual. */
+export async function movimientoCajaDatos(
+  id: string,
+): Promise<{ cajaId: string; montoCentavos: number; fechaYmd: string } | null> {
+  const snap = await adminDb().collection(MOVIMIENTOS_COLLECTION).doc(id).get()
+  if (!snap.exists) return null
+  const d = snap.data() as { cajaId?: unknown; montoCentavos?: unknown; fecha?: { toDate?: () => Date } }
+  if (typeof d.cajaId !== 'string' || typeof d.montoCentavos !== 'number') return null
+  const fecha = typeof d.fecha?.toDate === 'function' ? d.fecha.toDate() : null
+  if (!fecha || Number.isNaN(fecha.getTime())) return null
+  // La caja guarda YMD como medianoche UTC (parseDateInput); el día de negocio es el ISO.
+  return { cajaId: d.cajaId, montoCentavos: d.montoCentavos, fechaYmd: fecha.toISOString().slice(0, 10) }
+}

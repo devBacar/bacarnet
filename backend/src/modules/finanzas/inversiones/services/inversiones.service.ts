@@ -13,14 +13,24 @@ import { ErrorValidacion, NoEncontrado, numeroInversion, validarTransicion } fro
 import { alertasVista, cuotasVista, deudaHoyCentavos, kpisDe, resumenInversion, type CompromisoDeCuota } from '../domain/vista.js'
 import { registerMovimiento } from '../../cajachica/services/caja.service.js'
 import { getCajaDoc } from '../../cajachica/services/caja.repository.js'
-import { aplicarCuotaEnPesos, aplicarIngreso, extenderSinVencimiento, validarIngreso } from '../domain/ingresos.js'
-import { transicionConAgenda } from './agenda-inversiones.js'
-import { cerrarReservaCaja, movimientoCajaPorClave, reservarIngresoCaja } from './inversiones.repository.js'
 import {
+  aplicarCuotaEnPesos,
+  aplicarIngreso,
+  extenderSinVencimiento,
+  validarIngreso,
+  type IngresoPedido,
+} from '../domain/ingresos.js'
+import { transicionConAgenda } from './agenda-inversiones.js'
+import {
+  cerrarReservaCaja,
   compromisosDeCuotas,
   getInversionDoc,
   guardarInversionDoc,
   listHistorial,
+  movimientoCajaDatos,
+  movimientoCajaPorClave,
+  reservasCajaHechas,
+  reservarIngresoCaja,
   type HistorialEstadoDocument,
 } from './inversiones.repository.js'
 import { getConfigInversiones, getInversorDoc, listInversionesDocs, siguienteNumeroInversion } from './inversores.repository.js'
@@ -341,9 +351,37 @@ function claveCaja(inversionId: string, clave: string): string {
 }
 
 /**
+ * Si la caja se cargó pero la transacción del ingreso falló, queda una reserva "hecha"
+ * sin ingreso que la referencie. Un reintento con clave nueva reusa ese movimiento
+ * solo si coincide caja, monto y fecha (otro monto/caja/fecha = otro ingreso).
+ */
+async function movimientoCajaHuerfano(
+  inversionId: string,
+  inv: InversionDocumentBase,
+  pedido: IngresoPedido,
+): Promise<string | null> {
+  if (!pedido.cajaId) return null
+  const usadas = new Set(inv.ingresos.map((i) => i.cajaMovimientoId).filter((x): x is string => !!x))
+  for (const r of await reservasCajaHechas(inversionId)) {
+    if (usadas.has(r.cajaMovimientoId)) continue
+    const mov = await movimientoCajaDatos(r.cajaMovimientoId)
+    if (
+      mov &&
+      mov.cajaId === pedido.cajaId &&
+      mov.montoCentavos === pedido.montoCentavos &&
+      mov.fechaYmd === pedido.fecha
+    ) {
+      return r.cajaMovimientoId
+    }
+  }
+  return null
+}
+
+/**
  * Registra la plata que entró (REGLAS: el ingreso se registra cuando entra de verdad, no al aprobar).
  * Efectivo: primero el movimiento en la caja (si ya existe con esta clave, se reusa) y después,
  * en una transacción, el ingreso en la inversión y el cobro de la Agenda. Repetir con la misma clave no duplica.
+ * Si el ingreso falló después de cargar la caja y se reintenta con otra clave, se reusa el movimiento huérfano.
  */
 export async function registrarIngreso(id: string, raw: unknown, user: AuthedUser) {
   const pedido = validarIngreso(raw)
@@ -364,6 +402,10 @@ export async function registrarIngreso(id: string, raw: unknown, user: AuthedUse
       // Una reserva cortada a mitad de camino pudo haber llegado a cargar la caja: se busca antes de cargar.
       cajaMovimientoId = await movimientoCajaPorClave(clave)
       try {
+        if (!cajaMovimientoId) {
+          // Clave nueva tras falla post-caja: reusar huérfana de esta inversión si coincide.
+          cajaMovimientoId = await movimientoCajaHuerfano(id, inv, pedido)
+        }
         if (!cajaMovimientoId) {
           const mov = await registerMovimiento({
             user,

@@ -232,16 +232,16 @@ export function FinanzasChequesPage() {
         </div>
       ) : null}
 
-      {/* Tabs: dirección */}
+      {/* Nivel 1: Tabs dirección */}
       <div className="mb-4" data-tour="cheques">
-        <div className="inline-flex rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
+        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
           {DIR_TABS.map(([val, label]) => (
             <button
               key={val}
               type="button"
               data-tour={val === 'recibido' ? 'cheques-direccion' : undefined}
               onClick={() => cambiarFiltro(() => { setDireccion(val); setEstado('') })}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
                 direccion === val
                   ? 'bg-brand-primary text-white shadow-sm'
                   : 'text-body-muted hover:text-heading'
@@ -253,9 +253,9 @@ export function FinanzasChequesPage() {
         </div>
       </div>
 
-      {/* Cards resumen por dirección */}
+      {/* Cards resumen */}
       {data ? (
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <div className="mb-5 grid gap-3 sm:grid-cols-3">
           <div className="card-minimal px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--color-success, #16a34a)' }}>
               <ArrowDownLeft className="mr-1 inline h-3 w-3" />
@@ -275,9 +275,7 @@ export function FinanzasChequesPage() {
             </p>
           </div>
           <div className="card-minimal px-4 py-3">
-            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">
-              Neto
-            </p>
+            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">Neto</p>
             <p className="text-brand-primary mt-1 text-lg font-semibold">
               {formatMoneyCentavos(data.recibidosCentavos - data.emitidosCentavos, 'ARS')}
             </p>
@@ -285,135 +283,108 @@ export function FinanzasChequesPage() {
         </div>
       ) : null}
 
-      {/* Buscador */}
-      <div className="relative mb-4">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-        <input
-          type="text"
-          className={`${finanzasInputClass} pl-9`}
-          placeholder="Buscar por número, contraparte o cliente…"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
-        {busqueda ? (
-          <button
-            type="button"
-            className="text-body-muted hover:text-heading absolute right-2 top-1/2 -translate-y-1/2 px-1"
-            onClick={() => setBusqueda('')}
-          >
-            ×
-          </button>
+      {/* Nivel 2: Tabs tipo + buscador en la misma línea */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
+          {TIPO_TABS.map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => cambiarFiltro(() => setTipo(val))}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                tipo === val
+                  ? 'bg-brand-primary text-white shadow-sm'
+                  : 'text-body-muted hover:text-heading'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <input
+            type="text"
+            className={`${finanzasInputClass} pl-9`}
+            placeholder="Buscar por número, contraparte o cliente…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          {busqueda ? (
+            <button
+              type="button"
+              className="text-body-muted hover:text-heading absolute right-2 top-1/2 -translate-y-1/2 px-1"
+              onClick={() => setBusqueda('')}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+        {data ? (
+          <span className="text-body-muted text-sm whitespace-nowrap">
+            {total.toLocaleString('es-AR')} cheques · {formatMoneyCentavos(data.totalCentavos, 'ARS')}
+          </span>
         ) : null}
       </div>
 
-      {/* Filtros */}
-      <div className="mb-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Tipo</span>
-          <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
-            {TIPO_TABS.map(([val, label]) => (
-              <button
-                key={val}
-                type="button"
-                onClick={() => cambiarFiltro(() => setTipo(val))}
-                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                  tipo === val
-                    ? 'bg-brand-primary text-white shadow-sm'
-                    : 'text-body-muted hover:text-heading'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </label>
-        <label className="text-sm" data-tour="cheques-filtro-estado">
-          <span className="text-body-muted mb-1 block">Estado</span>
-          <select
-            className={finanzasInputClass}
-            value={estado}
-            onChange={(e) => cambiarFiltro(() => setEstado(e.target.value as ChequeEstado | ''))}
-          >
-            <option value="">Todos</option>
-            {estadosVisibles.map((val) => (
-              <option key={val} value={val}>{CHEQUE_ESTADO_LABELS[val]}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Origen</span>
-          <select
-            className={finanzasInputClass}
-            value={origen}
-            onChange={(e) => cambiarFiltro(() => setOrigen(e.target.value as ChequeOrigen | ''))}
-          >
-            <option value="">Todos</option>
-            {Object.entries(CHEQUE_ORIGEN_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Movimiento</span>
-          <select
-            className={finanzasInputClass}
-            value={vinculacion}
-            onChange={(e) => cambiarFiltro(() => setVinculacion(e.target.value as '' | 'vinculado' | 'sin_vincular'))}
-          >
-            <option value="">Todos</option>
-            <option value="vinculado">Con movimiento</option>
-            <option value="sin_vincular">Sin movimiento</option>
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Comprobante</span>
-          <select
-            className={finanzasInputClass}
-            value={comprobante}
-            onChange={(e) => cambiarFiltro(() => setComprobante(e.target.value as '' | 'con_comprobante' | 'sin_comprobante'))}
-          >
-            <option value="">Todos</option>
-            <option value="con_comprobante">Con comprobante</option>
-            <option value="sin_comprobante">Sin comprobante</option>
-          </select>
-        </label>
+      {/* Nivel 3: Selects de filtro */}
+      <div className="mb-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <select
+          className={finanzasInputClass}
+          value={estado}
+          data-tour="cheques-filtro-estado"
+          onChange={(e) => cambiarFiltro(() => setEstado(e.target.value as ChequeEstado | ''))}
+        >
+          <option value="">Estado: Todos</option>
+          {estadosVisibles.map((val) => (
+            <option key={val} value={val}>{CHEQUE_ESTADO_LABELS[val]}</option>
+          ))}
+        </select>
+        <select
+          className={finanzasInputClass}
+          value={origen}
+          onChange={(e) => cambiarFiltro(() => setOrigen(e.target.value as ChequeOrigen | ''))}
+        >
+          <option value="">Origen: Todos</option>
+          {Object.entries(CHEQUE_ORIGEN_LABELS).map(([val, label]) => (
+            <option key={val} value={val}>{label}</option>
+          ))}
+        </select>
+        <select
+          className={finanzasInputClass}
+          value={vinculacion}
+          onChange={(e) => cambiarFiltro(() => setVinculacion(e.target.value as '' | 'vinculado' | 'sin_vincular'))}
+        >
+          <option value="">Movimiento: Todos</option>
+          <option value="vinculado">Con movimiento</option>
+          <option value="sin_vincular">Sin movimiento</option>
+        </select>
+        <select
+          className={finanzasInputClass}
+          value={comprobante}
+          onChange={(e) => cambiarFiltro(() => setComprobante(e.target.value as '' | 'con_comprobante' | 'sin_comprobante'))}
+        >
+          <option value="">Comprobante: Todos</option>
+          <option value="con_comprobante">Con comprobante</option>
+          <option value="sin_comprobante">Sin comprobante</option>
+        </select>
+        <input
+          type="date"
+          className={finanzasInputClass}
+          value={desde}
+          title="Vencimiento desde"
+          data-tour="cheques-filtro-desde"
+          onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); try { sessionStorage.setItem('cheques_desde', e.target.value) } catch {} })}
+        />
+        <input
+          type="date"
+          className={finanzasInputClass}
+          value={hasta}
+          title="Vencimiento hasta"
+          data-tour="cheques-filtro-hasta"
+          onChange={(e) => cambiarFiltro(() => { setHasta(e.target.value); try { sessionStorage.setItem('cheques_hasta', e.target.value) } catch {} })}
+        />
       </div>
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="text-sm" data-tour="cheques-filtro-desde">
-          <span className="text-body-muted mb-1 block">Vencimiento desde</span>
-          <input
-            type="date"
-            className={finanzasInputClass}
-            value={desde}
-            onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); try { sessionStorage.setItem('cheques_desde', e.target.value) } catch {} })}
-          />
-        </label>
-        <label className="text-sm" data-tour="cheques-filtro-hasta">
-          <span className="text-body-muted mb-1 block">Vencimiento hasta</span>
-          <input
-            type="date"
-            className={finanzasInputClass}
-            value={hasta}
-            onChange={(e) => cambiarFiltro(() => { setHasta(e.target.value); try { sessionStorage.setItem('cheques_hasta', e.target.value) } catch {} })}
-          />
-        </label>
-      </div>
-
-      {/* Total del filtro actual */}
-      {data ? (
-        <div className="mb-4 grid gap-3 sm:grid-cols-2">
-          <div className="card-minimal px-4 py-3">
-            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">Total en filtro</p>
-            <p className="text-brand-primary mt-1 text-lg font-semibold">
-              {formatMoneyCentavos(data.totalCentavos, 'ARS')}
-            </p>
-          </div>
-          <div className="card-minimal px-4 py-3">
-            <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Cheques</p>
-            <p className="text-heading mt-1 text-lg font-semibold">{total.toLocaleString('es-AR')}</p>
-          </div>
-        </div>
-      ) : null}
 
       {isError ? (
         <p className="text-danger text-sm">{error instanceof Error ? error.message : 'No se pudieron cargar los cheques'}</p>
@@ -423,7 +394,7 @@ export function FinanzasChequesPage() {
         <p className="text-body-muted text-sm">Cargando cheques…</p>
       ) : (
         <div className={`surface-card overflow-x-auto ${isFetching ? 'opacity-70' : ''}`} data-tour="cheques-lista">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full text-[0.8125rem]">
             <thead className="surface-muted text-left text-xs uppercase tracking-wide">
               <tr className="text-body-muted">
                 {!direccion ? <th className="px-3 py-2">Dir.</th> : null}

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { AlertTriangle, Bell, CalendarDays, Percent } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../context'
 import {
   fetchConfigInversiones,
@@ -9,8 +10,10 @@ import {
   type Penalidad,
 } from '../../../services/finanzasInversionesApi'
 import { usePermisosFinanzas } from '../permisosFinanzas'
-import { FinanzasFormField, finanzasInputClass } from '../FinanzasFormField'
 import { parseMontoEsArACentavos } from '../montoEsAr'
+import { ConfigCampo, ConfigGrilla, ConfigInputSufijo, ConfigSelect } from './ConfigCampo'
+import { ConfigAviso, ConfigTarjeta } from './ConfigTarjeta'
+import { ConfigRetencionRg830 } from './ConfigRetencionRg830'
 
 type TipoPenalidad = Penalidad['tipo']
 
@@ -124,6 +127,22 @@ function armarConfig(form: FormState): ConfigInversiones | { error: string } {
   }
 }
 
+function formIgual(a: FormState, b: FormState): boolean {
+  return (
+    a.baseDiasDefault === b.baseDiasDefault &&
+    a.penalidadTipo === b.penalidadTipo &&
+    a.penalidadPct === b.penalidadPct &&
+    a.penalidadMonto === b.penalidadMonto &&
+    a.topeIntereses === b.topeIntereses &&
+    a.diasAvisoPorVencer === b.diasAvisoPorVencer &&
+    a.horizonteMesesSinVencimiento === b.horizonteMesesSinVencimiento &&
+    a.retencionActiva === b.retencionActiva &&
+    a.alicuotaInscriptoPct === b.alicuotaInscriptoPct &&
+    a.alicuotaNoInscriptoPct === b.alicuotaNoInscriptoPct &&
+    a.minimoNoSujeto === b.minimoNoSujeto
+  )
+}
+
 export function PestanaConfiguracion() {
   const { user } = useAuth()
   const { aprobarInversiones } = usePermisosFinanzas()
@@ -148,6 +167,11 @@ export function PestanaConfiguracion() {
     setForm((prev) => (prev ? { ...prev, [clave]: valor } : prev))
     setOkMsg(null)
   }
+
+  const hayCambios = useMemo(() => {
+    if (!form || !data) return false
+    return !formIgual(form, deConfig(data))
+  }, [form, data])
 
   const guardar = async () => {
     if (!form || !editable) return
@@ -190,194 +214,196 @@ export function PestanaConfiguracion() {
   const ro = !editable
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="mx-auto w-full max-w-3xl space-y-4 pb-24 sm:pb-6">
       {!editable ? (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100">
+        <ConfigAviso tono="amber" icono={AlertTriangle}>
           Solo el Líder de Finanzas cambia la configuración.
-        </p>
+        </ConfigAviso>
       ) : null}
 
-      <FinanzasFormField label="Base de días" htmlFor="cfg-base">
-        <select
-          id="cfg-base"
-          value={String(form.baseDiasDefault)}
-          disabled={ro}
-          onChange={(e) => {
-            const v = e.target.value
-            const base: BaseDias =
-              v === '365' ? 365 : v === '360' ? 360 : v === '360_reales' ? '360_reales' : 'reales'
-            set('baseDiasDefault', base)
-          }}
-          className={finanzasInputClass}
+      <ConfigTarjeta
+        tono="sky"
+        icono={CalendarDays}
+        titulo="Base de días"
+        descripcion="Cómo se cuentan los días al calcular intereses en las inversiones nuevas."
+      >
+        <ConfigCampo
+          label="Base de días"
+          htmlFor="cfg-base"
+          ayuda="Se usa como valor por defecto al crear una inversión."
         >
-          <option value="365">365 días</option>
-          <option value="360">360 con meses de 30 días</option>
-          <option value="360_reales">360 con días reales</option>
-          <option value="reales">Días reales</option>
-        </select>
-      </FinanzasFormField>
-
-      <div className="space-y-3">
-        <FinanzasFormField label="Penalidad por devolver antes" htmlFor="cfg-penalidad">
-          <select
-            id="cfg-penalidad"
-            value={form.penalidadTipo}
+          <ConfigSelect
+            id="cfg-base"
+            value={String(form.baseDiasDefault)}
             disabled={ro}
-            onChange={(e) => set('penalidadTipo', e.target.value as TipoPenalidad)}
-            className={finanzasInputClass}
+            onChange={(e) => {
+              const v = e.target.value
+              const base: BaseDias =
+                v === '365' ? 365 : v === '360' ? 360 : v === '360_reales' ? '360_reales' : 'reales'
+              set('baseDiasDefault', base)
+            }}
           >
-            <option value="ninguna">Ninguna</option>
-            <option value="porcentaje_interes">% del interés</option>
-            <option value="porcentaje_capital">% del capital</option>
-            <option value="monto_fijo">Monto fijo</option>
-          </select>
-        </FinanzasFormField>
+            <option value="365">365 días</option>
+            <option value="360">360 con meses de 30 días</option>
+            <option value="360_reales">360 con días reales</option>
+            <option value="reales">Días reales</option>
+          </ConfigSelect>
+        </ConfigCampo>
+      </ConfigTarjeta>
 
-        {form.penalidadTipo === 'porcentaje_interes' || form.penalidadTipo === 'porcentaje_capital' ? (
-          <FinanzasFormField label="Porcentaje de la penalidad" htmlFor="cfg-penalidad-pct">
-            <input
-              id="cfg-penalidad-pct"
-              type="text"
-              inputMode="decimal"
-              value={form.penalidadPct}
+      <ConfigTarjeta
+        tono="amber"
+        icono={Percent}
+        titulo="Penalidad por devolver antes"
+        descripcion="Qué se descuenta si el inversor pide la plata antes de tiempo."
+      >
+        <ConfigGrilla>
+          <ConfigCampo label="Tipo de penalidad" htmlFor="cfg-penalidad">
+            <ConfigSelect
+              id="cfg-penalidad"
+              value={form.penalidadTipo}
               disabled={ro}
-              onChange={(e) => set('penalidadPct', e.target.value)}
-              placeholder="Ej.: 10"
-              className={finanzasInputClass}
-            />
-          </FinanzasFormField>
-        ) : null}
+              onChange={(e) => set('penalidadTipo', e.target.value as TipoPenalidad)}
+            >
+              <option value="ninguna">Ninguna</option>
+              <option value="porcentaje_interes">% del interés</option>
+              <option value="porcentaje_capital">% del capital</option>
+              <option value="monto_fijo">Monto fijo</option>
+            </ConfigSelect>
+          </ConfigCampo>
 
-        {form.penalidadTipo === 'monto_fijo' ? (
-          <FinanzasFormField label="Monto fijo de la penalidad ($)" htmlFor="cfg-penalidad-monto">
-            <input
-              id="cfg-penalidad-monto"
-              type="text"
-              inputMode="decimal"
-              value={form.penalidadMonto}
-              disabled={ro}
-              onChange={(e) => set('penalidadMonto', e.target.value)}
-              placeholder="Ej.: 10.000,00"
-              className={finanzasInputClass}
-            />
-          </FinanzasFormField>
-        ) : null}
+          {form.penalidadTipo === 'porcentaje_interes' || form.penalidadTipo === 'porcentaje_capital' ? (
+            <ConfigCampo
+              label="Porcentaje"
+              htmlFor="cfg-penalidad-pct"
+              ayuda="Sobre el interés o el capital, según el tipo elegido."
+            >
+              <ConfigInputSufijo
+                id="cfg-penalidad-pct"
+                type="text"
+                inputMode="decimal"
+                value={form.penalidadPct}
+                disabled={ro}
+                onChange={(e) => set('penalidadPct', e.target.value)}
+                placeholder="Ej.: 10"
+                sufijo="%"
+              />
+            </ConfigCampo>
+          ) : null}
+
+          {form.penalidadTipo === 'monto_fijo' ? (
+            <ConfigCampo label="Monto fijo" htmlFor="cfg-penalidad-monto">
+              <ConfigInputSufijo
+                id="cfg-penalidad-monto"
+                type="text"
+                inputMode="decimal"
+                value={form.penalidadMonto}
+                disabled={ro}
+                onChange={(e) => set('penalidadMonto', e.target.value)}
+                placeholder="Ej.: 10.000,00"
+                sufijo="$"
+              />
+            </ConfigCampo>
+          ) : null}
+        </ConfigGrilla>
 
         {form.penalidadTipo !== 'ninguna' ? (
-          <label className="flex items-center gap-2 text-sm">
+          <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-sm">
             <input
               type="checkbox"
               checked={form.topeIntereses}
               disabled={ro}
               onChange={(e) => set('topeIntereses', e.target.checked)}
-              className="rounded border-neutral-300"
+              className="mt-0.5 rounded border-neutral-300"
             />
-            No puede superar los intereses
+            <span>
+              <span className="text-heading font-medium">No puede superar los intereses</span>
+              <span className="text-body-muted mt-0.5 block text-xs">
+                La penalidad se corta si llega al monto de intereses acumulados.
+              </span>
+            </span>
           </label>
         ) : null}
-      </div>
+      </ConfigTarjeta>
 
-      <FinanzasFormField label="Días de aviso por vencer" htmlFor="cfg-dias-aviso">
-        <input
-          id="cfg-dias-aviso"
-          type="number"
-          min={0}
-          max={365}
-          value={form.diasAvisoPorVencer}
-          disabled={ro}
-          onChange={(e) => set('diasAvisoPorVencer', e.target.value)}
-          className={finanzasInputClass}
-        />
-      </FinanzasFormField>
-
-      <FinanzasFormField
-        label="Meses hacia adelante para las inversiones sin fecha de devolución"
-        htmlFor="cfg-horizonte"
+      <ConfigTarjeta
+        tono="violet"
+        icono={Bell}
+        titulo="Avisos y horizonte"
+        descripcion="Cuándo avisar vencimientos y hasta dónde proyectar inversiones sin fecha de devolución."
       >
-        <input
-          id="cfg-horizonte"
-          type="number"
-          min={1}
-          max={60}
-          value={form.horizonteMesesSinVencimiento}
-          disabled={ro}
-          onChange={(e) => set('horizonteMesesSinVencimiento', e.target.value)}
-          className={finanzasInputClass}
-        />
-      </FinanzasFormField>
-
-      <section className="rounded-2xl border border-neutral-200 p-4 dark:border-zinc-800">
-        <h3 className="text-heading text-sm font-semibold">Retención de Ganancias (RG 830)</h3>
-        <p className="text-body-muted mt-2 text-xs">
-          Si está activo, a cada pago de intereses se le descuenta la retención y en la Agenda queda el
-          neto. Las alícuotas las define Finanzas con el contador.
-        </p>
-
-        <label className="mt-4 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.retencionActiva}
-            disabled={ro}
-            onChange={(e) => set('retencionActiva', e.target.checked)}
-            className="rounded border-neutral-300"
-          />
-          Retenemos Ganancias sobre los intereses que pagamos
-        </label>
-
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <FinanzasFormField label="Alícuota inscriptos (%)" htmlFor="cfg-ali-si" optional>
-            <input
-              id="cfg-ali-si"
-              type="text"
-              inputMode="decimal"
-              value={form.alicuotaInscriptoPct}
+        <ConfigGrilla>
+          <ConfigCampo
+            label="Días de aviso por vencer"
+            htmlFor="cfg-dias-aviso"
+            ayuda="Entre 0 y 365. Marca las cuotas que están por vencer."
+          >
+            <ConfigInputSufijo
+              id="cfg-dias-aviso"
+              type="number"
+              min={0}
+              max={365}
+              value={form.diasAvisoPorVencer}
               disabled={ro}
-              onChange={(e) => set('alicuotaInscriptoPct', e.target.value)}
-              placeholder="Ej.: 3"
-              className={finanzasInputClass}
+              onChange={(e) => set('diasAvisoPorVencer', e.target.value)}
+              sufijo="días"
             />
-          </FinanzasFormField>
-          <FinanzasFormField label="Alícuota no inscriptos (%)" htmlFor="cfg-ali-no" optional>
-            <input
-              id="cfg-ali-no"
-              type="text"
-              inputMode="decimal"
-              value={form.alicuotaNoInscriptoPct}
+          </ConfigCampo>
+
+          <ConfigCampo
+            label="Meses hacia adelante"
+            htmlFor="cfg-horizonte"
+            ayuda="Para inversiones sin fecha de devolución (entre 1 y 60)."
+          >
+            <ConfigInputSufijo
+              id="cfg-horizonte"
+              type="number"
+              min={1}
+              max={60}
+              value={form.horizonteMesesSinVencimiento}
               disabled={ro}
-              onChange={(e) => set('alicuotaNoInscriptoPct', e.target.value)}
-              placeholder="Ej.: 35"
-              className={finanzasInputClass}
+              onChange={(e) => set('horizonteMesesSinVencimiento', e.target.value)}
+              sufijo="meses"
             />
-          </FinanzasFormField>
-          <div className="sm:col-span-2">
-            <FinanzasFormField label="Mínimo no sujeto ($)" htmlFor="cfg-minimo" optional>
-              <input
-                id="cfg-minimo"
-                type="text"
-                inputMode="decimal"
-                value={form.minimoNoSujeto}
-                disabled={ro}
-                onChange={(e) => set('minimoNoSujeto', e.target.value)}
-                placeholder="Ej.: 1.000,00"
-                className={finanzasInputClass}
-              />
-            </FinanzasFormField>
-          </div>
-        </div>
-      </section>
+          </ConfigCampo>
+        </ConfigGrilla>
+      </ConfigTarjeta>
+
+      <ConfigRetencionRg830
+        retencionActiva={form.retencionActiva}
+        alicuotaInscriptoPct={form.alicuotaInscriptoPct}
+        alicuotaNoInscriptoPct={form.alicuotaNoInscriptoPct}
+        minimoNoSujeto={form.minimoNoSujeto}
+        soloLectura={ro}
+        onActiva={(v) => set('retencionActiva', v)}
+        onAlicuotaInscripto={(v) => set('alicuotaInscriptoPct', v)}
+        onAlicuotaNoInscripto={(v) => set('alicuotaNoInscriptoPct', v)}
+        onMinimoNoSujeto={(v) => set('minimoNoSujeto', v)}
+      />
 
       {errorLocal ? <p className="text-danger text-sm">{errorLocal}</p> : null}
-      {okMsg ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{okMsg}</p> : null}
+      {okMsg ? (
+        <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{okMsg}</p>
+      ) : null}
 
       {editable ? (
-        <button
-          type="button"
-          onClick={() => void guardar()}
-          disabled={guardando}
-          className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
-        >
-          {guardando ? 'Guardando…' : 'Guardar configuración'}
-        </button>
+        <div className="sticky bottom-0 z-10 -mx-1 border-t border-neutral-200/80 bg-white/95 px-1 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none dark:sm:bg-transparent">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void guardar()}
+              disabled={guardando}
+              className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+            >
+              {guardando ? 'Guardando…' : 'Guardar configuración'}
+            </button>
+            {hayCambios ? (
+              <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                Cambios sin guardar
+              </span>
+            ) : null}
+          </div>
+        </div>
       ) : null}
     </div>
   )

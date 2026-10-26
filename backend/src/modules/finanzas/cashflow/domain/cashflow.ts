@@ -603,23 +603,25 @@ export function armarCashflow(input: {
     movimientos: input.movimientos,
   })
 
-  // Lo que el banco todavía no detalló (avisos) se suma a Entró/Salió para que
-  // Arrancamos + Entró − Salió siga dando Terminamos, sin número "de menos".
-  const ajusteFaltante = saldosPorCuenta.avisos.reduce(
-    (ajuste, aviso) => {
-      if (aviso.faltanteCentavos < 0) ajuste.salidasCentavos += -aviso.faltanteCentavos
-      else ajuste.entradasCentavos += aviso.faltanteCentavos
-      return ajuste
-    },
-    { entradasCentavos: 0, salidasCentavos: 0 },
+  // Lo que el banco todavía no detalló (avisos) se suma a "Arrancamos el día con"
+  // para que no se vea un número de menos; Entró/Salió quedan con lo que sí tiene
+  // detalle, y Arrancamos + Entró − Salió sigue dando Terminamos.
+  const ajusteFaltanteCentavos = saldosPorCuenta.avisos.reduce(
+    (total, aviso) => total + aviso.faltanteCentavos,
+    0,
   )
 
   return {
     fecha: input.fecha,
     moneda: input.moneda,
     ...grupos,
-    entradasCentavos: grupos.entradasCentavos + ajusteFaltante.entradasCentavos,
-    salidasCentavos: grupos.salidasCentavos + ajusteFaltante.salidasCentavos,
     ...saldosPorCuenta,
+    saldoInicial:
+      saldosPorCuenta.saldoInicial && ajusteFaltanteCentavos !== 0
+        ? {
+            fechaId: saldosPorCuenta.saldoInicial.fechaId,
+            centavos: saldosPorCuenta.saldoInicial.centavos + ajusteFaltanteCentavos,
+          }
+        : saldosPorCuenta.saldoInicial,
   }
 }

@@ -381,7 +381,9 @@ describe('cashflow con cierre del banco', () => {
     })
 
     expect(cashflow.origenSaldos).toBe('banco')
-    expect(cashflow.saldoInicial).toEqual({ fechaId: '2026-09-28', centavos: -100_000_00 })
+    // El saldo inicial "oficial" es -100_000_00; se le suma el faltante de Julio
+    // (-47_800_00, plata que salió sin detalle) para que no se vea de menos.
+    expect(cashflow.saldoInicial).toEqual({ fechaId: '2026-09-28', centavos: -147_800_00 })
     expect(cashflow.saldoFinal).toEqual({ estado: 'en_curso', centavos: -147_000_00 })
     expect(cashflow.entradasCentavos).toBe(800_00)
     expect(cashflow.entradas[0]?.grupo).toBe('Cobros de clientes')

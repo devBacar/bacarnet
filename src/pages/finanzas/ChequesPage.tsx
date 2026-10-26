@@ -175,10 +175,10 @@ export function FinanzasChequesPage() {
   const TIPO_TABS: [ChequeTipo | '', string][] = [['', 'Todos'], ['echeq', 'eCheq'], ['fisico', 'Físicos']]
 
   const estadosVisibles: ChequeEstado[] = direccion === 'emitido'
-    ? ['pendiente', 'debitado', 'rechazado']
+    ? ['pendiente', 'debitado', 'rechazado', 'renovado']
     : direccion === 'recibido'
       ? ['en_cartera', 'depositado', 'vendido', 'rechazado']
-      : ['en_cartera', 'depositado', 'vendido', 'rechazado', 'pendiente', 'debitado']
+      : ['en_cartera', 'depositado', 'vendido', 'rechazado', 'pendiente', 'debitado', 'renovado']
 
   return (
     <>
@@ -564,6 +564,7 @@ function CondicionBadge({ estado }: { estado: ChequeEstado }) {
     rechazado: 'bg-[var(--color-danger-bg)] text-[var(--color-danger-text)] border-[var(--color-danger-border)]',
     pendiente: 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200',
     debitado: 'border-sky-300 bg-sky-100 text-sky-900 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-200',
+    renovado: 'border-subtle surface-muted text-body-muted',
   }
   return (
     <span className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${styles[estado]}`}>

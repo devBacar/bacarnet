@@ -19,8 +19,16 @@ import { FormularioCompromiso } from './compromisosMes/FormularioCompromiso'
 import { LeyendaPlanilla } from './compromisosMes/planillaComun'
 import { PlanillaCompromisos } from './compromisosMes/PlanillaCompromisos'
 import { PlanillaPorSemana } from './compromisosMes/PlanillaPorSemana'
+import { ProveedoresFinancierosPanel } from './compromisosMes/ProveedoresFinancierosPanel'
 import { usePermisosFinanzas } from '../permisosFinanzas'
 import { botonChico } from './TarjetasHoy'
+
+/** Grupo solo de vista en la planilla; el compromiso se guarda como Proveedores. */
+const GRUPO_VISTA_GASTOS_FINANCIEROS = 'Gastos financieros'
+
+function grupoEditable(grupo: string): string {
+  return grupo === GRUPO_VISTA_GASTOS_FINANCIEROS ? 'Proveedores' : grupo
+}
 
 const CLAVE_VISTA = 'bacarnet.planilla-mes.vista'
 type VistaPlanilla = 'semana' | 'dia'
@@ -109,19 +117,21 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
   const abrirAlta = (grupo: string) => {
     setFormulario({
       modo: 'alta',
-      inicial: { ...COMPROMISO_VACIO, grupo, fechaVencimiento: `${mes}-01` },
+      inicial: { ...COMPROMISO_VACIO, grupo: grupoEditable(grupo), fechaVencimiento: `${mes}-01` },
     })
   }
 
   const abrirEdicion = (fila: FilaCompromisoMes) => {
+    const grupoVista =
+      planilla.data?.grupos.find((grupo) => grupo.filas.some((item) => item.compromisoId === fila.compromisoId))
+        ?.grupo ?? 'Otros egresos'
     setFormulario({
       modo: 'editar',
       id: fila.compromisoId,
       inicial: {
         concepto: fila.concepto,
         proveedorONombre: fila.proveedorONombre,
-        grupo: planilla.data?.grupos.find((grupo) => grupo.filas.some((item) => item.compromisoId === fila.compromisoId))
-          ?.grupo ?? 'Otros egresos',
+        grupo: grupoEditable(grupoVista),
         moneda: fila.moneda,
         montoCentavos: fila.importeCentavos,
         fechaVencimiento: fila.fechaVencimiento,
@@ -240,6 +250,7 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
               ) : null}
             </p>
           )}
+          <ProveedoresFinancierosPanel />
           {puedeEditar ? (
             <button type="button" className={`${botonChico} gap-1`} onClick={() => abrirAlta('Otros egresos')}>
               <Plus className="h-4 w-4" aria-hidden />
@@ -283,7 +294,11 @@ export function CompromisosMes({ onPagar }: { onPagar: (compromisoId: string) =>
       {puedeEditar && formulario ? (
         <FormularioCompromiso
           titulo={formulario.modo === 'alta' ? 'Nuevo compromiso' : 'Editar compromiso'}
-          grupos={planilla.data?.grupos.map((grupo) => grupo.grupo) ?? [...GRUPOS_COMPROMISO]}
+          grupos={
+            planilla.data?.grupos
+              .map((grupo) => grupo.grupo)
+              .filter((grupo) => grupo !== GRUPO_VISTA_GASTOS_FINANCIEROS) ?? [...GRUPOS_COMPROMISO]
+          }
           inicial={formulario.inicial}
           onClose={() => setFormulario(null)}
           onSave={async (body) => {

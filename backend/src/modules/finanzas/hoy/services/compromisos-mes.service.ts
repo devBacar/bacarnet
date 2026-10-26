@@ -11,6 +11,7 @@ import {
   createCompromisoAgenda,
   patchCompromisoAgenda,
 } from '../../agenda/services/compromisos.service.js'
+import { nombresNormalizadosProveedoresFinancieros } from '../../agenda/services/proveedores-financieros.repository.js'
 import { armarPlanillaMes, parseMes, type CompromisoParaPlanilla, type PlanillaMes } from '../domain/compromisos-mes.js'
 import { feriadosNacionales2026 } from '../domain/feriados-nacionales-2026.js'
 import { fechaHoyArgentina } from '../domain/hoy.fechas.js'
@@ -85,7 +86,11 @@ function fuenteDe(row: CompromisoParaPlanilla): FuentePago {
 
 export async function getPlanillaCompromisosMes(mes: string, now = new Date()): Promise<PlanillaMes> {
   if (!parseMes(mes)) throw new CompromisoMesError('Indicá el mes con formato AAAA-MM', 400)
-  const [rows, tipo] = await Promise.all([listAllCompromisos(), getTipoCambioMes(mes)])
+  const [rows, tipo, proveedoresFinancieros] = await Promise.all([
+    listAllCompromisos(),
+    getTipoCambioMes(mes),
+    nombresNormalizadosProveedoresFinancieros(),
+  ])
   const bases = rows.flatMap((row) => {
     const mapped = aPlanilla(row.id, row.data)
     return mapped ? [mapped] : []
@@ -101,6 +106,7 @@ export async function getPlanillaCompromisosMes(mes: string, now = new Date()): 
     tipoCambio: tipo?.usdArs ?? null,
     feriados: feriadosNacionales2026(),
     compromisos,
+    proveedoresFinancieros,
   })
   for (const grupo of planilla.grupos) {
     for (const fila of grupo.filas) {

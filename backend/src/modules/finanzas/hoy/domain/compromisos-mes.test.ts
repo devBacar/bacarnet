@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
 import type { CompromisoParaPlanilla } from './compromisos-mes.js'
 import {
   armarColumnasMes,
   armarPlanillaMes,
   arsConvertido,
   clasificarDia,
+  GRUPO_VISTA_GASTOS_FINANCIEROS,
   ubicarPlanificado,
 } from './compromisos-mes.js'
 import { feriadosNacionales2026 } from './feriados-nacionales-2026.js'
@@ -240,6 +242,42 @@ describe('planificado, acumulado y totales', () => {
       compromisos: [compromiso({ id: 'raro', grupo: 'Grupo inventado' })],
     })
     expect(planilla.grupos.find((grupo) => grupo.grupo === 'Otros egresos')?.filas).toHaveLength(1)
+  })
+
+  it('un Proveedor financiero pasa a Gastos financieros y deja de sumar en Proveedores', () => {
+    const financieros = new Set([normalizarNombre('Matriz Finanzas SA')])
+    const planilla = armarPlanillaMes({
+      mes: '2026-09',
+      hoy: '2026-09-10',
+      tipoCambio: null,
+      feriados,
+      proveedoresFinancieros: financieros,
+      compromisos: [
+        compromiso({
+          id: 'comision-echeq',
+          grupo: 'Proveedores',
+          proveedorONombre: 'matriz finanzas sa',
+          concepto: 'Comisión echeq',
+          montoCentavos: 50_000,
+          fechaVencimiento: '2026-09-10',
+        }),
+        compromiso({
+          id: 'insumo',
+          grupo: 'Proveedores',
+          proveedorONombre: 'Papelería Norte',
+          concepto: 'Resmas',
+          montoCentavos: 20_000,
+          fechaVencimiento: '2026-09-11',
+        }),
+      ],
+    })
+    const proveedores = planilla.grupos.find((grupo) => grupo.grupo === 'Proveedores')
+    const gastos = planilla.grupos.find((grupo) => grupo.grupo === GRUPO_VISTA_GASTOS_FINANCIEROS)
+    expect(proveedores?.filas.map((fila) => fila.compromisoId)).toEqual(['insumo'])
+    expect(proveedores?.subtotal.importe).toEqual({ ars: 20_000, usd: 0 })
+    expect(gastos?.filas.map((fila) => fila.compromisoId)).toEqual(['comision-echeq'])
+    expect(gastos?.subtotal.importe).toEqual({ ars: 50_000, usd: 0 })
+    expect(planilla.grupos.map((grupo) => grupo.grupo)).toContain(GRUPO_VISTA_GASTOS_FINANCIEROS)
   })
 })
 

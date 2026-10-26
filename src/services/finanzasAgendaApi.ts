@@ -227,3 +227,45 @@ export async function fetchPagosHechos(mes: string): Promise<{ desde: string; ha
   }
   return (await res.json()) as { desde: string; hasta: string; pagos: PagoHechoItem[] }
 }
+
+export const PROVEEDORES_FINANCIEROS_QUERY_KEY = ['finanzas', 'agenda', 'proveedores-financieros'] as const
+
+export interface ProveedorFinancieroItem {
+  id: string
+  nombre: string
+  creadoPor: string
+  createdAt: string | null
+}
+
+export async function fetchProveedoresFinancieros(): Promise<ProveedorFinancieroItem[]> {
+  const res = await agendaFetch('/proveedores-financieros')
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(payload.error ?? 'No se pudieron cargar los proveedores financieros')
+  }
+  const data = (await res.json()) as { proveedores: ProveedorFinancieroItem[] }
+  return data.proveedores
+}
+
+export async function agregarProveedorFinanciero(nombre: string): Promise<ProveedorFinancieroItem> {
+  const res = await agendaFetch('/proveedores-financieros', {
+    method: 'POST',
+    body: JSON.stringify({ nombre }),
+  })
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(payload.error ?? 'No se pudo agregar el proveedor financiero')
+  }
+  const data = (await res.json()) as { proveedor: ProveedorFinancieroItem }
+  return data.proveedor
+}
+
+export async function quitarProveedorFinanciero(id: string): Promise<void> {
+  const res = await agendaFetch(`/proveedores-financieros/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(payload.error ?? 'No se pudo sacar el proveedor financiero')
+  }
+}

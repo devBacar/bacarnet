@@ -190,14 +190,14 @@ export async function pageCheques(input: {
   return snap.docs.map((doc) => toListadoItem(doc.id, doc.data()))
 }
 
-export async function sumChequesCentavos(filtro: ChequesFiltro): Promise<number> {
-  if (needsInMemory(filtro)) {
-    const docs = await loadFiltradoInMemory(filtro)
-    return docs.reduce((sum, doc) => {
-      const v = doc.data().montoCentavos
-      return sum + (typeof v === 'number' ? v : 0)
-    }, 0)
-  }
+/** Renovados no suman en totales generales (ya fueron reemplazados). Sí suman si el filtro es Renovado. */
+function montoSumaDoc(doc: FirebaseFirestore.QueryDocumentSnapshot, excluirRenovados: boolean): number {
+  const data = doc.data()
+  if (excluirRenovados && data.estado === 'renovado') return 0
+  return typeof data.montoCentavos === 'number' ? data.montoCentavos : 0
+}
+
+async function aggregateSumCentavos(filtro: ChequesFiltro): Promise<number> {
   const query = applyFiltro(collection(), filtro)
   const { AggregateField } = await import('firebase-admin/firestore')
   const snap = await query.aggregate({ total: AggregateField.sum('montoCentavos') }).get()
@@ -205,34 +205,43 @@ export async function sumChequesCentavos(filtro: ChequesFiltro): Promise<number>
   return typeof total === 'number' ? total : 0
 }
 
+export async function sumChequesCentavos(filtro: ChequesFiltro): Promise<number> {
+  const excluirRenovados = filtro.estado !== 'renovado'
+  if (needsInMemory(filtro)) {
+    const docs = await loadFiltradoInMemory(filtro)
+    return docs.reduce((sum, doc) => sum + montoSumaDoc(doc, excluirRenovados), 0)
+  }
+  const total = await aggregateSumCentavos(filtro)
+  if (!excluirRenovados || filtro.estado) return total
+  const renovados = await aggregateSumCentavos({ ...filtro, estado: 'renovado' })
+  return total - renovados
+}
+
 export async function sumChequesPorDireccion(filtro: Omit<ChequesFiltro, 'direccion'>): Promise<{
   recibidosCentavos: number
   emitidosCentavos: number
 }> {
+  const excluirRenovados = filtro.estado !== 'renovado'
   if (filtro.vinculacion || filtro.comprobante || filtro.q) {
     const [recDocs, emDocs] = await Promise.all([
       loadFiltradoInMemory({ ...filtro, direccion: 'recibido' }),
       loadFiltradoInMemory({ ...filtro, direccion: 'emitido' }),
     ])
     const sumDocs = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) =>
-      docs.reduce((s, d) => { const v = d.data().montoCentavos; return s + (typeof v === 'number' ? v : 0) }, 0)
+      docs.reduce((s, d) => s + montoSumaDoc(d, excluirRenovados), 0)
     return { recibidosCentavos: sumDocs(recDocs), emitidosCentavos: sumDocs(emDocs) }
   }
-  const { AggregateField } = await import('firebase-admin/firestore')
-  const [recSnap, emSnap] = await Promise.all([
-    applyFiltro(collection(), { ...filtro, direccion: 'recibido' })
-      .aggregate({ total: AggregateField.sum('montoCentavos') })
-      .get(),
-    applyFiltro(collection(), { ...filtro, direccion: 'emitido' })
-      .aggregate({ total: AggregateField.sum('montoCentavos') })
-      .get(),
-  ])
-  const rec = recSnap.data().total
-  const em = emSnap.data().total
-  return {
-    recibidosCentavos: typeof rec === 'number' ? rec : 0,
-    emitidosCentavos: typeof em === 'number' ? em : 0,
+  const sumDir = async (direccion: 'recibido' | 'emitido') => {
+    const total = await aggregateSumCentavos({ ...filtro, direccion })
+    if (!excluirRenovados || filtro.estado) return total
+    const renovados = await aggregateSumCentavos({ ...filtro, direccion, estado: 'renovado' })
+    return total - renovados
   }
+  const [recibidosCentavos, emitidosCentavos] = await Promise.all([
+    sumDir('recibido'),
+    sumDir('emitido'),
+  ])
+  return { recibidosCentavos, emitidosCentavos }
 }
 
 export function chequeDocId(direccion: ChequeDireccion, numero: string): string {

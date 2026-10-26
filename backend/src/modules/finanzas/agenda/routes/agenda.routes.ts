@@ -17,10 +17,63 @@ import {
   patchCompromisoUrgencia,
 } from '../services/compromisos.service.js'
 import { listarPagosHechos, PagosHechosError } from '../services/pagos-hechos.service.js'
+import {
+  agregarProveedorFinanciero,
+  listarProveedoresFinancieros,
+  ProveedorFinancieroError,
+  quitarProveedorFinanciero,
+} from '../services/proveedores-financieros.service.js'
 
 export const finanzasAgendaRouter = Router()
 
 finanzasAgendaRouter.use(requireWorkspaceUser, requireViewFinanzas)
+
+finanzasAgendaRouter.get('/proveedores-financieros', async (_req, res) => {
+  try {
+    const proveedores = await listarProveedoresFinancieros()
+    res.json({ proveedores })
+  } catch (err) {
+    console.error('[finanzas/agenda] list proveedores financieros', err)
+    res.status(500).json({ error: 'No se pudieron listar los proveedores financieros' })
+  }
+})
+
+finanzasAgendaRouter.post(
+  '/proveedores-financieros',
+  requireFinanzasPermiso('finanzas_agenda'),
+  async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>
+      const proveedor = await agregarProveedorFinanciero(body.nombre, req.authedUser!.uid)
+      res.status(201).json({ proveedor })
+    } catch (err) {
+      if (err instanceof ProveedorFinancieroError) {
+        res.status(err.status).json({ error: err.message })
+        return
+      }
+      console.error('[finanzas/agenda] alta proveedor financiero', err)
+      res.status(500).json({ error: 'No se pudo agregar el proveedor financiero' })
+    }
+  },
+)
+
+finanzasAgendaRouter.delete(
+  '/proveedores-financieros/:id',
+  requireFinanzasPermiso('finanzas_agenda'),
+  async (req, res) => {
+    try {
+      await quitarProveedorFinanciero(req.params.id)
+      res.status(204).send()
+    } catch (err) {
+      if (err instanceof ProveedorFinancieroError) {
+        res.status(err.status).json({ error: err.message })
+        return
+      }
+      console.error('[finanzas/agenda] baja proveedor financiero', err)
+      res.status(500).json({ error: 'No se pudo sacar el proveedor financiero' })
+    }
+  },
+)
 
 finanzasAgendaRouter.get('/pagos-hechos', async (req, res) => {
   try {

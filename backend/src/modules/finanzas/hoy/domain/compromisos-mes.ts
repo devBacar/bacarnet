@@ -14,6 +14,35 @@ import {
 } from '../../agenda/domain/pago-compromiso.js'
 import type { MedioPago, MonedaCompromiso } from '../../agenda/domain/agenda.types.js'
 import { GRUPOS_COMPROMISO } from '../../agenda/domain/grupos-compromiso.js'
+import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
+
+/** Solo vista de planilla: no se guarda en el compromiso. */
+export const GRUPO_VISTA_GASTOS_FINANCIEROS = 'Gastos financieros'
+
+/** Orden de grupos en la planilla (incluye Gastos financieros después de Proveedores). */
+export const GRUPOS_PLANILLA: readonly string[] = GRUPOS_COMPROMISO.flatMap((grupo) =>
+  grupo === 'Proveedores' ? [grupo, GRUPO_VISTA_GASTOS_FINANCIEROS] : [grupo],
+)
+
+/**
+ * Reagrupa Proveedores → Gastos financieros si el nombre está en la lista financiera.
+ * No toca el `grupo` guardado en Firestore.
+ */
+export function grupoVistaPlanilla(
+  grupo: string,
+  proveedorONombre: string,
+  proveedoresFinancieros: ReadonlySet<string>,
+): string {
+  const normalizado = normalizarGrupo(grupo)
+  if (
+    normalizado === 'Proveedores' &&
+    proveedoresFinancieros.size > 0 &&
+    proveedoresFinancieros.has(normalizarNombre(proveedorONombre))
+  ) {
+    return GRUPO_VISTA_GASTOS_FINANCIEROS
+  }
+  return normalizado
+}
 
 export type TipoColumnaDia = 'habil' | 'finde' | 'feriado'
 
@@ -316,14 +345,20 @@ export function armarPlanillaMes(input: {
   tipoCambio: number | null
   feriados: ReadonlySet<string>
   compromisos: readonly CompromisoParaPlanilla[]
+  /** Nombres normalizados de proveedores financieros (echeq / comisión). */
+  proveedoresFinancieros?: ReadonlySet<string>
 }): PlanillaMes {
   const columnas = armarColumnasMes(input.mes, input.hoy, input.feriados)
+  const financieros = input.proveedoresFinancieros ?? new Set<string>()
   const grupos = new Map<string, FilaPlanilla[]>()
-  for (const grupo of GRUPOS_COMPROMISO) grupos.set(grupo, [])
+  for (const grupo of GRUPOS_PLANILLA) grupos.set(grupo, [])
 
   const filas = input.compromisos
     .filter((row) => visibleEnMes(row, input.mes))
-    .map((row) => ({ grupo: normalizarGrupo(row.grupo), fila: filaDe(row, columnas, input.feriados, input.mes) }))
+    .map((row) => ({
+      grupo: grupoVistaPlanilla(row.grupo, row.proveedorONombre, financieros),
+      fila: filaDe(row, columnas, input.feriados, input.mes),
+    }))
     .sort((a, b) => {
       const porFecha = a.fila.fechaVencimiento.localeCompare(b.fila.fechaVencimiento)
       if (porFecha !== 0) return porFecha
@@ -338,7 +373,7 @@ export function armarPlanillaMes(input: {
   const totalEgresosPorDia: PlanillaMes['totalEgresosPorDia'] = {}
   const gruposArmados: GrupoPlanilla[] = []
 
-  for (const grupo of GRUPOS_COMPROMISO) {
+  for (const grupo of GRUPOS_PLANILLA) {
     const filasGrupo = grupos.get(grupo) ?? []
     const subtotalPorDia: Record<string, MontosMoneda> = {}
     const subtotal = {

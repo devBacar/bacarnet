@@ -80,7 +80,7 @@ function validOrigen(raw: string | undefined): ChequeOrigen | null {
 
 const VALID_ESTADOS: ChequeEstado[] = [
   'en_cartera', 'depositado', 'vendido', 'rechazado',
-  'pendiente', 'debitado',
+  'pendiente', 'debitado', 'renovado',
 ]
 
 function validEstado(raw: string | undefined): ChequeEstado | null {
@@ -619,9 +619,10 @@ function parseEmitidos488Sheet(
 
 // ── Parser: emitidos (Vientri grilla) ──────────────────────────────
 
-function inferEstadoEmitidoVientri(raw: string): ChequeEstado | null {
+/** Exportada para tests: estado de emitidos desde la grilla Vientri / 488-ext. */
+export function inferEstadoEmitidoVientri(raw: string): ChequeEstado {
   const norm = raw.toLowerCase().trim()
-  if (norm.includes('renovado')) return null
+  if (norm.includes('renovado')) return 'renovado'
   if (norm.includes('rechazado')) return 'rechazado'
   if (norm.includes('pago confirmado') || norm.includes('resumen bancario')) return 'debitado'
   if (norm.includes('abonado')) return 'debitado'
@@ -631,7 +632,8 @@ function inferEstadoEmitidoVientri(raw: string): ChequeEstado | null {
   return 'debitado'
 }
 
-function parseEmitidosVientriSheet(
+/** Exportada para tests: parsea la grilla de emitidos Vientri. */
+export function parseEmitidosVientriSheet(
   rows: unknown[][],
   headerIdx: number,
 ): { parsed: ChequeImportRow[]; errores: string[]; avisos: string[]; ignorados: number } {
@@ -667,11 +669,7 @@ function parseEmitidosVientriSheet(
 
     const estadoRaw = cellToStr(cellVal(row, iEstado))
     const estado = inferEstadoEmitidoVientri(estadoRaw)
-    if (estado === null) {
-      renovados++
-      ignorados++
-      continue
-    }
+    if (estado === 'renovado') renovados++
 
     const bancoNombre = cellToStr(cellVal(row, iBanco)) || null
     const banco = resolverBanco({ numero: nroRaw, nombre: bancoNombre })
@@ -702,7 +700,9 @@ function parseEmitidosVientriSheet(
     })
   }
 
-  if (renovados > 0) avisos.push(`${renovados} cheques con estado "Renovado" ignorados`)
+  if (renovados > 0) {
+    avisos.push(`${renovados} cheques quedaron como Renovado (no se van a pagar, fueron reemplazados)`)
+  }
 
   return { parsed, errores, avisos, ignorados }
 }
@@ -750,11 +750,7 @@ function parseEmitidos488ExtSheet(
     const rechazado = String(cellVal(row, iRechazado)).toLowerCase() === 'true'
 
     const estado = rechazado ? 'rechazado' : inferEstadoEmitidoVientri(estadoRaw)
-    if (estado === null) {
-      renovados++
-      ignorados++
-      continue
-    }
+    if (estado === 'renovado') renovados++
 
     const idbancoRaw = iIdBanco >= 0 ? cellVal(row, iIdBanco) : null
     const idbanco = typeof idbancoRaw === 'number' ? idbancoRaw : null
@@ -787,7 +783,9 @@ function parseEmitidos488ExtSheet(
     })
   }
 
-  if (renovados > 0) avisos.push(`${renovados} cheques con estado "Renovado" ignorados`)
+  if (renovados > 0) {
+    avisos.push(`${renovados} cheques quedaron como Renovado (no se van a pagar, fueron reemplazados)`)
+  }
 
   return { parsed, errores, avisos, ignorados }
 }

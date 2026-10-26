@@ -1,9 +1,9 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
-import { VIENTRI_CHEQUES } from '../../vientri/services/vientri.repository.js'
-import type { VientriChequeDoc } from '../../vientri/domain/tipos.js'
+import { VIENTRI_CHEQUES, VIENTRI_PERSONAS } from '../../vientri/services/vientri.repository.js'
+import type { VientriChequeDoc, VientriPersonaDoc } from '../../vientri/domain/tipos.js'
 import type { ChequeEstado, ChequeHistorialEstadoDocument } from '../domain/cheque.types.js'
-import { vientriChequeToRow, type ChequeVientriRow } from '../domain/mapear-vientri.js'
+import { vientriChequeToRow, clasificarOrigenPorPersonas, type ChequeVientriRow } from '../domain/mapear-vientri.js'
 import { chequeDocId } from './cheques.repository.js'
 import { reconciliarChequesConMovimientos } from './reconciliar-cheques-movimientos.js'
 
@@ -22,20 +22,43 @@ export interface ResultadoSincVientri {
 }
 
 export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<ResultadoSincVientri> {
-  const snap = await adminDb().collection(VIENTRI_CHEQUES).get()
+  const [snap, personasSnap] = await Promise.all([
+    adminDb().collection(VIENTRI_CHEQUES).get(),
+    adminDb().collection(VIENTRI_PERSONAS).get(),
+  ])
+
+  const personasMap = new Map<number, VientriPersonaDoc>()
+  for (const pDoc of personasSnap.docs) {
+    const p = pDoc.data() as VientriPersonaDoc
+    if (p.vientriId) personasMap.set(p.vientriId, p)
+  }
+
   const rows: ChequeVientriRow[] = []
   let descartados = 0
 
+  const totalPersonas = personasMap.size
+  const totalClientes = [...personasMap.values()].filter(p => p.esCliente).length
+  console.log(`[sync-vientri] personas cargadas: ${totalPersonas}, con esCliente=true: ${totalClientes}`)
+
+  let clasificadosCliente = 0
   for (const doc of snap.docs) {
     const row = vientriChequeToRow(doc.data() as VientriChequeDoc)
-    if (row) rows.push(row)
-    else descartados++
+    if (row) {
+      const clasif = clasificarOrigenPorPersonas(row, personasMap)
+      row.origen = clasif.origen
+      row.cliente = clasif.cliente
+      if (row.origen === 'cliente') clasificadosCliente++
+      rows.push(row)
+    } else {
+      descartados++
+    }
   }
+  console.log(`[sync-vientri] cheques clasificados como cliente: ${clasificadosCliente} de ${rows.length}`)
 
   const chequeCol = adminDb().collection(CHEQUES_COLLECTION)
   const existingMap = new Map<string, FirebaseFirestore.DocumentData>()
   const existingSnaps = await chequeCol.select(
-    'estado', 'montoCentavos', 'estadoBancario', 'fechaPago', 'vientriClave',
+    'estado', 'montoCentavos', 'estadoBancario', 'fechaPago', 'vientriClave', 'origen',
     'vientriCmpIngreso', 'vientriCmpIngresoDesc', 'vientriCmpSalida', 'vientriCmpSalidaDesc',
     'vientriEstadoPrevio', 'vientriCmpNdRechazo', 'vientriCmpPagoBanco', 'vientriMotivoRechazoId',
   ).get()
@@ -102,6 +125,7 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
           || prev.estadoBancario !== row.estadoBancario
           || prev.fechaPago !== row.fechaPago
           || prev.vientriClave !== vientriClave
+          || (prev.origen ?? 'tercero') !== row.origen
           || prevCmpIngreso !== (idCmpIngreso ?? null)
           || prevCmpIngresoDesc !== (cmpIngresoDesc ?? null)
           || prevCmpSalida !== (idCmpSalida ?? null)

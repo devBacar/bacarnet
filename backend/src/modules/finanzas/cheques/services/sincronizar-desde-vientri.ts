@@ -9,8 +9,7 @@ import { reconciliarChequesConMovimientos } from './reconciliar-cheques-movimien
 
 const CHEQUES_COLLECTION = 'cheques'
 const HISTORIAL_SUB = 'historialEstados'
-const READ_CHUNK = 500
-const WRITE_CHUNK = 200
+const WRITE_CHUNK = 50
 
 export interface ResultadoSincVientri {
   leidos: number
@@ -34,17 +33,13 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
   }
 
   const chequeCol = adminDb().collection(CHEQUES_COLLECTION)
-  const refs = rows.map((r) => chequeCol.doc(chequeDocId(r.direccion, r.numero)))
-
   const existingMap = new Map<string, FirebaseFirestore.DocumentData>()
-  for (let i = 0; i < refs.length; i += READ_CHUNK) {
-    const batch = refs.slice(i, i + READ_CHUNK)
-    if (batch.length === 0) continue
-    const snaps = await adminDb().getAll(...batch)
-    for (const s of snaps) {
-      if (s.exists) existingMap.set(s.id, s.data()!)
-    }
-  }
+  const existingSnaps = await chequeCol.select(
+    'estado', 'montoCentavos', 'estadoBancario', 'fechaPago', 'vientriClave',
+    'vientriCmpIngreso', 'vientriCmpIngresoDesc', 'vientriCmpSalida', 'vientriCmpSalidaDesc',
+    'vientriEstadoPrevio', 'vientriCmpNdRechazo', 'vientriCmpPagoBanco', 'vientriMotivoRechazoId',
+  ).get()
+  for (const s of existingSnaps.docs) existingMap.set(s.id, s.data())
 
   const now = Timestamp.now()
   let insertados = 0
@@ -55,6 +50,7 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
   for (let i = 0; i < rows.length; i += WRITE_CHUNK) {
     const slice = rows.slice(i, i + WRITE_CHUNK)
     const batch = adminDb().batch()
+    let batchWrites = 0
 
     for (const row of slice) {
       const docId = chequeDocId(row.direccion, row.numero)
@@ -66,14 +62,16 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
       const ref = chequeCol.doc(docId)
       const prev = existingMap.get(docId)
 
-      const { fechaAcreditacion, vientriClave, idCmpIngreso, idCmpSalida, idCmpNdRechazo, idCmpPagoBanco, estadoPrevioId, estadoPrevio, motivoRechazoId, ...rest } = row
+      const { fechaAcreditacion, vientriClave, idCmpIngreso, cmpIngresoDesc, idCmpSalida, cmpSalidaDesc, idCmpNdRechazo, idCmpPagoBanco, estadoPrevioId, estadoPrevio, motivoRechazoId, ...rest } = row
       const data: Record<string, unknown> = {
         ...rest,
         vientriSync: true,
         vientriSyncAt: FieldValue.serverTimestamp(),
         vientriClave,
         vientriCmpIngreso: idCmpIngreso,
+        vientriCmpIngresoDesc: cmpIngresoDesc,
         vientriCmpSalida: idCmpSalida,
+        vientriCmpSalidaDesc: cmpSalidaDesc,
         vientriCmpNdRechazo: idCmpNdRechazo,
         vientriCmpPagoBanco: idCmpPagoBanco,
         vientriEstadoPrevio: estadoPrevio,
@@ -86,11 +84,14 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
         data.createdBy = actorUid
         data.createdAt = FieldValue.serverTimestamp()
         batch.set(ref, data)
+        batchWrites++
         insertados++
       } else {
         const prevEstado = prev.estado as ChequeEstado | undefined
         const prevCmpIngreso = (prev.vientriCmpIngreso as number | null | undefined) ?? null
+        const prevCmpIngresoDesc = (prev.vientriCmpIngresoDesc as string | null | undefined) ?? null
         const prevCmpSalida = (prev.vientriCmpSalida as number | null | undefined) ?? null
+        const prevCmpSalidaDesc = (prev.vientriCmpSalidaDesc as string | null | undefined) ?? null
         const prevEstadoPrevio = (prev.vientriEstadoPrevio as string | null | undefined) ?? null
         const prevNdRechazo = (prev.vientriCmpNdRechazo as number | null | undefined) ?? null
         const prevPagoBanco = (prev.vientriCmpPagoBanco as number | null | undefined) ?? null
@@ -102,22 +103,21 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
           || prev.fechaPago !== row.fechaPago
           || prev.vientriClave !== vientriClave
           || prevCmpIngreso !== (idCmpIngreso ?? null)
+          || prevCmpIngresoDesc !== (cmpIngresoDesc ?? null)
           || prevCmpSalida !== (idCmpSalida ?? null)
+          || prevCmpSalidaDesc !== (cmpSalidaDesc ?? null)
           || prevEstadoPrevio !== (estadoPrevio ?? null)
           || prevNdRechazo !== (idCmpNdRechazo ?? null)
           || prevPagoBanco !== (idCmpPagoBanco ?? null)
           || prevMotivoRechazo !== (motivoRechazoId ?? null)
 
         if (!changed) {
-          batch.set(ref, {
-            vientriSyncAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-          }, { merge: true })
           sinCambios++
           continue
         }
 
         batch.set(ref, data, { merge: true })
+        batchWrites++
         actualizados++
 
         if (prevEstado && prevEstado !== row.estado) {
@@ -130,11 +130,15 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
             fecha: now,
           }
           batch.set(ref.collection(HISTORIAL_SUB).doc(), entry)
+          batchWrites++
           cambiosEstado++
         }
       }
     }
-    await batch.commit()
+    if (batchWrites > 0) {
+      await batch.commit()
+      await new Promise((r) => setTimeout(r, 20))
+    }
   }
 
   const errores: string[] = []

@@ -73,8 +73,12 @@ export interface ChequeDocument {
   vientriClave?: string | null
   /** ID del comprobante de ingreso en Vientri. */
   vientriCmpIngreso?: number | null
+  /** Tipo y número legible del comprobante de ingreso en Vientri (ej: 'OPA 852334'). */
+  vientriCmpIngresoDesc?: string | null
   /** ID del comprobante de salida en Vientri. */
   vientriCmpSalida?: number | null
+  /** Tipo y número legible del comprobante de salida en Vientri (ej: 'RCX 838069'). */
+  vientriCmpSalidaDesc?: string | null
   /** Nota de débito por rechazo en Vientri. */
   vientriCmpNdRechazo?: number | null
   /** Comprobante del pago del banco en Vientri. */

@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownLeft, ArrowUpRight, ClipboardPaste, Search, Upload } from 'lucide-react'
-import { Fragment, useEffect, useRef, useState } from 'react'
-import { fetchMovimientoById, type MovimientoListItem } from '../../services/finanzasMovimientosApi'
+import { ArrowDownLeft, ArrowUpRight, ClipboardPaste, Eye, Search, Upload } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
@@ -11,13 +10,16 @@ import {
   CHEQUE_DIRECCION_LABELS,
   CHEQUE_ESTADO_LABELS,
   fetchCheques,
+  fetchChequeDetalle,
   fetchResumenDiario,
   importChequesExcel,
   ingresarChequesPegados,
   type ChequeDireccion,
+  type ChequeDetalleResponse,
   type ChequeEstado,
   type ChequeOrigen,
   type ChequeTipo,
+  type ComprobantePendiente,
   type IngresarChequesRow,
 } from '../../services/finanzasChequesApi'
 
@@ -65,9 +67,7 @@ export function FinanzasChequesPage() {
   const puedeCheques = usePermisosFinanzas().cheques
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
-  const [movDetalle, setMovDetalle] = useState<MovimientoListItem | null>(null)
-  const [movCargando, setMovCargando] = useState(false)
-  const [expandido, setExpandido] = useState<string | null>(null)
+  const [detalleId, setDetalleId] = useState<string | null>(null)
 
   const [direccion, setDireccion] = useState<ChequeDireccion | ''>('')
   const [origen, setOrigen] = useState<ChequeOrigen | ''>('')
@@ -232,16 +232,16 @@ export function FinanzasChequesPage() {
         </div>
       ) : null}
 
-      {/* Tabs: dirección */}
+      {/* Nivel 1: Tabs dirección */}
       <div className="mb-4" data-tour="cheques">
-        <div className="inline-flex rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
+        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
           {DIR_TABS.map(([val, label]) => (
             <button
               key={val}
               type="button"
               data-tour={val === 'recibido' ? 'cheques-direccion' : undefined}
               onClick={() => cambiarFiltro(() => { setDireccion(val); setEstado('') })}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
                 direccion === val
                   ? 'bg-brand-primary text-white shadow-sm'
                   : 'text-body-muted hover:text-heading'
@@ -253,9 +253,9 @@ export function FinanzasChequesPage() {
         </div>
       </div>
 
-      {/* Cards resumen por dirección */}
+      {/* Cards resumen */}
       {data ? (
-        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <div className="mb-5 grid gap-3 sm:grid-cols-3">
           <div className="card-minimal px-4 py-3">
             <p className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--color-success, #16a34a)' }}>
               <ArrowDownLeft className="mr-1 inline h-3 w-3" />
@@ -275,9 +275,7 @@ export function FinanzasChequesPage() {
             </p>
           </div>
           <div className="card-minimal px-4 py-3">
-            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">
-              Neto
-            </p>
+            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">Neto</p>
             <p className="text-brand-primary mt-1 text-lg font-semibold">
               {formatMoneyCentavos(data.recibidosCentavos - data.emitidosCentavos, 'ARS')}
             </p>
@@ -285,135 +283,108 @@ export function FinanzasChequesPage() {
         </div>
       ) : null}
 
-      {/* Buscador */}
-      <div className="relative mb-4">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-        <input
-          type="text"
-          className={`${finanzasInputClass} pl-9`}
-          placeholder="Buscar por número, contraparte o cliente…"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
-        {busqueda ? (
-          <button
-            type="button"
-            className="text-body-muted hover:text-heading absolute right-2 top-1/2 -translate-y-1/2 px-1"
-            onClick={() => setBusqueda('')}
-          >
-            ×
-          </button>
+      {/* Nivel 2: Tabs tipo + buscador en la misma línea */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
+          {TIPO_TABS.map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => cambiarFiltro(() => setTipo(val))}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                tipo === val
+                  ? 'bg-brand-primary text-white shadow-sm'
+                  : 'text-body-muted hover:text-heading'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <input
+            type="text"
+            className={`${finanzasInputClass} pl-9`}
+            placeholder="Buscar por número, contraparte o cliente…"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          {busqueda ? (
+            <button
+              type="button"
+              className="text-body-muted hover:text-heading absolute right-2 top-1/2 -translate-y-1/2 px-1"
+              onClick={() => setBusqueda('')}
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+        {data ? (
+          <span className="text-body-muted text-sm whitespace-nowrap">
+            {total.toLocaleString('es-AR')} cheques · {formatMoneyCentavos(data.totalCentavos, 'ARS')}
+          </span>
         ) : null}
       </div>
 
-      {/* Filtros */}
-      <div className="mb-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Tipo</span>
-          <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
-            {TIPO_TABS.map(([val, label]) => (
-              <button
-                key={val}
-                type="button"
-                onClick={() => cambiarFiltro(() => setTipo(val))}
-                className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                  tipo === val
-                    ? 'bg-brand-primary text-white shadow-sm'
-                    : 'text-body-muted hover:text-heading'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </label>
-        <label className="text-sm" data-tour="cheques-filtro-estado">
-          <span className="text-body-muted mb-1 block">Estado</span>
-          <select
-            className={finanzasInputClass}
-            value={estado}
-            onChange={(e) => cambiarFiltro(() => setEstado(e.target.value as ChequeEstado | ''))}
-          >
-            <option value="">Todos</option>
-            {estadosVisibles.map((val) => (
-              <option key={val} value={val}>{CHEQUE_ESTADO_LABELS[val]}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Origen</span>
-          <select
-            className={finanzasInputClass}
-            value={origen}
-            onChange={(e) => cambiarFiltro(() => setOrigen(e.target.value as ChequeOrigen | ''))}
-          >
-            <option value="">Todos</option>
-            {Object.entries(CHEQUE_ORIGEN_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Movimiento</span>
-          <select
-            className={finanzasInputClass}
-            value={vinculacion}
-            onChange={(e) => cambiarFiltro(() => setVinculacion(e.target.value as '' | 'vinculado' | 'sin_vincular'))}
-          >
-            <option value="">Todos</option>
-            <option value="vinculado">Con movimiento</option>
-            <option value="sin_vincular">Sin movimiento</option>
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Comprobante</span>
-          <select
-            className={finanzasInputClass}
-            value={comprobante}
-            onChange={(e) => cambiarFiltro(() => setComprobante(e.target.value as '' | 'con_comprobante' | 'sin_comprobante'))}
-          >
-            <option value="">Todos</option>
-            <option value="con_comprobante">Con comprobante</option>
-            <option value="sin_comprobante">Sin comprobante</option>
-          </select>
-        </label>
+      {/* Nivel 3: Selects de filtro */}
+      <div className="mb-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <select
+          className={finanzasInputClass}
+          value={estado}
+          data-tour="cheques-filtro-estado"
+          onChange={(e) => cambiarFiltro(() => setEstado(e.target.value as ChequeEstado | ''))}
+        >
+          <option value="">Estado: Todos</option>
+          {estadosVisibles.map((val) => (
+            <option key={val} value={val}>{CHEQUE_ESTADO_LABELS[val]}</option>
+          ))}
+        </select>
+        <select
+          className={finanzasInputClass}
+          value={origen}
+          onChange={(e) => cambiarFiltro(() => setOrigen(e.target.value as ChequeOrigen | ''))}
+        >
+          <option value="">Origen: Todos</option>
+          {Object.entries(CHEQUE_ORIGEN_LABELS).map(([val, label]) => (
+            <option key={val} value={val}>{label}</option>
+          ))}
+        </select>
+        <select
+          className={finanzasInputClass}
+          value={vinculacion}
+          onChange={(e) => cambiarFiltro(() => setVinculacion(e.target.value as '' | 'vinculado' | 'sin_vincular'))}
+        >
+          <option value="">Movimiento: Todos</option>
+          <option value="vinculado">Con movimiento</option>
+          <option value="sin_vincular">Sin movimiento</option>
+        </select>
+        <select
+          className={finanzasInputClass}
+          value={comprobante}
+          onChange={(e) => cambiarFiltro(() => setComprobante(e.target.value as '' | 'con_comprobante' | 'sin_comprobante'))}
+        >
+          <option value="">Comprobante: Todos</option>
+          <option value="con_comprobante">Con comprobante</option>
+          <option value="sin_comprobante">Sin comprobante</option>
+        </select>
+        <input
+          type="date"
+          className={finanzasInputClass}
+          value={desde}
+          title="Vencimiento desde"
+          data-tour="cheques-filtro-desde"
+          onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); try { sessionStorage.setItem('cheques_desde', e.target.value) } catch {} })}
+        />
+        <input
+          type="date"
+          className={finanzasInputClass}
+          value={hasta}
+          title="Vencimiento hasta"
+          data-tour="cheques-filtro-hasta"
+          onChange={(e) => cambiarFiltro(() => { setHasta(e.target.value); try { sessionStorage.setItem('cheques_hasta', e.target.value) } catch {} })}
+        />
       </div>
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="text-sm" data-tour="cheques-filtro-desde">
-          <span className="text-body-muted mb-1 block">Vencimiento desde</span>
-          <input
-            type="date"
-            className={finanzasInputClass}
-            value={desde}
-            onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); try { sessionStorage.setItem('cheques_desde', e.target.value) } catch {} })}
-          />
-        </label>
-        <label className="text-sm" data-tour="cheques-filtro-hasta">
-          <span className="text-body-muted mb-1 block">Vencimiento hasta</span>
-          <input
-            type="date"
-            className={finanzasInputClass}
-            value={hasta}
-            onChange={(e) => cambiarFiltro(() => { setHasta(e.target.value); try { sessionStorage.setItem('cheques_hasta', e.target.value) } catch {} })}
-          />
-        </label>
-      </div>
-
-      {/* Total del filtro actual */}
-      {data ? (
-        <div className="mb-4 grid gap-3 sm:grid-cols-2">
-          <div className="card-minimal px-4 py-3">
-            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">Total en filtro</p>
-            <p className="text-brand-primary mt-1 text-lg font-semibold">
-              {formatMoneyCentavos(data.totalCentavos, 'ARS')}
-            </p>
-          </div>
-          <div className="card-minimal px-4 py-3">
-            <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Cheques</p>
-            <p className="text-heading mt-1 text-lg font-semibold">{total.toLocaleString('es-AR')}</p>
-          </div>
-        </div>
-      ) : null}
 
       {isError ? (
         <p className="text-danger text-sm">{error instanceof Error ? error.message : 'No se pudieron cargar los cheques'}</p>
@@ -423,7 +394,7 @@ export function FinanzasChequesPage() {
         <p className="text-body-muted text-sm">Cargando cheques…</p>
       ) : (
         <div className={`surface-card overflow-x-auto ${isFetching ? 'opacity-70' : ''}`} data-tour="cheques-lista">
-          <table className="min-w-full text-sm">
+          <table className="min-w-full text-[0.8125rem]">
             <thead className="surface-muted text-left text-xs uppercase tracking-wide">
               <tr className="text-body-muted">
                 {!direccion ? <th className="px-3 py-2">Dir.</th> : null}
@@ -438,18 +409,14 @@ export function FinanzasChequesPage() {
                 <th className="px-3 py-2 text-right">Importe</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Estado</th>
-                <th className="px-3 py-2">Mov.</th>
-                <th className="px-3 py-2">Obs.</th>
+                <th className="px-3 py-2 text-center">Detalle</th>
               </tr>
             </thead>
             <tbody>
-              {(data?.cheques ?? []).map((ch) => {
-                const colCount = 10 + (!direccion ? 1 : 0) + (direccion !== 'emitido' ? 1 : 0)
-                return (
-                <Fragment key={ch.id}>
+              {(data?.cheques ?? []).map((ch) => (
                 <tr
-                  className={`border-t border-subtle cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50 ${expandido === ch.id ? 'bg-neutral-50 dark:bg-neutral-800/50' : ''}`}
-                  onClick={() => setExpandido(expandido === ch.id ? null : ch.id)}
+                  key={ch.id}
+                  className="border-t border-subtle hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
                 >
                   {!direccion ? (
                     <td className="px-3 py-2">
@@ -495,63 +462,19 @@ export function FinanzasChequesPage() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs">
-                    {ch.movimientoBancarioId ? (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50"
-                        title={`Ver movimiento del ${ch.movimientoFecha ?? ''}`}
-                        onClick={async (e) => {
-                          e.stopPropagation()
-                          setMovCargando(true)
-                          try {
-                            const mov = await fetchMovimientoById(ch.movimientoBancarioId!)
-                            setMovDetalle(mov)
-                          } catch { toast.error('No se pudo cargar el movimiento') }
-                          finally { setMovCargando(false) }
-                        }}
-                      >
-                        ✓ {ch.movimientoFecha ? formatFecha(ch.movimientoFecha) : 'Vinculado'}
-                      </button>
-                    ) : (
-                      <span className="text-body-muted">—</span>
-                    )}
-                  </td>
-                  <td className="max-w-[200px] truncate px-3 py-2 text-xs" title={ch.observaciones ?? ''}>
-                    {ch.observaciones || '—'}
+                  <td className="px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded p-1 transition-colors hover:opacity-80"
+                      style={{ color: ch.movimientoBancarioId ? '#5B8FD4' : 'var(--color-text-muted)' }}
+                      title="Ver detalle"
+                      onClick={() => setDetalleId(ch.id)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
                   </td>
                 </tr>
-                {expandido === ch.id ? (
-                  <tr className="bg-neutral-50 dark:bg-neutral-900">
-                    <td colSpan={colCount} className="px-6 py-3 text-sm">
-                      <div className="flex flex-wrap gap-x-8 gap-y-1">
-                        <span><span className="text-body-muted">Firmado por:</span> {ch.emisor || '—'}{ch.emisorCuit ? ` (CUIT ${ch.emisorCuit})` : ''}</span>
-                        {ch.direccion === 'recibido' ? (
-                          <span><span className="text-body-muted">Recibido el</span> {ch.fechaRecibido ? formatFecha(ch.fechaRecibido) : '—'} <span className="text-body-muted">de</span> {ch.endosante || '—'}</span>
-                        ) : null}
-                        <span><span className="text-body-muted">Entregado el</span> {ch.fechaEntregado ? formatFecha(ch.fechaEntregado) : '—'} <span className="text-body-muted">a</span> {ch.destinatario || '—'}</span>
-                        {ch.estadoBancario ? (
-                          <span><span className="text-body-muted">Estado en Vientri:</span> {ch.estadoBancario}</span>
-                        ) : null}
-                        {ch.vientriEstadoPrevio ? (
-                          <span><span className="text-body-muted">Estado previo:</span> {ch.vientriEstadoPrevio}</span>
-                        ) : null}
-                        {ch.vientriCmpIngreso ? (
-                          <span><span className="text-body-muted">Cmp. ingreso:</span> #{ch.vientriCmpIngreso}</span>
-                        ) : null}
-                        {ch.vientriCmpSalida ? (
-                          <span><span className="text-body-muted">Cmp. salida:</span> #{ch.vientriCmpSalida}</span>
-                        ) : null}
-                        {ch.fechaAcreditacion ? (
-                          <span><span className="text-body-muted">Acreditación:</span> {formatFecha(ch.fechaAcreditacion)}</span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ) : null}
-                </Fragment>
-                )
-              })}
+              ))}
             </tbody>
           </table>
           {(data?.cheques.length ?? 0) === 0 ? (
@@ -594,15 +517,8 @@ export function FinanzasChequesPage() {
         />
       ) : null}
 
-      {movDetalle ? (
-        <MovimientoDetalleModal movimiento={movDetalle} onClose={() => setMovDetalle(null)} />
-      ) : null}
-      {movCargando ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="surface-card rounded-xl px-6 py-4 shadow-lg">
-            <p className="text-body-muted text-sm">Cargando movimiento…</p>
-          </div>
-        </div>
+      {detalleId ? (
+        <ChequeDetalleModal chequeId={detalleId} onClose={() => setDetalleId(null)} />
       ) : null}
     </>
   )
@@ -731,52 +647,176 @@ function emptyRow(): ParsedRow {
 
 const INPUT_CLS = 'w-full rounded border border-transparent bg-transparent px-1 py-0.5 focus:border-neutral-300 focus:outline-none dark:focus:border-zinc-600'
 
-function MovimientoDetalleModal({ movimiento, onClose }: { movimiento: MovimientoListItem; onClose: () => void }) {
-  const entrada = movimiento.tipo === 'credito'
-  const contraparte = typeof movimiento.contraparte === 'string'
-    ? movimiento.contraparte
-    : movimiento.contraparte?.nombre ?? null
+function ComprobanteCard({ label, desc, cmpId, cmp }: { label: string; desc: string | null; cmpId: number | null; cmp: ComprobantePendiente | null }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-body-muted text-xs font-medium uppercase tracking-wide">{label}</p>
+      <p className="font-medium">{desc || (cmpId ? `#${cmpId}` : '—')}</p>
+      {cmp ? (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+          {cmp.persona?.nombre ? <>
+            <dt className="text-body-muted">A nombre de</dt>
+            <dd>{cmp.persona.nombre}{cmp.persona.cuit ? ` (${cmp.persona.cuit})` : ''}</dd>
+          </> : null}
+          {cmp.tipo ? <>
+            <dt className="text-body-muted">Tipo</dt>
+            <dd>{cmp.tipo}</dd>
+          </> : null}
+          {cmp.fecha ? <>
+            <dt className="text-body-muted">Fecha</dt>
+            <dd>{formatFecha(cmp.fecha)}</dd>
+          </> : null}
+          {cmp.fechaVencimiento ? <>
+            <dt className="text-body-muted">Vencimiento</dt>
+            <dd>{formatFecha(cmp.fechaVencimiento)}</dd>
+          </> : null}
+          <dt className="text-body-muted">Total</dt>
+          <dd>{formatMoneyCentavos(cmp.totalCentavos, cmp.moneda === 'USD' ? 'USD' : 'ARS')}</dd>
+          {cmp.pendienteCentavos !== 0 && cmp.pendienteCentavos !== cmp.totalCentavos ? <>
+            <dt className="text-body-muted">Pendiente</dt>
+            <dd>{formatMoneyCentavos(cmp.pendienteCentavos, cmp.moneda === 'USD' ? 'USD' : 'ARS')}</dd>
+          </> : null}
+        </dl>
+      ) : (
+        <p className="text-body-muted text-xs">Sin datos en Vientri</p>
+      )}
+    </div>
+  )
+}
+
+function ChequeDetalleModal({ chequeId, onClose }: { chequeId: string; onClose: () => void }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['finanzas', 'cheques', 'detalle', chequeId],
+    queryFn: () => fetchChequeDetalle(chequeId),
+  })
+
+  const ch = data?.cheque
+  const mov = data?.movimiento
+  const cmps = data?.comprobantes
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="surface-card w-full max-w-md rounded-2xl p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-heading mb-4 text-lg font-semibold">Detalle del movimiento</h2>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt className="text-body-muted">Fecha</dt>
-          <dd>{formatFecha(movimiento.fechaProceso)}</dd>
+      <div className="surface-card w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        {isLoading ? (
+          <p className="text-body-muted py-8 text-center text-sm">Cargando detalle…</p>
+        ) : isError || !ch ? (
+          <p className="text-danger py-8 text-center text-sm">No se pudo cargar el detalle</p>
+        ) : (
+          <>
+            <header className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-heading text-lg font-semibold">Cheque {ch.numero}</h2>
+                <p className="text-body-muted text-sm">
+                  {CHEQUE_DIRECCION_LABELS[ch.direccion]} · {CHEQUE_ESTADO_LABELS[ch.estado]}
+                  {ch.bancoEmisor ? ` · ${ch.bancoEmisor}` : ''}
+                </p>
+              </div>
+              <p className="text-brand-primary text-lg font-semibold whitespace-nowrap">
+                {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
+              </p>
+            </header>
 
-          <dt className="text-body-muted">Descripción</dt>
-          <dd>{movimiento.descripcion}</dd>
+            <div className="grid gap-5 sm:grid-cols-2">
+              {/* Cheque info */}
+              <div className="space-y-1">
+                <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Datos del cheque</p>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+                  <dt className="text-body-muted">Firmado por</dt>
+                  <dd>{ch.emisor || '—'}{ch.emisorCuit ? ` (${ch.emisorCuit})` : ''}</dd>
+                  <dt className="text-body-muted">Emisión</dt>
+                  <dd>{ch.fechaEmision ? formatFecha(ch.fechaEmision) : '—'}</dd>
+                  <dt className="text-body-muted">Vencimiento</dt>
+                  <dd>{ch.fechaPago ? formatFecha(ch.fechaPago) : '—'}</dd>
+                  {ch.direccion === 'recibido' ? <>
+                    <dt className="text-body-muted">Recibido de</dt>
+                    <dd>{ch.endosante || '—'}{ch.fechaRecibido ? ` (${formatFecha(ch.fechaRecibido)})` : ''}</dd>
+                  </> : null}
+                  {ch.destinatario ? <>
+                    <dt className="text-body-muted">Entregado a</dt>
+                    <dd>{ch.destinatario}{ch.fechaEntregado ? ` (${formatFecha(ch.fechaEntregado)})` : ''}</dd>
+                  </> : null}
+                  {ch.cliente ? <>
+                    <dt className="text-body-muted">Cliente</dt>
+                    <dd>{ch.cliente}</dd>
+                  </> : null}
+                  {ch.fechaAcreditacion ? <>
+                    <dt className="text-body-muted">Acreditación</dt>
+                    <dd>{formatFecha(ch.fechaAcreditacion)}</dd>
+                  </> : null}
+                  {ch.cmc7 ? <>
+                    <dt className="text-body-muted">CMC7</dt>
+                    <dd className="font-mono text-xs">{ch.cmc7}</dd>
+                  </> : null}
+                  {ch.observaciones ? <>
+                    <dt className="text-body-muted">Observaciones</dt>
+                    <dd>{ch.observaciones}</dd>
+                  </> : null}
+                  {ch.estadoBancario ? <>
+                    <dt className="text-body-muted">Estado Vientri</dt>
+                    <dd>{ch.estadoBancario}</dd>
+                  </> : null}
 
-          {contraparte ? <>
-            <dt className="text-body-muted">Contraparte</dt>
-            <dd>{contraparte}</dd>
-          </> : null}
+                </dl>
+              </div>
 
-          <dt className="text-body-muted">Tipo</dt>
-          <dd>
-            <span className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${
-              entrada
-                ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
-                : 'border-red-300 bg-red-100 text-red-900'
-            }`}>
-              {entrada ? 'Entrada' : 'Salida'}
-            </span>
-          </dd>
+              {/* Movimiento bancario */}
+              <div className="space-y-1">
+                <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Movimiento bancario</p>
+                {mov ? (
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+                    <dt className="text-body-muted">Fecha</dt>
+                    <dd>{formatFecha(mov.fechaProceso)}</dd>
+                    <dt className="text-body-muted">Descripción</dt>
+                    <dd>{mov.descripcion}</dd>
+                    {(() => {
+                      const cp = typeof mov.contraparte === 'string' ? mov.contraparte : mov.contraparte?.nombre ?? null
+                      return cp ? <>
+                        <dt className="text-body-muted">Contraparte</dt>
+                        <dd>{cp}</dd>
+                      </> : null
+                    })()}
+                    <dt className="text-body-muted">Monto</dt>
+                    <dd className={`font-medium ${mov.tipo === 'credito' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                      {mov.tipo === 'credito' ? '' : '−'}{formatMoneyCentavos(mov.montoCentavos, 'ARS')}
+                    </dd>
+                    <dt className="text-body-muted">Cuenta</dt>
+                    <dd>{mov.bancoNombre}</dd>
+                    {mov.nota ? <>
+                      <dt className="text-body-muted">Nota</dt>
+                      <dd>{mov.nota}</dd>
+                    </> : null}
+                  </dl>
+                ) : (
+                  <p className="text-body-muted text-sm">Sin movimiento vinculado</p>
+                )}
+              </div>
+            </div>
 
-          <dt className="text-body-muted">Monto</dt>
-          <dd className={`font-medium ${entrada ? 'text-emerald-800' : 'text-red-800'}`}>
-            {entrada ? '' : '−'}{formatMoneyCentavos(movimiento.montoCentavos, 'ARS')}
-          </dd>
-
-          <dt className="text-body-muted">Cuenta</dt>
-          <dd>{movimiento.bancoNombre}</dd>
-
-          {movimiento.nota ? <>
-            <dt className="text-body-muted">Nota</dt>
-            <dd>{movimiento.nota}</dd>
-          </> : null}
-        </dl>
+            {/* Comprobantes */}
+            {(ch.vientriCmpIngreso || ch.vientriCmpSalida) ? (
+              <div className="mt-5 border-t border-subtle pt-4">
+                <div className="grid gap-5 sm:grid-cols-2">
+                  {ch.vientriCmpIngreso ? (
+                    <ComprobanteCard
+                      label="Comprobante de ingreso"
+                      desc={ch.vientriCmpIngresoDesc}
+                      cmpId={ch.vientriCmpIngreso}
+                      cmp={cmps?.ingreso ?? null}
+                    />
+                  ) : null}
+                  {ch.vientriCmpSalida ? (
+                    <ComprobanteCard
+                      label="Comprobante de salida"
+                      desc={ch.vientriCmpSalidaDesc}
+                      cmpId={ch.vientriCmpSalida}
+                      cmp={cmps?.salida ?? null}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
         <div className="mt-5 text-right">
           <button type="button" className="btn-primary rounded-lg px-4 py-2 text-sm font-medium" onClick={onClose}>
             Cerrar

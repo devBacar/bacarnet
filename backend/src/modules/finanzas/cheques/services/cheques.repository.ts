@@ -49,7 +49,9 @@ export interface ChequeListadoItem {
   vientriClave: string | null
   vientriEstadoPrevio: string | null
   vientriCmpIngreso: number | null
+  vientriCmpIngresoDesc: string | null
   vientriCmpSalida: number | null
+  vientriCmpSalidaDesc: string | null
 }
 
 function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
@@ -84,7 +86,9 @@ function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
     vientriClave: typeof data.vientriClave === 'string' ? data.vientriClave : null,
     vientriEstadoPrevio: typeof data.vientriEstadoPrevio === 'string' ? data.vientriEstadoPrevio : null,
     vientriCmpIngreso: typeof data.vientriCmpIngreso === 'number' ? data.vientriCmpIngreso : null,
+    vientriCmpIngresoDesc: typeof data.vientriCmpIngresoDesc === 'string' ? data.vientriCmpIngresoDesc : null,
     vientriCmpSalida: typeof data.vientriCmpSalida === 'number' ? data.vientriCmpSalida : null,
+    vientriCmpSalidaDesc: typeof data.vientriCmpSalidaDesc === 'string' ? data.vientriCmpSalidaDesc : null,
   }
 }
 
@@ -565,6 +569,44 @@ export async function corregirPagoProveedorDebitado(options: { dryRun: boolean }
   }
 
   return { evaluados: snap.size, corregidos }
+}
+
+export interface ComprobantePendiente {
+  vientriId: number
+  tipo: string | null
+  comprobante: string
+  persona: { nombre: string | null; cuit: string | null } | null
+  fecha: string | null
+  fechaVencimiento: string | null
+  totalCentavos: number
+  pendienteCentavos: number
+  moneda: string | null
+}
+
+export async function buscarPendientesPorVientriId(ids: number[]): Promise<Map<number, ComprobantePendiente>> {
+  if (ids.length === 0) return new Map()
+  const col = adminDb().collection('vientriPendientes')
+  const mapa = new Map<number, ComprobantePendiente>()
+  for (const id of ids) {
+    const snap = await col.where('vientriId', '==', id).limit(1).get()
+    if (snap.empty) continue
+    const d = snap.docs[0].data()
+    const persona = d.persona && typeof d.persona === 'object'
+      ? { nombre: (d.persona as Record<string, unknown>).nombre as string | null, cuit: (d.persona as Record<string, unknown>).cuit as string | null }
+      : null
+    mapa.set(id, {
+      vientriId: id,
+      tipo: typeof d.tipo === 'string' ? d.tipo : null,
+      comprobante: typeof d.comprobante === 'string' ? d.comprobante : '',
+      persona,
+      fecha: typeof d.fecha === 'string' ? d.fecha : null,
+      fechaVencimiento: typeof d.fechaVencimiento === 'string' ? d.fechaVencimiento : null,
+      totalCentavos: typeof d.totalCentavos === 'number' ? d.totalCentavos : 0,
+      pendienteCentavos: typeof d.pendienteCentavos === 'number' ? d.pendienteCentavos : 0,
+      moneda: typeof d.moneda === 'string' ? d.moneda : null,
+    })
+  }
+  return mapa
 }
 
 export async function resumenDiario(fecha: string): Promise<{

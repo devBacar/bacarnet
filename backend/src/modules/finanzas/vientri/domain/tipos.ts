@@ -44,8 +44,10 @@ export interface VientriChequeDoc {
   destinatario: string | null
   /** ID del comprobante con el que ingresó (recibo, OP). */
   idCmpIngreso: number | null
+  cmpIngresoDesc: string | null
   /** ID del comprobante con el que salió (pago, depósito). */
   idCmpSalida: number | null
+  cmpSalidaDesc: string | null
   /** Nota de débito por rechazo. */
   idCmpNdRechazo: number | null
   /** Comprobante del pago del banco. */

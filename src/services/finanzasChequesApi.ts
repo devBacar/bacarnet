@@ -57,7 +57,9 @@ export interface ChequeListItem {
   vientriSync: boolean
   vientriEstadoPrevio: string | null
   vientriCmpIngreso: number | null
+  vientriCmpIngresoDesc: string | null
   vientriCmpSalida: number | null
+  vientriCmpSalidaDesc: string | null
 }
 
 export interface ChequesListResponse {
@@ -117,6 +119,47 @@ async function chequesFetch(path: string, init?: RequestInit): Promise<Response>
     ...init,
     headers: { Authorization: `Bearer ${token}`, ...init?.headers },
   })
+}
+
+export interface ComprobantePendiente {
+  vientriId: number
+  tipo: string | null
+  comprobante: string
+  persona: { nombre: string | null; cuit: string | null } | null
+  fecha: string | null
+  fechaVencimiento: string | null
+  totalCentavos: number
+  pendienteCentavos: number
+  moneda: string | null
+}
+
+export interface ChequeDetalleMovimiento {
+  id: string
+  fechaProceso: string
+  descripcion: string
+  contraparte: { nombre: string | null; cuit: string | null } | string | null
+  tipo: string
+  montoCentavos: number
+  bancoNombre: string
+  nota: string | null
+}
+
+export interface ChequeDetalleResponse {
+  cheque: ChequeListItem
+  movimiento: ChequeDetalleMovimiento | null
+  comprobantes: {
+    ingreso: ComprobantePendiente | null
+    salida: ComprobantePendiente | null
+  }
+}
+
+export async function fetchChequeDetalle(id: string): Promise<ChequeDetalleResponse> {
+  const res = await chequesFetch(`/${encodeURIComponent(id)}/detalle`)
+  const body = (await res.json().catch(() => null)) as { error?: string } & Partial<ChequeDetalleResponse> | null
+  if (!res.ok || !body?.cheque) {
+    throw new Error(body?.error ?? 'No se pudo obtener el detalle del cheque')
+  }
+  return body as ChequeDetalleResponse
 }
 
 export async function fetchChequeById(id: string): Promise<ChequeListItem> {

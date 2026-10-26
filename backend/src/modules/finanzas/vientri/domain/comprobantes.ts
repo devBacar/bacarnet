@@ -19,8 +19,23 @@ export function textoComprobante(f: FilaCsv): string {
   const letra = (f.letra ?? '').trim()
   const pv = aEntero(f.punto_venta)
   const nro = aEntero(f.numero)
-  const numero = pv !== null && nro !== null ? `${String(pv).padStart(4, '0')}-${String(nro).padStart(8, '0')}` : (f.numero ?? '').trim()
-  return [tipo, letra, numero].filter(Boolean).join(' ')
+  const numero = pv !== null && pv > 0 && nro !== null
+    ? `${String(pv).padStart(4, '0')}-${String(nro).padStart(8, '0')}`
+    : (nro !== null ? String(nro) : (f.numero ?? '').trim())
+  const letraStr = letra && letra !== 'X' ? letra : ''
+  return [tipo, letraStr, numero].filter(Boolean).join(' ')
+}
+
+export function indiceComprobantes(filas: FilaCsv[]): Map<number, string> {
+  const mapa = new Map<number, string>()
+  for (const f of filas) {
+    const id = aEntero(f.vientri_id)
+    if (id !== null) {
+      const txt = textoComprobante(f)
+      if (txt) mapa.set(id, txt)
+    }
+  }
+  return mapa
 }
 
 /** Tipo de comprobante de Vientri → lado y signo. Inferido de los datos; a confirmar con Administración. */

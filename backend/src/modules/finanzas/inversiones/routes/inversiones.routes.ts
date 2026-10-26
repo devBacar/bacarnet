@@ -31,6 +31,7 @@ import {
   subirDocumento,
 } from '../services/inversiones.service.js'
 import { confirmar, vistaPrevia } from '../services/importar-planilla.service.js'
+import { cuentaDeInversiones } from '../services/cuenta.service.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 
 export const finanzasInversionesRouter = Router()
@@ -59,6 +60,22 @@ function responderError(res: Response, err: unknown, fallback: string, contexto:
 }
 
 // Rutas fijas antes que '/:id' para que no se pisen.
+
+finanzasInversionesRouter.get('/cuenta', async (_req, res) => {
+  try {
+    res.json(await cuentaDeInversiones())
+  } catch (err) {
+    responderError(res, err, 'No pude armar la cuenta general', 'cuenta general')
+  }
+})
+
+finanzasInversionesRouter.get('/inversores/:id/cuenta', async (req, res) => {
+  try {
+    res.json(await cuentaDeInversiones(req.params.id))
+  } catch (err) {
+    responderError(res, err, 'No pude armar la cuenta del inversor', 'cuenta inversor')
+  }
+})
 
 finanzasInversionesRouter.get('/inversores', async (_req, res) => {
   try {
@@ -188,7 +205,7 @@ finanzasInversionesRouter.post('/:id/enviar', async (req, res) => {
 
 finanzasInversionesRouter.post('/:id/aprobar', requireFinanzasPermiso('finanzas_inversiones_aprobar'), async (req, res) => {
   try {
-    res.json(await aprobarInversion(req.params.id, req.body?.nota, req.authedUser!))
+    res.json(await aprobarInversion(req.params.id, req.body, req.authedUser!))
   } catch (err) {
     responderError(res, err, 'No pude aprobarla', 'aprobar')
   }

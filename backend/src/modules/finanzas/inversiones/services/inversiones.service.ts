@@ -280,9 +280,45 @@ function resolver(id: string, user: AuthedUser, resultado: 'aprobada' | 'rechaza
   }))
 }
 
-/** Solo el Líder (la ruta ya lo exige con finanzas_inversiones_aprobar). Queda vigente: recién ahí cuenta para la Agenda. */
-export function aprobarInversion(id: string, rawNota: unknown, user: AuthedUser) {
-  return resolver(id, user, 'aprobada', notaDe(rawNota))
+/**
+ * Nota del body de aprobar: acepta string suelto (compat) o `{ nota }`.
+ * `ingreso` opcional: mismo formato que registrarIngreso.
+ */
+function bodyAprobar(raw: unknown): { nota: string | null; ingreso: unknown | undefined } {
+  if (typeof raw === 'string' || raw == null) return { nota: notaDe(raw), ingreso: undefined }
+  if (typeof raw !== 'object') return { nota: null, ingreso: undefined }
+  const r = raw as Record<string, unknown>
+  const ingreso = Object.prototype.hasOwnProperty.call(r, 'ingreso') && r.ingreso != null ? r.ingreso : undefined
+  return { nota: notaDe(r.nota), ingreso }
+}
+
+/**
+ * Solo el Líder (la ruta ya lo exige con finanzas_inversiones_aprobar). Queda vigente: recién ahí cuenta para la Agenda.
+ * Opcional: en el mismo paso registrar el ingreso del capital. La caja no entra en la transacción de Firestore;
+ * si el ingreso falla después de aprobar, se devuelve el detalle con `ingresoError` (se puede reintentar desde el detalle).
+ */
+export async function aprobarInversion(id: string, raw: unknown, user: AuthedUser) {
+  const { nota, ingreso } = bodyAprobar(raw)
+
+  if (ingreso !== undefined) {
+    const pedido = validarIngreso(ingreso)
+    if (pedido.medio === 'efectivo' && pedido.cajaId) {
+      const inv = await cargar(id)
+      const caja = await getCajaDoc(pedido.cajaId)
+      if (!caja) throw new ErrorValidacion('No encontré esa caja.')
+      if (caja.moneda !== inv.moneda) throw new ErrorValidacion('La caja elegida es de otra moneda.')
+    }
+  }
+
+  const detalle = await resolver(id, user, 'aprobada', nota)
+  if (ingreso === undefined) return detalle
+
+  try {
+    return await registrarIngreso(id, ingreso, user)
+  } catch (err) {
+    const mensaje = err instanceof Error ? err.message : 'No pude registrar el ingreso'
+    return { ...detalle, ingresoError: mensaje }
+  }
 }
 
 /** Rechazada vuelve a borrador para que se corrija; el motivo queda en la aprobación y en el historial. */

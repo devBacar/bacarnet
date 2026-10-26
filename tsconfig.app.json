@@ -19,6 +19,9 @@
     "paths": {
       "@intranet/helpdesk-scheduling": [
         "backend/src/modules/helpdesk/schedulingConstants.ts"
+      ],
+      "@intranet/cuenta-inversor": [
+        "backend/src/modules/finanzas/inversiones/domain/cuentaInversor.ts"
       ]
     },
 
@@ -28,5 +31,6 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
 }

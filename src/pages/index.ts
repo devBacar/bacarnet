@@ -40,6 +40,7 @@ export {
 export { FinanzasChequesPage } from './finanzas/ChequesPage'
 export { FinanzasVientriPage } from './finanzas/VientriPage'
 export { InversionesPage } from './finanzas/InversionesPage'
+export { InversorCuentaPage } from './finanzas/InversorCuentaPage'
 export { FinanzasIndexRedirect } from './finanzas/FinanzasIndexRedirect'
 export { RrhhHorasExtraPage } from './rrhh/HorasExtraPage'
 export { TableroFinanzasPage } from './tablero-finanzas/TableroFinanzasPage'

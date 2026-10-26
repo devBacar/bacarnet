@@ -39,6 +39,7 @@ import {
   FinanzasChequesPage,
   FinanzasVientriPage,
   InversionesPage,
+  InversorCuentaPage,
   FinanzasLayout,
   FinanzasIndexRedirect,
   RrhhHorasExtraPage,
@@ -100,6 +101,7 @@ export function AppRoutes() {
                   <Route path="cheques" element={<FinanzasChequesPage />} />
                   <Route path="vientri" element={<FinanzasVientriPage />} />
                   <Route path="inversiones" element={<InversionesPage />} />
+                  <Route path="inversiones/inversores/:inversorId" element={<InversorCuentaPage />} />
                   <Route path="inversiones/:id" element={<InversionesPage />} />
                 </Route>
                 <Route path="cajas" element={<FinanzasCajasPage />} />

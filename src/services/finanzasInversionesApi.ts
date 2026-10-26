@@ -386,6 +386,41 @@ export interface IngresoInput {
   nota?: string | null
 }
 
+import type { CuentaInversor } from '../components/finanzas/inversiones/cuentaInversor'
+
+export type MovimientoCuenta = {
+  /** Del ingreso: la fecha en que entró. De la cuota: su vencimiento (la Agenda no guarda el día del pago). */
+  fecha: string
+  tipo: 'ingreso_capital' | 'cuota_pagada' | 'cuota_parcial'
+  inversionId: string
+  inversionNumero: string
+  inversorNombre: string
+  moneda: MonedaInversion
+  montoCentavos: number
+  retencionCentavos: number
+  detalle: string
+}
+
+export type CapitalSinIngresar = {
+  id: string
+  numero: string
+  inversorNombre: string
+  moneda: MonedaInversion
+  faltaCentavos: number
+}
+
+export type DocumentoDeCuenta = Omit<DocumentoInversion, 'storagePath'> & {
+  inversionId: string
+  inversionNumero: string
+}
+
+export interface CuentaCompleta extends CuentaInversor {
+  hoy: string
+  capitalSinIngresar: CapitalSinIngresar[]
+  movimientos: MovimientoCuenta[]
+  documentos: DocumentoDeCuenta[]
+}
+
 export interface OperacionInput {
   tipo: TipoOperacion
   /** Precancelación y devolución parcial: el día que se devuelve. En renovación se ignora (es el vencimiento). */
@@ -524,8 +559,23 @@ export async function enviarAAprobacion(id: string, nota: string | null): Promis
   return leer(await post(`/${encodeURIComponent(id)}/enviar`, { nota }), 'No pude enviarla a aprobación')
 }
 
-export async function aprobarInversion(id: string, nota: string | null): Promise<InversionDetalle> {
-  return leer(await post(`/${encodeURIComponent(id)}/aprobar`, { nota }), 'No pude aprobarla')
+export type AprobarInversionInput = {
+  nota?: string | null
+  /** Mismo formato que registrarIngreso. Si falla la caja después de aprobar, la respuesta trae ingresoError. */
+  ingreso?: IngresoInput | null
+}
+
+export type AprobarInversionResultado = InversionDetalle & { ingresoError?: string }
+
+export async function aprobarInversion(
+  id: string,
+  input: AprobarInversionInput | string | null = null,
+): Promise<AprobarInversionResultado> {
+  const body =
+    typeof input === 'string' || input == null
+      ? { nota: input }
+      : { nota: input.nota ?? null, ingreso: input.ingreso ?? undefined }
+  return leer(await post(`/${encodeURIComponent(id)}/aprobar`, body), 'No pude aprobarla')
 }
 
 export async function rechazarInversion(id: string, motivo: string): Promise<InversionDetalle> {
@@ -664,3 +714,15 @@ export async function confirmarImportacion(token: string, filas: number[]): Prom
 export async function fetchCruce(semanas = 12): Promise<CruceResponse> {
   return leer(await invFetch(`/cruce?semanas=${semanas}`), 'No pude armar el cruce')
 }
+
+// ── Cuenta ───────────────────────────────────────────────────
+
+export async function fetchCuentaGeneral(): Promise<CuentaCompleta> {
+  return leer(await invFetch('/cuenta'), 'No pude traer la cuenta general')
+}
+
+export async function fetchCuentaInversor(id: string): Promise<CuentaCompleta> {
+  return leer(await invFetch(`/inversores/${encodeURIComponent(id)}/cuenta`), 'No pude traer la cuenta del inversor')
+}
+
+export { type KpisMoneda, type EstadoCuotaCalendario, type MesCalendario, type MonedaCuenta } from '../components/finanzas/inversiones/cuentaInversor'

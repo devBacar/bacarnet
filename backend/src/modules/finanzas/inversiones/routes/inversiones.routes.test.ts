@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 import type { NextFunction, Request, Response } from 'express'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { detalleInversion, simular } from '../services/inversiones.service.js'
+import { aprobarInversion, detalleInversion, simular } from '../services/inversiones.service.js'
 import { finanzasInversionesRouter } from './inversiones.routes.js'
 
 /**
@@ -50,6 +50,11 @@ vi.mock('../services/inversiones.service.js', () => ({
   aprobarInversion: vi.fn(async () => ({ estado: 'vigente' })),
   rechazarInversion: vi.fn(async () => ({})),
   anularInversion: vi.fn(async () => ({})),
+  registrarIngreso: vi.fn(async () => ({})),
+  cuotaEnPesos: vi.fn(async () => ({})),
+  subirDocumento: vi.fn(async () => ({})),
+  enlaceDeDocumento: vi.fn(async () => ({})),
+  quitarDocumentoDe: vi.fn(async () => ({})),
 }))
 
 
@@ -97,6 +102,21 @@ describe('rutas de Inversores: permisos', () => {
   it('el Líder aprueba y guarda la configuración', async () => {
     expect((await pedir('POST', '/abc/aprobar', LIDER)).status).toBe(200)
     expect((await pedir('PUT', '/config', LIDER)).status).toBe(200)
+  })
+
+  it('aprobar pasa el body completo (nota + ingreso opcional)', async () => {
+    vi.mocked(aprobarInversion).mockClear()
+    const body = {
+      nota: 'ok',
+      ingreso: { clave: 'clave-0001', medio: 'transferencia', fecha: '2026-01-10', montoCentavos: 100, cuentaId: 'c1' },
+    }
+    const res = await fetch(`${base}/abc/aprobar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-permisos': LIDER.join(',') },
+      body: JSON.stringify(body),
+    })
+    expect(res.status).toBe(200)
+    expect(aprobarInversion).toHaveBeenCalledWith('abc', body, expect.objectContaining({ uid: 'u1' }))
   })
 
   it('las rutas fijas no las pisa /:id', async () => {

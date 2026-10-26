@@ -25,7 +25,13 @@ import { FichaInversorModal } from './FichaInversorModal'
 import { textoSistema } from './textosInversiones'
 
 type Props =
-  | { modo: 'nuevo'; onCerrar: () => void; onGuardado: (detalle: InversionDetalle) => void }
+  | {
+      modo: 'nuevo'
+      /** Desde la cuenta de un inversor: el formulario arranca con esa persona elegida. */
+      inversorIdInicial?: string
+      onCerrar: () => void
+      onGuardado: (detalle: InversionDetalle) => void
+    }
   | {
       modo: 'editar'
       inversionId: string
@@ -326,7 +332,9 @@ function armarInput(form: FormState): InversionInput | { error: string } {
 export function FormInversion(props: Props) {
   const queryClient = useQueryClient()
   const [form, setForm] = useState<FormState>(() =>
-    props.modo === 'editar' ? deDetalle(props.inicial) : vacio(),
+    props.modo === 'editar'
+      ? deDetalle(props.inicial)
+      : { ...vacio(), inversorId: props.inversorIdInicial ?? '' },
   )
   const [error, setError] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -450,7 +458,7 @@ export function FormInversion(props: Props) {
   const puedeSinVenc = form.sistema === 'americano' || form.sistema === 'capitaliza'
 
   return (
-    <div className="space-y-6">
+    <div className="min-h-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto pr-1">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-heading text-xl font-bold tracking-tight sm:text-2xl">
@@ -619,7 +627,7 @@ export function FormInversion(props: Props) {
               aria-label="Tasa por mes o anual"
               value={form.tasaExpresada}
               onChange={(e) => set('tasaExpresada', e.target.value as TasaExpresada)}
-              className={finanzasInputClass}
+              className={`${finanzasInputClass} !w-auto shrink-0`}
             >
               <option value="mensual">Por mes</option>
               <option value="anual">Anual</option>

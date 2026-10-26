@@ -754,6 +754,10 @@ function ChequeDetalleModal({ chequeId, onClose }: { chequeId: string; onClose: 
                     <dt className="text-body-muted">Estado Vientri</dt>
                     <dd>{ch.estadoBancario}</dd>
                   </> : null}
+                  {ch.vientriClave ? <>
+                    <dt className="text-body-muted">Tipo</dt>
+                    <dd>{ch.vientriClave.startsWith('oca-') ? 'Ocasional' : 'Regular'}</dd>
+                  </> : null}
 
                 </dl>
               </div>

@@ -55,6 +55,7 @@ export interface ChequeListItem {
   movimientoFecha: string | null
   fechaAcreditacion: string | null
   vientriSync: boolean
+  vientriClave: string | null
   vientriEstadoPrevio: string | null
   vientriCmpIngreso: number | null
   vientriCmpIngresoDesc: string | null

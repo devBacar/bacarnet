@@ -28,6 +28,26 @@ export const CHEQUE_DIRECCION_LABELS: Record<ChequeDireccion, string> = {
   emitido: 'Emitido',
 }
 
+/** Compromiso de Agenda que este cheque paga (vínculo inverso de compromiso.chequeId). */
+export interface ChequePagoDe {
+  compromisoId: string
+  proveedorONombre: string
+  concepto: string
+}
+
+/** Arma el vínculo al compromiso en el momento del pago (snapshot de nombre y concepto). */
+export function armarChequePagoDe(input: {
+  compromisoId: string
+  proveedorONombre: string | null | undefined
+  concepto: string | null | undefined
+}): ChequePagoDe {
+  return {
+    compromisoId: input.compromisoId.trim(),
+    proveedorONombre: (input.proveedorONombre ?? '').trim(),
+    concepto: (input.concepto ?? '').trim(),
+  }
+}
+
 export interface ChequeDocument {
   numero: string
   tipo: ChequeTipo
@@ -64,6 +84,12 @@ export interface ChequeDocument {
   movimientoFecha?: string | null
   /** Fecha real de acreditación: del Excel en emitidos, del movimiento en recibidos. */
   fechaAcreditacion?: string | null
+
+  /**
+   * Compromiso que este cheque paga (emitido propio o endoso de cartera desde Hoy).
+   * Ausente/null en cheques viejos o sin vínculo a Agenda.
+   */
+  pagoDe?: ChequePagoDe | null
 
   /** true si este cheque fue creado o actualizado desde vientriCheques. */
   vientriSync?: boolean

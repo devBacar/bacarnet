@@ -13,6 +13,13 @@ export type ChequeTipo = 'echeq' | 'fisico'
 export type ChequeOrigen = 'cliente' | 'tercero' | 'propio'
 export type ChequeDireccion = 'recibido' | 'emitido'
 
+/** Compromiso de Agenda que este cheque paga (si se emitió/endosó desde Hoy). */
+export interface ChequePagoDe {
+  compromisoId: string
+  proveedorONombre: string
+  concepto: string
+}
+
 export const CHEQUE_ESTADO_LABELS: Record<ChequeEstado, string> = {
   en_cartera: 'En cartera',
   depositado: 'Depositado',
@@ -61,6 +68,8 @@ export interface ChequeListItem {
   vientriCmpIngresoDesc: string | null
   vientriCmpSalida: number | null
   vientriCmpSalidaDesc: string | null
+  /** Ausente en respuestas viejas; null si el cheque no paga un compromiso. */
+  pagoDe?: ChequePagoDe | null
 }
 
 export interface ChequesListResponse {

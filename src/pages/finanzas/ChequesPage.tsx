@@ -17,6 +17,7 @@ import {
   type ChequeDireccion,
   type ChequeEstado,
   type ChequeOrigen,
+  type ChequePagoDe,
   type ChequeTipo,
   type ComprobantePendiente,
   type IngresarChequesRow,
@@ -49,6 +50,14 @@ function calcDias(fechaEmision: string, fechaPago: string): number | null {
   const b = new Date(fechaPago + 'T00:00:00')
   if (isNaN(a.getTime()) || isNaN(b.getTime())) return null
   return Math.round((b.getTime() - a.getTime()) / 86_400_000)
+}
+
+function textoPaga(pagoDe: ChequePagoDe | null | undefined): string | null {
+  if (!pagoDe) return null
+  const concepto = pagoDe.concepto.trim()
+  const proveedor = pagoDe.proveedorONombre.trim()
+  if (!concepto && !proveedor) return null
+  return [concepto, proveedor].filter(Boolean).join(' · ')
 }
 
 // ── Main page ───────────────────────────────────────────────────────
@@ -425,6 +434,12 @@ export function FinanzasChequesPage() {
                   <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                     {ch.numero}
                     {ch.bancoEmisor ? <span className="text-body-muted block font-sans text-[11px]">{ch.bancoEmisor}</span> : null}
+                    {(() => {
+                      const paga = textoPaga(ch.pagoDe)
+                      return paga ? (
+                        <span className="text-body-muted block font-sans text-[11px]">Paga: {paga}</span>
+                      ) : null
+                    })()}
                   </td>
                   <td className="px-3 py-2">
                     {ch.direccion === 'emitido'
@@ -709,6 +724,10 @@ function ChequeDetalleModal({ chequeId, onClose }: { chequeId: string; onClose: 
                   {CHEQUE_DIRECCION_LABELS[ch.direccion]} · {CHEQUE_ESTADO_LABELS[ch.estado]}
                   {ch.bancoEmisor ? ` · ${ch.bancoEmisor}` : ''}
                 </p>
+                {(() => {
+                  const paga = textoPaga(ch.pagoDe)
+                  return paga ? <p className="text-body mt-1 text-sm">Paga: {paga}</p> : null
+                })()}
               </div>
               <p className="text-brand-primary text-lg font-semibold whitespace-nowrap">
                 {formatMoneyCentavos(ch.montoCentavos, 'ARS')}

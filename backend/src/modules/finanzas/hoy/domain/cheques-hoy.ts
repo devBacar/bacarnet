@@ -1,8 +1,8 @@
 import type { BancoFilaHoy, ChequeADebitarFila, ChequeEnHoy, ChequesADebitarHoy } from './hoy.tipos.js'
 import { formatoPesos, mananaHabil } from './hoy.fechas.js'
 
-/** Un emitido anulado, rechazado o ya debitado no se vuelve a descontar. */
-const NO_SE_DEBITA = new Set(['anulado', 'rechazado', 'debitado'])
+/** Un emitido anulado, rechazado, renovado o ya debitado no se vuelve a descontar. */
+const NO_SE_DEBITA = new Set(['anulado', 'rechazado', 'debitado', 'renovado'])
 
 /**
  * En cartera = se puede usar para pagar.

@@ -5,6 +5,8 @@ import { armarVistaHoy } from './hoy.vista.js'
 import {
   armarChequesADebitar,
   camposEndoso,
+  chequesParaLaSemana,
+  chequesQueVencenHoy,
   esChequeEnCartera,
   ordenarCartera,
 } from './cheques-hoy.js'
@@ -224,5 +226,45 @@ describe('cheques que se debitan mañana', () => {
       ],
     })
     expect(bancos.impactos).toEqual([`Después de estos cheques, Julio queda en ${formatoPesos(400_000)}.`])
+  })
+
+  it('un cheque renovado no entra en semana, vencen hoy ni a debitar', () => {
+    const renovado = cheque({
+      id: 'renovado',
+      direccion: 'emitido',
+      estado: 'renovado',
+      fechaPago: HOY,
+      montoCentavos: 50_000,
+      bancoEmisor: 'Julio',
+      destinatario: 'Reemplazado SA',
+      numero: '99',
+    })
+    const vigente = cheque({
+      id: 'vigente',
+      direccion: 'emitido',
+      estado: 'pendiente',
+      fechaPago: HOY,
+      montoCentavos: 10_000,
+      bancoEmisor: 'Julio',
+      numero: '11',
+    })
+
+    expect(chequesParaLaSemana([renovado, vigente], HOY).map((c) => c.id)).toEqual(['vigente'])
+    expect(chequesQueVencenHoy([renovado, vigente], HOY).map((c) => c.id)).toEqual(['vigente'])
+
+    const aDebitar = armarChequesADebitar({
+      hoy: HOY,
+      bancos: [
+        {
+          bancoNombre: 'Julio',
+          saldoAhoraCentavos: 500_000,
+          descubiertoCentavos: null,
+          quedaParaUsarCentavos: 500_000,
+        },
+      ],
+      cheques: [renovado, vigente],
+    })
+    expect(aDebitar.filas.map((f) => f.id)).toEqual(['vigente'])
+    expect(aDebitar.totalCentavos).toBe(10_000)
   })
 })

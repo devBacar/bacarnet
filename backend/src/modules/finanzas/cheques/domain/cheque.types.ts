@@ -13,6 +13,7 @@ export type ChequeEstado =
   | 'rechazado'
   | 'pendiente'
   | 'debitado'
+  | 'renovado'
 
 export const CHEQUE_ESTADO_LABELS: Record<ChequeEstado, string> = {
   en_cartera: 'En cartera',
@@ -21,6 +22,7 @@ export const CHEQUE_ESTADO_LABELS: Record<ChequeEstado, string> = {
   rechazado: 'Rechazado',
   pendiente: 'Pendiente',
   debitado: 'Debitado',
+  renovado: 'Renovado',
 }
 
 export const CHEQUE_DIRECCION_LABELS: Record<ChequeDireccion, string> = {

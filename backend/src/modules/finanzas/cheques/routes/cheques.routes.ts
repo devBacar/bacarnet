@@ -123,7 +123,7 @@ finanzasChequesRouter.post('/ingresar', requireFinanzasPermiso('finanzas_cheques
 
 const VALID_ESTADOS: ChequeEstado[] = [
   'en_cartera', 'depositado', 'vendido', 'rechazado',
-  'pendiente', 'debitado',
+  'pendiente', 'debitado', 'renovado',
 ]
 
 

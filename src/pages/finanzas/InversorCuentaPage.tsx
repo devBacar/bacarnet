@@ -33,7 +33,6 @@ import {
   enlaceDocumentoInversion,
   fetchCuentaInversor,
   fetchInversor,
-  type DocumentoInversion,
 } from '../../services/finanzasInversionesApi'
 
 function LoadingBlock() {
@@ -42,13 +41,6 @@ function LoadingBlock() {
       <div className="spinner-brand h-8 w-8 animate-spin rounded-full border-4" />
     </div>
   )
-}
-
-function formatFecha(ymd: string | null | undefined): string {
-  if (!ymd) return '—'
-  const [y, m, d] = ymd.split('-')
-  if (!y || !m || !d) return ymd
-  return `${d}/${m}/${y}`
 }
 
 export function InversorCuentaPage() {

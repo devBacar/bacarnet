@@ -205,7 +205,7 @@ finanzasInversionesRouter.post('/:id/enviar', async (req, res) => {
 
 finanzasInversionesRouter.post('/:id/aprobar', requireFinanzasPermiso('finanzas_inversiones_aprobar'), async (req, res) => {
   try {
-    res.json(await aprobarInversion(req.params.id, req.body?.nota, req.authedUser!))
+    res.json(await aprobarInversion(req.params.id, req.body, req.authedUser!))
   } catch (err) {
     responderError(res, err, 'No pude aprobarla', 'aprobar')
   }

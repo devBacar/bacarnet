@@ -54,6 +54,19 @@ export const TEXTO_ESTADO_CUOTA_CALENDARIO: Record<EstadoCuotaCalendario, string
   vencida: 'Vencida',
 }
 
+/** Modal de aprobar (nota + ingreso opcional a Caja). */
+export const TEXTOS_APROBAR = {
+  titulo: 'Aprobar inversión',
+  ayuda: 'Queda vigente. Si el capital ya entró, podés anotarlo acá.',
+  nota: 'Nota',
+  capitalYaIngreso: 'El capital ya ingresó',
+  cancelar: 'Cancelar',
+  confirmar: 'Aprobar',
+  enviando: 'Aprobando…',
+  ingresoError: (msg: string) =>
+    `Inversión aprobada, pero el ingreso a Caja no se registró: ${msg}. Registralo desde 'Registrar ingreso'.`,
+} as const
+
 /** Cómo se devuelve la plata, en palabras. */
 export const TEXTO_SISTEMA: Record<SistemaDevolucion, string> = {
   americano: 'Paga intereses por mes',

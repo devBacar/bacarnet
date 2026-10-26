@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { ComoLoPagasModal } from '../hoy/ComoLoPagasModal'
@@ -16,6 +16,8 @@ import {
   quitarDocumentoInversion,
   rechazarInversion,
   subirDocumentoInversion,
+  type AprobarInversionInput,
+  type AprobarInversionResultado,
   type CuotaDetalle,
   type DocumentoInversion,
   type EstadoCuota,
@@ -23,11 +25,18 @@ import {
   type MedioIngreso,
 } from '../../../services/finanzasInversionesApi'
 import { pagarHoyCombinado, type PagoHoy } from '../../../services/finanzasHoyApi'
+import {
+  armarIngresoInput,
+  CamposIngresoCapital,
+  claveIngresoNueva,
+  estadoIngresoInicial,
+  type CamposIngresoState,
+} from './CamposIngresoCapital'
 import { FormInversion } from './FormInversion'
 import { CuotaEnPesosModal } from './CuotaEnPesosModal'
 import { RegistrarIngresoModal } from './RegistrarIngresoModal'
 import { FichaInversorModal } from './FichaInversorModal'
-import { textoEstado, textoSistema, textoTasa } from './textosInversiones'
+import { TEXTOS_APROBAR, textoEstado, textoSistema, textoTasa } from './textosInversiones'
 
 function formatFecha(ymd: string | null | undefined): string {
   if (!ymd) return '—'
@@ -177,6 +186,101 @@ function MotivoModal({
   )
 }
 
+function AprobarModal({
+  moneda,
+  montoSugeridoCentavos,
+  enviando,
+  onClose,
+  onConfirmar,
+}: {
+  moneda: 'ARS' | 'USD'
+  montoSugeridoCentavos: number
+  enviando: boolean
+  onClose: () => void
+  onConfirmar: (input: AprobarInversionInput) => void
+}) {
+  const claveRef = useRef(claveIngresoNueva())
+  const [nota, setNota] = useState('')
+  const [conIngreso, setConIngreso] = useState(false)
+  const [campos, setCampos] = useState<CamposIngresoState>(() => estadoIngresoInicial(montoSugeridoCentavos))
+  const [error, setError] = useState<string | null>(null)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center sm:p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="aprobar-inv-titulo"
+        className="surface-card max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-neutral-200 p-5 shadow-xl dark:border-zinc-700 sm:p-6"
+      >
+        <h2 id="aprobar-inv-titulo" className="text-heading text-lg font-semibold">
+          {TEXTOS_APROBAR.titulo}
+        </h2>
+        <p className="text-body-muted mt-2 text-sm">{TEXTOS_APROBAR.ayuda}</p>
+
+        <div className="mt-4 space-y-3">
+          <FinanzasFormField label={TEXTOS_APROBAR.nota} htmlFor="ap-nota" optional>
+            <textarea
+              id="ap-nota"
+              value={nota}
+              onChange={(e) => setNota(e.target.value)}
+              rows={2}
+              className={finanzasInputClass}
+            />
+          </FinanzasFormField>
+
+          <label className="flex cursor-pointer items-start gap-2 text-sm text-heading">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={conIngreso}
+              onChange={(e) => setConIngreso(e.target.checked)}
+            />
+            <span>{TEXTOS_APROBAR.capitalYaIngreso}</span>
+          </label>
+
+          {conIngreso ? (
+            <CamposIngresoCapital moneda={moneda} value={campos} onChange={setCampos} idPrefix="ap" />
+          ) : null}
+        </div>
+
+        {error ? <p className="text-danger mt-3 text-sm">{error}</p> : null}
+
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={enviando}
+            className="rounded-xl px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:text-gray-200 dark:hover:bg-zinc-800"
+          >
+            {TEXTOS_APROBAR.cancelar}
+          </button>
+          <button
+            type="button"
+            disabled={enviando}
+            onClick={() => {
+              setError(null)
+              if (!conIngreso) {
+                onConfirmar({ nota: nota.trim() || null })
+                return
+              }
+              const armado = armarIngresoInput(claveRef.current, campos)
+              if (!armado.ok) {
+                setError(armado.error)
+                return
+              }
+              onConfirmar({ nota: nota.trim() || null, ingreso: armado.input })
+            }}
+            className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+          >
+            {enviando ? TEXTOS_APROBAR.enviando : TEXTOS_APROBAR.confirmar}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function pagoDesdeCuota(d: InversionDetalle, c: CuotaDetalle): PagoHoy {
   return {
     id: c.compromisoId!,
@@ -211,6 +315,7 @@ export function DetalleInversion({ id }: { id: string }) {
   const [transferencia, setTransferencia] = useState<PrecargaTransferenciaHoy | null>(null)
   const [cuotaPesos, setCuotaPesos] = useState<CuotaDetalle | null>(null)
   const [ingresoAbierto, setIngresoAbierto] = useState(false)
+  const [aprobarAbierto, setAprobarAbierto] = useState(false)
   const [motivoAccion, setMotivoAccion] = useState<'anular' | 'rechazar' | null>(null)
   const [enviandoAccion, setEnviandoAccion] = useState(false)
   const [errorAccion, setErrorAccion] = useState<string | null>(null)
@@ -271,16 +376,23 @@ export function DetalleInversion({ id }: { id: string }) {
     .map((c) => c.fechaVencimiento.slice(0, 7))
   const mesesRepetidos = [...new Set(mesesConRetencion.filter((m, i) => mesesConRetencion.indexOf(m) !== i))]
 
-  const correrAccion = async (tarea: () => Promise<InversionDetalle>) => {
+  const correrAccion = async (tarea: () => Promise<InversionDetalle | AprobarInversionResultado>) => {
     setErrorAccion(null)
     setEnviandoAccion(true)
     try {
       const detalle = await tarea()
       alActualizar(detalle)
       setMotivoAccion(null)
-      toast.success('Listo')
+      setAprobarAbierto(false)
+      if ('ingresoError' in detalle && detalle.ingresoError) {
+        toast.error(TEXTOS_APROBAR.ingresoError(detalle.ingresoError), { duration: 8000 })
+      } else {
+        toast.success('Listo')
+      }
     } catch (e) {
-      setErrorAccion(e instanceof Error ? e.message : 'No se pudo completar')
+      const msg = e instanceof Error ? e.message : 'No se pudo completar'
+      setErrorAccion(msg)
+      if (aprobarAbierto) toast.error(msg)
     } finally {
       setEnviandoAccion(false)
     }
@@ -378,10 +490,7 @@ export function DetalleInversion({ id }: { id: string }) {
               <button
                 type="button"
                 disabled={enviandoAccion}
-                onClick={() => {
-                  if (!window.confirm('¿Aprobar esta inversión?')) return
-                  void correrAccion(() => aprobarInversion(id, null))
-                }}
+                onClick={() => setAprobarAbierto(true)}
                 className="rounded-xl bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
               >
                 Aprobar
@@ -750,6 +859,16 @@ export function DetalleInversion({ id }: { id: string }) {
           montoSugeridoCentavos={faltaIngresar}
           onClose={() => setIngresoAbierto(false)}
           onGuardado={alActualizar}
+        />
+      ) : null}
+
+      {aprobarAbierto ? (
+        <AprobarModal
+          moneda={moneda}
+          montoSugeridoCentavos={faltaIngresar > 0 ? faltaIngresar : d.ingresoEsperadoCentavos}
+          enviando={enviandoAccion}
+          onClose={() => setAprobarAbierto(false)}
+          onConfirmar={(input) => void correrAccion(() => aprobarInversion(id, input))}
         />
       ) : null}
 

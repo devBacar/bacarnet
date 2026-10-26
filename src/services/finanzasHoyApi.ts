@@ -25,6 +25,10 @@ export interface PagoHoy {
   medioPago: MedioPagoHoy
   proveedorONombre: string
   sugerenciasBanco: SugerenciaBanco[]
+  /** Medio cheque y ya hay cheque emitido para el compromiso. */
+  chequeEmitido?: boolean
+  /** Aviso cuando el cheque ya se emitió y solo falta debitarlo. */
+  aviso?: string | null
   moneda?: 'ARS' | 'USD'
   /** La fecha se estimó según la historia del proveedor. */
   estimada?: boolean

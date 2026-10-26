@@ -149,6 +149,7 @@ function rankUrgencia(urgencia: UrgenciaHoy): number {
 
 function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy {
   const dias = row.fechaVencimiento < hoy && !row.sinFecha ? diasEntre(row.fechaVencimiento, hoy) : 0
+  const chequeEmitido = row.medioPago === 'cheque' && row.chequeId != null
   return {
     id: row.id,
     urgencia: row.urgencia ? URGENCIA_LABEL[row.urgencia] : 'Normal',
@@ -162,6 +163,8 @@ function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[])
     medioPago: row.medioPago,
     proveedorONombre: row.proveedorONombre,
     sugerenciasBanco: sugerirDebitos(row.montoCentavos, movimientos, hoy, row.cuentaId),
+    chequeEmitido,
+    aviso: chequeEmitido ? 'Ya tiene cheque emitido, solo falta debitarlo' : null,
     ...(row.estimada ? { estimada: true } : {}),
   }
 }
@@ -182,7 +185,7 @@ export function seleccionarPagos(compromisos: CompromisoHoy[], hoy: string, movi
 
 /**
  * Pagos atrasados: vencimiento ya pasado. Primero los más recientes.
- * Solo por transferencia: lo que se paga con cheque o efectivo se resuelve en Compromisos de la semana.
+ * Incluye todos los medios; si el cheque ya se emitió, la fila lo aclara.
  */
 export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
   return compromisos
@@ -191,8 +194,7 @@ export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: str
         compromisoAbierto(row.estado) &&
         !row.sinFecha &&
         row.fechaVencimiento < hoy &&
-        row.montoCentavos > 0 &&
-        row.medioPago === 'transferencia',
+        row.montoCentavos > 0,
     )
     .sort((a, b) => b.fechaVencimiento.localeCompare(a.fechaVencimiento) || porUrgenciaYNombre(a, b))
     .map((row) => filaPago(row, hoy, movimientos))

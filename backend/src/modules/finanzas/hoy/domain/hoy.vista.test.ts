@@ -20,6 +20,7 @@ function compromiso(partial: Partial<CompromisoHoy> & Pick<CompromisoHoy, 'id' |
     medioPago: 'transferencia',
     estado: 'pendiente',
     cuentaId: null,
+    chequeId: null,
     ...partial,
   }
 }
@@ -128,18 +129,61 @@ describe('hoy: pagos de hoy y vencidos', () => {
     expect(vista.dia.pagosCentavos).toBe(1_000)
   })
 
-  it('pagos atrasados: solo lo que se paga por transferencia (cheque y efectivo van a Compromisos de la semana)', () => {
+  it('pagos atrasados: incluye transferencia, cheque y efectivo; avisa si el cheque ya se emitió', () => {
     const vista = armarVistaHoy(
       base({
         compromisos: [
           compromiso({ id: 'banco', fechaVencimiento: '2026-09-27', montoCentavos: 1_000, medioPago: 'transferencia' }),
-          compromiso({ id: 'cheque', fechaVencimiento: '2026-09-27', montoCentavos: 2_000, medioPago: 'cheque' }),
+          compromiso({
+            id: 'cheque-emitido',
+            fechaVencimiento: '2026-09-27',
+            montoCentavos: 2_000,
+            medioPago: 'cheque',
+            chequeId: 'ch-1',
+          }),
+          compromiso({ id: 'cheque-sin', fechaVencimiento: '2026-09-27', montoCentavos: 2_500, medioPago: 'cheque' }),
           compromiso({ id: 'efectivo', fechaVencimiento: '2026-09-27', montoCentavos: 3_000, medioPago: 'efectivo' }),
         ],
       }),
     )
-    expect(vista.pagosAtrasados.filas.map((fila) => fila.id)).toEqual(['banco'])
-    expect(vista.pagosAtrasados.totalCentavos).toBe(1_000)
+    expect(vista.pagosAtrasados.filas.map((fila) => fila.id)).toEqual([
+      'banco',
+      'cheque-emitido',
+      'cheque-sin',
+      'efectivo',
+    ])
+    expect(vista.pagosAtrasados.totalCentavos).toBe(8_500)
+
+    const conCheque = vista.pagosAtrasados.filas.find((fila) => fila.id === 'cheque-emitido')
+    expect(conCheque).toMatchObject({
+      medioPago: 'cheque',
+      comoPagar: 'Con cheque',
+      chequeEmitido: true,
+      aviso: 'Ya tiene cheque emitido, solo falta debitarlo',
+    })
+
+    const sinCheque = vista.pagosAtrasados.filas.find((fila) => fila.id === 'cheque-sin')
+    expect(sinCheque).toMatchObject({
+      medioPago: 'cheque',
+      chequeEmitido: false,
+      aviso: null,
+    })
+
+    const banco = vista.pagosAtrasados.filas.find((fila) => fila.id === 'banco')
+    expect(banco).toMatchObject({
+      medioPago: 'transferencia',
+      comoPagar: 'Por banco',
+      chequeEmitido: false,
+      aviso: null,
+    })
+
+    const efectivo = vista.pagosAtrasados.filas.find((fila) => fila.id === 'efectivo')
+    expect(efectivo).toMatchObject({
+      medioPago: 'efectivo',
+      comoPagar: 'En efectivo',
+      chequeEmitido: false,
+      aviso: null,
+    })
   })
 
   it('separa las facturas de Vientri sin fecha de pago', () => {

@@ -73,6 +73,7 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
     medioPago: medioDe(data.medioPago),
     estado: data.estado,
     cuentaId: data.cuentaId ?? null,
+    chequeId: data.chequeId ?? null,
     sinFecha:
       data.vientri?.sinFechaDePago === true && data.vientri.fechaEstimada !== true && fechaVencimiento === data.vientri.fechaVencimiento,
     estimada: data.vientri?.fechaEstimada === true && fechaVencimiento === data.vientri.fechaVencimiento,
@@ -211,7 +212,8 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
     listarCheques({
       ...FILTRO_CHEQUE_VACIO,
       direccion: 'emitido',
-      desde: hoy,
+      // Incluye cheques emitidos hace tiempo (atrasados viejos) y los de esta semana.
+      desde: sumarDias(hoy, -120),
       hasta: hastaSemana,
     }),
     // Si la consulta falla, la franja DEMO no se muestra; el día se arma igual.

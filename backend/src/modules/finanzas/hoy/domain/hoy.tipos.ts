@@ -14,6 +14,8 @@ export interface CompromisoHoy {
   medioPago: MedioPagoHoy
   estado: EstadoCompromisoHoy
   cuentaId: string | null
+  /** Cheque ya elegido/emitido para pagar este compromiso (Agenda). */
+  chequeId: string | null
   /** Factura de Vientri sin vencimiento cargado (y Finanzas todavía no le puso fecha de pago). */
   sinFecha?: boolean
   /** La fecha no viene de Vientri: se estimó según lo que tarda este proveedor en cobrar. */
@@ -93,6 +95,10 @@ export interface PagoFilaHoy {
   medioPago: MedioPagoHoy
   proveedorONombre: string
   sugerenciasBanco: SugerenciaBanco[]
+  /** Medio cheque y ya hay chequeId en el compromiso. */
+  chequeEmitido: boolean
+  /** Aviso visible cuando el cheque ya se emitió y solo falta debitarlo. */
+  aviso: string | null
   estimada?: boolean
 }
 

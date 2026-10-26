@@ -282,7 +282,11 @@ export function TarjetaSemanaGrafico({ prevision }: { prevision: HoyResponse['pr
   const pesado = dias.find((fila) => fila.esElMasPesado)
   const altura = (centavos: number) => `${Math.round((centavos / maximo) * 100)}%`
   return (
-    <Tarjeta titulo="Esta semana" subtitulo="Rojo: a pagar · Verde: a cobrar" ayuda="Los próximos cinco días hábiles. Cuanto más alta la barra, más plata se mueve ese día.">
+    <Tarjeta
+      titulo="Esta semana"
+      subtitulo="Rojo: a pagar · Verde: a cobrar"
+      ayuda="Los próximos cinco días hábiles. Cuanto más alta la barra, más plata se mueve ese día. No incluye lo atrasado (eso está aparte, en Pagos/Cobros atrasados); sí incluye cheques que vencen ese día; un cobro deja de contar acá en cuanto ya llegó al banco."
+    >
       {dias.length === 0 ? (
         <Vacio texto="Esta semana no hay nada anotado todavía." />
       ) : (

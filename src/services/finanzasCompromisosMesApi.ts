@@ -53,6 +53,9 @@ export interface FilaCompromisoMes {
   observacion: string | null
   fechaVencimiento: string
   medioPago: MedioPagoCompromiso
+  /** Cheque ya elegido para este compromiso, antes incluso de registrar el pago. */
+  chequeId?: string | null
+  chequeAsignado?: { numero: string; banco: string | null; propio: boolean } | null
   porDia: Record<string, CeldaDiaMes>
   acumuladoCentavos: number
   diferenciaCentavos: number

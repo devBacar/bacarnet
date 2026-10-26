@@ -31,6 +31,8 @@ loadLocalEnvFiles()
 const DEFAULT_DOMAIN = 'bacarsa.com.ar'
 const DEFAULT_IMPERSONATE = 'datos@bacarsa.com.ar'
 const DEFAULT_PUBLIC_APP_URL = 'https://bacarnet.web.app'
+/** Planilla de compromisos de Inversores en Google Sheets, para "Sincronizar ahora" en Inversiones. */
+const DEFAULT_INVERSORES_SHEET_ID = '1oH2QjbSDqKyKBBcNPuczojypuRQdhxznHFQJtFyAfxQ'
 
 export const DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive'] as const
 export const GMAIL_SEND_SCOPES = ['https://www.googleapis.com/auth/gmail.send'] as const
@@ -110,6 +112,7 @@ export function getEnv() {
     .trim()
     .replace(/\/+$/, '')
   const stTicketsApiKey = process.env.ST_INTEGRATION_API_KEY?.trim() || ''
+  const inversoresSheetId = process.env.INVERSORES_SHEET_ID?.trim() || DEFAULT_INVERSORES_SHEET_ID
 
   if (!allowedEmailDomain) {
     throw new Error('ALLOWED_EMAIL_DOMAIN está vacío')
@@ -154,6 +157,7 @@ export function getEnv() {
     widgetsOAuthRedirectUri,
     stTicketsBaseUrl,
     stTicketsApiKey,
+    inversoresSheetId,
   }
 }
 

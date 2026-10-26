@@ -95,13 +95,19 @@ export async function getPlanillaCompromisosMes(mes: string, now = new Date()): 
     ...row,
     pagosResumen: lineasPagosPlanilla(fuenteDe(row), catalogo),
   }))
-  return armarPlanillaMes({
+  const planilla = armarPlanillaMes({
     mes,
     hoy: fechaHoyArgentina(now),
     tipoCambio: tipo?.usdArs ?? null,
     feriados: feriadosNacionales2026(),
     compromisos,
   })
+  for (const grupo of planilla.grupos) {
+    for (const fila of grupo.filas) {
+      fila.chequeAsignado = fila.chequeId ? (catalogo.cheques.get(fila.chequeId) ?? null) : null
+    }
+  }
+  return planilla
 }
 
 export async function leerTipoCambioMes(mes: string): Promise<TipoCambioMes | { mes: string; usdArs: null }> {

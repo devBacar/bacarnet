@@ -119,12 +119,27 @@ function medioDe(medio: string): PagoDesdePlanilla['medioPago'] {
   return 'transferencia'
 }
 
+function textoCheque(fila: FilaListaSemana): string {
+  if (fila.chequeAsignado) {
+    const numero = fila.chequeAsignado.numero ? ` N.º ${fila.chequeAsignado.numero}` : ''
+    return `cheque${numero} ya emitido`
+  }
+  if (fila.chequeId) return 'cheque ya emitido'
+  return 'cheque sin emitir todavía'
+}
+
 function FilaCompromiso({ fila, onPagar }: { fila: FilaListaSemana; onPagar: (pago: PagoDesdePlanilla) => void }) {
   const como = fila.cuota ? `${textoComoSePaga(fila.medioPago)} y cuota ${fila.cuota}` : textoComoSePaga(fila.medioPago)
   const parcial = textoPagoParcial(fila.acumuladoCentavos, fila.importeCentavos, fila.diferenciaCentavos, (centavos) =>
     formatMoneyCentavos(centavos, fila.moneda),
   )
-  const detalle = [fila.proveedorONombre, como, parcial ?? '', fila.enFirmaCentavos > 0 ? `${formatMoneyCentavos(fila.enFirmaCentavos, fila.moneda)} en firma` : '']
+  const detalle = [
+    fila.proveedorONombre,
+    como,
+    textoCheque(fila),
+    parcial ?? '',
+    fila.enFirmaCentavos > 0 ? `${formatMoneyCentavos(fila.enFirmaCentavos, fila.moneda)} en firma` : '',
+  ]
     .filter((parte) => parte.trim().length > 0)
     .join(' · ')
   const puedeAgenda = usePermisosFinanzas().agenda
@@ -258,7 +273,7 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
           </button>
         </>
       }
-      ayuda="Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá."
+      ayuda="Solo lo que se paga con cheque. Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá."
     >
       {cargando ? <p className="text-body-muted py-2 text-[13px]">Cargando la semana…</p> : null}
       {error ? (

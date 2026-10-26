@@ -277,6 +277,11 @@ export function enviarAAprobacion(id: string, rawNota: unknown, user: AuthedUser
   }))
 }
 
+/** Aprobación automática desde la sincronización en vivo de la planilla: viene vigente en la hoja, se aprueba sola. */
+export function aprobarInversionAutomatica(id: string, user: AuthedUser, nota: string) {
+  return resolver(id, user, 'aprobada', nota)
+}
+
 function resolver(id: string, user: AuthedUser, resultado: 'aprobada' | 'rechazada', nota: string | null) {
   return cambiarEstado(id, user, ['pendiente_aprobacion'], resultado === 'aprobada' ? 'vigente' : 'borrador', nota, (inv) => ({
     aprobacion: {

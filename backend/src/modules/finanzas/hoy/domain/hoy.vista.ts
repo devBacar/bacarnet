@@ -180,10 +180,20 @@ export function seleccionarPagos(compromisos: CompromisoHoy[], hoy: string, movi
     .map((row) => filaPago(row, hoy, movimientos))
 }
 
-/** Pagos atrasados: vencimiento ya pasado. Primero los más recientes. */
+/**
+ * Pagos atrasados: vencimiento ya pasado. Primero los más recientes.
+ * Solo por transferencia: lo que se paga con cheque o efectivo se resuelve en Compromisos de la semana.
+ */
 export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
   return compromisos
-    .filter((row) => compromisoAbierto(row.estado) && !row.sinFecha && row.fechaVencimiento < hoy && row.montoCentavos > 0)
+    .filter(
+      (row) =>
+        compromisoAbierto(row.estado) &&
+        !row.sinFecha &&
+        row.fechaVencimiento < hoy &&
+        row.montoCentavos > 0 &&
+        row.medioPago === 'transferencia',
+    )
     .sort((a, b) => b.fechaVencimiento.localeCompare(a.fechaVencimiento) || porUrgenciaYNombre(a, b))
     .map((row) => filaPago(row, hoy, movimientos))
 }

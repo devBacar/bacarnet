@@ -179,6 +179,7 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
   let inversoresNuevos = 0
   let creadas = 0
   let yaEstaban = 0
+  const creadasIds: string[] = []
 
   try {
     for (const p of elegidas) {
@@ -251,6 +252,7 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
         })
         await batch.commit()
         creadas += 1
+        creadasIds.push(p.id)
       } catch (err) {
         if ((err as { code?: number }).code === 6) yaEstaban += 1
         else throw err
@@ -266,5 +268,5 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
 
   const partes = [`${creadas} inversiones quedaron para aprobar`, `${inversoresNuevos} inversores nuevos`]
   if (yaEstaban) partes.push(`${yaEstaban} ya estaban importadas`)
-  return { creadas, inversoresNuevos, mensaje: partes.join(' · ') + '.' }
+  return { creadas, inversoresNuevos, creadasIds, mensaje: partes.join(' · ') + '.' }
 }

@@ -128,6 +128,20 @@ describe('hoy: pagos de hoy y vencidos', () => {
     expect(vista.dia.pagosCentavos).toBe(1_000)
   })
 
+  it('pagos atrasados: solo lo que se paga por transferencia (cheque y efectivo van a Compromisos de la semana)', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [
+          compromiso({ id: 'banco', fechaVencimiento: '2026-09-27', montoCentavos: 1_000, medioPago: 'transferencia' }),
+          compromiso({ id: 'cheque', fechaVencimiento: '2026-09-27', montoCentavos: 2_000, medioPago: 'cheque' }),
+          compromiso({ id: 'efectivo', fechaVencimiento: '2026-09-27', montoCentavos: 3_000, medioPago: 'efectivo' }),
+        ],
+      }),
+    )
+    expect(vista.pagosAtrasados.filas.map((fila) => fila.id)).toEqual(['banco'])
+    expect(vista.pagosAtrasados.totalCentavos).toBe(1_000)
+  })
+
   it('separa las facturas de Vientri sin fecha de pago', () => {
     const vista = armarVistaHoy(
       base({

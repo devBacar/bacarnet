@@ -1,6 +1,6 @@
 /** Procesa una carpeta de exportación de Vientri ya leída (nombre → texto). Sin Firestore: se puede testear. */
 import { armarCheques, COLUMNAS_CHEQUES, COLUMNAS_CHEQUES_PROPIOS, type ResultadoCheques } from './cheques.js'
-import { armarPendientes, COLUMNAS_COMPROBANTES } from './comprobantes.js'
+import { armarPendientes, COLUMNAS_COMPROBANTES, indiceComprobantes } from './comprobantes.js'
 import { ARCHIVOS_REQUERIDOS, leerControl, verificarArchivo, type ControlCorrida, type ResultadoControl } from './control.js'
 import { CsvError, exigirColumnas, leerCsv, type TablaCsv } from './csv.js'
 import { calcularPlazos, type PlazosHistoricos } from './plazos.js'
@@ -86,7 +86,8 @@ export function procesarCarpeta(textos: Map<string, string>): ResultadoProcesami
     if (id !== null && simbolo) monedas.set(id, simbolo)
   }
 
-  const { cheques, resumen } = armarCheques(t('cheques.csv').filas, t('cheques_propios.csv').filas, { personas: indice, bancos })
+  const comprobantes = indiceComprobantes(t('comprobantes.csv').filas)
+  const { cheques, resumen } = armarCheques(t('cheques.csv').filas, t('cheques_propios.csv').filas, { personas: indice, bancos, comprobantes })
   const pendientes = armarPendientes(t('comprobantes.csv').filas, indice, monedas)
   const plazos = calcularPlazos(t('comprobantes.csv').filas, t('aplicaciones.csv').filas, control.fechaDatos)
   const tipos = textos.get('tipos_comprobante.csv')

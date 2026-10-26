@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownLeft, ArrowUpRight, ClipboardPaste, Search, Upload } from 'lucide-react'
-import { Fragment, useEffect, useRef, useState } from 'react'
-import { fetchMovimientoById, type MovimientoListItem } from '../../services/finanzasMovimientosApi'
+import { ArrowDownLeft, ArrowUpRight, ClipboardPaste, Eye, Search, Upload } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
@@ -11,13 +10,16 @@ import {
   CHEQUE_DIRECCION_LABELS,
   CHEQUE_ESTADO_LABELS,
   fetchCheques,
+  fetchChequeDetalle,
   fetchResumenDiario,
   importChequesExcel,
   ingresarChequesPegados,
   type ChequeDireccion,
+  type ChequeDetalleResponse,
   type ChequeEstado,
   type ChequeOrigen,
   type ChequeTipo,
+  type ComprobantePendiente,
   type IngresarChequesRow,
 } from '../../services/finanzasChequesApi'
 
@@ -65,9 +67,7 @@ export function FinanzasChequesPage() {
   const puedeCheques = usePermisosFinanzas().cheques
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
-  const [movDetalle, setMovDetalle] = useState<MovimientoListItem | null>(null)
-  const [movCargando, setMovCargando] = useState(false)
-  const [expandido, setExpandido] = useState<string | null>(null)
+  const [detalleId, setDetalleId] = useState<string | null>(null)
 
   const [direccion, setDireccion] = useState<ChequeDireccion | ''>('')
   const [origen, setOrigen] = useState<ChequeOrigen | ''>('')
@@ -438,18 +438,14 @@ export function FinanzasChequesPage() {
                 <th className="px-3 py-2 text-right">Importe</th>
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Estado</th>
-                <th className="px-3 py-2">Mov.</th>
-                <th className="px-3 py-2">Obs.</th>
+                <th className="px-3 py-2 text-center">Detalle</th>
               </tr>
             </thead>
             <tbody>
-              {(data?.cheques ?? []).map((ch) => {
-                const colCount = 10 + (!direccion ? 1 : 0) + (direccion !== 'emitido' ? 1 : 0)
-                return (
-                <Fragment key={ch.id}>
+              {(data?.cheques ?? []).map((ch) => (
                 <tr
-                  className={`border-t border-subtle cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50 ${expandido === ch.id ? 'bg-neutral-50 dark:bg-neutral-800/50' : ''}`}
-                  onClick={() => setExpandido(expandido === ch.id ? null : ch.id)}
+                  key={ch.id}
+                  className="border-t border-subtle hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
                 >
                   {!direccion ? (
                     <td className="px-3 py-2">
@@ -495,63 +491,19 @@ export function FinanzasChequesPage() {
                       </span>
                     ) : null}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs">
-                    {ch.movimientoBancarioId ? (
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 rounded bg-green-100 px-1.5 py-0.5 text-green-800 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50"
-                        title={`Ver movimiento del ${ch.movimientoFecha ?? ''}`}
-                        onClick={async (e) => {
-                          e.stopPropagation()
-                          setMovCargando(true)
-                          try {
-                            const mov = await fetchMovimientoById(ch.movimientoBancarioId!)
-                            setMovDetalle(mov)
-                          } catch { toast.error('No se pudo cargar el movimiento') }
-                          finally { setMovCargando(false) }
-                        }}
-                      >
-                        ✓ {ch.movimientoFecha ? formatFecha(ch.movimientoFecha) : 'Vinculado'}
-                      </button>
-                    ) : (
-                      <span className="text-body-muted">—</span>
-                    )}
-                  </td>
-                  <td className="max-w-[200px] truncate px-3 py-2 text-xs" title={ch.observaciones ?? ''}>
-                    {ch.observaciones || '—'}
+                  <td className="px-3 py-2 text-center">
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded p-1 transition-colors hover:opacity-80"
+                      style={{ color: ch.movimientoBancarioId ? '#5B8FD4' : 'var(--color-text-muted)' }}
+                      title="Ver detalle"
+                      onClick={() => setDetalleId(ch.id)}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
                   </td>
                 </tr>
-                {expandido === ch.id ? (
-                  <tr className="bg-neutral-50 dark:bg-neutral-900">
-                    <td colSpan={colCount} className="px-6 py-3 text-sm">
-                      <div className="flex flex-wrap gap-x-8 gap-y-1">
-                        <span><span className="text-body-muted">Firmado por:</span> {ch.emisor || '—'}{ch.emisorCuit ? ` (CUIT ${ch.emisorCuit})` : ''}</span>
-                        {ch.direccion === 'recibido' ? (
-                          <span><span className="text-body-muted">Recibido el</span> {ch.fechaRecibido ? formatFecha(ch.fechaRecibido) : '—'} <span className="text-body-muted">de</span> {ch.endosante || '—'}</span>
-                        ) : null}
-                        <span><span className="text-body-muted">Entregado el</span> {ch.fechaEntregado ? formatFecha(ch.fechaEntregado) : '—'} <span className="text-body-muted">a</span> {ch.destinatario || '—'}</span>
-                        {ch.estadoBancario ? (
-                          <span><span className="text-body-muted">Estado en Vientri:</span> {ch.estadoBancario}</span>
-                        ) : null}
-                        {ch.vientriEstadoPrevio ? (
-                          <span><span className="text-body-muted">Estado previo:</span> {ch.vientriEstadoPrevio}</span>
-                        ) : null}
-                        {ch.vientriCmpIngreso ? (
-                          <span><span className="text-body-muted">Cmp. ingreso:</span> #{ch.vientriCmpIngreso}</span>
-                        ) : null}
-                        {ch.vientriCmpSalida ? (
-                          <span><span className="text-body-muted">Cmp. salida:</span> #{ch.vientriCmpSalida}</span>
-                        ) : null}
-                        {ch.fechaAcreditacion ? (
-                          <span><span className="text-body-muted">Acreditación:</span> {formatFecha(ch.fechaAcreditacion)}</span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ) : null}
-                </Fragment>
-                )
-              })}
+              ))}
             </tbody>
           </table>
           {(data?.cheques.length ?? 0) === 0 ? (
@@ -594,15 +546,8 @@ export function FinanzasChequesPage() {
         />
       ) : null}
 
-      {movDetalle ? (
-        <MovimientoDetalleModal movimiento={movDetalle} onClose={() => setMovDetalle(null)} />
-      ) : null}
-      {movCargando ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="surface-card rounded-xl px-6 py-4 shadow-lg">
-            <p className="text-body-muted text-sm">Cargando movimiento…</p>
-          </div>
-        </div>
+      {detalleId ? (
+        <ChequeDetalleModal chequeId={detalleId} onClose={() => setDetalleId(null)} />
       ) : null}
     </>
   )
@@ -731,52 +676,176 @@ function emptyRow(): ParsedRow {
 
 const INPUT_CLS = 'w-full rounded border border-transparent bg-transparent px-1 py-0.5 focus:border-neutral-300 focus:outline-none dark:focus:border-zinc-600'
 
-function MovimientoDetalleModal({ movimiento, onClose }: { movimiento: MovimientoListItem; onClose: () => void }) {
-  const entrada = movimiento.tipo === 'credito'
-  const contraparte = typeof movimiento.contraparte === 'string'
-    ? movimiento.contraparte
-    : movimiento.contraparte?.nombre ?? null
+function ComprobanteCard({ label, desc, cmpId, cmp }: { label: string; desc: string | null; cmpId: number | null; cmp: ComprobantePendiente | null }) {
+  return (
+    <div className="space-y-1">
+      <p className="text-body-muted text-xs font-medium uppercase tracking-wide">{label}</p>
+      <p className="font-medium">{desc || (cmpId ? `#${cmpId}` : '—')}</p>
+      {cmp ? (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+          {cmp.persona?.nombre ? <>
+            <dt className="text-body-muted">A nombre de</dt>
+            <dd>{cmp.persona.nombre}{cmp.persona.cuit ? ` (${cmp.persona.cuit})` : ''}</dd>
+          </> : null}
+          {cmp.tipo ? <>
+            <dt className="text-body-muted">Tipo</dt>
+            <dd>{cmp.tipo}</dd>
+          </> : null}
+          {cmp.fecha ? <>
+            <dt className="text-body-muted">Fecha</dt>
+            <dd>{formatFecha(cmp.fecha)}</dd>
+          </> : null}
+          {cmp.fechaVencimiento ? <>
+            <dt className="text-body-muted">Vencimiento</dt>
+            <dd>{formatFecha(cmp.fechaVencimiento)}</dd>
+          </> : null}
+          <dt className="text-body-muted">Total</dt>
+          <dd>{formatMoneyCentavos(cmp.totalCentavos, cmp.moneda === 'USD' ? 'USD' : 'ARS')}</dd>
+          {cmp.pendienteCentavos !== 0 && cmp.pendienteCentavos !== cmp.totalCentavos ? <>
+            <dt className="text-body-muted">Pendiente</dt>
+            <dd>{formatMoneyCentavos(cmp.pendienteCentavos, cmp.moneda === 'USD' ? 'USD' : 'ARS')}</dd>
+          </> : null}
+        </dl>
+      ) : (
+        <p className="text-body-muted text-xs">Sin datos en Vientri</p>
+      )}
+    </div>
+  )
+}
+
+function ChequeDetalleModal({ chequeId, onClose }: { chequeId: string; onClose: () => void }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['finanzas', 'cheques', 'detalle', chequeId],
+    queryFn: () => fetchChequeDetalle(chequeId),
+  })
+
+  const ch = data?.cheque
+  const mov = data?.movimiento
+  const cmps = data?.comprobantes
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div className="surface-card w-full max-w-md rounded-2xl p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-heading mb-4 text-lg font-semibold">Detalle del movimiento</h2>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          <dt className="text-body-muted">Fecha</dt>
-          <dd>{formatFecha(movimiento.fechaProceso)}</dd>
+      <div className="surface-card w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        {isLoading ? (
+          <p className="text-body-muted py-8 text-center text-sm">Cargando detalle…</p>
+        ) : isError || !ch ? (
+          <p className="text-danger py-8 text-center text-sm">No se pudo cargar el detalle</p>
+        ) : (
+          <>
+            <header className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-heading text-lg font-semibold">Cheque {ch.numero}</h2>
+                <p className="text-body-muted text-sm">
+                  {CHEQUE_DIRECCION_LABELS[ch.direccion]} · {CHEQUE_ESTADO_LABELS[ch.estado]}
+                  {ch.bancoEmisor ? ` · ${ch.bancoEmisor}` : ''}
+                </p>
+              </div>
+              <p className="text-brand-primary text-lg font-semibold whitespace-nowrap">
+                {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
+              </p>
+            </header>
 
-          <dt className="text-body-muted">Descripción</dt>
-          <dd>{movimiento.descripcion}</dd>
+            <div className="grid gap-5 sm:grid-cols-2">
+              {/* Cheque info */}
+              <div className="space-y-1">
+                <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Datos del cheque</p>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+                  <dt className="text-body-muted">Firmado por</dt>
+                  <dd>{ch.emisor || '—'}{ch.emisorCuit ? ` (${ch.emisorCuit})` : ''}</dd>
+                  <dt className="text-body-muted">Emisión</dt>
+                  <dd>{ch.fechaEmision ? formatFecha(ch.fechaEmision) : '—'}</dd>
+                  <dt className="text-body-muted">Vencimiento</dt>
+                  <dd>{ch.fechaPago ? formatFecha(ch.fechaPago) : '—'}</dd>
+                  {ch.direccion === 'recibido' ? <>
+                    <dt className="text-body-muted">Recibido de</dt>
+                    <dd>{ch.endosante || '—'}{ch.fechaRecibido ? ` (${formatFecha(ch.fechaRecibido)})` : ''}</dd>
+                  </> : null}
+                  {ch.destinatario ? <>
+                    <dt className="text-body-muted">Entregado a</dt>
+                    <dd>{ch.destinatario}{ch.fechaEntregado ? ` (${formatFecha(ch.fechaEntregado)})` : ''}</dd>
+                  </> : null}
+                  {ch.cliente ? <>
+                    <dt className="text-body-muted">Cliente</dt>
+                    <dd>{ch.cliente}</dd>
+                  </> : null}
+                  {ch.fechaAcreditacion ? <>
+                    <dt className="text-body-muted">Acreditación</dt>
+                    <dd>{formatFecha(ch.fechaAcreditacion)}</dd>
+                  </> : null}
+                  {ch.cmc7 ? <>
+                    <dt className="text-body-muted">CMC7</dt>
+                    <dd className="font-mono text-xs">{ch.cmc7}</dd>
+                  </> : null}
+                  {ch.observaciones ? <>
+                    <dt className="text-body-muted">Observaciones</dt>
+                    <dd>{ch.observaciones}</dd>
+                  </> : null}
+                  {ch.estadoBancario ? <>
+                    <dt className="text-body-muted">Estado Vientri</dt>
+                    <dd>{ch.estadoBancario}</dd>
+                  </> : null}
 
-          {contraparte ? <>
-            <dt className="text-body-muted">Contraparte</dt>
-            <dd>{contraparte}</dd>
-          </> : null}
+                </dl>
+              </div>
 
-          <dt className="text-body-muted">Tipo</dt>
-          <dd>
-            <span className={`inline-block rounded border px-2 py-0.5 text-xs font-medium ${
-              entrada
-                ? 'border-emerald-300 bg-emerald-100 text-emerald-900'
-                : 'border-red-300 bg-red-100 text-red-900'
-            }`}>
-              {entrada ? 'Entrada' : 'Salida'}
-            </span>
-          </dd>
+              {/* Movimiento bancario */}
+              <div className="space-y-1">
+                <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Movimiento bancario</p>
+                {mov ? (
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+                    <dt className="text-body-muted">Fecha</dt>
+                    <dd>{formatFecha(mov.fechaProceso)}</dd>
+                    <dt className="text-body-muted">Descripción</dt>
+                    <dd>{mov.descripcion}</dd>
+                    {(() => {
+                      const cp = typeof mov.contraparte === 'string' ? mov.contraparte : mov.contraparte?.nombre ?? null
+                      return cp ? <>
+                        <dt className="text-body-muted">Contraparte</dt>
+                        <dd>{cp}</dd>
+                      </> : null
+                    })()}
+                    <dt className="text-body-muted">Monto</dt>
+                    <dd className={`font-medium ${mov.tipo === 'credito' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                      {mov.tipo === 'credito' ? '' : '−'}{formatMoneyCentavos(mov.montoCentavos, 'ARS')}
+                    </dd>
+                    <dt className="text-body-muted">Cuenta</dt>
+                    <dd>{mov.bancoNombre}</dd>
+                    {mov.nota ? <>
+                      <dt className="text-body-muted">Nota</dt>
+                      <dd>{mov.nota}</dd>
+                    </> : null}
+                  </dl>
+                ) : (
+                  <p className="text-body-muted text-sm">Sin movimiento vinculado</p>
+                )}
+              </div>
+            </div>
 
-          <dt className="text-body-muted">Monto</dt>
-          <dd className={`font-medium ${entrada ? 'text-emerald-800' : 'text-red-800'}`}>
-            {entrada ? '' : '−'}{formatMoneyCentavos(movimiento.montoCentavos, 'ARS')}
-          </dd>
-
-          <dt className="text-body-muted">Cuenta</dt>
-          <dd>{movimiento.bancoNombre}</dd>
-
-          {movimiento.nota ? <>
-            <dt className="text-body-muted">Nota</dt>
-            <dd>{movimiento.nota}</dd>
-          </> : null}
-        </dl>
+            {/* Comprobantes */}
+            {(ch.vientriCmpIngreso || ch.vientriCmpSalida) ? (
+              <div className="mt-5 border-t border-subtle pt-4">
+                <div className="grid gap-5 sm:grid-cols-2">
+                  {ch.vientriCmpIngreso ? (
+                    <ComprobanteCard
+                      label="Comprobante de ingreso"
+                      desc={ch.vientriCmpIngresoDesc}
+                      cmpId={ch.vientriCmpIngreso}
+                      cmp={cmps?.ingreso ?? null}
+                    />
+                  ) : null}
+                  {ch.vientriCmpSalida ? (
+                    <ComprobanteCard
+                      label="Comprobante de salida"
+                      desc={ch.vientriCmpSalidaDesc}
+                      cmpId={ch.vientriCmpSalida}
+                      cmp={cmps?.salida ?? null}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </>
+        )}
         <div className="mt-5 text-right">
           <button type="button" className="btn-primary rounded-lg px-4 py-2 text-sm font-medium" onClick={onClose}>
             Cerrar

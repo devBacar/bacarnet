@@ -1,7 +1,8 @@
 import { Router } from 'express'
+import { adminDb } from '../../../../lib/firebase/admin.js'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { listChequesApi, getResumenDiario, importChequesExcel, ingresarChequesPegados } from '../services/cheques.service.js'
-import { getChequeById, updateChequeEstado, desvincularChequesFueraDeVentana, corregirPagoProveedorDebitado } from '../services/cheques.repository.js'
+import { getChequeById, buscarPendientesPorVientriId, updateChequeEstado, desvincularChequesFueraDeVentana, corregirPagoProveedorDebitado } from '../services/cheques.repository.js'
 import { reconciliarChequesConMovimientos } from '../services/reconciliar-cheques-movimientos.js'
 import { sincronizarChequesDesdeVientri } from '../services/sincronizar-desde-vientri.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
@@ -175,6 +176,49 @@ finanzasChequesRouter.post('/reconciliar', requireFinanzasPermiso('finanzas_cheq
     console.error('[finanzas/cheques] reconciliar', err)
     const message = err instanceof Error ? err.message : 'No se pudo reconciliar'
     res.status(500).json({ error: message })
+  }
+})
+
+finanzasChequesRouter.get('/:id/detalle', async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) { res.status(400).json({ error: 'Id inválido' }); return }
+    const cheque = await getChequeById(id)
+    if (!cheque) { res.status(404).json({ error: 'Cheque no encontrado' }); return }
+
+    let movimiento = null
+    if (cheque.movimientoBancarioId) {
+      const movSnap = await adminDb().collection('movimientosBancarios').doc(cheque.movimientoBancarioId).get()
+      if (movSnap.exists) {
+        const d = movSnap.data()!
+        const contraparte = typeof d.contraparte === 'string' ? d.contraparte : d.contraparte ?? null
+        movimiento = {
+          id: movSnap.id,
+          fechaProceso: String(d.fechaProceso ?? ''),
+          descripcion: String(d.descripcion ?? ''),
+          contraparte,
+          tipo: String(d.tipo ?? ''),
+          montoCentavos: typeof d.montoCentavos === 'number' ? d.montoCentavos : 0,
+          bancoNombre: String(d.bancoNombre ?? ''),
+          nota: typeof d.nota === 'string' ? d.nota : null,
+        }
+      }
+    }
+
+    const cmpIds: number[] = []
+    if (cheque.vientriCmpIngreso) cmpIds.push(cheque.vientriCmpIngreso)
+    if (cheque.vientriCmpSalida) cmpIds.push(cheque.vientriCmpSalida)
+    const pendientesMap = await buscarPendientesPorVientriId(cmpIds)
+
+    const comprobantes = {
+      ingreso: cheque.vientriCmpIngreso ? pendientesMap.get(cheque.vientriCmpIngreso) ?? null : null,
+      salida: cheque.vientriCmpSalida ? pendientesMap.get(cheque.vientriCmpSalida) ?? null : null,
+    }
+
+    res.json({ cheque, movimiento, comprobantes })
+  } catch (err) {
+    console.error('[finanzas/cheques] get detalle', err)
+    res.status(500).json({ error: 'No se pudo obtener el detalle del cheque' })
   }
 })
 

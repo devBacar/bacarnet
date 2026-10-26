@@ -52,6 +52,7 @@ export function estadoDesdeChq(idEstado: number | null, emitido: boolean, rechaz
 export interface Catalogos {
   personas: Map<number, VientriPersonaDoc>
   bancos: Map<number, string>
+  comprobantes?: Map<number, string>
 }
 
 interface ChqLeido {
@@ -84,6 +85,8 @@ function desdeChq(c: ChqLeido, cat: Catalogos): VientriChequeDoc {
   const libradorId = aEntero(f.id_persona_librador)
   const libradorRef = refPersona(cat.personas, libradorId)
   const librador = libradorRef ?? (aCuit(f.cuit_librador) ? { vientriId: 0, nombre: null, cuit: aCuit(f.cuit_librador) } : null)
+  const idCmpIngreso = aEntero(f.id_cmp_ingreso)
+  const idCmpSalida = aEntero(f.id_cmp_salida)
   return {
     clave: `chq-${c.id}`,
     direccion: c.emitido ? 'emitido' : 'recibido',
@@ -106,8 +109,10 @@ function desdeChq(c: ChqLeido, cat: Catalogos): VientriChequeDoc {
     entregadoPor: refPersona(cat.personas, aEntero(f.id_persona_entrega)),
     entregadoA: refPersona(cat.personas, aEntero(f.id_persona_recibe)),
     destinatario: null,
-    idCmpIngreso: aEntero(f.id_cmp_ingreso),
-    idCmpSalida: aEntero(f.id_cmp_salida),
+    idCmpIngreso,
+    cmpIngresoDesc: idCmpIngreso !== null ? (cat.comprobantes?.get(idCmpIngreso) ?? null) : null,
+    idCmpSalida,
+    cmpSalidaDesc: idCmpSalida !== null ? (cat.comprobantes?.get(idCmpSalida) ?? null) : null,
     idCmpNdRechazo: aEntero(f.id_cmp_nd_rechazo),
     idCmpPagoBanco: aEntero(f.id_cmp_pago_banco),
     estadoPrevioId: aEntero(f.id_estado_previo),
@@ -262,7 +267,9 @@ export function armarCheques(filasChq: FilaCsv[], filasChqoca: FilaCsv[], cat: C
       entregadoA: refPersona(cat.personas, aEntero(o.id_persona_recibe)),
       destinatario: aTexto(o.destinatario),
       idCmpIngreso: null,
+      cmpIngresoDesc: null,
       idCmpSalida: null,
+      cmpSalidaDesc: null,
       idCmpNdRechazo: null,
       idCmpPagoBanco: null,
       estadoPrevioId: null,

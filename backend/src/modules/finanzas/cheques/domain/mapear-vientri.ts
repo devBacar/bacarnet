@@ -15,7 +15,9 @@ const ESTADO_MAP: Partial<Record<EstadoChequeVientri, ChequeEstado>> = {
 export interface ChequeVientriRow extends ChequeImportRow {
   vientriClave: string
   idCmpIngreso: number | null
+  cmpIngresoDesc: string | null
   idCmpSalida: number | null
+  cmpSalidaDesc: string | null
   idCmpNdRechazo: number | null
   idCmpPagoBanco: number | null
   estadoPrevioId: number | null
@@ -57,7 +59,9 @@ export function vientriChequeToRow(doc: VientriChequeDoc): ChequeVientriRow | nu
     fechaAcreditacion: doc.fechaConciliado ?? null,
     vientriClave: doc.clave,
     idCmpIngreso: doc.idCmpIngreso,
+    cmpIngresoDesc: doc.cmpIngresoDesc ?? null,
     idCmpSalida: doc.idCmpSalida,
+    cmpSalidaDesc: doc.cmpSalidaDesc ?? null,
     idCmpNdRechazo: doc.idCmpNdRechazo,
     idCmpPagoBanco: doc.idCmpPagoBanco,
     estadoPrevioId: doc.estadoPrevioId,

@@ -1,6 +1,6 @@
 import { useQueries, useQueryClient } from '@tanstack/react-query'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronDown, ChevronLeft, ChevronRight, Plus } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import { usePermisosFinanzas } from '../permisosFinanzas'
@@ -20,7 +20,6 @@ import { FormularioCompromiso } from './compromisosMes/FormularioCompromiso'
 import {
   armarListaSemana,
   diasDeLaSemana,
-  etiquetaAtraso,
   lunesDe,
   mesesDe,
   rangoSemana,
@@ -37,9 +36,6 @@ const control =
 const botonPagar =
   'inline-flex w-[76px] shrink-0 items-center justify-center rounded-lg border border-[var(--color-primary)] bg-white px-2 py-1.5 text-xs font-medium text-[var(--color-primary)] transition hover:bg-[var(--color-primary-light)] dark:bg-transparent dark:hover:bg-[var(--color-primary-light)]'
 
-/** Cuántos vencidos se ven antes de "Ver los N restantes". */
-const VENCIDOS_A_LA_VISTA = 3
-
 export interface PagoDesdePlanilla {
   id: string
   aQuien: string
@@ -50,17 +46,16 @@ export interface PagoDesdePlanilla {
   moneda: MonedaCompromiso
 }
 
-function TotalSeccion({ valores, rojo = false }: { valores: MontosMoneda; rojo?: boolean }) {
+function TotalSeccion({ valores }: { valores: MontosMoneda }) {
   const hayPesos = valores.ars > 0
   const hayDolares = valores.usd > 0
   if (!hayPesos && !hayDolares) {
     return <span className="text-sm text-neutral-500 dark:text-neutral-400">nada para pagar</span>
   }
-  const color = rojo ? 'text-red-700 dark:text-red-300' : 'text-heading'
   const pesos = hayPesos ? formatMoneyCentavos(valores.ars, 'ARS') : ''
   const dolares = hayDolares ? formatMoneyCentavos(valores.usd, 'USD') : ''
   return (
-    <span className={`ml-auto shrink-0 text-right whitespace-nowrap ${color}`}>
+    <span className="text-heading ml-auto shrink-0 text-right whitespace-nowrap">
       {pesos ? <span className="text-base font-semibold tabular-nums">{pesos}</span> : null}
       {dolares ? (
         <span className={pesos ? 'ml-1.5 text-sm font-normal tabular-nums' : 'text-base font-semibold tabular-nums'}>
@@ -71,22 +66,51 @@ function TotalSeccion({ valores, rojo = false }: { valores: MontosMoneda; rojo?:
   )
 }
 
-function EncabezadoSeccion({
+function EncabezadoDia({
   titulo,
   valores,
-  tono,
+  esHoy,
+  abierto,
+  desplegable,
+  onToggle,
 }: {
   titulo: string
   valores: MontosMoneda
-  tono: 'normal' | 'hoy' | 'vencidos'
+  esHoy: boolean
+  abierto: boolean
+  desplegable: boolean
+  onToggle: () => void
 }) {
-  const color =
-    tono === 'vencidos' ? 'text-red-700 dark:text-red-300' : tono === 'hoy' ? 'text-[var(--color-primary)]' : 'text-heading'
-  return (
-    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-4 pt-3 pb-1.5">
+  const color = esHoy ? 'text-[var(--color-primary)]' : 'text-heading'
+  const contenido = (
+    <>
+      {desplegable ? (
+        abierto ? (
+          <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+        )
+      ) : (
+        <span className="inline-block w-4 shrink-0" aria-hidden />
+      )}
       <h3 className={`min-w-0 text-base font-semibold ${color}`}>{titulo}</h3>
-      <TotalSeccion valores={valores} rojo={tono === 'vencidos'} />
-    </div>
+      <TotalSeccion valores={valores} />
+    </>
+  )
+  if (!desplegable) {
+    return (
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-4 pt-3 pb-1.5 opacity-50">{contenido}</div>
+    )
+  }
+  return (
+    <button
+      type="button"
+      className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 px-4 pt-3 pb-1.5 text-left"
+      aria-expanded={abierto}
+      onClick={onToggle}
+    >
+      {contenido}
+    </button>
   )
 }
 
@@ -95,17 +119,7 @@ function medioDe(medio: string): PagoDesdePlanilla['medioPago'] {
   return 'transferencia'
 }
 
-function FilaCompromiso({
-  fila,
-  hoy,
-  onPagar,
-  mostrarAtraso = false,
-}: {
-  fila: FilaListaSemana
-  hoy: string
-  onPagar: (pago: PagoDesdePlanilla) => void
-  mostrarAtraso?: boolean
-}) {
+function FilaCompromiso({ fila, onPagar }: { fila: FilaListaSemana; onPagar: (pago: PagoDesdePlanilla) => void }) {
   const como = fila.cuota ? `${textoComoSePaga(fila.medioPago)} y cuota ${fila.cuota}` : textoComoSePaga(fila.medioPago)
   const parcial = textoPagoParcial(fila.acumuladoCentavos, fila.importeCentavos, fila.diferenciaCentavos, (centavos) =>
     formatMoneyCentavos(centavos, fila.moneda),
@@ -113,7 +127,6 @@ function FilaCompromiso({
   const detalle = [fila.proveedorONombre, como, parcial ?? '', fila.enFirmaCentavos > 0 ? `${formatMoneyCentavos(fila.enFirmaCentavos, fila.moneda)} en firma` : '']
     .filter((parte) => parte.trim().length > 0)
     .join(' · ')
-  const atraso = mostrarAtraso ? etiquetaAtraso(fila.fechaVencimiento, hoy) : null
   const puedeAgenda = usePermisosFinanzas().agenda
   const puedePagar =
     puedeAgenda && fila.faltaCentavos > 0 && fila.estado !== 'pagado' && fila.estado !== 'confeccionada_pendiente_autorizacion'
@@ -129,11 +142,6 @@ function FilaCompromiso({
       <div className="col-span-2 min-w-0 sm:col-span-1">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-heading break-words text-[15px] font-medium">{fila.concepto}</span>
-          {atraso ? (
-            <span className="inline-flex shrink-0 rounded-md bg-red-50 px-1.5 py-0.5 text-[11px] text-red-700 dark:bg-red-950/40 dark:text-red-300">
-              {atraso}
-            </span>
-          ) : null}
         </p>
         {detalle ? <p className="mt-0.5 break-words text-xs text-neutral-500 dark:text-neutral-400">{detalle}</p> : null}
         {parcial ? (
@@ -184,7 +192,7 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
   const hoy = hoyArgentina()
   const [lunes, setLunes] = useState(() => lunesDe(hoy))
   const [alta, setAlta] = useState(false)
-  const [verVencidos, setVerVencidos] = useState(false)
+  const [abiertos, setAbiertos] = useState<Record<string, boolean>>(() => ({ [hoy]: true }))
 
   const dias = diasDeLaSemana(lunes)
   const meses = mesesDe(dias)
@@ -199,10 +207,13 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
   const error = consultas.find((consulta) => consulta.isError)?.error
   const planillas = consultas.flatMap((consulta) => (consulta.data ? [consulta.data] : []))
   const esEstaSemana = lunes === lunesDe(hoy)
-  const lista = armarListaSemana({ planillas, dias, hoy, esEstaSemana })
+  const esSemanaPasada = lunes < lunesDe(hoy)
+  const lista = esSemanaPasada ? { dias: [] } : armarListaSemana({ planillas, dias, hoy, esEstaSemana })
   const grupos = planillas[0]?.grupos.map((grupo) => grupo.grupo) ?? [...GRUPOS_COMPROMISO]
-  const vencidosVisibles = verVencidos ? lista.vencidos : lista.vencidos.slice(0, VENCIDOS_A_LA_VISTA)
-  const vencidosOcultos = lista.vencidos.length - VENCIDOS_A_LA_VISTA
+
+  useEffect(() => {
+    setAbiertos({ [hoy]: true })
+  }, [lunes, hoy])
 
   const recargar = () => {
     void queryClient.invalidateQueries({ queryKey: COMPROMISOS_MES_QUERY_KEY })
@@ -221,10 +232,20 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
       derecha={
         <>
           <span className="inline-flex items-center gap-1">
-            <button type="button" aria-label="Semana anterior" className={control} onClick={() => { setVerVencidos(false); setLunes((actual) => sumarDias(actual, -7)) }}>
+            <button
+              type="button"
+              aria-label="Semana anterior"
+              className={control}
+              onClick={() => setLunes((actual) => sumarDias(actual, -7))}
+            >
               <ChevronLeft className="h-4 w-4" aria-hidden />
             </button>
-            <button type="button" aria-label="Semana siguiente" className={control} onClick={() => { setVerVencidos(false); setLunes((actual) => sumarDias(actual, 7)) }}>
+            <button
+              type="button"
+              aria-label="Semana siguiente"
+              className={control}
+              onClick={() => setLunes((actual) => sumarDias(actual, 7))}
+            >
               <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
           </span>
@@ -245,46 +266,46 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
           {error instanceof Error ? error.message : 'No se pudo cargar la semana'}
         </p>
       ) : null}
-      {!cargando && !error && !esEstaSemana && lista.dias.length === 0 ? (
+
+      {!cargando && !error && esSemanaPasada ? (
+        <p className="text-body-muted py-2 text-[13px]">Lo atrasado está en Pagos/Cobros atrasados.</p>
+      ) : null}
+
+      {!cargando && !error && !esSemanaPasada && lista.dias.length === 0 ? (
         <Vacio texto="Esta semana no hay compromisos anotados." />
       ) : null}
 
-      {lista.vencidos.length > 0 ? (
-        <section className="-mx-4 rounded-none border-l-[3px] border-red-500">
-          <EncabezadoSeccion titulo={`Vencidos sin pagar · ${lista.vencidos.length}`} valores={lista.totalVencidos} tono="vencidos" />
-          <div className="divide-y divide-neutral-200 dark:divide-zinc-800">
-            {vencidosVisibles.map((fila) => (
-              <FilaCompromiso key={fila.compromisoId} fila={fila} hoy={hoy} onPagar={onPagar} mostrarAtraso />
-            ))}
-          </div>
-          {vencidosOcultos > 0 ? (
-            <button
-              type="button"
-              className="px-4 py-2 text-left text-sm text-[var(--color-primary)] underline-offset-2 hover:underline"
-              onClick={() => setVerVencidos((actual) => !actual)}
-            >
-              {verVencidos ? 'Ver menos' : vencidosOcultos === 1 ? 'Ver el restante ›' : `Ver los ${vencidosOcultos} restantes ›`}
-            </button>
-          ) : null}
-        </section>
-      ) : null}
-
-      {lista.dias.map((dia, indice) => {
-        const titulo = tituloDiaLista(dia.fecha, hoy)
-        const separada = lista.vencidos.length > 0 || indice > 0
-        return (
-          <section key={dia.fecha} className={`-mx-4 ${separada ? 'border-t border-neutral-300 dark:border-zinc-600' : ''}`}>
-            <EncabezadoSeccion titulo={titulo.texto} valores={dia.total} tono={titulo.esHoy ? 'hoy' : 'normal'} />
-            {dia.filas.length > 0 ? (
-              <div className="divide-y divide-neutral-200 dark:divide-zinc-800">
-                {dia.filas.map((fila) => (
-                  <FilaCompromiso key={fila.compromisoId} fila={fila} hoy={hoy} onPagar={onPagar} />
-                ))}
-              </div>
-            ) : null}
-          </section>
-        )
-      })}
+      {!esSemanaPasada
+        ? lista.dias.map((dia, indice) => {
+            const titulo = tituloDiaLista(dia.fecha, hoy)
+            const tiene = dia.filas.length > 0
+            const abierto = Boolean(abiertos[dia.fecha])
+            return (
+              <section
+                key={dia.fecha}
+                className={`-mx-4 ${indice > 0 ? 'border-t border-neutral-300 dark:border-zinc-600' : ''}`}
+              >
+                <EncabezadoDia
+                  titulo={titulo.texto}
+                  valores={dia.total}
+                  esHoy={titulo.esHoy}
+                  abierto={abierto}
+                  desplegable={tiene}
+                  onToggle={() =>
+                    setAbiertos((actual) => ({ ...actual, [dia.fecha]: !actual[dia.fecha] }))
+                  }
+                />
+                {tiene && abierto ? (
+                  <div className="divide-y divide-neutral-200 dark:divide-zinc-800">
+                    {dia.filas.map((fila) => (
+                      <FilaCompromiso key={fila.compromisoId} fila={fila} onPagar={onPagar} />
+                    ))}
+                  </div>
+                ) : null}
+              </section>
+            )
+          })
+        : null}
 
       {alta ? (
         <FormularioCompromiso

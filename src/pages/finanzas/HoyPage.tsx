@@ -11,13 +11,18 @@ import {
   ReprogramarModal,
   YaLoPagueModal,
 } from '../../components/finanzas/hoy/ModalesHoy'
-import { CobrosHoy, PagosHoy } from '../../components/finanzas/hoy/PagosCobrosHoy'
+import {
+  CobrosAtrasados,
+  CobrosHoy,
+  fusionarPorId,
+  PagosAtrasados,
+  PagosHoy,
+} from '../../components/finanzas/hoy/PagosCobrosHoy'
 import {
   CuatroNumeros,
   EncabezadoHoy,
   FranjaDemo,
   TarjetaBancos,
-  TarjetaOjo,
   TarjetaSemanaGrafico,
 } from '../../components/finanzas/hoy/TarjetasHoy'
 import { NuevaTransferenciaModal, type PrecargaTransferenciaHoy } from '../../components/finanzas/NuevaTransferenciaModal'
@@ -112,6 +117,17 @@ export function FinanzasHoyPage() {
     }
   }
 
+  function confirmarIngreso(ingreso: IngresoHoy) {
+    if (!ingreso.movimientoId) return
+    setConfirmandoId(ingreso.id)
+    void confirmarCobroHoy(ingreso.id, ingreso.movimientoId)
+      .then((mensaje) => recargar(mensaje))
+      .catch((err: unknown) => {
+        toast.error(err instanceof Error ? err.message : 'No se pudo confirmar')
+      })
+      .finally(() => setConfirmandoId(null))
+  }
+
   async function borrarDemo() {
     if (!window.confirm('¿Borramos los datos de ejemplo? Solo se borran los marcados como DEMO.')) return
     setBorrandoDemo(true)
@@ -166,86 +182,71 @@ export function FinanzasHoyPage() {
           {data.vacio ? (
             <p className="text-[13px] text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>
           ) : null}
-          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
+          <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosHoy
-              pagos={data.pagos}
+              pagos={{
+                filas: data.pagos.filas.filter((pago) => !pago.vencido),
+                totalCentavos: data.pagos.filas
+                  .filter((pago) => !pago.vencido)
+                  .reduce((s, f) => s + f.montoCentavos, 0),
+              }}
               onPagar={setPagoModo}
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
             />
             <CobrosHoy
-              ingresos={data.ingresos.filas}
-              atrasados={data.prevision.cobrosAtrasados}
+              ingresos={data.ingresos.filas.filter((ingreso) => !ingreso.atrasado)}
               sinFecha={data.cobrosSinFecha}
               confirmandoId={confirmandoId}
-              onConfirmar={(ingreso) => {
-                if (!ingreso.movimientoId) return
-                setConfirmandoId(ingreso.id)
-                void confirmarCobroHoy(ingreso.id, ingreso.movimientoId)
-                  .then((mensaje) => recargar(mensaje))
-                  .catch((err: unknown) => {
-                    toast.error(err instanceof Error ? err.message : 'No se pudo confirmar')
-                  })
-                  .finally(() => setConfirmandoId(null))
-              }}
+              onConfirmar={confirmarIngreso}
               onEfectivo={setIngresoEfectivo}
               onReprogramar={setReprogramarIngreso}
               onReclamar={setReclamo}
-              onReclamarAtrasado={setReclamo}
               puedeOperar={permisos.agenda}
             />
           </div>
-          {(data.pagosAtrasados?.filas.length ?? 0) > 0 || (data.pagosSinFecha?.filas.length ?? 0) > 0 ? (
-            <div className="grid min-w-0 items-start gap-4 lg:grid-cols-2">
-              {[
-                { titulo: 'Pagos atrasados hasta 30 días', recientes: true },
-                { titulo: 'Atrasados de más de 30 días: revisar si ya se pagaron', recientes: false },
-              ].map(({ titulo, recientes }) => {
-                const filas = (data.pagosAtrasados?.filas ?? []).filter((f) =>
-                  recientes ? (f.diasAtraso ?? 0) <= 30 : (f.diasAtraso ?? 0) > 30,
-                )
-                if (filas.length === 0) return null
-                return (
-                  <PagosHoy
-                    key={titulo}
-                    pagos={{ filas, totalCentavos: filas.reduce((s, f) => s + f.montoCentavos, 0) }}
-                    titulo={`${titulo} (${filas.length})`}
-                    vacio="No hay pagos atrasados."
-                    ayuda={
-                      recientes
-                        ? 'Ya pasó su fecha de pago. No suman en los números de hoy. Si ya se pagaron, marcalos; si se van a pagar otro día, cambiales la fecha.'
-                        : 'Siguen con saldo en Vientri pero pasó más de un mes: lo normal es que ya estén pagados y falte cargarlo en Vientri. Revisalos con Administración.'
-                    }
-                    tour={recientes ? 'hoy-pagos-atrasados' : 'hoy-pagos-atrasados-viejos'}
-                    onPagar={setPagoModo}
-                    onYaPague={setYaPague}
-                    onReprogramar={setReprogramarPago}
-                    puedeOperar={permisos.agenda}
-                  />
-                )
-              })}
-              {data.pagosSinFecha && data.pagosSinFecha.filas.length > 0 ? (
-                <PagosHoy
-                  pagos={data.pagosSinFecha}
-                  titulo={`Sin fecha de pago (${data.pagosSinFecha.filas.length})`}
-                  vacio="No hay facturas sin fecha."
-                  ayuda="Facturas de Vientri que no tienen vencimiento. Poneles el día en que las vas a pagar y pasan a ese día."
-                  tour="hoy-pagos-sin-fecha"
-                  sinFecha
-                  onPagar={setPagoModo}
-                  onYaPague={setYaPague}
-                  onReprogramar={setReprogramarPago}
-                  puedeOperar={permisos.agenda}
-                />
-              ) : null}
-            </div>
+          <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
+            <PagosAtrasados
+              pagos={fusionarPorId(
+                data.pagosAtrasados?.filas ?? [],
+                data.pagos.filas.filter((pago) => pago.vencido),
+              )}
+              onPagar={setPagoModo}
+              onYaPague={setYaPague}
+              onReprogramar={setReprogramarPago}
+              puedeOperar={permisos.agenda}
+            />
+            <CobrosAtrasados
+              atrasados={data.prevision.cobrosAtrasados}
+              llegados={data.ingresos.filas.filter(
+                (ingreso) =>
+                  ingreso.atrasado && !data.prevision.cobrosAtrasados.some((c) => c.id === ingreso.id),
+              )}
+              confirmandoId={confirmandoId}
+              onReclamar={setReclamo}
+              onConfirmar={confirmarIngreso}
+              puedeOperar={permisos.agenda}
+            />
+          </div>
+          {data.pagosSinFecha && data.pagosSinFecha.filas.length > 0 ? (
+            <PagosHoy
+              pagos={data.pagosSinFecha}
+              titulo={`Sin fecha de pago (${data.pagosSinFecha.filas.length})`}
+              vacio="No hay facturas sin fecha."
+              ayuda="Facturas de Vientri que no tienen vencimiento. Poneles el día en que las vas a pagar y pasan a ese día."
+              tour="hoy-pagos-sin-fecha"
+              sinFecha
+              onPagar={setPagoModo}
+              onYaPague={setYaPague}
+              onReprogramar={setReprogramarPago}
+              puedeOperar={permisos.agenda}
+            />
           ) : null}
           <CompromisosSemana onPagar={pagarDesdePlanilla} />
-          <div className="grid min-w-0 items-start gap-4 lg:grid-cols-3">
+          <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <TarjetaBancos dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
             <TarjetaSemanaGrafico prevision={data.prevision} />
-            <TarjetaOjo prevision={data.prevision} />
           </div>
         </>
       ) : null}

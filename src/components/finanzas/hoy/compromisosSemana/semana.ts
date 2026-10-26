@@ -208,8 +208,6 @@ export interface DiaListaSemana {
 }
 
 export interface ListaSemana {
-  vencidos: FilaListaSemana[]
-  totalVencidos: MontosMoneda
   dias: DiaListaSemana[]
 }
 
@@ -279,8 +277,9 @@ function sumarFalta(filas: readonly FilaListaSemana[]): MontosMoneda {
 }
 
 /**
- * Lista de la semana: vencidos aparte (solo la semana actual) y un bloque por día hábil.
- * En la semana actual, lo ya pasado entra en vencidos y lo pagado de esos días no se muestra.
+ * Lista de la semana: un bloque por día hábil.
+ * En la semana actual solo desde hoy; semanas futuras completas.
+ * Lo atrasado vive en Pagos/Cobros atrasados (no se lista acá).
  */
 export function armarListaSemana(input: {
   planillas: PlanillaCompromisosMes[]
@@ -296,24 +295,17 @@ export function armarListaSemana(input: {
     }
   }
   const filas = unirFilas(input.planillas).map((fila) => aLista(fila, input.dias))
-  const vencidos = input.esEstaSemana
-    ? filas
-        .filter((fila) => fila.fechaVencimiento < input.hoy && fila.diferenciaCentavos > 0 && fila.estado !== 'pagado')
-        .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento) || a.concepto.localeCompare(b.concepto, 'es'))
-    : []
-  const idsVencidos = new Set(vencidos.map((fila) => fila.compromisoId))
   const desde = input.esEstaSemana ? input.dias.filter((dia) => dia >= input.hoy) : input.dias
   const dias: DiaListaSemana[] = []
   for (const fecha of desde) {
     if (feriados.has(fecha)) continue
     const delDia = filas
-      .filter((fila) => !idsVencidos.has(fila.compromisoId) && fila.dia === fecha)
+      .filter((fila) => fila.dia === fecha)
       .sort((a, b) => a.concepto.localeCompare(b.concepto, 'es'))
     const visibles = input.esEstaSemana
       ? delDia.filter((fila) => fila.faltaCentavos > 0 || fila.enFirmaCentavos > 0)
       : delDia
-    if (!input.esEstaSemana && visibles.length === 0) continue
     dias.push({ fecha, filas: visibles, total: sumarFalta(visibles) })
   }
-  return { vencidos, totalVencidos: sumarFalta(vencidos), dias }
+  return { dias }
 }

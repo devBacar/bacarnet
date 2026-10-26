@@ -165,6 +165,10 @@ service cloud.firestore {
     match /inversores/{id} {
       allow read, write: if false;
     }
+    // Proveedores financieros (echeq): lista chica para reagrupar la planilla. Solo backend.
+    match /proveedoresFinancieros/{id} {
+      allow read, write: if false;
+    }
     match /inversiones/{id}/{document=**} {
       allow read, write: if false;
     }

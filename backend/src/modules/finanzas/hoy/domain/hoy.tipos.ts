@@ -14,8 +14,8 @@ export interface CompromisoHoy {
   medioPago: MedioPagoHoy
   estado: EstadoCompromisoHoy
   cuentaId: string | null
-  /** Cheque ya elegido/emitido para este compromiso (vínculo Agenda → Cheques). */
-  chequeId?: string | null
+  /** Cheque ya elegido/emitido para pagar este compromiso (Agenda). */
+  chequeId: string | null
   /** Factura de Vientri sin vencimiento cargado (y Finanzas todavía no le puso fecha de pago). */
   sinFecha?: boolean
   /** La fecha no viene de Vientri: se estimó según lo que tarda este proveedor en cobrar. */
@@ -95,6 +95,10 @@ export interface PagoFilaHoy {
   medioPago: MedioPagoHoy
   proveedorONombre: string
   sugerenciasBanco: SugerenciaBanco[]
+  /** Medio cheque y ya hay chequeId en el compromiso. */
+  chequeEmitido: boolean
+  /** Aviso visible cuando el cheque ya se emitió y solo falta debitarlo. */
+  aviso: string | null
   estimada?: boolean
 }
 
@@ -161,8 +165,6 @@ export interface ChequeEnHoy {
   destinatario: string | null
   emisor: string
   cliente: string | null
-  /** Compromiso de Agenda que este cheque paga; null/ausente = cheque suelto. */
-  pagoDe?: { compromisoId: string; proveedorONombre: string; concepto: string } | null
 }
 
 export interface ChequeADebitarFila {
@@ -190,26 +192,6 @@ export interface ChequeCarteraHoy {
   montoCentavos: number
 }
 
-export interface CentroDePagosFilaHoy {
-  id: string
-  aQuien: string
-  concepto: string
-  montoCentavos: number
-  /** YYYY-MM-DD. Null si es factura sin fecha de pago. */
-  fechaVencimiento: string | null
-  medioPago: MedioPagoHoy
-  estaAtrasado: boolean
-  /** Solo cuando el compromiso está atrasado y ya tiene cheque emitido. */
-  aviso: string | null
-  chequeEmitido: boolean
-  chequeNumero: string | null
-}
-
-export interface CentroDePagosHoy {
-  filas: CentroDePagosFilaHoy[]
-  totalCentavos: number
-}
-
 export interface HoyVista {
   saludo: string
   fecha: string
@@ -220,11 +202,6 @@ export interface HoyVista {
   pagosAtrasados: { totalCentavos: number; filas: PagoFilaHoy[] }
   /** Facturas de Vientri sin vencimiento: Finanzas les pone el día de pago. */
   pagosSinFecha: { totalCentavos: number; filas: PagoFilaHoy[] }
-  /**
-   * Resumen unificado: pagos de hoy, atrasados, semana y cheques sueltos,
-   * ordenados por vencimiento (lo más atrasado primero).
-   */
-  centroDePagos: CentroDePagosHoy
   ingresos: { filas: IngresoFilaHoy[] }
   cobrosSinFecha: { cantidad: number; totalCentavos: number }
   dia: {

@@ -1,5 +1,4 @@
 import { presentarEstadoInterbanking } from '../../transferencias/domain/estado-interbanking.js'
-import { armarCentroDePagos } from './centro-de-pagos.js'
 import { armarChequesADebitar, chequesParaLaSemana, chequesQueVencenHoy } from './cheques-hoy.js'
 import {
   diasEntre,
@@ -150,6 +149,7 @@ function rankUrgencia(urgencia: UrgenciaHoy): number {
 
 function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy {
   const dias = row.fechaVencimiento < hoy && !row.sinFecha ? diasEntre(row.fechaVencimiento, hoy) : 0
+  const chequeEmitido = row.medioPago === 'cheque' && row.chequeId != null
   return {
     id: row.id,
     urgencia: row.urgencia ? URGENCIA_LABEL[row.urgencia] : 'Normal',
@@ -163,6 +163,8 @@ function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[])
     medioPago: row.medioPago,
     proveedorONombre: row.proveedorONombre,
     sugerenciasBanco: sugerirDebitos(row.montoCentavos, movimientos, hoy, row.cuentaId),
+    chequeEmitido,
+    aviso: chequeEmitido ? 'Ya tiene cheque emitido, solo falta debitarlo' : null,
     ...(row.estimada ? { estimada: true } : {}),
   }
 }
@@ -183,7 +185,7 @@ export function seleccionarPagos(compromisos: CompromisoHoy[], hoy: string, movi
 
 /**
  * Pagos atrasados: vencimiento ya pasado. Primero los más recientes.
- * Solo por transferencia: lo que se paga con cheque o efectivo se resuelve en Compromisos de la semana.
+ * Incluye todos los medios; si el cheque ya se emitió, la fila lo aclara.
  */
 export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
   return compromisos
@@ -192,8 +194,7 @@ export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: str
         compromisoAbierto(row.estado) &&
         !row.sinFecha &&
         row.fechaVencimiento < hoy &&
-        row.montoCentavos > 0 &&
-        row.medioPago === 'transferencia',
+        row.montoCentavos > 0,
     )
     .sort((a, b) => b.fechaVencimiento.localeCompare(a.fechaVencimiento) || porUrgenciaYNombre(a, b))
     .map((row) => filaPago(row, hoy, movimientos))
@@ -453,13 +454,6 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const cobrosAtrasados = listarCobrosAtrasados(input.cobros, hoy, ingresos.llegados)
   const firmas = transferenciasSinFirmar(input.transferencias, input.now)
   const chequesADebitar = armarChequesADebitar({ cheques: input.cheques, hoy, bancos })
-  const hastaSemana = proximosDiasHabiles(hoy, 7).at(-1) ?? hoy
-  const centroDePagos = armarCentroDePagos({
-    hoy,
-    hasta: hastaSemana,
-    compromisos: input.compromisos,
-    cheques: input.cheques,
-  })
   const vacio =
     pagos.length === 0 &&
     pagosAtrasados.length === 0 &&
@@ -477,7 +471,6 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
     pagos: { totalCentavos: pagosDeCompromisos, filas: pagos },
     pagosAtrasados: { totalCentavos: suma(pagosAtrasados), filas: pagosAtrasados },
     pagosSinFecha: { totalCentavos: suma(pagosSinFecha), filas: pagosSinFecha },
-    centroDePagos,
     ingresos: { filas: ingresos.filas },
     cobrosSinFecha: { cantidad: cobrosSinFecha.length, totalCentavos: suma(cobrosSinFecha) },
     dia: {

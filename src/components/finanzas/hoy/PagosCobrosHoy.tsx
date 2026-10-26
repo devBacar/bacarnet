@@ -333,6 +333,12 @@ export function PagosAtrasados({
           {pago.concepto} · {pago.comoPagar}
           {pago.estimada ? ' · fecha estimada' : null}
           {pago.urgencia !== 'Normal' ? ` · urgencia ${pago.urgencia.toLowerCase()}` : null}
+          {pago.aviso ? (
+            <>
+              {' · '}
+              <span className="text-heading font-medium">{pago.aviso}</span>
+            </>
+          ) : null}
         </>
       }
       etiqueta={pago.vencidoTexto ? <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta> : undefined}

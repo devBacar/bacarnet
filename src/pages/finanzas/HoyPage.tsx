@@ -3,7 +3,6 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
 import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
-import { CentroDePagos } from '../../components/finanzas/hoy/CentroDePagos'
 import { CompromisosSemana, type PagoDesdePlanilla } from '../../components/finanzas/hoy/CompromisosSemana'
 import {
   ComoLoPagasModal,
@@ -182,12 +181,6 @@ export function FinanzasHoyPage() {
           <CuatroNumeros data={data} />
           {data.vacio ? (
             <p className="text-[13px] text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>
-          ) : null}
-          {data.centroDePagos && data.centroDePagos.filas.length > 0 ? (
-            <CentroDePagos
-              filas={data.centroDePagos.filas}
-              totalCentavos={data.centroDePagos.totalCentavos}
-            />
           ) : null}
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosHoy

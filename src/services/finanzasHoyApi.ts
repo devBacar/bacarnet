@@ -25,6 +25,10 @@ export interface PagoHoy {
   medioPago: MedioPagoHoy
   proveedorONombre: string
   sugerenciasBanco: SugerenciaBanco[]
+  /** Medio cheque y ya hay cheque emitido para el compromiso. */
+  chequeEmitido?: boolean
+  /** Aviso cuando el cheque ya se emitió y solo falta debitarlo. */
+  aviso?: string | null
   moneda?: 'ARS' | 'USD'
   /** La fecha se estimó según la historia del proveedor. */
   estimada?: boolean
@@ -98,19 +102,6 @@ export interface ChequeCarteraHoy {
   montoCentavos: number
 }
 
-export interface CentroDePagosFila {
-  id: string
-  aQuien: string
-  concepto: string
-  montoCentavos: number
-  fechaVencimiento: string | null
-  medioPago: MedioPagoHoy
-  estaAtrasado: boolean
-  aviso: string | null
-  chequeEmitido: boolean
-  chequeNumero: string | null
-}
-
 export interface HoyResponse {
   saludo: string
   fecha: string
@@ -121,8 +112,6 @@ export interface HoyResponse {
   pagosAtrasados?: { totalCentavos: number; filas: PagoHoy[] }
   /** Facturas de Vientri sin vencimiento: hay que ponerles el día de pago. */
   pagosSinFecha?: { totalCentavos: number; filas: PagoHoy[] }
-  /** Resumen unificado ordenado por vencimiento (lo más atrasado primero). */
-  centroDePagos?: { totalCentavos: number; filas: CentroDePagosFila[] }
   ingresos: { filas: IngresoHoy[] }
   cobrosSinFecha?: { cantidad: number; totalCentavos: number }
   dia: {

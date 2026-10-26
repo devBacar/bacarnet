@@ -152,7 +152,6 @@ function mapCheque(row: ChequeListadoItem): ChequeEnHoy {
     destinatario: row.destinatario,
     emisor: row.emisor,
     cliente: row.cliente,
-    pagoDe: row.pagoDe,
   }
 }
 
@@ -210,10 +209,10 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
     listCuentaDocuments(),
     listTransferenciasConfeccionadas(),
     listarMovimientos(sumarDias(hoy, -4), hoy),
-    // Incluye emitidos atrasados (aún no debitados) para el Centro de pagos.
     listarCheques({
       ...FILTRO_CHEQUE_VACIO,
       direccion: 'emitido',
+      // Incluye cheques emitidos hace tiempo (atrasados viejos) y los de esta semana.
       desde: sumarDias(hoy, -120),
       hasta: hastaSemana,
     }),

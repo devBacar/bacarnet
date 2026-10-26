@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { CobroAtrasadoHoy, HoyResponse, IngresoHoy, PagoHoy } from '../../../services/finanzasHoyApi'
 import { Etiqueta, MenuAcciones, Monto, Tarjeta, Vacio, botonChico, botonChicoSecundario, linkChico } from './TarjetasHoy'
 
@@ -430,42 +430,39 @@ export function CobrosAtrasados({
     if (item.tipo === 'atrasado') {
       const cobro = item.cobro
       return (
-        <li className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-1.5 text-[13px]">
-          <span className="min-w-0">
-            <span className="font-medium text-red-700 dark:text-red-300">Atrasado:</span>{' '}
-            <span className="text-heading">{cobro.cliente}</span>
-            <span className="text-body-muted">
-              {' '}
-              · {cobro.haceTexto.toLowerCase()}
-              {cobro.estimada ? ' · fecha estimada' : ''}
-            </span>
-          </span>
-          <span className="flex shrink-0 items-center gap-2">
-            <Monto centavos={cobro.montoCentavos} className="text-heading" />
-            <button type="button" className={linkChico} onClick={() => onReclamar(cobro)}>
+        <Fila
+          nombre={cobro.cliente}
+          detalle={
+            <>
+              {cobro.concepto}
+              {cobro.estimada ? ' · fecha estimada' : null}
+            </>
+          }
+          etiqueta={<Etiqueta tono="rojo">{cobro.haceTexto}</Etiqueta>}
+          centavos={cobro.montoCentavos}
+          accion={
+            <button type="button" className={botonChicoSecundario} onClick={() => onReclamar(cobro)}>
               Reclamar
             </button>
-          </span>
-        </li>
+          }
+        />
       )
     }
     const ingreso = item.ingreso
     return (
-      <li className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 py-1.5 text-[13px]">
-        <span className="min-w-0">
-          <span className="font-medium text-red-700 dark:text-red-300">Atrasado:</span>{' '}
-          <span className="text-heading">{ingreso.cliente}</span>
-          <span className="text-body-muted">
-            {' '}
-            · {ingreso.atrasadoTexto?.toLowerCase() ?? 'atrasado'}
-            {ingreso.estimada ? ' · fecha estimada' : ''}
-            {' · '}
+      <Fila
+        nombre={ingreso.cliente}
+        detalle={
+          <>
+            {ingreso.concepto} ·{' '}
             <span className="text-emerald-700 dark:text-emerald-300">llegó a {ingreso.bancoNombre ?? 'un banco'}</span>
-          </span>
-        </span>
-        <span className="flex shrink-0 items-center gap-2">
-          <Monto centavos={ingreso.montoCentavos} className="text-heading" />
-          {puedeOperar && ingreso.movimientoId ? (
+            {ingreso.estimada ? ' · fecha estimada' : null}
+          </>
+        }
+        etiqueta={ingreso.atrasadoTexto ? <Etiqueta tono="rojo">{ingreso.atrasadoTexto}</Etiqueta> : undefined}
+        centavos={ingreso.montoCentavos}
+        accion={
+          puedeOperar && ingreso.movimientoId ? (
             <button
               type="button"
               className={botonChico}
@@ -474,9 +471,9 @@ export function CobrosAtrasados({
             >
               {confirmandoId === ingreso.id ? 'Confirmando…' : 'Confirmar'}
             </button>
-          ) : null}
-        </span>
-      </li>
+          ) : undefined
+        }
+      />
     )
   }
 
@@ -529,7 +526,11 @@ function ListaConScroll<T>({
   const hayMas = items.length > FILAS_VISIBLES
   return (
     <div className={todos && hayMas ? 'max-h-[28rem] overflow-y-auto' : undefined}>
-      <ul>{visibles.map((item) => <Fragment key={clave(item)}>{render(item)}</Fragment>)}</ul>
+      <ul className="divide-y divide-neutral-100 dark:divide-zinc-800">
+        {visibles.map((item) => (
+          <li key={clave(item)}>{render(item)}</li>
+        ))}
+      </ul>
       {hayMas && !todos ? (
         <button type="button" className={`${linkChico} mt-1`} onClick={() => setTodos(true)}>
           Ver más ({items.length})

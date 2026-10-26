@@ -73,7 +73,6 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
     medioPago: medioDe(data.medioPago),
     estado: data.estado,
     cuentaId: data.cuentaId ?? null,
-    chequeId: data.chequeId ?? null,
     sinFecha:
       data.vientri?.sinFechaDePago === true && data.vientri.fechaEstimada !== true && fechaVencimiento === data.vientri.fechaVencimiento,
     estimada: data.vientri?.fechaEstimada === true && fechaVencimiento === data.vientri.fechaVencimiento,
@@ -152,7 +151,6 @@ function mapCheque(row: ChequeListadoItem): ChequeEnHoy {
     destinatario: row.destinatario,
     emisor: row.emisor,
     cliente: row.cliente,
-    pagoDe: row.pagoDe,
   }
 }
 
@@ -210,11 +208,10 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
     listCuentaDocuments(),
     listTransferenciasConfeccionadas(),
     listarMovimientos(sumarDias(hoy, -4), hoy),
-    // Incluye emitidos atrasados (aún no debitados) para el Centro de pagos.
     listarCheques({
       ...FILTRO_CHEQUE_VACIO,
       direccion: 'emitido',
-      desde: sumarDias(hoy, -120),
+      desde: hoy,
       hasta: hastaSemana,
     }),
     // Si la consulta falla, la franja DEMO no se muestra; el día se arma igual.

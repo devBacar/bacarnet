@@ -98,19 +98,6 @@ export interface ChequeCarteraHoy {
   montoCentavos: number
 }
 
-export interface CentroDePagosFila {
-  id: string
-  aQuien: string
-  concepto: string
-  montoCentavos: number
-  fechaVencimiento: string | null
-  medioPago: MedioPagoHoy
-  estaAtrasado: boolean
-  aviso: string | null
-  chequeEmitido: boolean
-  chequeNumero: string | null
-}
-
 export interface HoyResponse {
   saludo: string
   fecha: string
@@ -121,8 +108,6 @@ export interface HoyResponse {
   pagosAtrasados?: { totalCentavos: number; filas: PagoHoy[] }
   /** Facturas de Vientri sin vencimiento: hay que ponerles el día de pago. */
   pagosSinFecha?: { totalCentavos: number; filas: PagoHoy[] }
-  /** Resumen unificado ordenado por vencimiento (lo más atrasado primero). */
-  centroDePagos?: { totalCentavos: number; filas: CentroDePagosFila[] }
   ingresos: { filas: IngresoHoy[] }
   cobrosSinFecha?: { cantidad: number; totalCentavos: number }
   dia: {

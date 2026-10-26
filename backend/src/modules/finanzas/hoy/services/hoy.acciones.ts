@@ -9,7 +9,13 @@ import {
   marcarCompromisoYaPagado,
   reprogramarCompromiso,
 } from '../../agenda/services/compromisos.service.js'
-import { chequeDocId, getChequeById, marcarChequeEndosado } from '../../cheques/services/cheques.repository.js'
+import { armarChequePagoDe } from '../../cheques/domain/cheque.types.js'
+import {
+  anotarChequePagoDe,
+  chequeDocId,
+  getChequeById,
+  marcarChequeEndosado,
+} from '../../cheques/services/cheques.repository.js'
 import { listCajasForUser, registerMovimiento } from '../../cajachica/services/caja.service.js'
 import { camposEndoso, esChequeEnCartera } from '../domain/cheques-hoy.js'
 import { fechaHoyArgentina, formatoPesos } from '../domain/hoy.fechas.js'
@@ -136,7 +142,12 @@ export async function pagarCompromisoConChequeDeCartera(input: {
   if (!parche.destinatario) throw new Error('Este pago no tiene a quién se lo endosamos')
   const falta = faltaDelCompromiso(compromiso)
   const monto = montoQueRegistraChequeCartera(cheque.montoCentavos, falta)
-  await marcarChequeEndosado({ id: cheque.id, destinatario: parche.destinatario })
+  const pagoDe = armarChequePagoDe({
+    compromisoId: input.compromisoId,
+    proveedorONombre: compromiso.proveedorONombre,
+    concepto: compromiso.concepto,
+  })
+  await marcarChequeEndosado({ id: cheque.id, destinatario: parche.destinatario, pagoDe })
   const hoy = fechaHoyArgentina(new Date())
   await marcarCompromisoYaPagado(input.compromisoId, input.user.uid, {
     medioPago: 'cheque',
@@ -228,6 +239,8 @@ export async function pagarCompromisoCombinado(input: {
           user: input.user,
           compromisoId: input.compromisoId,
           destinatario: compromiso.proveedorONombre,
+          concepto: compromiso.concepto,
+          proveedorONombre: compromiso.proveedorONombre,
           montoCentavos: parte.montoARegistrar,
           cheque: parte.cheque,
         })
@@ -254,6 +267,8 @@ async function pagarConChequePropio(input: {
   user: AuthedUser
   compromisoId: string
   destinatario: string
+  concepto: string
+  proveedorONombre: string
   montoCentavos: number
   cheque: { tipo: 'echeq' | 'fisico'; numero: string; banco: string; fechaPago: string }
 }) {
@@ -284,6 +299,16 @@ async function pagarConChequePropio(input: {
   const chequeId = chequeDocId('emitido', input.cheque.numero)
   const creado = await getChequeById(chequeId)
   if (!creado) throw new Error('Cargué el cheque pero no lo encuentro para anotarlo en el pago')
+  const pagoDe = armarChequePagoDe({
+    compromisoId: input.compromisoId,
+    proveedorONombre: input.proveedorONombre,
+    concepto: input.concepto,
+  })
+  await anotarChequePagoDe({
+    id: creado.id,
+    pagoDe,
+    destinatario: input.destinatario,
+  })
   try {
     await marcarCompromisoYaPagado(input.compromisoId, input.user.uid, {
       medioPago: 'cheque',

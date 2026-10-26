@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { generarCronograma } from './cronograma.js'
 import {
+  capitalNuevoSumaACaja,
   encadenar,
   fechaDeCelda,
   historialDe,
@@ -92,6 +93,13 @@ describe('historial: seguir cada inversión hacia atrás', () => {
 
   it('si desaparece un mes y vuelve, es una inversión nueva', () => {
     expect(de('Ruiz', '1 de 4').meses).toHaveLength(1)
+  })
+
+  it('capitalNuevoSumaACaja: solo 1 mes y sin importaciones previas del inversor', () => {
+    expect(capitalNuevoSumaACaja(de('Ruiz', '1 de 4'), false)).toBe(true)
+    expect(capitalNuevoSumaACaja(de('Ruiz', '1 de 4'), true)).toBe(false)
+    expect(capitalNuevoSumaACaja(de('Gomez Ana', '11 de 20'), false)).toBe(false)
+    expect(capitalNuevoSumaACaja(de('Lopez Juan', '-'), false)).toBe(false)
   })
 
   it('junta los pagos de todos los meses y arma un id fijo', () => {

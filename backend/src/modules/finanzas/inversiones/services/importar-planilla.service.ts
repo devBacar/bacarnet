@@ -7,6 +7,7 @@ import { horizonteSinVencimiento } from '../domain/condiciones.js'
 import { generarCronograma, totalesDe } from '../domain/cronograma.js'
 import { hoyArgentina } from '../domain/fechas.js'
 import {
+  capitalNuevoSumaACaja,
   encadenar,
   historialDe,
   idInversionImportada,
@@ -40,6 +41,8 @@ interface Propuesta {
   cuotaPlanilla: string | null
   inicioPlanilla: string
   historialPlanilla: Array<{ mes: string; fecha: string; montoCentavos: number }>
+  /** Capital realmente nuevo: al sincronizar suma a la Caja principal (no es dato plano). */
+  capitalSumaACaja: boolean
 }
 
 function libroDe(buffer: Buffer): XLSX.WorkBook {
@@ -75,6 +78,11 @@ export async function vistaPrevia(archivo: Buffer, hojaElegida: string | null, u
     adminDb().collection(INVERSIONES_COLLECTION).where('importada', '==', true).get(),
   ])
   const yaImportadas = new Set(existentes.docs.map((d) => d.id))
+  const inversoresConImportada = new Set(
+    existentes.docs
+      .map((d) => (d.data() as { inversorId?: string }).inversorId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0),
+  )
   const porNombre = new Map(inversores.map(({ id, data }) => [data.nombreNormalizado, id]))
 
   const propuestas: Propuesta[] = []
@@ -83,6 +91,9 @@ export async function vistaPrevia(archivo: Buffer, hojaElegida: string | null, u
     const r = interpretar(actual, config)
     const id = idInversionImportada(cadena)
     const historial = historialDe(cadena)
+    const inversorExistenteId = porNombre.get(normalizarNombre(actual.concepto)) ?? null
+    const inversorYaImportado = inversorExistenteId ? inversoresConImportada.has(inversorExistenteId) : false
+    const capitalSumaACaja = capitalNuevoSumaACaja(cadena, inversorYaImportado)
     let totales = null
     if (r.condiciones) {
       try {
@@ -100,6 +111,7 @@ export async function vistaPrevia(archivo: Buffer, hojaElegida: string | null, u
       cuotaPlanilla: actual.cuotaTexto,
       inicioPlanilla: cadena.meses[0].mes,
       historialPlanilla: historial,
+      capitalSumaACaja,
     })
     const c = r.condiciones
     return {
@@ -108,7 +120,7 @@ export async function vistaPrevia(archivo: Buffer, hojaElegida: string | null, u
       errores: r.errores,
       avisos: [...r.avisos, ...cadena.revisar],
       inversorNombre: actual.concepto,
-      inversorExistenteId: porNombre.get(normalizarNombre(actual.concepto)) ?? null,
+      inversorExistenteId,
       observacionPlanilla: actual.observacion,
       cuotaPlanilla: actual.cuotaTexto,
       importeMesCentavos: actual.importeCentavos,
@@ -127,6 +139,7 @@ export async function vistaPrevia(archivo: Buffer, hojaElegida: string | null, u
       mesesEncontrados: cadena.meses.length,
       pagosEncontrados: historial.length,
       yaImportada: yaImportadas.has(id),
+      capitalSumaACaja,
     }
   })
 
@@ -180,6 +193,7 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
   let creadas = 0
   let yaEstaban = 0
   const creadasIds: string[] = []
+  const capitalNuevoIds: string[] = []
 
   try {
     for (const p of elegidas) {
@@ -203,6 +217,27 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
       }
       const cond = p.condiciones
       const ahora = new Date().toISOString()
+      // Continuación / historial: el capital ya había entrado → dato plano. Realmente nueva: sin ingreso;
+      // al sincronizar (o al aprobar a mano) se registra de verdad en la Caja principal.
+      const ingresos = p.capitalSumaACaja
+        ? []
+        : [
+            {
+              id: 'importado',
+              medio: 'transferencia' as const,
+              fecha: cond.fechaAlta,
+              montoCentavos: cond.capitalCentavos,
+              cuentaId: null,
+              cajaId: null,
+              chequeId: null,
+              movimientoId: null,
+              nota: 'El capital ya había entrado (según la planilla).',
+              registradoPor: user.uid,
+              registradoPorNombre: user.displayName,
+              registradoAt: ahora,
+              importado: true,
+            },
+          ]
       const data: InversionDocumentBase = {
         ...cond,
         numero: numeroInversion(await siguienteNumeroInversion()),
@@ -210,23 +245,7 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
         inversorNombre: p.inversorNombre,
         estado: 'pendiente_aprobacion',
         cronograma: generarCronograma(cond, {}, null, { hasta: cond.sinVencimiento ? horizonteSinVencimiento(hoy, config) : null }),
-        ingresos: [
-          {
-            id: 'importado',
-            medio: 'transferencia',
-            fecha: cond.fechaAlta,
-            montoCentavos: cond.capitalCentavos,
-            cuentaId: null,
-            cajaId: null,
-            chequeId: null,
-            movimientoId: null,
-            nota: 'El capital ya había entrado (según la planilla).',
-            registradoPor: user.uid,
-            registradoPorNombre: user.displayName,
-            registradoAt: ahora,
-            importado: true,
-          },
-        ],
+        ingresos,
         aprobacion: { solicitadaPor: user.uid, solicitadaPorNombre: user.displayName, solicitadaAt: ahora, resueltaPor: null, resueltaPorNombre: null, resueltaAt: null, resultado: null, nota: 'Importada de la planilla' },
         operacionPendiente: null,
         renovacionDe: null,
@@ -253,6 +272,7 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
         await batch.commit()
         creadas += 1
         creadasIds.push(p.id)
+        if (p.capitalSumaACaja) capitalNuevoIds.push(p.id)
       } catch (err) {
         if ((err as { code?: number }).code === 6) yaEstaban += 1
         else throw err
@@ -268,5 +288,5 @@ export async function confirmar(token: unknown, filasRaw: unknown, user: AuthedU
 
   const partes = [`${creadas} inversiones quedaron para aprobar`, `${inversoresNuevos} inversores nuevos`]
   if (yaEstaban) partes.push(`${yaEstaban} ya estaban importadas`)
-  return { creadas, inversoresNuevos, creadasIds, mensaje: partes.join(' · ') + '.' }
+  return { creadas, inversoresNuevos, creadasIds, capitalNuevoIds, mensaje: partes.join(' · ') + '.' }
 }

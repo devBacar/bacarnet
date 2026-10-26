@@ -7,6 +7,7 @@ import type {
   ChequeHistorialEstadoDocument,
   ChequeImportRow,
   ChequeOrigen,
+  ChequePagoDe,
 } from '../domain/cheque.types.js'
 
 export const CHEQUES_COLLECTION = 'cheques'
@@ -52,6 +53,24 @@ export interface ChequeListadoItem {
   vientriCmpIngresoDesc: string | null
   vientriCmpSalida: number | null
   vientriCmpSalidaDesc: string | null
+  pagoDe: ChequePagoDe | null
+}
+
+function leerPagoDe(data: DocumentData): ChequePagoDe | null {
+  const raw = data.pagoDe
+  if (!raw || typeof raw !== 'object') return null
+  const compromisoId = typeof (raw as ChequePagoDe).compromisoId === 'string'
+    ? (raw as ChequePagoDe).compromisoId.trim()
+    : ''
+  if (!compromisoId) return null
+  return {
+    compromisoId,
+    proveedorONombre:
+      typeof (raw as ChequePagoDe).proveedorONombre === 'string'
+        ? (raw as ChequePagoDe).proveedorONombre
+        : '',
+    concepto: typeof (raw as ChequePagoDe).concepto === 'string' ? (raw as ChequePagoDe).concepto : '',
+  }
 }
 
 function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
@@ -89,6 +108,7 @@ function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
     vientriCmpIngresoDesc: typeof data.vientriCmpIngresoDesc === 'string' ? data.vientriCmpIngresoDesc : null,
     vientriCmpSalida: typeof data.vientriCmpSalida === 'number' ? data.vientriCmpSalida : null,
     vientriCmpSalidaDesc: typeof data.vientriCmpSalidaDesc === 'string' ? data.vientriCmpSalidaDesc : null,
+    pagoDe: leerPagoDe(data),
   }
 }
 
@@ -328,18 +348,34 @@ export async function updateChequeEstado(input: {
 
 /**
  * Endoso desde Hoy: el cheque recibido se usó para pagarle a otra persona.
- * Escribe solo `utilizado`, `destinatario` y `updatedAt`.
+ * Escribe `utilizado`, `destinatario`, opcionalmente `pagoDe`, y `updatedAt`.
  * No toca endosante, estado ni ningún otro campo.
  */
 export async function marcarChequeEndosado(input: {
   id: string
   destinatario: string
+  pagoDe?: ChequePagoDe | null
 }): Promise<void> {
   const destinatario = input.destinatario.trim()
   if (!destinatario) throw new Error('Falta a quién se endosa el cheque')
   await collection().doc(input.id).update({
     utilizado: true,
     destinatario,
+    ...(input.pagoDe ? { pagoDe: input.pagoDe } : {}),
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+}
+
+/** Anota el compromiso que paga un cheque propio recién emitido desde Hoy. */
+export async function anotarChequePagoDe(input: {
+  id: string
+  pagoDe: ChequePagoDe
+  destinatario?: string | null
+}): Promise<void> {
+  const destinatario = input.destinatario?.trim() || null
+  await collection().doc(input.id).update({
+    pagoDe: input.pagoDe,
+    ...(destinatario ? { destinatario } : {}),
     updatedAt: FieldValue.serverTimestamp(),
   })
 }

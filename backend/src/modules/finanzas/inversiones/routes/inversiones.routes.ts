@@ -31,6 +31,7 @@ import {
   subirDocumento,
 } from '../services/inversiones.service.js'
 import { confirmar, vistaPrevia } from '../services/importar-planilla.service.js'
+import { sincronizarPlanillaInversores } from '../services/sincronizar-planilla.service.js'
 import { cuentaDeInversiones } from '../services/cuenta.service.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 
@@ -160,6 +161,22 @@ finanzasInversionesRouter.post('/importar/confirmar', async (req, res) => {
     responderError(res, err, 'No pude importar', 'importar confirmar')
   }
 })
+
+/**
+ * Lee la planilla de Inversores en vivo desde Google Sheets y carga/aprueba sola lo nuevo:
+ * estar en la planilla ya significa vigente. Requiere el mismo permiso que aprobar a mano.
+ */
+finanzasInversionesRouter.post(
+  '/importar/sincronizar',
+  requireFinanzasPermiso('finanzas_inversiones_aprobar'),
+  async (req, res) => {
+    try {
+      res.json(await sincronizarPlanillaInversores(req.authedUser!))
+    } catch (err) {
+      responderError(res, err, 'No pude sincronizar la planilla', 'importar sincronizar')
+    }
+  },
+)
 
 // ── Inversiones (después de las rutas fijas) ──────────────────
 

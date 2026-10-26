@@ -709,6 +709,20 @@ export async function confirmarImportacion(token: string, filas: number[]): Prom
   return leer(await post('/importar/confirmar', { token, filas }), 'No pude importar la planilla')
 }
 
+export interface SincronizarPlanillaResultado {
+  creadas: number
+  inversoresNuevos: number
+  aprobadas: number
+  erroresAprobacion: string[]
+  avisos: string[]
+  mensaje: string
+}
+
+/** Trae la planilla de Inversores en vivo desde Google Sheets y carga/aprueba sola lo nuevo. */
+export async function sincronizarPlanillaInversores(): Promise<SincronizarPlanillaResultado> {
+  return leer(await post('/importar/sincronizar', {}), 'No pude sincronizar la planilla')
+}
+
 // ── Cruce ────────────────────────────────────────────────────
 
 export async function fetchCruce(semanas = 12): Promise<CruceResponse> {

@@ -61,6 +61,12 @@ export interface CompromisoParaPlanilla {
   pagosResumen?: LineaPagoPlanilla[]
 }
 
+export interface ChequeAsignado {
+  numero: string
+  banco: string | null
+  propio: boolean
+}
+
 export interface FilaPlanilla {
   compromisoId: string
   concepto: string
@@ -74,6 +80,9 @@ export interface FilaPlanilla {
   observacion: string | null
   fechaVencimiento: string
   medioPago: MedioPago
+  /** Cheque ya elegido para este compromiso, antes incluso de registrar el pago. */
+  chequeId: string | null
+  chequeAsignado?: ChequeAsignado | null
   porDia: Record<string, CeldaDia>
   acumuladoCentavos: number
   diferenciaCentavos: number
@@ -264,6 +273,7 @@ function filaDe(
     observacion: normalizarObservacion(row.observacion),
     fechaVencimiento: row.fechaVencimiento,
     medioPago: row.medioPago,
+    chequeId: row.chequeId ?? null,
     porDia,
     acumuladoCentavos,
     diferenciaCentavos,

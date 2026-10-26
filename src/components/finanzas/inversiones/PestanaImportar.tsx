@@ -2,10 +2,12 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
 import {
   confirmarImportacion,
+  sincronizarPlanillaInversores,
   vistaPreviaImportacion,
   type ImportarFila,
   type ImportarVistaPrevia,
 } from '../../../services/finanzasInversionesApi'
+import { usePermisosFinanzas } from '../permisosFinanzas'
 import { FinanzasFormField, finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
 
@@ -25,6 +27,7 @@ function historialTexto(fila: ImportarFila): string {
 
 export function PestanaImportar() {
   const queryClient = useQueryClient()
+  const puedeAprobar = usePermisosFinanzas().finanzas_inversiones_aprobar
   const inputRef = useRef<HTMLInputElement>(null)
   const [archivo, setArchivo] = useState<File | null>(null)
   const [vista, setVista] = useState<Vista | null>(null)
@@ -32,6 +35,7 @@ export function PestanaImportar() {
   const [hojaElegida, setHojaElegida] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
   const [importando, setImportando] = useState(false)
+  const [sincronizando, setSincronizando] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mensaje, setMensaje] = useState<string | null>(null)
 
@@ -103,8 +107,44 @@ export function PestanaImportar() {
     }
   }
 
+  const sincronizar = async () => {
+    if (!window.confirm('Se va a leer la planilla de Inversores de Google Sheets y lo nuevo se carga ya aprobado. ¿Seguimos?')) return
+    setError(null)
+    setMensaje(null)
+    setSincronizando(true)
+    try {
+      const res = await sincronizarPlanillaInversores()
+      const extra = [...res.avisos, ...res.erroresAprobacion]
+      setMensaje(extra.length ? `${res.mensaje} ${extra.join(' · ')}` : res.mensaje)
+      void queryClient.invalidateQueries({ queryKey: ['finanzas', 'inversiones'] })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No pude sincronizar la planilla')
+    } finally {
+      setSincronizando(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
+      {puedeAprobar ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-[var(--color-primary-muted)] bg-[var(--color-primary-light)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium">Planilla en vivo (Google Sheets)</p>
+            <p className="text-body-muted text-xs">
+              Trae lo nuevo de la planilla y lo carga ya vigente: estar ahí significa que está aprobado.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void sincronizar()}
+            disabled={sincronizando}
+            className="shrink-0 rounded-xl bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+          >
+            {sincronizando ? 'Sincronizando…' : 'Sincronizar ahora'}
+          </button>
+        </div>
+      ) : null}
+
       <p className="text-body-muted text-sm">
         Se leen los grupos INVERSORES DOLARES e INVERSORES PESOS. Todo queda Para aprobar: el Líder
         revisa cada inversión antes de que impacte en la Agenda. Importar dos veces la misma planilla

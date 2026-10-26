@@ -442,7 +442,8 @@ export interface OperacionInput {
  * - "k de N" sin % → cuotas fijas: lo que falta de la deuda en N − k cuotas iguales (francés con tasa 0).
  * - Si no se puede deducir: a medida, con aviso para revisarla.
  * Capital = la columna Deuda. Las cuotas arrancan el mes siguiente al de la hoja (el mes de la hoja ya está en Compromisos del mes).
- * El capital ya había entrado: se registra como ingreso importado (sin movimiento de caja ni cheque).
+ * Capital de una cadena que ya venía en meses anteriores: ingreso importado (sin caja).
+ * Capital realmente nuevo (primer mes, inversor sin importadas): al sincronizar suma a la Caja principal.
  */
 export interface ImportarFila {
   fila: number

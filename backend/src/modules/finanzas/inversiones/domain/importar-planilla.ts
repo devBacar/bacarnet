@@ -368,3 +368,13 @@ export function idInversionImportada(cadena: Cadena): string {
   const slug = normalizar(primero.concepto).replace(/\s+/g, '-').slice(0, 40)
   return `pla-${primero.moneda.toLowerCase()}-${slug}-${primero.mes}-f${primero.fila}`
 }
+
+/**
+ * El capital de esta importación debe sumar de verdad a la Caja principal.
+ * Solo si es realmente nueva: aparece por primera vez en el mes tope (un solo mes en la cadena)
+ * y ese inversor no tiene ninguna inversión ya importada (así una cuota más de un inversor viejo
+ * no se confunde con un inversor nuevo, aunque el id de fila sea distinto).
+ */
+export function capitalNuevoSumaACaja(cadena: Cadena, inversorYaImportado: boolean): boolean {
+  return cadena.meses.length === 1 && !inversorYaImportado
+}

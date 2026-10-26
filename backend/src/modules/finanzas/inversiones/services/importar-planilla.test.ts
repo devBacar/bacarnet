@@ -22,7 +22,13 @@ vi.mock('../../../../lib/firebase/admin.js', () => ({
   adminDb: () => ({
     collection: (c: string) => ({
       doc: (id: string) => ref(`${c}/${id}`),
-      where: () => ({ get: async () => ({ docs: [...base.keys()].filter((k) => k.split('/').length === 2 && k.startsWith(`${c}/`)).map((k) => ({ id: k.split('/')[1] })) }) }),
+      where: () => ({
+        get: async () => ({
+          docs: [...base.keys()]
+            .filter((k) => k.split('/').length === 2 && k.startsWith(`${c}/`))
+            .map((k) => ({ id: k.split('/')[1], data: () => base.get(k) })),
+        }),
+      }),
     }),
     runTransaction: (fn: (tx: unknown) => Promise<unknown>) => {
       const turno = cola.then(() =>

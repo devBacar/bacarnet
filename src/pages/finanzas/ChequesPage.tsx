@@ -15,7 +15,6 @@ import {
   importChequesExcel,
   ingresarChequesPegados,
   type ChequeDireccion,
-  type ChequeDetalleResponse,
   type ChequeEstado,
   type ChequeOrigen,
   type ChequeTipo,

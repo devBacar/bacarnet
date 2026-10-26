@@ -1,6 +1,5 @@
 import { Info, MoreHorizontal } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
 import { ETIQUETA_ESTADO_CLASES, estadoDescubierto, type TonoEstado } from '../estadoDescubierto'
 import { formatMoneyCentavos } from '../formatMoney'
 import type { HoyResponse } from '../../../services/finanzasHoyApi'
@@ -89,15 +88,18 @@ export function Tarjeta({
   children: ReactNode
 }) {
   return (
-    <section data-tour={tour} className="min-w-0 overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
-      <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
+    <section
+      data-tour={tour}
+      className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900"
+    >
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
         <div className="min-w-0">
           <h2 className={claseTitulo}>{titulo}</h2>
           {subtitulo ? <p className={claseSubtitulo}>{subtitulo}</p> : null}
         </div>
         {derecha ? <div className="flex min-w-0 flex-wrap items-center gap-2">{derecha}</div> : null}
       </header>
-      <div className="min-w-0 p-4">{children}</div>
+      <div className="min-h-0 min-w-0 flex-1 p-4">{children}</div>
       {ayuda ? <Ayuda tamano={claseAyuda}>{ayuda}</Ayuda> : null}
     </section>
   )
@@ -223,7 +225,7 @@ export function CuatroNumeros({ data }: { data: HoyResponse }) {
 }
 
 /* ----------------------------------------------------------------------------
- * Tres tarjetas chicas al pie: cómo queda cada banco, la semana y los avisos
+ * Dos tarjetas chicas al pie: cómo queda cada banco y la semana
  * -------------------------------------------------------------------------- */
 
 export function TarjetaBancos({
@@ -315,84 +317,3 @@ export function TarjetaSemanaGrafico({ prevision }: { prevision: HoyResponse['pr
   )
 }
 
-interface Aviso {
-  clave: string
-  texto: string
-  centavos: number | null
-  href?: string
-  tono: 'rojo' | 'ambar'
-}
-
-function armarAvisos(prevision: HoyResponse['prevision']): Aviso[] {
-  const avisos: Aviso[] = []
-  const porBanco = new Map<string, { cuando: 'Hoy' | 'Mañana'; banco: string; cantidad: number; centavos: number }>()
-  for (const fila of prevision.chequesADebitar.filas) {
-    const clave = `${fila.cuando}|${fila.banco}`
-    const actual = porBanco.get(clave) ?? { cuando: fila.cuando, banco: fila.banco, cantidad: 0, centavos: 0 }
-    actual.cantidad += 1
-    actual.centavos += fila.montoCentavos
-    porBanco.set(clave, actual)
-  }
-  for (const [clave, grupo] of porBanco) {
-    const cheques = grupo.cantidad === 1 ? '1 cheque' : `${grupo.cantidad} cheques`
-    avisos.push({
-      clave: `cheque:${clave}`,
-      texto:
-        grupo.cuando === 'Mañana'
-          ? `Mañana se debita${grupo.cantidad === 1 ? '' : 'n'} ${cheques} en ${grupo.banco}`
-          : `Hoy: ${cheques} en ${grupo.banco} todavía sin debitar`,
-      centavos: grupo.centavos,
-      href: '/finanzas/cheques',
-      tono: 'ambar',
-    })
-  }
-  if (prevision.firmas) {
-    avisos.push({
-      clave: 'firmas',
-      texto: `${prevision.firmas.cantidad} ${prevision.firmas.cantidad === 1 ? 'transferencia esperando' : 'transferencias esperando'} firma`,
-      centavos: prevision.firmas.montoCentavos,
-      href: '/finanzas/transferencias',
-      tono: 'ambar',
-    })
-  }
-  for (const cobro of prevision.cobrosAtrasados) {
-    avisos.push({
-      clave: `atrasado:${cobro.id}`,
-      texto: `Cobro atrasado: ${cobro.cliente} · ${cobro.haceTexto.toLowerCase()}`,
-      centavos: cobro.montoCentavos,
-      tono: 'rojo',
-    })
-  }
-  for (const texto of prevision.chequesADebitar.impactos) {
-    avisos.push({ clave: `impacto:${texto}`, texto, centavos: null, tono: texto.startsWith('Ojo') ? 'rojo' : 'ambar' })
-  }
-  return avisos
-}
-
-export function TarjetaOjo({ prevision }: { prevision: HoyResponse['prevision'] }) {
-  const avisos = armarAvisos(prevision)
-  return (
-    <Tarjeta tour="hoy-avisos" titulo="Ojo con esto" ayuda="Cosas que conviene mirar hoy: cheques que se debitan, firmas pendientes y cobros atrasados.">
-      {avisos.length === 0 ? (
-        <Vacio texto="Nada para revisar." />
-      ) : (
-        <ul className="divide-y divide-neutral-100 dark:divide-zinc-800">
-          {avisos.map((aviso) => (
-            <li key={aviso.clave} className="flex items-start justify-between gap-2 py-2 text-[13px]">
-              <span className={`min-w-0 ${aviso.tono === 'rojo' ? 'text-red-700 dark:text-red-300' : 'text-amber-900 dark:text-amber-200'}`}>
-                {aviso.href ? (
-                  <Link to={aviso.href} className="underline-offset-2 hover:underline">
-                    {aviso.texto}
-                  </Link>
-                ) : (
-                  aviso.texto
-                )}
-              </span>
-              {aviso.centavos != null ? <span className="text-heading shrink-0 tabular-nums">{montoCorto(aviso.centavos)}</span> : null}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Tarjeta>
-  )
-}

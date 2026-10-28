@@ -1,17 +1,19 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
   DollarSign,
   Link2,
   RefreshCw,
   Search,
+  Upload,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../../context'
 import {
   fetchChequesOcasionales,
   fetchOcasionalDetalle,
   fetchOcasionalesResumen,
+  importarOcasionalesCsv,
   type ChequeOcasionalItem,
   type OcasionalesFiltro,
 } from '../../../services/finanzasChequesApi'
@@ -36,13 +38,27 @@ const FILTRO_TABS: [OcasionalesFiltro, string][] = [
 
 export function PestanaOcasionales() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [importMsg, setImportMsg] = useState<string | null>(null)
   const [filtro, setFiltro] = useState<OcasionalesFiltro>('')
   const [busqueda, setBusqueda] = useState('')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
-  const [subvista, setSubvista] = useState<'cheques' | 'cadenas'>('cheques')
+  const [subvista, setSubvista] = useState<'cheques' | 'cadenas' | 'usd'>('cheques')
   const [beneficiarioCadenas, setBeneficiarioCadenas] = useState('')
   const [detalleId, setDetalleId] = useState<string | null>(null)
+
+  const importMutation = useMutation({
+    mutationFn: (file: File) => importarOcasionalesCsv(file),
+    onSuccess: (res) => {
+      setImportMsg(res.mensaje)
+      void queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques-ocasionales'] })
+    },
+    onError: (err) => {
+      setImportMsg(err instanceof Error ? err.message : 'Error al importar CSV')
+    },
+  })
   useEffect(() => {
     const t = setTimeout(() => {
       setQ(busqueda.trim())
@@ -73,21 +89,58 @@ export function PestanaOcasionales() {
   }
 
   const subTabs = (
-    <div className="mb-4 inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
-      {([['cheques', 'Cheques'], ['cadenas', 'Cadenas']] as const).map(([val, label]) => (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
+        {([
+          ['cheques', 'Cheques'],
+          ['cadenas', 'Cadenas'],
+          ['usd', 'Operaciones USD (fraccionadas)'],
+        ] as const).map(([val, label]) => (
+          <button
+            key={val}
+            type="button"
+            onClick={() => { setSubvista(val); if (val === 'cadenas') setBeneficiarioCadenas('') }}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              subvista === val
+                ? 'bg-brand-primary text-white shadow-sm'
+                : 'text-body-muted hover:text-heading'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.txt"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) {
+              setImportMsg(null)
+              importMutation.mutate(file)
+            }
+            e.target.value = ''
+          }}
+        />
         <button
-          key={val}
           type="button"
-          onClick={() => { setSubvista(val); if (val === 'cadenas') setBeneficiarioCadenas('') }}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-            subvista === val
-              ? 'bg-brand-primary text-white shadow-sm'
-              : 'text-body-muted hover:text-heading'
-          }`}
+          disabled={importMutation.isPending}
+          onClick={() => fileInputRef.current?.click()}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
         >
-          {label}
+          <Upload className="h-3.5 w-3.5" />
+          {importMutation.isPending ? 'Importando…' : 'Importar CSV'}
         </button>
-      ))}
+        {importMsg ? (
+          <span className={`text-xs ${importMutation.isError ? 'text-danger' : 'text-emerald-600 dark:text-emerald-400'}`}>
+            {importMsg}
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 
@@ -99,6 +152,82 @@ export function PestanaOcasionales() {
           beneficiarioFiltro={beneficiarioCadenas}
           onLimpiarFiltro={() => setBeneficiarioCadenas('')}
         />
+      </>
+    )
+  }
+
+  if (subvista === 'usd') {
+    const ops = resumen?.operacionesUsdAgrupadas ?? []
+    return (
+      <>
+        {subTabs}
+        <div className="surface-card rounded-2xl border border-neutral-200 p-4 dark:border-zinc-800">
+          <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h3 className="text-heading text-sm font-semibold">
+                Operaciones en Dólares agrupadas (detección de fraccionamiento)
+              </h3>
+              <p className="text-body-muted text-xs">
+                Agrupa cheques del mismo beneficiario, monto USD y cotización pactada para identificar operaciones grandes partidas en varios cheques chicos.
+              </p>
+            </div>
+            {resumen?.totalMontoUsd ? (
+              <span className="text-xs font-semibold text-green-700 dark:text-green-400">
+                {ops.length} operaciones reales · US$ {resumen.totalMontoUsd.toLocaleString('es-AR')} (TC prom. $ {(resumen.cotizacionPromedioUsd ?? 0).toLocaleString('es-AR')})
+              </span>
+            ) : null}
+          </header>
+
+          {ops.length === 0 ? (
+            <p className="text-body-muted py-6 text-center text-sm">No hay operaciones en USD registradas.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead className="border-b border-subtle text-left text-body-muted">
+                  <tr>
+                    <th className="px-2.5 py-2">Beneficiario</th>
+                    <th className="px-2.5 py-2 text-right">Operación USD</th>
+                    <th className="px-2.5 py-2 text-right">TC pactado</th>
+                    <th className="px-2.5 py-2 text-right">Equivalente (USD × TC)</th>
+                    <th className="px-2.5 py-2 text-center">Cheques (fraccionamiento)</th>
+                    <th className="px-2.5 py-2 text-right">Suma cheques ARS</th>
+                    <th className="px-2.5 py-2 text-right">Diferencia vs. Eq.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ops.map((op) => {
+                    const diff = op.sumaChequesCentavos - op.equivalenteCentavos
+                    return (
+                      <tr key={`${op.beneficiarioNormalizado}-${op.montoUsd}-${op.cotizacion}`} className="border-t border-subtle">
+                        <td className="px-2.5 py-2 font-medium">{op.beneficiario}</td>
+                        <td className="px-2.5 py-2 text-right font-semibold text-green-700 dark:text-green-400">
+                          US$ {op.montoUsd.toLocaleString('es-AR')}
+                        </td>
+                        <td className="px-2.5 py-2 text-right tabular-nums">
+                          $ {op.cotizacion.toLocaleString('es-AR')}
+                        </td>
+                        <td className="px-2.5 py-2 text-right tabular-nums">
+                          {formatMoneyCentavos(op.equivalenteCentavos, 'ARS')}
+                        </td>
+                        <td className="px-2.5 py-2 text-center">
+                          <span className="inline-block rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                            {op.cantidadCheques} {op.cantidadCheques === 1 ? 'cheque' : 'cheques'}
+                          </span>
+                        </td>
+                        <td className="text-brand-primary px-2.5 py-2 text-right font-semibold tabular-nums">
+                          {formatMoneyCentavos(op.sumaChequesCentavos, 'ARS')}
+                        </td>
+                        <td className={`px-2.5 py-2 text-right tabular-nums ${diff > 0 ? 'text-red-600 dark:text-red-400' : 'text-body-muted'}`}>
+                          {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${formatMoneyCentavos(diff, 'ARS')}`}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </>
     )
   }
@@ -164,7 +293,11 @@ export function PestanaOcasionales() {
             <ResumenCard
               icon={<DollarSign className="h-4 w-4 text-green-500" />}
               label="Operaciones USD"
-              value={String(resumen.conUsd)}
+              value={
+                resumen.operacionesUsdUnicas != null
+                  ? `${resumen.operacionesUsdUnicas} ops (${resumen.conUsd} chq)`
+                  : String(resumen.conUsd)
+              }
               subvalue={
                 resumen.totalMontoUsd
                   ? `US$ ${resumen.totalMontoUsd.toLocaleString('es-AR')}`
@@ -172,7 +305,7 @@ export function PestanaOcasionales() {
               }
               hint={
                 resumen.cotizacionPromedioUsd
-                  ? `TC prom. $ ${resumen.cotizacionPromedioUsd.toLocaleString('es-AR')}`
+                  ? `TC prom. $ ${resumen.cotizacionPromedioUsd.toLocaleString('es-AR')} · click en solapa USD`
                   : undefined
               }
             />

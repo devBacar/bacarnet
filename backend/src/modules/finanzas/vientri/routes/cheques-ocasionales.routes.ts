@@ -1,7 +1,8 @@
 import { Router } from 'express'
-import { requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
+import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import { adminDb } from '../../../../lib/firebase/admin.js'
-import { VIENTRI_CHEQUES_OCASIONALES } from '../services/importar-cheques-ocasionales.js'
+import { importarChequesOcasionales, VIENTRI_CHEQUES_OCASIONALES } from '../services/importar-cheques-ocasionales.js'
 import { VIENTRI_CHEQUES } from '../services/vientri.repository.js'
 import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
 import type { VientriChequeDoc } from '../domain/tipos.js'
@@ -253,12 +254,47 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
 
     let totalMontoUsd = 0
     let sumaPonderadaTc = 0
+    const gruposUsdMap = new Map<
+      string,
+      {
+        beneficiario: string
+        beneficiarioNormalizado: string
+        montoUsd: number
+        cotizacion: number
+        equivalenteCentavos: number
+        cantidadCheques: number
+        sumaChequesCentavos: number
+        cheques: string[]
+      }
+    >()
+
     for (const d of usdItems) {
       if (d.operacionUsd) {
-        totalMontoUsd += d.operacionUsd.montoUsd
-        sumaPonderadaTc += d.operacionUsd.montoUsd * d.operacionUsd.cotizacion
+        const key = `${d.beneficiarioNormalizado}|${d.operacionUsd.montoUsd}|${d.operacionUsd.cotizacion}`
+        const existente = gruposUsdMap.get(key)
+        if (existente) {
+          existente.cantidadCheques += 1
+          existente.sumaChequesCentavos += d.montoCentavos
+          existente.cheques.push(d.numeroCheque)
+        } else {
+          gruposUsdMap.set(key, {
+            beneficiario: d.beneficiario,
+            beneficiarioNormalizado: d.beneficiarioNormalizado,
+            montoUsd: d.operacionUsd.montoUsd,
+            cotizacion: d.operacionUsd.cotizacion,
+            equivalenteCentavos: Math.round(d.operacionUsd.montoUsd * d.operacionUsd.cotizacion * 100),
+            cantidadCheques: 1,
+            sumaChequesCentavos: d.montoCentavos,
+            cheques: [d.numeroCheque],
+          })
+          totalMontoUsd += d.operacionUsd.montoUsd
+          sumaPonderadaTc += d.operacionUsd.montoUsd * d.operacionUsd.cotizacion
+        }
       }
     }
+    const operacionesUsdAgrupadas = [...gruposUsdMap.values()].sort(
+      (a, b) => b.sumaChequesCentavos - a.sumaChequesCentavos,
+    )
     const cotizacionPromedioUsd = totalMontoUsd > 0 ? Math.round(sumaPonderadaTc / totalMontoUsd) : 0
 
     const porMesMap = new Map<string, { mes: string; cantidad: number; montoCentavos: number }>()
@@ -286,6 +322,8 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
       gastoRealMontoCentavos: sumMonto(gastoRealItems),
       conRenovacion: renovItems.length,
       conUsd: usdItems.length,
+      operacionesUsdUnicas: operacionesUsdAgrupadas.length,
+      operacionesUsdAgrupadas,
       totalMontoUsd,
       cotizacionPromedioUsd,
       porMes,
@@ -294,6 +332,38 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] resumen', err)
     res.status(500).json({ error: 'No se pudo calcular el resumen' })
+  }
+})
+
+finanzasChequesOcasionalesRouter.post('/importar', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  const actorUid = req.authedUser?.uid
+  if (!actorUid) {
+    res.status(401).json({ error: 'No autenticado' })
+    return
+  }
+  try {
+    const parsed = await parseMultipartUpload(req)
+    if (!parsed.file) {
+      res.status(400).json({ error: 'No se recibió ningún archivo' })
+      return
+    }
+    const ext = parsed.file.originalname.split('.').pop()?.toLowerCase()
+    if (ext !== 'csv' && ext !== 'txt') {
+      res.status(400).json({ error: 'Solo se aceptan archivos .csv' })
+      return
+    }
+    const csv = parsed.file.buffer.toString('utf-8')
+    const resultado = await importarChequesOcasionales({
+      csv,
+      origen: 'manual',
+      actor: actorUid,
+      simular: false,
+    })
+    res.json(resultado)
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] importar', err)
+    const message = err instanceof Error ? err.message : 'No se pudo importar el CSV'
+    res.status(400).json({ error: message })
   }
 })
 

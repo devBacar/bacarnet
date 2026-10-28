@@ -315,6 +315,17 @@ export interface OcasionalesResumenResponse {
   gastoRealMontoCentavos?: number
   conRenovacion: number
   conUsd: number
+  operacionesUsdUnicas?: number
+  operacionesUsdAgrupadas?: Array<{
+    beneficiario: string
+    beneficiarioNormalizado: string
+    montoUsd: number
+    cotizacion: number
+    equivalenteCentavos: number
+    cantidadCheques: number
+    sumaChequesCentavos: number
+    cheques: string[]
+  }>
   totalMontoUsd?: number
   cotizacionPromedioUsd?: number
   porMes?: Array<{
@@ -443,6 +454,33 @@ export async function fetchOcasionalesCadenas(): Promise<OcasionalesCadenasRespo
     throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudieron cargar las cadenas')
   }
   return body as OcasionalesCadenasResponse
+}
+
+export interface ImportarOcasionalesResponse {
+  ok: boolean
+  mensaje: string
+  resumen: {
+    filas: number
+    parseados: number
+    conRenovacion: number
+    conUsd: number
+    proveedoresFinancieros: number
+    fechasImposibles: number
+  }
+}
+
+export async function importarOcasionalesCsv(file: File): Promise<ImportarOcasionalesResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await ocasionalesFetch('/importar', {
+    method: 'POST',
+    body: formData,
+  })
+  const body = (await res.json().catch(() => null)) as { error?: string } | ImportarOcasionalesResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo importar el CSV')
+  }
+  return body as ImportarOcasionalesResponse
 }
 
 export async function updateChequeEstado(id: string, estado: ChequeEstado): Promise<void> {

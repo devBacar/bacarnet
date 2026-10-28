@@ -28,6 +28,25 @@ describe('parsearObs', () => {
       const r = parsearObs('Renovacion cheques nº 11111, 22222')
       expect(r.renovacion?.chequeIds).toEqual(['11111', '22222'])
     })
+
+    it('"Renovacion" sola marca renovación sin IDs', () => {
+      const r = parsearObs('Renovacion')
+      expect(r.renovacion).toEqual({ chequeIds: [] })
+    })
+
+    it('"Renovacion cheque 39584927" sin n°', () => {
+      const r = parsearObs('Renovacion cheque 39584927')
+      expect(r.renovacion?.chequeIds).toEqual(['39584927'])
+    })
+
+    it('números con barras expandidos', () => {
+      const r = parsearObs('Renovacion cheques 39316462/63/39316308/9/10/11/12/13/14')
+      expect(r.renovacion?.chequeIds).toEqual([
+        '39316462', '39316463',
+        '39316308', '39316309', '39316310', '39316311',
+        '39316312', '39316313', '39316314',
+      ])
+    })
   })
 
   describe('operación USD', () => {

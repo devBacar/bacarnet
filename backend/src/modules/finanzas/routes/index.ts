@@ -16,6 +16,7 @@ import { finanzasChequesRouter } from '../cheques/routes/cheques.routes.js'
 import { finanzasTableroRouter } from '../tablero/routes/tablero.routes.js'
 import { finanzasVientriRouter } from '../vientri/routes/vientri.routes.js'
 import { finanzasInversionesRouter } from '../inversiones/routes/inversiones.routes.js'
+import { finanzasChequesOcasionalesRouter } from '../vientri/routes/cheques-ocasionales.routes.js'
 
 export const finanzasRouter = Router()
 
@@ -36,3 +37,4 @@ finanzasRouter.use('/cheques', finanzasChequesRouter)
 finanzasRouter.use('/tablero', finanzasTableroRouter)
 finanzasRouter.use('/vientri', finanzasVientriRouter)
 finanzasRouter.use('/inversiones', finanzasInversionesRouter)
+finanzasRouter.use('/cheques-ocasionales', finanzasChequesOcasionalesRouter)

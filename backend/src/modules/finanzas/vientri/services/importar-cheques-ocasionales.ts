@@ -8,7 +8,7 @@
 import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
 import { nombresNormalizadosProveedoresFinancieros } from '../../agenda/services/proveedores-financieros.repository.js'
 import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
-import { leerCsv, exigirColumnas, type FilaCsv } from '../domain/csv.js'
+import { leerCsv, leerCsvSinHeader, exigirColumnas, type FilaCsv } from '../domain/csv.js'
 import { NOMBRE_ESTADO_CHQ } from '../domain/cheques.js'
 import { parsearObs } from '../domain/parsear-obs.js'
 import { aBool, aCentavos, aEntero, aFecha, aTexto, fechaImposible } from '../domain/valores.js'
@@ -21,15 +21,21 @@ import {
 
 export const VIENTRI_CHEQUES_OCASIONALES = 'vientriChequesOcasionales'
 
-const COLUMNAS_REQUERIDAS = [
+const COLUMNAS_CON_HEADER = [
   'vientri_id', 'numero', 'importe', 'fecha_vto', 'pagado', 'destinatario', 'obs',
+] as const
+
+const COLUMNAS_SIN_HEADER = [
+  'destinatario', 'numero', 'numero_completo', 'id_banco',
+  'fecha_emision', 'fecha_vto', 'importe', 'pagado',
+  'obs', 'id_cheque', 'id_persona_recibe',
 ] as const
 
 function filaADoc(
   f: FilaCsv,
   proveedoresFinancieros: Set<string>,
 ): ChequeOcasionalDoc | null {
-  const vientriId = aEntero(f.vientri_id)
+  const vientriId = aEntero(f.vientri_id) ?? aEntero(f.numero)
   if (vientriId === null) return null
 
   const montoCentavos = aCentavos(f.importe) ?? 0
@@ -61,6 +67,7 @@ function filaADoc(
     pagado: aBool(f.pagado) || aFecha(f.fecha_conciliado) !== null,
     esProveedorFinanciero,
     tipoProveedor: esProveedorFinanciero ? 'financiero' : null,
+    esRenovacion: obs.renovacion !== null,
     renovacionDe: obs.renovacion?.chequeIds ?? [],
     renovadoPor: [],
     operacionUsd: obs.operacionUsd,
@@ -115,8 +122,12 @@ export async function importarChequesOcasionales(opts: {
 }): Promise<ResultadoImportacionOcasionales> {
   const simular = opts.simular === true
 
-  const tabla = leerCsv(opts.csv)
-  exigirColumnas(tabla, 'cheques_ocasionales.csv', COLUMNAS_REQUERIDAS)
+  const primeraLinea = opts.csv.split(/\r?\n/, 1)[0] ?? ''
+  const tieneHeader = COLUMNAS_CON_HEADER.every((c) => primeraLinea.includes(c))
+  const tabla = tieneHeader
+    ? leerCsv(opts.csv)
+    : leerCsvSinHeader(opts.csv, [...COLUMNAS_SIN_HEADER])
+  if (tieneHeader) exigirColumnas(tabla, 'cheques_ocasionales.csv', COLUMNAS_CON_HEADER)
 
   const proveedoresFinancieros = await nombresNormalizadosProveedoresFinancieros()
 
@@ -131,7 +142,7 @@ export async function importarChequesOcasionales(opts: {
   const resumen = {
     filas: tabla.filas.length,
     parseados: docs.length,
-    conRenovacion: docs.filter((d) => d.renovacionDe.length > 0).length,
+    conRenovacion: docs.filter((d) => d.esRenovacion).length,
     conUsd: docs.filter((d) => d.operacionUsd !== null).length,
     proveedoresFinancieros: docs.filter((d) => d.esProveedorFinanciero).length,
     fechasImposibles: docs.filter((d) => d.revisar.some((r) => r.includes('imposible'))).length,
@@ -141,7 +152,7 @@ export async function importarChequesOcasionales(opts: {
     ? null
     : await crearImportacion({ tipo: 'cheques_ocasionales', origen: opts.origen, actor: opts.actor })
 
-  const docsParaSync = docs.map((d) => ({ id: String(d.vientriId), data: d as unknown as object }))
+  const docsParaSync = docs.map((d) => ({ id: `oca-${d.vientriId}`, data: d as unknown as object }))
 
   const conteo = await sincronizarColeccion({
     coleccion: VIENTRI_CHEQUES_OCASIONALES,

@@ -65,8 +65,8 @@ describe('importarChequesOcasionales', () => {
     await importarChequesOcasionales({ csv, origen: 'script', actor: 'test', simular: true })
 
     const input = mockSync.mock.calls[0]![0]
-    const viejo = input.docs.find((d) => d.id === '10')
-    const nuevo = input.docs.find((d) => d.id === '11')
+    const viejo = input.docs.find((d) => d.id === 'oca-10')
+    const nuevo = input.docs.find((d) => d.id === 'oca-11')
 
     const viejoData = viejo?.data as unknown as { renovadoPor: string[] }
     const nuevoData = nuevo?.data as unknown as { renovacionDe: string[] }

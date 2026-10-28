@@ -22,6 +22,7 @@ finanzasChequesRouter.get('/', async (req, res) => {
       tipo: one(req.query.tipo),
       vinculacion: one(req.query.vinculacion),
       comprobante: one(req.query.comprobante),
+      interesEncubierto: one(req.query.interesEncubierto),
       desde: one(req.query.desde),
       hasta: one(req.query.hasta),
       q: one(req.query.q),

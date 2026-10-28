@@ -72,6 +72,15 @@ export interface ChequeListItem {
   vientriCmpSalidaDesc: string | null
   /** Ausente en respuestas viejas; null si el cheque no paga un compromiso. */
   pagoDe?: ChequePagoDe | null
+  ocasionalEnriquecido?: boolean
+  esProveedorFinanciero?: boolean | null
+  esRenovacion?: boolean | null
+  tipoProveedor?: 'financiero' | 'ficticio' | null
+  operacionUsd?: { montoUsd: number; cotizacion: number } | null
+  renovacionDe?: string[] | null
+  renovadoPor?: string[] | null
+  esInteresEncubierto?: boolean
+  beneficiarioRealFinanciero?: string | null
 }
 
 export interface ChequesListResponse {
@@ -97,6 +106,7 @@ export interface ChequesListFilters {
   tipo?: ChequeTipo | ''
   vinculacion?: 'vinculado' | 'sin_vincular' | ''
   comprobante?: 'con_comprobante' | 'sin_comprobante' | ''
+  interesEncubierto?: 'true' | 'false' | ''
   desde?: string
   hasta?: string
   q?: string
@@ -191,6 +201,7 @@ export async function fetchCheques(filters: ChequesListFilters): Promise<Cheques
   if (filters.tipo) params.set('tipo', filters.tipo)
   if (filters.vinculacion) params.set('vinculacion', filters.vinculacion)
   if (filters.comprobante) params.set('comprobante', filters.comprobante)
+  if (filters.interesEncubierto) params.set('interesEncubierto', filters.interesEncubierto)
   if (filters.q) params.set('q', filters.q)
   if (filters.desde) params.set('desde', filters.desde)
   if (filters.hasta) params.set('hasta', filters.hasta)
@@ -256,6 +267,157 @@ export async function ingresarChequesPegados(payload: IngresarChequesPayload): P
     throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudieron ingresar los cheques')
   }
   return body as ImportResult
+}
+
+// ── Cheques Ocasionales ─────────────────────────────────────────────
+
+export interface ChequeOcasionalItem {
+  numeroCheque: string
+  beneficiario: string
+  beneficiarioNormalizado: string
+  montoCentavos: number
+  fechaVencimiento: string | null
+  fechaEmision: string | null
+  estadoCodigo: number | null
+  estado: string
+  pagado: boolean
+  esProveedorFinanciero: boolean
+  tipoProveedor: 'financiero' | 'ficticio' | null
+  esRenovacion: boolean
+  renovacionDe: string[]
+  renovadoPor: string[]
+  operacionUsd: { montoUsd: number; cotizacion: number } | null
+  obsOriginal: string
+  revisar: string[]
+  vientriId: number
+  baja: boolean
+}
+
+export type OcasionalesFiltro = '' | 'financiero' | 'gasto_real' | 'con_renovacion' | 'con_usd'
+
+export interface OcasionalesListResponse {
+  cheques: ChequeOcasionalItem[]
+  total: number
+  totalCentavos: number
+  page: number
+  pages: number
+}
+
+export interface OcasionalesResumenResponse {
+  totalCheques: number
+  financieros: number
+  conRenovacion: number
+  conUsd: number
+  costoFinanciero: {
+    cantidadCadenas: number
+    capitalTotalCentavos: number
+    interesTotalCentavos: number
+    tasaImplicitaPromedio: number
+    porBeneficiario: Array<{
+      beneficiario: string
+      cadenas: number
+      capitalCentavos: number
+      interesCentavos: number
+      tasaImplicita: number
+    }>
+  }
+}
+
+export interface OcasionalDetalleResponse {
+  cheque: ChequeOcasionalItem
+}
+
+export interface OperacionUsdItem {
+  montoUsd: number
+  cotizacion: number
+}
+
+export interface CostoEslabonItem {
+  chequeViejo: string
+  chequeNuevo: string
+  montoViejoCentavos: number
+  montoNuevoCentavos: number
+  interesCentavos: number
+}
+
+export interface CadenaRenovacion {
+  id: string
+  beneficiario: string
+  beneficiarioNormalizado: string
+  cheques: string[]
+  eslabones: CostoEslabonItem[]
+  capitalInicialCentavos: number
+  montoFinalCentavos: number
+  interesTotalCentavos: number
+  tasaImplicita: number
+  operacionUsd: OperacionUsdItem | null
+}
+
+export interface ChequeClasificado {
+  numeroCheque: string
+  clasificacion: 'gasto_real' | 'operacion_financiera'
+  rolEnCadena: 'capital' | 'interes' | 'mixto' | null
+  cadenaId: string | null
+}
+
+export interface OcasionalesCadenasResponse {
+  cadenas: CadenaRenovacion[]
+  clasificados: ChequeClasificado[]
+}
+
+async function ocasionalesFetch(path: string, init?: RequestInit): Promise<Response> {
+  const user = auth.currentUser
+  if (!user) throw new Error('No autenticado')
+  const token = await user.getIdToken()
+  return fetch(resolveApiUrl(`/api/finanzas/cheques-ocasionales${path}`), {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, ...init?.headers },
+  })
+}
+
+export async function fetchChequesOcasionales(params: {
+  filtro?: OcasionalesFiltro
+  q?: string
+  page?: number
+}): Promise<OcasionalesListResponse> {
+  const qs = new URLSearchParams()
+  if (params.filtro) qs.set('filtro', params.filtro)
+  if (params.q) qs.set('q', params.q)
+  if (params.page) qs.set('page', String(params.page))
+  const s = qs.toString()
+  const res = await ocasionalesFetch(s ? `?${s}` : '/')
+  const body = (await res.json().catch(() => null)) as { error?: string } | OcasionalesListResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudieron cargar los cheques ocasionales')
+  }
+  return body as OcasionalesListResponse
+}
+
+export async function fetchOcasionalesResumen(): Promise<OcasionalesResumenResponse> {
+  const res = await ocasionalesFetch('/resumen')
+  const body = (await res.json().catch(() => null)) as { error?: string } | OcasionalesResumenResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo obtener el resumen')
+  }
+  return body as OcasionalesResumenResponse
+}
+
+export async function fetchOcasionalDetalle(id: string): Promise<OcasionalDetalleResponse> {
+  const res = await ocasionalesFetch(`/${encodeURIComponent(id)}`)
+  const body = (await res.json().catch(() => null)) as { error?: string } | OcasionalDetalleResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo obtener el detalle')
+  }
+  return body as OcasionalDetalleResponse
+}
+
+export async function fetchOcasionalesCadenas(): Promise<OcasionalesCadenasResponse> {
+  const res = await ocasionalesFetch('/cadenas')
+  const body = (await res.json().catch(() => null)) as { error?: string } | OcasionalesCadenasResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudieron cargar las cadenas')
+  }
+  return body as OcasionalesCadenasResponse
 }
 
 export async function updateChequeEstado(id: string, estado: ChequeEstado): Promise<void> {

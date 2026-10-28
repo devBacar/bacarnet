@@ -10,6 +10,7 @@ const ESTADO_MAP: Partial<Record<EstadoChequeVientri, ChequeEstado>> = {
   entregado: 'en_cartera',
   pendiente_debito: 'pendiente',
   debitado: 'debitado',
+  renovado: 'renovado',
 }
 
 export interface ChequeVientriRow extends ChequeImportRow {

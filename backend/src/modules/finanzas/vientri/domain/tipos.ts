@@ -16,6 +16,7 @@ export type EstadoChequeVientri =
   | 'entregado'
   | 'pendiente_debito'
   | 'debitado'
+  | 'renovado'
   | 'anulado'
   | 'otro'
 

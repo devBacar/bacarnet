@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Tags } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, ListOrdered, Tags } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useSearchParams } from 'react-router-dom'
@@ -237,36 +237,28 @@ export function FinanzasMovimientosPage() {
 
   return (
     <>
-      <header data-tour="movimientos" className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h1 className="text-heading text-2xl font-semibold">Movimientos</h1>
-          <p className="text-body-muted mt-1 text-sm">
-            Todo lo que entró y salió de las cuentas corrientes, tal como lo informa el banco.
-          </p>
-        </div>
+      <header data-tour="movimientos" className="mb-4 flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <h1 className="text-heading text-2xl font-bold tracking-tight">Movimientos</h1>
         {puedeCategorias ? (
-        <div className="sm:max-w-xs sm:text-right">
-          <button
-            type="button"
-            data-tour="movimientos-ordenar-categorias"
-            onClick={() => setGestionAbierta(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800"
-          >
-            <Tags className="h-4 w-4" aria-hidden />
-            Ordenar categorías
-          </button>
-          <button
-            type="button"
-            className="mt-2 inline-flex rounded-lg border border-neutral-200 px-2.5 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            disabled={completando}
-            onClick={() => void completarAhora()}
-          >
-            {completando ? 'Completando…' : 'Completar contrapartes'}
-          </button>
-          <p className="text-body-muted mt-1.5 text-xs">
-            Crear, agrupar o unir categorías y clasificar lo que quedó sin clasificar. Completar contrapartes revisa los últimos 30 días.
-          </p>
-        </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-tour="movimientos-ordenar-categorias"
+              onClick={() => setGestionAbierta(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 transition hover:bg-neutral-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800"
+            >
+              <Tags className="h-4 w-4" aria-hidden />
+              Ordenar categorías
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800"
+              disabled={completando}
+              onClick={() => void completarAhora()}
+            >
+              {completando ? 'Completando…' : 'Completar contrapartes'}
+            </button>
+          </div>
         ) : null}
       </header>
 
@@ -353,21 +345,30 @@ export function FinanzasMovimientosPage() {
 
       {totales ? (
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-emerald-800">Entradas</p>
-            <p className="mt-1 text-lg font-semibold text-emerald-950">
+          <div className="surface-card rounded-2xl border border-emerald-200 p-3 dark:border-emerald-900/70">
+            <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+              <ArrowDownCircle className="h-4 w-4 text-emerald-500" aria-hidden />
+              Entradas
+            </div>
+            <p className="mt-1 text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
               {formatMoneyCentavos(totales.entradasCentavos, 'ARS')}
             </p>
           </div>
-          <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-red-800">Salidas</p>
-            <p className="mt-1 text-lg font-semibold text-red-950">
+          <div className="surface-card rounded-2xl border border-red-200 p-3 dark:border-red-900/70">
+            <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+              <ArrowUpCircle className="h-4 w-4 text-red-500" aria-hidden />
+              Salidas
+            </div>
+            <p className="mt-1 text-lg font-bold tabular-nums text-red-600 dark:text-red-400">
               {formatMoneyCentavos(totales.salidasCentavos, 'ARS')}
             </p>
           </div>
-          <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Movimientos</p>
-            <p className="text-heading mt-1 text-lg font-semibold">{totales.cantidad.toLocaleString('es-AR')}</p>
+          <div className="surface-card rounded-2xl border border-neutral-200 p-3 dark:border-zinc-800">
+            <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+              <ListOrdered className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden />
+              Movimientos
+            </div>
+            <p className="text-heading mt-1 text-lg font-bold tabular-nums">{totales.cantidad.toLocaleString('es-AR')}</p>
           </div>
         </div>
       ) : null}
@@ -378,9 +379,9 @@ export function FinanzasMovimientosPage() {
       {!filtrosListos || isLoading ? (
         <p className="text-body-muted text-sm">Cargando movimientos…</p>
       ) : (
-        <div className={`overflow-x-auto rounded-xl border border-neutral-200 dark:border-zinc-800 ${isFetching ? 'opacity-70' : ''}`}>
+        <div className={`overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900 ${isFetching ? 'opacity-70' : ''}`}>
           <table className="min-w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-zinc-900">
+            <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-left text-xs font-medium text-brand-primary">
               <tr>
                 <th className="px-3 py-2">Fecha</th>
                 <th className="px-3 py-2">Descripción</th>

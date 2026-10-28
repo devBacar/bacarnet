@@ -7,9 +7,15 @@ export function PublicLayout() {
   const modoFinanzas = pathname === '/finanzas' || pathname.startsWith('/finanzas/')
 
   return (
-    <div className="min-h-screen bg-white text-brand-body dark:bg-zinc-950">
+    <div className="flex h-screen flex-col overflow-hidden bg-white text-brand-body dark:bg-zinc-950">
       {modoFinanzas ? <FinanzasNavbar /> : <Navbar />}
-      <main className={modoFinanzas ? undefined : 'layout-container'}>
+      <main
+        className={
+          modoFinanzas
+            ? 'flex-1 overflow-y-auto scrollbar-overlay'
+            : 'layout-container flex-1 overflow-y-auto scrollbar-overlay'
+        }
+      >
         <Outlet />
       </main>
     </div>

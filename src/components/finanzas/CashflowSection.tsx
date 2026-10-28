@@ -1,6 +1,17 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, ArrowRight, ChevronDown, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import {
+  AlertTriangle,
+  ArrowDownCircle,
+  ArrowRight,
+  ArrowUpCircle,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
+  Scale,
+  Wallet,
+} from 'lucide-react'
+import { useMemo, useState, type ReactNode } from 'react'
 import toast from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import { syncMovimientosBancarios } from '../../services/finanzasMovimientosApi'
@@ -315,16 +326,23 @@ function Kpi({
   valor,
   valorClassName = 'text-heading',
   ayuda,
+  icono,
+  borde = 'border-neutral-200 dark:border-zinc-800',
 }: {
   label: string
   valor: string
   valorClassName?: string
   ayuda: string
+  icono?: ReactNode
+  borde?: string
 }) {
   return (
-    <div className="min-w-0 rounded-xl border border-neutral-200 px-3 py-2.5 dark:border-zinc-800">
-      <p className="text-heading text-sm font-medium leading-snug">{label}</p>
-      <p className={`mt-0.5 text-base font-semibold tabular-nums ${valorClassName}`}>{valor}</p>
+    <div className={`surface-card min-w-0 rounded-2xl border p-3 ${borde}`}>
+      <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+        {icono}
+        <span>{label}</span>
+      </div>
+      <p className={`mt-1 text-lg font-bold tabular-nums ${valorClassName}`}>{valor}</p>
       <p className="text-body-muted mt-0.5 text-xs leading-snug">{ayuda}</p>
     </div>
   )
@@ -382,14 +400,14 @@ export function CashflowSection() {
     <section
       data-tour="saldos-dia"
       aria-labelledby="finanzas-cashflow-heading"
-      className="surface-card space-y-3 rounded-2xl border border-t-4 border-teal-200 border-t-teal-500 bg-gradient-to-b from-teal-50/70 to-transparent to-25% p-4 dark:border-teal-900/50 dark:border-t-teal-500 dark:from-teal-950/25"
+      className="flex flex-col overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
         <div>
-          <h2 id="finanzas-cashflow-heading" className="text-heading text-base font-semibold">
+          <h2 id="finanzas-cashflow-heading" className="text-brand-primary text-[15px] font-medium">
             Entradas y salidas del día
           </h2>
-          <p className="text-body-muted mt-0.5 text-xs">
+          <p className="text-brand-primary text-[13px]">
             Todas las cuentas juntas. Pesos y dólares por separado.
           </p>
         </div>
@@ -444,8 +462,9 @@ export function CashflowSection() {
             {actualizando ? 'Actualizando…' : 'Actualizar'}
           </button>
         </div>
-      </div>
+      </header>
 
+      <div className="space-y-3 p-4">
       {query.isLoading ? (
         <div className="h-24 animate-pulse rounded-xl bg-neutral-100 dark:bg-zinc-800" />
       ) : query.isError ? (
@@ -457,7 +476,7 @@ export function CashflowSection() {
       ) : data ? (
         <>
           <p className="text-heading text-xs font-semibold capitalize">{formatDay(data.fecha)}</p>
-          <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <Kpi
               label="Arrancamos el día con"
               valor={
@@ -466,23 +485,31 @@ export function CashflowSection() {
                   : 'Sin dato'
               }
               ayuda={subtituloArranque(data.origenSaldos)}
+              icono={<Wallet className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden />}
+              borde="border-blue-200 dark:border-blue-900/70"
             />
             <Kpi
               label="Entró"
               valor={formatMoneyCentavos(data.entradasCentavos, moneda)}
               valorClassName="text-emerald-700 dark:text-emerald-400"
               ayuda="Plata que entró en el día."
+              icono={<ArrowDownCircle className="h-4 w-4 text-emerald-500" aria-hidden />}
+              borde="border-emerald-200 dark:border-emerald-900/70"
             />
             <Kpi
               label="Salió"
               valor={formatMoneyCentavos(data.salidasCentavos, moneda)}
               valorClassName="text-red-600 dark:text-red-400"
               ayuda="Plata que salió en el día."
+              icono={<ArrowUpCircle className="h-4 w-4 text-red-500" aria-hidden />}
+              borde="border-red-200 dark:border-red-900/70"
             />
             <Kpi
               label="Terminamos con"
               valor={montoOGuion(data.saldoFinal.centavos, moneda)}
               ayuda={subtituloCierre(data.saldoFinal.estado)}
+              icono={<Scale className="h-4 w-4 text-emerald-500" aria-hidden />}
+              borde="border-emerald-200 dark:border-emerald-900/70"
             />
           </div>
           {avisos.length > 0 ? (
@@ -578,6 +605,7 @@ export function CashflowSection() {
           </div>
         </>
       ) : null}
+      </div>
     </section>
   )
 }

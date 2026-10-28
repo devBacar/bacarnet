@@ -38,12 +38,14 @@ describe('estadoDesdeChq', () => {
     expect(estadoDesdeChq(10, true, false)).toBe('debitado')
     expect(estadoDesdeChq(10, false, false)).toBe('entregado')
     expect(estadoDesdeChq(10, false, true)).toBe('rechazado')
+    expect(estadoDesdeChq(5, false, false)).toBe('renovado')
+    expect(estadoDesdeChq(5, true, false)).toBe('renovado')
     expect(estadoDesdeChq(99, false, false)).toBe('otro')
   })
 })
 
 describe('armarCheques', () => {
-  it('descarta el estado 5 que tiene un gemelo con el mismo número, banco e importe', () => {
+  it('conserva los cheques con estado 5 (Renovado) para trackear cadenas de renovación', () => {
     const r = armarCheques(
       [
         chq({ vientri_id: '10', numero: '00001234', id_estado: '5' }),
@@ -53,9 +55,10 @@ describe('armarCheques', () => {
       [],
       cat,
     )
-    expect(r.cheques.map((c) => c.clave).sort()).toEqual(['chq-11', 'chq-12'])
-    expect(r.resumen.duplicadosEstado5).toBe(1)
-    expect(r.cheques.find((c) => c.clave === 'chq-12')?.estado).toBe('otro')
+    expect(r.cheques.map((c) => c.clave).sort()).toEqual(['chq-10', 'chq-11', 'chq-12'])
+    expect(r.resumen.renovados).toBe(2)
+    expect(r.cheques.find((c) => c.clave === 'chq-10')?.estado).toBe('renovado')
+    expect(r.cheques.find((c) => c.clave === 'chq-12')?.estado).toBe('renovado')
   })
 
   it('separa emitidos y recibidos por el librador, no por la tabla', () => {

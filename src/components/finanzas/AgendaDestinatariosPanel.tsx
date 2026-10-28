@@ -96,7 +96,7 @@ export function AgendaDestinatariosPanel() {
   return (
     <section>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <label className="block min-w-0 flex-1 text-sm">
+        <label className="block w-full text-sm sm:max-w-xs">
           <span className="text-body-muted mb-1 block">Buscar</span>
           <input
             className={finanzasInputClass}

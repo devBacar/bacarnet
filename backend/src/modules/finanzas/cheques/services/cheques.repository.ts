@@ -9,6 +9,7 @@ import type {
   ChequeOrigen,
   ChequePagoDe,
 } from '../domain/cheque.types.js'
+import type { OperacionUsdParseada } from '../../vientri/domain/cheque-ocasional.types.js'
 
 export const CHEQUES_COLLECTION = 'cheques'
 const HISTORIAL_ESTADOS_SUB = 'historialEstados'
@@ -54,6 +55,15 @@ export interface ChequeListadoItem {
   vientriCmpSalida: number | null
   vientriCmpSalidaDesc: string | null
   pagoDe: ChequePagoDe | null
+  ocasionalEnriquecido: boolean
+  esProveedorFinanciero: boolean | null
+  esRenovacion: boolean | null
+  tipoProveedor: 'financiero' | 'ficticio' | null
+  operacionUsd: OperacionUsdParseada | null
+  renovacionDe: string[] | null
+  renovadoPor: string[] | null
+  esInteresEncubierto: boolean
+  beneficiarioRealFinanciero: string | null
 }
 
 function leerPagoDe(data: DocumentData): ChequePagoDe | null {
@@ -109,6 +119,15 @@ function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
     vientriCmpSalida: typeof data.vientriCmpSalida === 'number' ? data.vientriCmpSalida : null,
     vientriCmpSalidaDesc: typeof data.vientriCmpSalidaDesc === 'string' ? data.vientriCmpSalidaDesc : null,
     pagoDe: leerPagoDe(data),
+    ocasionalEnriquecido: data.ocasionalEnriquecido === true,
+    esProveedorFinanciero: typeof data.esProveedorFinanciero === 'boolean' ? data.esProveedorFinanciero : null,
+    esRenovacion: typeof data.esRenovacion === 'boolean' ? data.esRenovacion : null,
+    tipoProveedor: data.tipoProveedor === 'financiero' || data.tipoProveedor === 'ficticio' ? data.tipoProveedor : null,
+    operacionUsd: data.operacionUsd && typeof data.operacionUsd === 'object' ? data.operacionUsd as OperacionUsdParseada : null,
+    renovacionDe: Array.isArray(data.renovacionDe) ? data.renovacionDe : null,
+    renovadoPor: Array.isArray(data.renovadoPor) ? data.renovadoPor : null,
+    esInteresEncubierto: data.esInteresEncubierto === true,
+    beneficiarioRealFinanciero: typeof data.beneficiarioRealFinanciero === 'string' ? data.beneficiarioRealFinanciero : null,
   }
 }
 
@@ -121,6 +140,7 @@ export interface ChequesFiltro {
   hasta: string | null
   vinculacion: 'vinculado' | 'sin_vincular' | null
   comprobante: 'con_comprobante' | 'sin_comprobante' | null
+  interesEncubierto?: boolean | null
   q: string | null
 }
 
@@ -144,6 +164,10 @@ function matchComprobante(data: FirebaseFirestore.DocumentData, comprobante: 'co
   return comprobante === 'con_comprobante' ? tiene : !tiene
 }
 
+function matchInteresEncubierto(data: FirebaseFirestore.DocumentData, interesEncubierto: boolean): boolean {
+  return (data.esInteresEncubierto === true) === interesEncubierto
+}
+
 function matchBusqueda(data: FirebaseFirestore.DocumentData, q: string): boolean {
   const norm = q.toLowerCase()
   const fields = [data.numero, data.emisor, data.emisorCuit, data.cliente, data.destinatario]
@@ -157,13 +181,14 @@ async function loadFiltradoInMemory(filtro: ChequesFiltro): Promise<FirebaseFire
     const data = doc.data()
     if (filtro.vinculacion && !matchVinculacion(data, filtro.vinculacion)) return false
     if (filtro.comprobante && !matchComprobante(data, filtro.comprobante)) return false
+    if (filtro.interesEncubierto != null && !matchInteresEncubierto(data, filtro.interesEncubierto)) return false
     if (filtro.q && !matchBusqueda(data, filtro.q)) return false
     return true
   })
 }
 
 function needsInMemory(filtro: ChequesFiltro): boolean {
-  return Boolean(filtro.vinculacion || filtro.comprobante || filtro.q)
+  return Boolean(filtro.vinculacion || filtro.comprobante || filtro.interesEncubierto != null || filtro.q)
 }
 
 export async function countChequesFiltrados(filtro: ChequesFiltro): Promise<number> {

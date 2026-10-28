@@ -217,7 +217,9 @@ export function FinanzasAgendaPage() {
     <button
       type="button"
       onClick={() => ir({ tab: id })}
-      className={`rounded-lg px-4 py-2 text-sm font-medium ${tab === id ? 'bg-brand-primary text-white' : 'text-body-muted'}`}
+      className={`rounded-lg px-4 py-2 text-sm font-medium ${
+        tab === id ? 'bg-brand-primary text-white' : 'text-body-muted hover:text-heading'
+      }`}
     >
       {texto}
     </button>
@@ -225,20 +227,8 @@ export function FinanzasAgendaPage() {
 
   return (
     <>
-      <header className="mb-6">
-        <h1 className="text-heading text-2xl font-bold tracking-tight sm:text-3xl">Agenda</h1>
-        <p className="text-body-muted mt-2 max-w-2xl text-sm">
-          Lo que hay que pagar y cobrar, ordenado por fecha de vencimiento. Marcá la urgencia (Alta,
-          Media o Baja) para saber qué pagar primero.
-        </p>
-      </header>
-
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
-          {botonTab('pagos', 'Compromisos')}
-          {botonTab('cobros', 'Cobros esperados')}
-          {botonTab('planilla', 'Planilla del mes')}
-        </div>
+      <header className="mb-4 flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <h1 className="text-heading text-2xl font-bold tracking-tight">Agenda</h1>
         <div className="inline-flex items-center gap-3">
           {tab === 'pagos' ? <ProveedoresFinancierosPanel /> : null}
           {puedeAlta ? (
@@ -253,6 +243,12 @@ export function FinanzasAgendaPage() {
             </button>
           ) : null}
         </div>
+      </header>
+
+      <div className="mb-4 inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
+        {botonTab('pagos', 'Compromisos')}
+        {botonTab('cobros', 'Cobros esperados')}
+        {botonTab('planilla', 'Planilla del mes')}
       </div>
 
       {muestraResumen ? (
@@ -508,9 +504,9 @@ function CompromisosTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-2xl border border-neutral-200 dark:border-zinc-800">
+      <div className="overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
         <table className="min-w-full text-sm">
-          <thead className="bg-neutral-50 dark:bg-zinc-950/80">
+          <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-brand-primary">
             <tr>
               {vista === 'pendientes' ? (
                 <th className="px-3 py-3 text-left font-medium">Urgencia</th>
@@ -880,9 +876,9 @@ function CobrosTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-2xl border border-neutral-200 dark:border-zinc-800">
+      <div className="overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
         <table className="min-w-full text-sm">
-          <thead className="bg-neutral-50 dark:bg-zinc-950/80">
+          <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-brand-primary">
             <tr>
               {vista === 'esperados' ? <th className="px-3 py-3 text-left font-medium">Urgencia</th> : null}
               <th className="px-3 py-3 text-left font-medium">Cliente</th>

@@ -44,10 +44,12 @@ export async function findProveedorFinancieroPorNombreNormalizado(
 }
 
 export async function crearProveedorFinancieroDoc(nombre: string, uid: string): Promise<string> {
-  const ref = adminDb().collection(PROVEEDORES_FINANCIEROS_COLLECTION).doc()
+  const nombreNormalizado = normalizarNombre(nombre)
+  // ID determinístico: evita duplicados por construcción. '/' no es válido en IDs de Firestore.
+  const ref = adminDb().collection(PROVEEDORES_FINANCIEROS_COLLECTION).doc(`provfin-${nombreNormalizado.replace(/\//g, '-')}`)
   const doc: ProveedorFinancieroDocument = {
     nombre,
-    nombreNormalizado: normalizarNombre(nombre),
+    nombreNormalizado,
     creadoPor: uid,
     createdAt: Timestamp.now(),
   }

@@ -1,4 +1,4 @@
-import { Info, MoreHorizontal } from 'lucide-react'
+import { ArrowDownCircle, ArrowUpCircle, Info, MoreHorizontal, Scale, Wallet } from 'lucide-react'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ETIQUETA_ESTADO_CLASES, estadoDescubierto, type TonoEstado } from '../estadoDescubierto'
 import { formatMoneyCentavos } from '../formatMoney'
@@ -194,16 +194,41 @@ export function FranjaDemo({ borrando, onBorrar }: { borrando: boolean; onBorrar
 }
 
 export function EncabezadoHoy({ fecha }: { fecha: string }) {
-  return <h1 className="text-heading text-xl font-semibold">Hoy · {fechaLarga(fecha)}</h1>
+  return (
+    <header className="flex min-h-10 flex-wrap items-center justify-between gap-3">
+      <h1 className="text-heading text-2xl font-bold tracking-tight">Hoy · {fechaLarga(fecha)}</h1>
+    </header>
+  )
 }
 
-function Numero({ titulo, centavos, tono = 'normal' }: { titulo: string; centavos: number; tono?: 'normal' | 'verde' }) {
+function Numero({
+  titulo,
+  centavos,
+  tono = 'normal',
+  icono,
+  borde,
+}: {
+  titulo: string
+  centavos: number
+  tono?: 'normal' | 'verde' | 'rojo'
+  icono: ReactNode
+  borde: string
+}) {
   const color =
-    centavos < 0 ? 'text-red-600 dark:text-red-400' : tono === 'verde' ? 'text-emerald-700 dark:text-emerald-300' : 'text-heading'
+    centavos < 0 || tono === 'rojo'
+      ? 'text-red-600 dark:text-red-400'
+      : tono === 'verde'
+        ? 'text-emerald-700 dark:text-emerald-300'
+        : 'text-heading'
   return (
-    <div className="min-w-0 rounded-xl border border-neutral-300 bg-white px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900">
-      <p className="text-body-muted text-[13px]">{titulo}</p>
-      <p className={`break-words text-[17px] font-medium tabular-nums ${color}`}>{formatMoneyCentavos(centavos, 'ARS')}</p>
+    <div className={`surface-card min-w-0 rounded-2xl border p-3 ${borde}`}>
+      <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+        {icono}
+        <span>{titulo}</span>
+      </div>
+      <p className={`mt-1 break-words text-lg font-bold tabular-nums ${color}`}>
+        {formatMoneyCentavos(centavos, 'ARS')}
+      </p>
     </div>
   )
 }
@@ -215,11 +240,42 @@ export function CuatroNumeros({ data }: { data: HoyResponse }) {
   const llegaron = cobros.filter((fila) => fila.llego).length
   const detalleCobros = cobros.length === 0 ? '' : ` (${cobros.length}${llegaron > 0 ? ` · ${llegaron} ${llegaron === 1 ? 'llegó' : 'llegaron'}` : ''})`
   return (
-    <div data-tour="hoy-numeros" className="grid grid-cols-2 gap-2 md:grid-cols-4">
-      <Numero titulo="Arrancaste el día con" centavos={data.dia.saldoInicialCentavos} />
-      <Numero titulo={`Hoy pagás${data.pagos.filas.length > 0 ? ` (${data.pagos.filas.length})` : ''}`} centavos={data.dia.pagosCentavos} />
-      <Numero titulo={`Hoy cobrás${detalleCobros}`} centavos={totalCobros} tono="verde" />
-      <Numero titulo="Terminás el día en" centavos={data.dia.saldoFinalCentavos} />
+    <div data-tour="hoy-numeros" className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <Numero
+        titulo="Arrancaste el día con"
+        centavos={data.dia.saldoInicialCentavos}
+        icono={<Wallet className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden />}
+        borde="border-blue-200 dark:border-blue-900/70"
+      />
+      <Numero
+        titulo={`Hoy pagás${data.pagos.filas.length > 0 ? ` (${data.pagos.filas.length})` : ''}`}
+        centavos={data.dia.pagosCentavos}
+        tono="rojo"
+        icono={<ArrowUpCircle className="h-4 w-4 text-red-500" aria-hidden />}
+        borde="border-red-200 dark:border-red-900/70"
+      />
+      <Numero
+        titulo={`Hoy cobrás${detalleCobros}`}
+        centavos={totalCobros}
+        tono="verde"
+        icono={<ArrowDownCircle className="h-4 w-4 text-emerald-500" aria-hidden />}
+        borde="border-emerald-200 dark:border-emerald-900/70"
+      />
+      <Numero
+        titulo="Terminás el día en"
+        centavos={data.dia.saldoFinalCentavos}
+        icono={
+          <Scale
+            className={`h-4 w-4 ${data.dia.saldoFinalCentavos >= 0 ? 'text-emerald-500' : 'text-red-500'}`}
+            aria-hidden
+          />
+        }
+        borde={
+          data.dia.saldoFinalCentavos >= 0
+            ? 'border-emerald-200 dark:border-emerald-900/70'
+            : 'border-red-200 dark:border-red-900/70'
+        }
+      />
     </div>
   )
 }

@@ -145,11 +145,12 @@ export function AgendaResumen<E, I>({
         })}
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-3" aria-live="polite">
+      <div className="grid gap-3 sm:grid-cols-3" aria-live="polite">
         <Kpi
           icono={<ArrowUpCircle className="h-5 w-5 text-red-600 dark:text-red-400" aria-hidden />}
           titulo="Egresos (a pagar)"
           detalle={plural(actual.egresos.cantidad, 'compromiso', 'compromisos')}
+          borde="border-red-200 dark:border-red-900/70"
         >
           <Importes tot={actual.egresos} conUsd={conUsd} />
         </Kpi>
@@ -157,6 +158,7 @@ export function AgendaResumen<E, I>({
           icono={<ArrowDownCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-400" aria-hidden />}
           titulo="Ingresos (a cobrar)"
           detalle={plural(actual.ingresos.cantidad, 'cobro', 'cobros')}
+          borde="border-emerald-200 dark:border-emerald-900/70"
         >
           <Importes tot={actual.ingresos} conUsd={conUsd} />
         </Kpi>
@@ -164,6 +166,11 @@ export function AgendaResumen<E, I>({
           icono={<Scale className="text-heading h-5 w-5" aria-hidden />}
           titulo="Neto (entra − sale)"
           detalle={etiquetaPlazo}
+          borde={
+            neto.ARS < 0
+              ? 'border-red-200 dark:border-red-900/70'
+              : 'border-emerald-200 dark:border-emerald-900/70'
+          }
         >
           <span
             className={`block tabular-nums ${neto.ARS < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-400'}`}
@@ -187,15 +194,17 @@ function Kpi({
   icono,
   titulo,
   detalle,
+  borde = 'border-neutral-200 dark:border-zinc-800',
   children,
 }: {
   icono: ReactNode
   titulo: string
   detalle: string
+  borde?: string
   children: ReactNode
 }) {
   return (
-    <div className="surface-card rounded-2xl border border-neutral-200 p-3 dark:border-zinc-800">
+    <div className={`surface-card rounded-2xl border p-3 ${borde}`}>
       <p className="text-body-muted flex items-center gap-2 text-xs font-medium">
         {icono}
         {titulo}

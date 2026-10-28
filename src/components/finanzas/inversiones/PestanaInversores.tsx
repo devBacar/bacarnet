@@ -71,7 +71,7 @@ export function PestanaInversores() {
   return (
     <>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="w-full max-w-sm">
+        <div className="w-full sm:max-w-xs">
           <FinanzasFormField label="Buscar por nombre" htmlFor="inv-buscar">
             <input
               id="inv-buscar"

@@ -130,13 +130,8 @@ export function FinanzasCuentasPage() {
   return (
     <TransferirDesdeCuentaContext.Provider value={puedeTransferir ? setTransferirCuentaId : null}>
     <>
-      <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-heading text-2xl font-bold tracking-tight">Saldos bancarios</h1>
-          <p className="text-body-muted mt-1 max-w-2xl text-sm">
-            Los pesos se actualizan solos desde Interbanking; los dólares se cargan a mano.
-          </p>
-        </div>
+      <header className="mb-4 flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <h1 className="text-heading text-2xl font-bold tracking-tight">Saldos bancarios</h1>
         <button
           type="button"
           onClick={() => void handleRefresh()}

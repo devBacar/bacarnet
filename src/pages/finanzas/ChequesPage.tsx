@@ -1,11 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownLeft, ArrowUpRight, ClipboardPaste, Eye, Search, Upload } from 'lucide-react'
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  CalendarClock,
+  CalendarDays,
+  ClipboardPaste,
+  Eye,
+  FileWarning,
+  Scale,
+  Search,
+  Upload,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
+import { PestanaOcasionales } from '../../components/finanzas/cheques/PestanaOcasionales'
 import {
   CHEQUE_DIRECCION_LABELS,
   CHEQUE_ESTADO_LABELS,
@@ -70,19 +82,23 @@ function mesActual() {
   return { desde: `${y}-${m}-01`, hasta: `${y}-${m}-${String(last).padStart(2, '0')}` }
 }
 
+type VistaTab = 'recibido' | 'emitido' | 'ocasionales'
+
 export function FinanzasChequesPage() {
   const { user } = useAuth()
   const puedeCheques = usePermisosFinanzas().cheques
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [detalleId, setDetalleId] = useState<string | null>(null)
+  const [vista, setVista] = useState<VistaTab>('recibido')
 
-  const [direccion, setDireccion] = useState<ChequeDireccion | ''>('')
+  const [direccion, setDireccion] = useState<ChequeDireccion | ''>('recibido')
   const [origen, setOrigen] = useState<ChequeOrigen | ''>('')
   const [estado, setEstado] = useState<ChequeEstado | ''>('')
   const [tipo, setTipo] = useState<ChequeTipo | ''>('')
   const [vinculacion, setVinculacion] = useState<'' | 'vinculado' | 'sin_vincular'>('')
   const [comprobante, setComprobante] = useState<'' | 'con_comprobante' | 'sin_comprobante'>('')
+  const [interesEncubierto, setInteresEncubierto] = useState<'' | 'true' | 'false'>('')
   const { desde: mesDesde, hasta: mesHasta } = mesActual()
   const [desde, setDesde] = useState(() => {
     try { return sessionStorage.getItem('cheques_desde') ?? mesDesde } catch { return mesDesde }
@@ -104,7 +120,7 @@ export function FinanzasChequesPage() {
   }, [busqueda])
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ['finanzas', 'cheques', direccion, origen, estado, tipo, vinculacion, comprobante, desde, hasta, q, page],
+    queryKey: ['finanzas', 'cheques', direccion, origen, estado, tipo, vinculacion, comprobante, interesEncubierto, desde, hasta, q, page],
     queryFn: () =>
       fetchCheques({
         direccion,
@@ -113,6 +129,7 @@ export function FinanzasChequesPage() {
         tipo,
         vinculacion,
         comprobante,
+        interesEncubierto,
         desde: desde || undefined,
         hasta: hasta || undefined,
         q: q || undefined,
@@ -166,10 +183,10 @@ export function FinanzasChequesPage() {
   const total = data?.total ?? 0
   const paginas = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
-  const DIR_TABS: [ChequeDireccion | '', string][] = [
-    ['', 'Todos'],
-    ['recibido', 'Recibidos'],
-    ['emitido', 'Emitidos'],
+  const VISTA_TABS: [VistaTab, string, React.ReactNode][] = [
+    ['recibido', 'Recibidos', <ArrowDownLeft key="r" className="h-3.5 w-3.5" />],
+    ['emitido', 'Emitidos', <ArrowUpRight key="e" className="h-3.5 w-3.5" />],
+    ['ocasionales', 'Ocasionales', <FileWarning key="o" className="h-3.5 w-3.5" />],
   ]
 
   const TIPO_TABS: [ChequeTipo | '', string][] = [['', 'Todos'], ['echeq', 'eCheq'], ['fisico', 'Físicos']]
@@ -182,15 +199,13 @@ export function FinanzasChequesPage() {
 
   return (
     <>
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-heading text-2xl font-semibold">Chequera Virtual</h1>
-        </div>
-        {puedeCheques ? <div className="flex gap-2">
+      <header className="mb-4 flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <h1 className="text-heading text-2xl font-bold tracking-tight">Chequera Virtual</h1>
+        {puedeCheques ? <div className="flex flex-wrap gap-2">
           <button
             type="button"
             data-tour="cheques-ingresar"
-            className="btn-primary inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium"
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
             onClick={() => setShowPegar(true)}
           >
             <ClipboardPaste className="h-4 w-4" />
@@ -205,7 +220,7 @@ export function FinanzasChequesPage() {
           />
           <button
             type="button"
-            className="border-subtle text-body-muted inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium"
+            className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800"
             disabled={importMutation.isPending}
             onClick={() => fileRef.current?.click()}
           >
@@ -215,23 +230,56 @@ export function FinanzasChequesPage() {
         </div> : null}
       </header>
 
+      {/* Nivel 1: Tabs vista principal */}
+      <div className="mb-4" data-tour="cheques">
+        <div className="inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
+          {VISTA_TABS.map(([val, label, icon]) => (
+            <button
+              key={val}
+              type="button"
+              data-tour={val === 'recibido' ? 'cheques-direccion' : undefined}
+              onClick={() => {
+                setVista(val)
+                if (val !== 'ocasionales') {
+                  cambiarFiltro(() => { setDireccion(val); setEstado('') })
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium ${
+                vista === val
+                  ? 'bg-brand-primary text-white'
+                  : 'text-body-muted hover:text-heading'
+              }`}
+            >
+              {icon}
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {vista === 'ocasionales' ? (
+        <PestanaOcasionales />
+      ) : <>
+
       {resumen ? (
-        <div className="mb-6 grid gap-3 sm:grid-cols-2">
-          <div className="card-minimal px-5 py-4" data-tour="cheques-resumen">
-            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">
+        <div className="mb-4 grid gap-3 sm:grid-cols-2">
+          <div className="surface-card rounded-2xl border border-amber-200 p-3 dark:border-amber-900/70" data-tour="cheques-resumen">
+            <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+              <CalendarClock className="h-4 w-4 text-amber-500" aria-hidden />
               Hoy {formatFecha(resumen.fecha)}
-            </p>
-            <p className="text-brand-primary mt-1 text-lg font-semibold">
+            </div>
+            <p className="text-heading mt-1 text-lg font-bold tabular-nums">
               {resumen.cantidadACobrar === 0
                 ? 'No hay cheques que venzan hoy'
                 : `${resumen.cantidadACobrar} cheque${resumen.cantidadACobrar === 1 ? '' : 's'} a cobrar por ${formatMoneyCentavos(resumen.totalACobrarCentavos, 'ARS')}`}
             </p>
           </div>
-          <div className="card-minimal px-5 py-4">
-            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">
+          <div className="surface-card rounded-2xl border border-blue-200 p-3 dark:border-blue-900/70">
+            <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+              <CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden />
               Próximos vencimientos
-            </p>
-            <p className="text-brand-primary mt-1 text-lg font-semibold">
+            </div>
+            <p className="text-heading mt-1 text-lg font-bold tabular-nums">
               {resumen.proximos.cantidadACobrar === 0
                 ? 'No hay cheques próximos a vencer'
                 : `${resumen.proximos.cantidadACobrar} cheque${resumen.proximos.cantidadACobrar === 1 ? '' : 's'} por ${formatMoneyCentavos(resumen.proximos.totalACobrarCentavos, 'ARS')}`}
@@ -240,51 +288,33 @@ export function FinanzasChequesPage() {
         </div>
       ) : null}
 
-      {/* Nivel 1: Tabs dirección */}
-      <div className="mb-4" data-tour="cheques">
-        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
-          {DIR_TABS.map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              data-tour={val === 'recibido' ? 'cheques-direccion' : undefined}
-              onClick={() => cambiarFiltro(() => { setDireccion(val); setEstado('') })}
-              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-                direccion === val
-                  ? 'bg-brand-primary text-white shadow-sm'
-                  : 'text-body-muted hover:text-heading'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Cards resumen */}
       {data ? (
-        <div className="mb-5 grid gap-3 sm:grid-cols-3">
-          <div className="card-minimal px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--color-success, #16a34a)' }}>
-              <ArrowDownLeft className="mr-1 inline h-3 w-3" />
+        <div className="mb-4 grid gap-3 sm:grid-cols-3">
+          <div className="surface-card rounded-2xl border border-emerald-200 p-3 dark:border-emerald-900/70">
+            <p className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+              <ArrowDownLeft className="h-4 w-4 text-emerald-500" aria-hidden />
               Recibidos
             </p>
-            <p className="mt-1 text-lg font-semibold" style={{ color: 'var(--color-success, #16a34a)' }}>
+            <p className="mt-1 text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
               {formatMoneyCentavos(data.recibidosCentavos, 'ARS')}
             </p>
           </div>
-          <div className="card-minimal px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: 'var(--color-danger, #dc2626)' }}>
-              <ArrowUpRight className="mr-1 inline h-3 w-3" />
+          <div className="surface-card rounded-2xl border border-red-200 p-3 dark:border-red-900/70">
+            <p className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+              <ArrowUpRight className="h-4 w-4 text-red-500" aria-hidden />
               Emitidos
             </p>
-            <p className="mt-1 text-lg font-semibold" style={{ color: 'var(--color-danger, #dc2626)' }}>
+            <p className="mt-1 text-lg font-bold tabular-nums text-red-600 dark:text-red-400">
               {formatMoneyCentavos(data.emitidosCentavos, 'ARS')}
             </p>
           </div>
-          <div className="card-minimal px-4 py-3">
-            <p className="text-brand-muted text-xs font-medium uppercase tracking-wide">Neto</p>
-            <p className="text-brand-primary mt-1 text-lg font-semibold">
+          <div className="surface-card rounded-2xl border border-neutral-200 p-3 dark:border-zinc-800">
+            <p className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+              <Scale className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden />
+              Neto
+            </p>
+            <p className="text-heading mt-1 text-lg font-bold tabular-nums">
               {formatMoneyCentavos(data.recibidosCentavos - data.emitidosCentavos, 'ARS')}
             </p>
           </div>
@@ -309,7 +339,7 @@ export function FinanzasChequesPage() {
             </button>
           ))}
         </div>
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative w-full sm:max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
           <input
             type="text"
@@ -376,6 +406,15 @@ export function FinanzasChequesPage() {
           <option value="con_comprobante">Con comprobante</option>
           <option value="sin_comprobante">Sin comprobante</option>
         </select>
+        <select
+          className={finanzasInputClass}
+          value={interesEncubierto}
+          onChange={(e) => cambiarFiltro(() => setInteresEncubierto(e.target.value as '' | 'true' | 'false'))}
+        >
+          <option value="">Interés encubierto: Todos</option>
+          <option value="true">Solo interés encubierto</option>
+          <option value="false">Sin interés encubierto</option>
+        </select>
         <input
           type="date"
           className={finanzasInputClass}
@@ -401,10 +440,10 @@ export function FinanzasChequesPage() {
       {isLoading ? (
         <p className="text-body-muted text-sm">Cargando cheques…</p>
       ) : (
-        <div className={`surface-card overflow-x-auto ${isFetching ? 'opacity-70' : ''}`} data-tour="cheques-lista">
+        <div className={`overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900 ${isFetching ? 'opacity-70' : ''}`} data-tour="cheques-lista">
           <table className="min-w-full text-[0.8125rem]">
-            <thead className="surface-muted text-left text-xs uppercase tracking-wide">
-              <tr className="text-body-muted">
+            <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-left text-xs font-medium text-brand-primary">
+              <tr>
                 {!direccion ? <th className="px-3 py-2">Dir.</th> : null}
                 <th className="px-3 py-2">Nº</th>
                 <th className="px-3 py-2">
@@ -462,7 +501,22 @@ export function FinanzasChequesPage() {
                   <td className="text-brand-primary whitespace-nowrap px-3 py-2 text-right font-medium">
                     {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
                   </td>
-                  <td className="px-3 py-2"><TipoBadge tipo={ch.tipo} /></td>
+                  <td className="px-3 py-2">
+                    <TipoBadge tipo={ch.tipo} />
+                    {ch.esProveedorFinanciero ? (
+                      <span className="ml-1 inline-block rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
+                        Financiero
+                      </span>
+                    ) : null}
+                    {ch.esInteresEncubierto ? (
+                      <span
+                        className="ml-1 inline-block rounded border border-orange-300 bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-900 dark:border-orange-700 dark:bg-orange-900/40 dark:text-orange-200"
+                        title={ch.beneficiarioRealFinanciero ? `Beneficiario real: ${ch.beneficiarioRealFinanciero}` : undefined}
+                      >
+                        Interés encubierto
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="px-3 py-2">
                     <CondicionBadge estado={ch.estado} />
                     {ch.estado === 'rechazado' && ch.estadoBancario && /confirmado.*resumen/i.test(ch.estadoBancario) ? (
@@ -473,6 +527,16 @@ export function FinanzasChequesPage() {
                         <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-neutral-800 px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block dark:bg-zinc-700">
                           Debitado
                         </span>
+                      </span>
+                    ) : null}
+                    {ch.esRenovacion ? (
+                      <span className="ml-1 inline-block rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                        Renov.
+                      </span>
+                    ) : null}
+                    {ch.operacionUsd ? (
+                      <span className="ml-1 inline-block rounded border border-green-300 bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-900 dark:border-green-700 dark:bg-green-900/40 dark:text-green-200">
+                        USD
                       </span>
                     ) : null}
                   </td>
@@ -520,6 +584,8 @@ export function FinanzasChequesPage() {
           </button>
         </div>
       ) : null}
+
+      </>}
 
       {puedeCheques && showPegar ? (
         <PegarChequesModal
@@ -777,6 +843,45 @@ function ChequeDetalleModal({ chequeId, onClose }: { chequeId: string; onClose: 
                   {ch.vientriClave ? <>
                     <dt className="text-body-muted">Tipo</dt>
                     <dd>{ch.vientriClave.startsWith('oca-') ? 'Ocasional' : 'Regular'}</dd>
+                  </> : null}
+                  {ch.esProveedorFinanciero ? <>
+                    <dt className="text-body-muted">Proveedor</dt>
+                    <dd>
+                      <span className="inline-block rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
+                        Financiero{ch.tipoProveedor === 'ficticio' ? ' (ficticio)' : ''}
+                      </span>
+                    </dd>
+                  </> : null}
+                  {ch.esInteresEncubierto ? <>
+                    <dt className="text-body-muted">Clasificación</dt>
+                    <dd>
+                      <span className="inline-block rounded border border-orange-300 bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-900 dark:border-orange-700 dark:bg-orange-900/40 dark:text-orange-200">
+                        Interés encubierto (circuito financiero)
+                      </span>
+                      {ch.beneficiarioRealFinanciero ? (
+                        <span className="text-body-muted ml-1.5 text-xs">
+                          Beneficiario real: <strong className="text-heading">{ch.beneficiarioRealFinanciero}</strong>
+                        </span>
+                      ) : null}
+                    </dd>
+                  </> : null}
+                  {ch.operacionUsd ? <>
+                    <dt className="text-body-muted">Operación USD</dt>
+                    <dd>
+                      US$ {ch.operacionUsd.montoUsd.toLocaleString('es-AR', { minimumFractionDigits: 2 })} @ $ {ch.operacionUsd.cotizacion.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      {' · '}
+                      <span className="text-body-muted text-xs">
+                        Eq. {formatMoneyCentavos(Math.round(ch.operacionUsd.montoUsd * ch.operacionUsd.cotizacion * 100), 'ARS')}
+                      </span>
+                    </dd>
+                  </> : null}
+                  {ch.renovacionDe && ch.renovacionDe.length > 0 ? <>
+                    <dt className="text-body-muted">Renueva a</dt>
+                    <dd className="font-mono text-xs">{ch.renovacionDe.join(', ')}</dd>
+                  </> : null}
+                  {ch.renovadoPor && ch.renovadoPor.length > 0 ? <>
+                    <dt className="text-body-muted">Renovado por</dt>
+                    <dd className="font-mono text-xs">{ch.renovadoPor.join(', ')}</dd>
                   </> : null}
 
                 </dl>

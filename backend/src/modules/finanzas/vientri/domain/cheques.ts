@@ -26,6 +26,7 @@ export const NOMBRE_ESTADO_CHQ: Record<number, string> = {
   1: 'En cartera',
   2: 'Depositado',
   4: 'Pago a proveedor',
+  5: 'Renovado',
   8: 'Vendido',
   10: 'Pago confirmado a proveedor',
   13: 'Rechazado',
@@ -38,6 +39,8 @@ export function estadoDesdeChq(idEstado: number | null, emitido: boolean, rechaz
       return 'en_cartera'
     case 2:
       return 'depositado'
+    case 5:
+      return 'renovado'
     case 8:
       return 'vendido'
     case 4:
@@ -135,14 +138,13 @@ export interface ResultadoCheques {
     unidosPorNumero: number
     soloChqoca: number
     bajasReemplazadas: number
-    /** Estado 5 de Vientri: el cheque se volvió a cargar y tiene un gemelo vivo (mismo banco, número e importe). */
-    duplicadosEstado5: number
+    renovados: number
     ambiguos: number
   }
 }
 
 export function armarCheques(filasChq: FilaCsv[], filasChqoca: FilaCsv[], cat: Catalogos): ResultadoCheques {
-  const resumen = { chq: filasChq.length, chqoca: filasChqoca.length, unidosPorId: 0, unidosPorNumero: 0, soloChqoca: 0, bajasReemplazadas: 0, duplicadosEstado5: 0, ambiguos: 0 }
+  const resumen = { chq: filasChq.length, chqoca: filasChqoca.length, unidosPorId: 0, unidosPorNumero: 0, soloChqoca: 0, bajasReemplazadas: 0, renovados: 0, ambiguos: 0 }
 
   const leidos: ChqLeido[] = []
   for (const f of filasChq) {
@@ -170,20 +172,9 @@ export function armarCheques(filasChq: FilaCsv[], filasChqoca: FilaCsv[], cat: C
     return true
   })
 
-  // Estado 5: el mismo cheque se volvió a cargar (mismo banco, número e importe) y el otro registro es el que sigue.
-  // Se descarta para no contarlo dos veces. Si no tiene gemelo queda, marcado para revisar ("Estado 5").
-  const conGemelo = new Set(
-    vigentes.filter((c) => !c.baja && aEntero(c.fila.id_estado) !== 5).map((c) => claveCruce(c.bancoId, c.serie, c.centavos)),
-  )
-  const sinDuplicados = vigentes.filter((c) => {
-    if (!c.baja && aEntero(c.fila.id_estado) === 5 && conGemelo.has(claveCruce(c.bancoId, c.serie, c.centavos))) {
-      resumen.duplicadosEstado5++
-      return false
-    }
-    return true
-  })
-  vigentes.length = 0
-  vigentes.push(...sinDuplicados)
+  for (const c of vigentes) {
+    if (!c.baja && aEntero(c.fila.id_estado) === 5) resumen.renovados++
+  }
 
   const porId = new Map(vigentes.map((c) => [c.id, c]))
   const porClave = new Map<string, ChqLeido[]>()

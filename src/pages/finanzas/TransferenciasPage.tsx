@@ -147,20 +147,14 @@ export function FinanzasTransferenciasPage() {
 
   return (
     <>
-      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-heading text-2xl font-semibold">Transferencias</h1>
-          <p className="text-body-muted mt-1 text-sm">
-            Historial de confecciones hechas desde BacarNet. Cancelar acá no cancela la operación en
-            Interbanking.
-          </p>
-        </div>
-        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto">
+      <header className="mb-4 flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <h1 className="text-heading text-2xl font-bold tracking-tight">Transferencias</h1>
+        <div className="flex flex-wrap items-center gap-2">
           {permisos.transferencias ? (
             <button
               type="button"
               data-tour="transferencias-nueva"
-              className="w-full rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white sm:w-auto"
+              className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white"
               onClick={() => setNuevaAbierta(true)}
             >
               Nueva transferencia
@@ -169,7 +163,7 @@ export function FinanzasTransferenciasPage() {
           <button
             type="button"
             data-tour="transferencias-actualizar"
-            className="w-full rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800 sm:w-auto"
+            className="rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800"
             disabled={actualizandoEstados}
             onClick={() => void actualizarEstados()}
           >
@@ -178,12 +172,12 @@ export function FinanzasTransferenciasPage() {
         </div>
       </header>
 
-      <div className="mb-4 inline-flex w-full rounded-xl border border-neutral-200 p-1 dark:border-zinc-800 sm:w-auto">
+      <div className="mb-4 inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
         <button
           type="button"
           onClick={() => setPestana('historial')}
-          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium sm:flex-none ${
-            pestana === 'historial' ? 'bg-brand-primary text-white' : 'text-body-muted'
+          className={`rounded-lg px-4 py-2 text-sm font-medium ${
+            pestana === 'historial' ? 'bg-brand-primary text-white' : 'text-body-muted hover:text-heading'
           }`}
         >
           Historial
@@ -192,8 +186,8 @@ export function FinanzasTransferenciasPage() {
           type="button"
           data-tour="transferencias-pestana-agenda"
           onClick={() => setPestana('agenda')}
-          className={`flex-1 rounded-lg px-4 py-2 text-sm font-medium sm:flex-none ${
-            pestana === 'agenda' ? 'bg-brand-primary text-white' : 'text-body-muted'
+          className={`rounded-lg px-4 py-2 text-sm font-medium ${
+            pestana === 'agenda' ? 'bg-brand-primary text-white' : 'text-body-muted hover:text-heading'
           }`}
         >
           Agenda de destinatarios
@@ -256,9 +250,9 @@ export function FinanzasTransferenciasPage() {
       ) : isError ? (
         <p className="text-sm text-red-700">{error instanceof Error ? error.message : 'No se pudo cargar'}</p>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-neutral-200 dark:border-zinc-800">
+        <div className="overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
           <table className="min-w-full text-sm">
-            <thead className="bg-neutral-50 dark:bg-zinc-950/80">
+            <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-brand-primary">
               <tr>
                 <th className="px-3 py-3 text-left font-medium">Fecha</th>
                 <th className="px-3 py-3 text-left font-medium">Dirección</th>

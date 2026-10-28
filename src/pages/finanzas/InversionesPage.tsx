@@ -195,7 +195,7 @@ export function InversionesPage() {
       type="button"
       onClick={() => ir(tabId)}
       className={`rounded-lg px-4 py-2 text-sm font-medium ${
-        tab === tabId ? 'bg-brand-primary text-white' : 'text-body-muted'
+        tab === tabId ? 'bg-brand-primary text-white' : 'text-body-muted hover:text-heading'
       }`}
     >
       {texto}
@@ -208,13 +208,8 @@ export function InversionesPage() {
 
   return (
     <>
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-heading text-2xl font-bold tracking-tight sm:text-3xl">Inversores</h1>
-          <p className="text-body-muted mt-2 max-w-2xl text-sm">
-            Personas que le prestan plata a BACAR: inversiones, cuotas y pagos.
-          </p>
-        </div>
+      <header className="mb-4 flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <h1 className="text-heading text-2xl font-bold tracking-tight">Inversores</h1>
         {tab === 'inversiones' ? (
           <button
             type="button"

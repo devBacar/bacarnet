@@ -52,9 +52,9 @@ export function TablaInversiones({
   const navigate = useNavigate()
 
   return (
-    <div className="overflow-x-auto rounded-2xl border border-neutral-200 dark:border-zinc-800">
+    <div className="overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
       <table className="min-w-full text-sm">
-        <thead className="bg-neutral-50 dark:bg-zinc-950/80">
+        <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-brand-primary">
           <tr>
             <th className="px-3 py-3 text-left font-medium">Número</th>
             <th className="px-3 py-3 text-left font-medium">Inversor</th>

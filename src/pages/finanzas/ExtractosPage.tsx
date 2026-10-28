@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { ArrowDownCircle, ArrowUpCircle, Scale, Wallet } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
@@ -224,24 +225,51 @@ export function FinanzasExtractosPage() {
   const errorVista = vista.error instanceof Error ? vista.error.message : null
 
   const atajoClass = (activo: boolean) =>
-    `rounded-xl px-4 py-3 text-base font-semibold ${
-      activo
-        ? 'btn-primary'
-        : 'border border-neutral-300 bg-white text-neutral-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100'
+    `rounded-lg px-4 py-2 text-sm font-medium ${
+      activo ? 'bg-brand-primary text-white' : 'text-body-muted hover:text-heading'
     }`
 
   return (
     <>
-      <header data-tour="extractos" className="mb-6">
-        <h1 className="text-heading text-2xl font-semibold">Extractos</h1>
-        <p className="text-body-muted mt-1 text-sm">
-          Bajá el extracto oficial del banco, con la categoría de BacarNet, y fijate si falta algún movimiento.
-        </p>
+      <header data-tour="extractos" className="mb-4 flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <h1 className="text-heading text-2xl font-bold tracking-tight">Extractos</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            data-tour="extractos-bajar"
+            className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+            disabled={!puedePedir}
+            onClick={() => void bajarExcel()}
+          >
+            {bajando ? 'Bajando…' : 'Bajar Excel'}
+          </button>
+          <button
+            type="button"
+            data-tour="extractos-ver"
+            className="rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800"
+            disabled={!puedePedir}
+            onClick={verEnPantalla}
+          >
+            {vista.isFetching ? 'Buscando…' : 'Ver en pantalla'}
+          </button>
+        </div>
       </header>
 
-      <div className="mb-4 max-w-xl">
+      <div className="mb-4 inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800" data-tour="extractos-periodo">
+        <button type="button" className={atajoClass(modo === 'mes-pasado')} aria-pressed={modo === 'mes-pasado'} onClick={() => elegirModo('mes-pasado')}>
+          Mes pasado
+        </button>
+        <button type="button" className={atajoClass(modo === 'este-mes')} aria-pressed={modo === 'este-mes'} onClick={() => elegirModo('este-mes')}>
+          Este mes
+        </button>
+        <button type="button" className={atajoClass(modo === 'fechas')} aria-pressed={modo === 'fechas'} onClick={() => elegirModo('fechas')}>
+          Elegir fechas
+        </button>
+      </div>
+
+      <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <label className="text-sm" data-tour="extractos-cuenta">
-          <span className="text-body-muted mb-1 block font-medium">Cuenta</span>
+          <span className="text-body-muted mb-1 block">Cuenta</span>
           <select
             className={finanzasInputClass}
             value={cuentaId}
@@ -255,51 +283,23 @@ export function FinanzasExtractosPage() {
             ))}
           </select>
         </label>
-      </div>
-
-      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3" data-tour="extractos-periodo">
-        <button type="button" className={atajoClass(modo === 'mes-pasado')} aria-pressed={modo === 'mes-pasado'} onClick={() => elegirModo('mes-pasado')}>
-          Mes pasado
-        </button>
-        <button type="button" className={atajoClass(modo === 'este-mes')} aria-pressed={modo === 'este-mes'} onClick={() => elegirModo('este-mes')}>
-          Este mes
-        </button>
-        <button type="button" className={atajoClass(modo === 'fechas')} aria-pressed={modo === 'fechas'} onClick={() => elegirModo('fechas')}>
-          Elegir fechas
-        </button>
+        {modo === 'fechas' ? (
+          <>
+            <label className="text-sm">
+              <span className="text-body-muted mb-1 block">Desde</span>
+              <input type="date" className={finanzasInputClass} value={desde} max={hoy} onChange={(event) => setDesde(event.target.value)} />
+            </label>
+            <label className="text-sm">
+              <span className="text-body-muted mb-1 block">Hasta</span>
+              <input type="date" className={finanzasInputClass} value={hasta} max={hoy} onChange={(event) => setHasta(event.target.value)} />
+            </label>
+          </>
+        ) : null}
       </div>
 
       <p className="text-body-muted mb-3 text-sm">
         Del {formatFecha(desde)} al {formatFecha(hasta)}.
       </p>
-
-      {modo === 'fechas' ? (
-        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="text-sm">
-            <span className="text-body-muted mb-1 block font-medium">Desde</span>
-            <input type="date" className={finanzasInputClass} value={desde} max={hoy} onChange={(event) => setDesde(event.target.value)} />
-          </label>
-          <label className="text-sm">
-            <span className="text-body-muted mb-1 block font-medium">Hasta</span>
-            <input type="date" className={finanzasInputClass} value={hasta} max={hoy} onChange={(event) => setHasta(event.target.value)} />
-          </label>
-        </div>
-      ) : null}
-
-      <div className="mb-4 flex flex-col gap-2 sm:flex-row">
-        <button type="button" data-tour="extractos-bajar" className="btn-primary rounded-xl px-5 py-3 text-base font-semibold disabled:opacity-60" disabled={!puedePedir} onClick={() => void bajarExcel()}>
-          {bajando ? 'Bajando…' : 'Bajar Excel'}
-        </button>
-        <button
-          type="button"
-          data-tour="extractos-ver"
-          className="rounded-xl border border-neutral-300 bg-white px-5 py-3 text-base font-semibold text-neutral-900 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100"
-          disabled={!puedePedir}
-          onClick={verEnPantalla}
-        >
-          {vista.isFetching ? 'Buscando…' : 'Ver en pantalla'}
-        </button>
-      </div>
 
       {periodoInvalido ? (
         <p className="mb-4 text-sm text-red-700 dark:text-red-300">La fecha desde tiene que ser anterior o igual a la fecha hasta.</p>
@@ -323,34 +323,46 @@ export function FinanzasExtractosPage() {
           </p>
 
           <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Saldo inicial</p>
-              <p className="text-heading mt-1 text-lg font-semibold">{formatMoneyCentavos(consulta.resumen.saldoInicialCentavos, 'ARS')}</p>
+            <div className="surface-card rounded-2xl border border-blue-200 p-3 dark:border-blue-900/70">
+              <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+                <Wallet className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden />
+                Saldo inicial
+              </div>
+              <p className="text-heading mt-1 text-lg font-bold tabular-nums">{formatMoneyCentavos(consulta.resumen.saldoInicialCentavos, 'ARS')}</p>
             </div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-900 dark:bg-emerald-950">
-              <p className="text-xs font-medium uppercase tracking-wide text-emerald-800 dark:text-emerald-200">Entró</p>
-              <p className="mt-1 text-lg font-semibold text-emerald-950 dark:text-emerald-50">{formatMoneyCentavos(consulta.resumen.totalCreditosCentavos, 'ARS')}</p>
+            <div className="surface-card rounded-2xl border border-emerald-200 p-3 dark:border-emerald-900/70">
+              <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+                <ArrowDownCircle className="h-4 w-4 text-emerald-500" aria-hidden />
+                Entró
+              </div>
+              <p className="mt-1 text-lg font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{formatMoneyCentavos(consulta.resumen.totalCreditosCentavos, 'ARS')}</p>
             </div>
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950">
-              <p className="text-xs font-medium uppercase tracking-wide text-red-800 dark:text-red-200">Salió</p>
-              <p className="mt-1 text-lg font-semibold text-red-950 dark:text-red-50">{formatMoneyCentavos(consulta.resumen.totalDebitosCentavos, 'ARS')}</p>
+            <div className="surface-card rounded-2xl border border-red-200 p-3 dark:border-red-900/70">
+              <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+                <ArrowUpCircle className="h-4 w-4 text-red-500" aria-hidden />
+                Salió
+              </div>
+              <p className="mt-1 text-lg font-bold tabular-nums text-red-600 dark:text-red-400">{formatMoneyCentavos(consulta.resumen.totalDebitosCentavos, 'ARS')}</p>
             </div>
-            <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="text-body-muted text-xs font-medium uppercase tracking-wide">Saldo final</p>
-              <p className="text-heading mt-1 text-lg font-semibold">{formatMoneyCentavos(consulta.resumen.saldoFinalCentavos, 'ARS')}</p>
+            <div className="surface-card rounded-2xl border border-emerald-200 p-3 dark:border-emerald-900/70">
+              <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+                <Scale className="h-4 w-4 text-emerald-500" aria-hidden />
+                Saldo final
+              </div>
+              <p className="text-heading mt-1 text-lg font-bold tabular-nums">{formatMoneyCentavos(consulta.resumen.saldoFinalCentavos, 'ARS')}</p>
             </div>
           </div>
 
-          <div className="max-h-[32rem] overflow-auto rounded-xl border border-neutral-200 dark:border-zinc-800">
+          <div className="max-h-[32rem] overflow-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
             <table className="min-w-[40rem] w-full text-sm">
-              <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-zinc-900 dark:text-zinc-400">
+              <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-left text-xs font-medium text-brand-primary">
                 <tr>
-                  <th className="sticky top-0 bg-neutral-50 px-3 py-2 dark:bg-zinc-900">Fecha</th>
-                  <th className="sticky top-0 bg-neutral-50 px-3 py-2 dark:bg-zinc-900">Concepto</th>
-                  <th className="sticky top-0 bg-neutral-50 px-3 py-2 dark:bg-zinc-900">Categoría</th>
-                  <th className="sticky top-0 bg-neutral-50 px-3 py-2 text-right dark:bg-zinc-900">Débito</th>
-                  <th className="sticky top-0 bg-neutral-50 px-3 py-2 text-right dark:bg-zinc-900">Crédito</th>
-                  <th className="sticky top-0 bg-neutral-50 px-3 py-2 text-right dark:bg-zinc-900">Saldo</th>
+                  <th className="sticky top-0 bg-brand-primary-light px-3 py-2">Fecha</th>
+                  <th className="sticky top-0 bg-brand-primary-light px-3 py-2">Concepto</th>
+                  <th className="sticky top-0 bg-brand-primary-light px-3 py-2">Categoría</th>
+                  <th className="sticky top-0 bg-brand-primary-light px-3 py-2 text-right">Débito</th>
+                  <th className="sticky top-0 bg-brand-primary-light px-3 py-2 text-right">Crédito</th>
+                  <th className="sticky top-0 bg-brand-primary-light px-3 py-2 text-right">Saldo</th>
                 </tr>
               </thead>
               <tbody>

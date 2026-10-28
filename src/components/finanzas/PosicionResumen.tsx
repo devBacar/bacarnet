@@ -3,7 +3,7 @@ import { ETIQUETA_ESTADO_CLASES, estadoDescubierto } from './estadoDescubierto'
 import type { PosicionPorBancoRow } from './finanzasAggregates'
 import { formatMoneyCentavos } from './formatMoney'
 import { PosicionMonto } from './PosicionMonto'
-import { ArrowRightLeft } from 'lucide-react'
+import { ArrowRightLeft, DollarSign, Landmark } from 'lucide-react'
 
 const SEMAFORO_COLOR: Record<FinanzasSemaforo, string> = {
   verde: 'bg-emerald-500',
@@ -68,20 +68,41 @@ export function PosicionResumen({
     <section
       data-tour="saldos-bancos"
       aria-labelledby="finanzas-posicion-heading"
-      className="surface-card rounded-2xl border border-t-4 border-[#c5d4e4] border-t-[#1e3a5f] bg-gradient-to-b from-[#e8eef5] to-transparent to-40% p-4 dark:border-[#5b8fd4]/30 dark:border-t-[#5b8fd4] dark:from-[#5b8fd4]/10"
+      className="flex flex-col overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900"
     >
-      <h2 id="finanzas-posicion-heading" className="text-heading text-base font-semibold">
-        Posición actual
-      </h2>
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
+        <h2 id="finanzas-posicion-heading" className="text-brand-primary text-[15px] font-medium">
+          Posición actual
+        </h2>
+      </header>
 
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => onSelect('ARS', null)} className={celda}>
-          <p className="text-body-muted text-xs">Pesos</p>
-          <PosicionMonto centavos={arsCentavos} moneda="ARS" size="md" />
+      <div className="p-4">
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => onSelect('ARS', null)}
+          className="surface-card rounded-2xl border border-blue-200 p-3 text-left transition hover:bg-neutral-50 dark:border-blue-900/70 dark:hover:bg-zinc-800"
+        >
+          <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+            <Landmark className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden />
+            Pesos
+          </div>
+          <div className="mt-1">
+            <PosicionMonto centavos={arsCentavos} moneda="ARS" size="md" />
+          </div>
         </button>
-        <button type="button" onClick={() => onSelect('USD', null)} className={celda}>
-          <p className="text-body-muted text-xs">Dólares</p>
-          <PosicionMonto centavos={usdCentavos} moneda="USD" size="md" />
+        <button
+          type="button"
+          onClick={() => onSelect('USD', null)}
+          className="surface-card rounded-2xl border border-emerald-200 p-3 text-left transition hover:bg-neutral-50 dark:border-emerald-900/70 dark:hover:bg-zinc-800"
+        >
+          <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
+            <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden />
+            Dólares
+          </div>
+          <div className="mt-1">
+            <PosicionMonto centavos={usdCentavos} moneda="USD" size="md" />
+          </div>
         </button>
       </div>
 
@@ -234,6 +255,7 @@ export function PosicionResumen({
         Tocá un monto para ver las cuentas, cargar saldos en dólares o el descubierto. «Le queda para usar»
         es el saldo más el descubierto acordado.
       </p>
+      </div>
     </section>
   )
 }

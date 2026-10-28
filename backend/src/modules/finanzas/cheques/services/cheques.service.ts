@@ -35,6 +35,7 @@ export interface ChequesListadoQuery {
   tipo?: string
   vinculacion?: string
   comprobante?: string
+  interesEncubierto?: string
   desde?: string
   hasta?: string
   q?: string
@@ -101,6 +102,12 @@ function validVinculacion(raw: string | undefined): 'vinculado' | 'sin_vincular'
   return raw
 }
 
+function validInteresEncubierto(raw: string | undefined): boolean | null {
+  if (!raw) return null
+  if (raw !== 'true' && raw !== 'false') throw new Error(`interesEncubierto inválido: ${raw}`)
+  return raw === 'true'
+}
+
 function validComprobante(raw: string | undefined): 'con_comprobante' | 'sin_comprobante' | null {
   if (!raw) return null
   if (raw !== 'con_comprobante' && raw !== 'sin_comprobante') throw new Error(`comprobante inválido: ${raw}`)
@@ -114,6 +121,7 @@ export async function listChequesApi(query: ChequesListadoQuery): Promise<Cheque
   const tipo = validTipo(query.tipo?.trim())
   const vinculacion = validVinculacion(query.vinculacion?.trim())
   const comprobante = validComprobante(query.comprobante?.trim())
+  const interesEncubierto = validInteresEncubierto(query.interesEncubierto?.trim())
   const q = query.q?.trim() || null
   const desde = query.desde?.trim() || null
   const hasta = query.hasta?.trim() || null
@@ -124,8 +132,8 @@ export async function listChequesApi(query: ChequesListadoQuery): Promise<Cheque
   const page = parsePositiveInt(query.page, 1, 10_000)
   const limit = parsePositiveInt(query.limit, PAGE_DEFAULT, PAGE_MAX)
   const offset = (page - 1) * limit
-  const filtro: ChequesFiltro = { direccion, origen, estado, tipo, vinculacion, comprobante, desde, hasta, q }
-  const baseFiltro = { origen, estado, tipo, vinculacion, comprobante, desde, hasta, q }
+  const filtro: ChequesFiltro = { direccion, origen, estado, tipo, vinculacion, comprobante, interesEncubierto, desde, hasta, q }
+  const baseFiltro = { origen, estado, tipo, vinculacion, comprobante, interesEncubierto, desde, hasta, q }
 
   const [total, totalCentavos, porDireccion, cheques] = await Promise.all([
     countChequesFiltrados(filtro),

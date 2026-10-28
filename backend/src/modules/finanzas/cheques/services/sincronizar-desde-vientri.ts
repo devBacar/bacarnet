@@ -1,10 +1,14 @@
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { VIENTRI_CHEQUES, VIENTRI_PERSONAS } from '../../vientri/services/vientri.repository.js'
+import { VIENTRI_CHEQUES_OCASIONALES } from '../../vientri/services/importar-cheques-ocasionales.js'
 import type { VientriChequeDoc, VientriPersonaDoc } from '../../vientri/domain/tipos.js'
+import type { ChequeOcasionalDoc } from '../../vientri/domain/cheque-ocasional.types.js'
 import type { ChequeEstado, ChequeHistorialEstadoDocument } from '../domain/cheque.types.js'
 import { vientriChequeToRow, clasificarOrigenPorPersonas, type ChequeVientriRow } from '../domain/mapear-vientri.js'
 import { chequeDocId } from './cheques.repository.js'
+import { nombresNormalizadosProveedoresFinancieros } from '../../agenda/services/proveedores-financieros.repository.js'
+import { esInteresFinancieroDisfrazado } from '../../vientri/domain/clasificar-cheque-proveedor.js'
 import { reconciliarChequesConMovimientos } from './reconciliar-cheques-movimientos.js'
 
 const CHEQUES_COLLECTION = 'cheques'
@@ -22,10 +26,19 @@ export interface ResultadoSincVientri {
 }
 
 export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<ResultadoSincVientri> {
-  const [snap, personasSnap] = await Promise.all([
+  const [snap, personasSnap, ocasionalesSnap] = await Promise.all([
     adminDb().collection(VIENTRI_CHEQUES).get(),
     adminDb().collection(VIENTRI_PERSONAS).get(),
+    adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).get(),
   ])
+
+  const proveedoresFinancieros = await nombresNormalizadosProveedoresFinancieros()
+
+  const ocasionalesMap = new Map<string, ChequeOcasionalDoc>()
+  for (const oDoc of ocasionalesSnap.docs) {
+    const o = oDoc.data() as ChequeOcasionalDoc
+    if (o.numeroCheque) ocasionalesMap.set(o.numeroCheque, o)
+  }
 
   const personasMap = new Map<number, VientriPersonaDoc>()
   for (const pDoc of personasSnap.docs) {
@@ -61,6 +74,7 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
     'estado', 'montoCentavos', 'estadoBancario', 'fechaPago', 'vientriClave', 'origen',
     'vientriCmpIngreso', 'vientriCmpIngresoDesc', 'vientriCmpSalida', 'vientriCmpSalidaDesc',
     'vientriEstadoPrevio', 'vientriCmpNdRechazo', 'vientriCmpPagoBanco', 'vientriMotivoRechazoId',
+    'ocasionalEnriquecido', 'esProveedorFinanciero', 'esInteresEncubierto', 'beneficiarioRealFinanciero',
   ).get()
   for (const s of existingSnaps.docs) existingMap.set(s.id, s.data())
 
@@ -103,6 +117,28 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
       }
       if (fechaAcreditacion) data.fechaAcreditacion = fechaAcreditacion
 
+      const oca = ocasionalesMap.get(row.numero)
+      if (oca) {
+        data.ocasionalEnriquecido = true
+        data.esProveedorFinanciero = oca.esProveedorFinanciero
+        data.esRenovacion = oca.esRenovacion
+        data.tipoProveedor = oca.tipoProveedor ?? null
+        data.operacionUsd = oca.operacionUsd ?? null
+        data.renovacionDe = oca.renovacionDe.length > 0 ? oca.renovacionDe : null
+        data.renovadoPor = oca.renovadoPor.length > 0 ? oca.renovadoPor : null
+      } else {
+        data.ocasionalEnriquecido = false
+      }
+
+      // Interés encubierto: beneficiario real de CHQOCA o destinatario del cheque en cheques.
+      const clasif = esInteresFinancieroDisfrazado(oca?.beneficiario || row.destinatario, proveedoresFinancieros)
+      data.esInteresEncubierto = clasif.esInteresEncubierto
+      data.beneficiarioRealFinanciero = clasif.beneficiarioReal
+      if (!oca) {
+        data.esProveedorFinanciero = clasif.esInteresEncubierto
+        data.tipoProveedor = clasif.esInteresEncubierto ? 'financiero' : null
+      }
+
       if (!prev) {
         data.createdBy = actorUid
         data.createdAt = FieldValue.serverTimestamp()
@@ -120,6 +156,9 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
         const prevPagoBanco = (prev.vientriCmpPagoBanco as number | null | undefined) ?? null
         const prevMotivoRechazo = (prev.vientriMotivoRechazoId as number | null | undefined) ?? null
 
+        const prevOcasional = prev.ocasionalEnriquecido === true
+        const nowOcasional = Boolean(oca)
+
         const changed = prevEstado !== row.estado
           || prev.montoCentavos !== row.montoCentavos
           || prev.estadoBancario !== row.estadoBancario
@@ -134,6 +173,10 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
           || prevNdRechazo !== (idCmpNdRechazo ?? null)
           || prevPagoBanco !== (idCmpPagoBanco ?? null)
           || prevMotivoRechazo !== (motivoRechazoId ?? null)
+          || prevOcasional !== nowOcasional
+          || (prev.esInteresEncubierto === true) !== clasif.esInteresEncubierto
+          || (prev.esProveedorFinanciero === true) !== (data.esProveedorFinanciero === true)
+          || ((prev.beneficiarioRealFinanciero as string | null | undefined) ?? null) !== clasif.beneficiarioReal
 
         if (!changed) {
           sinCambios++

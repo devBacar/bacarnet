@@ -305,9 +305,23 @@ export interface OcasionalesListResponse {
 
 export interface OcasionalesResumenResponse {
   totalCheques: number
+  totalMontoCentavos?: number
+  pendientesCantidad?: number
+  pendientesMontoCentavos?: number
+  fechasImposiblesCantidad?: number
   financieros: number
+  financierosMontoCentavos?: number
+  gastoRealCantidad?: number
+  gastoRealMontoCentavos?: number
   conRenovacion: number
   conUsd: number
+  totalMontoUsd?: number
+  cotizacionPromedioUsd?: number
+  porMes?: Array<{
+    mes: string
+    cantidad: number
+    montoCentavos: number
+  }>
   costoFinanciero: {
     cantidadCadenas: number
     capitalTotalCentavos: number
@@ -323,8 +337,19 @@ export interface OcasionalesResumenResponse {
   }
 }
 
+export interface EslabonDetalleRef {
+  numeroCheque: string
+  montoCentavos: number | null
+  fechaVencimiento: string | null
+  estado: string | null
+}
+
 export interface OcasionalDetalleResponse {
   cheque: ChequeOcasionalItem
+  clasificacion?: ChequeClasificado | null
+  cadena?: CadenaRenovacion | null
+  renovacionDeDetalle?: EslabonDetalleRef[]
+  renovadoPorDetalle?: EslabonDetalleRef[]
 }
 
 export interface OperacionUsdItem {

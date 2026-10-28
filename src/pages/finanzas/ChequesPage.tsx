@@ -852,9 +852,28 @@ function ChequeDetalleModal({ chequeId, onClose }: { chequeId: string; onClose: 
                       </span>
                     </dd>
                   </> : null}
+                  {ch.esInteresEncubierto ? <>
+                    <dt className="text-body-muted">Clasificación</dt>
+                    <dd>
+                      <span className="inline-block rounded border border-orange-300 bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-900 dark:border-orange-700 dark:bg-orange-900/40 dark:text-orange-200">
+                        Interés encubierto (circuito financiero)
+                      </span>
+                      {ch.beneficiarioRealFinanciero ? (
+                        <span className="text-body-muted ml-1.5 text-xs">
+                          Beneficiario real: <strong className="text-heading">{ch.beneficiarioRealFinanciero}</strong>
+                        </span>
+                      ) : null}
+                    </dd>
+                  </> : null}
                   {ch.operacionUsd ? <>
                     <dt className="text-body-muted">Operación USD</dt>
-                    <dd>US$ {ch.operacionUsd.montoUsd.toLocaleString('es-AR', { minimumFractionDigits: 2 })} @ {ch.operacionUsd.cotizacion.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</dd>
+                    <dd>
+                      US$ {ch.operacionUsd.montoUsd.toLocaleString('es-AR', { minimumFractionDigits: 2 })} @ $ {ch.operacionUsd.cotizacion.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                      {' · '}
+                      <span className="text-body-muted text-xs">
+                        Eq. {formatMoneyCentavos(Math.round(ch.operacionUsd.montoUsd * ch.operacionUsd.cotizacion * 100), 'ARS')}
+                      </span>
+                    </dd>
                   </> : null}
                   {ch.renovacionDe && ch.renovacionDe.length > 0 ? <>
                     <dt className="text-body-muted">Renueva a</dt>

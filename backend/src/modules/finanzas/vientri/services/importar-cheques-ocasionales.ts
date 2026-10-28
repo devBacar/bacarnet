@@ -31,6 +31,17 @@ const COLUMNAS_SIN_HEADER = [
   'obs', 'id_cheque', 'id_persona_recibe',
 ] as const
 
+function esObsFinanciero(obsTexto: string, proveedoresFinancieros: Set<string>): boolean {
+  const norm = normalizarNombre(obsTexto.replace(/[().+,/-]/g, ' '))
+  if (!norm) return false
+  // Patrones explícitos de capital / interés en OBS (ej. "cap + int", "Anderson (Int)", "Int parcial y Cap")
+  if (/\b(intereses|interes|int)\b/.test(norm)) return true
+  for (const pf of proveedoresFinancieros) {
+    if (pf.length >= 4 && norm.includes(pf)) return true
+  }
+  return false
+}
+
 function filaADoc(
   f: FilaCsv,
   proveedoresFinancieros: Set<string>,
@@ -41,19 +52,24 @@ function filaADoc(
   const montoCentavos = aCentavos(f.importe) ?? 0
   const beneficiario = aTexto(f.destinatario) ?? ''
   const beneficiarioNorm = normalizarNombre(beneficiario)
-  const esProveedorFinanciero = beneficiarioNorm !== '' && proveedoresFinancieros.has(beneficiarioNorm)
+  const obs = parsearObs(f.obs)
+
+  const esProveedorFinanciero =
+    (beneficiarioNorm !== '' && proveedoresFinancieros.has(beneficiarioNorm))
+    || obs.renovacion !== null
+    || obs.operacionUsd !== null
+    || (beneficiarioNorm === '' && esObsFinanciero(obs.obsOriginal, proveedoresFinancieros))
 
   const estadoCodigo = aEntero(f.id_estado)
   const estado = estadoCodigo !== null
     ? (NOMBRE_ESTADO_CHQ[estadoCodigo] ?? `Estado ${estadoCodigo}`)
     : 'Sin estado'
 
-  const obs = parsearObs(f.obs)
-
   const fechaVencimiento = aFecha(f.fecha_vto)
   const revisar: string[] = []
   if (fechaImposible(fechaVencimiento)) revisar.push(`Fecha imposible (${fechaVencimiento})`)
   if (montoCentavos <= 0) revisar.push('Importe cero o negativo')
+  if (beneficiarioNorm === '') revisar.push('Sin destinatario')
 
   return {
     numeroCheque: (f.numero_completo || f.numero || '').trim(),

@@ -74,7 +74,7 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
     'estado', 'montoCentavos', 'estadoBancario', 'fechaPago', 'vientriClave', 'origen',
     'vientriCmpIngreso', 'vientriCmpIngresoDesc', 'vientriCmpSalida', 'vientriCmpSalidaDesc',
     'vientriEstadoPrevio', 'vientriCmpNdRechazo', 'vientriCmpPagoBanco', 'vientriMotivoRechazoId',
-    'ocasionalEnriquecido', 'esInteresEncubierto', 'beneficiarioRealFinanciero',
+    'ocasionalEnriquecido', 'esProveedorFinanciero', 'esInteresEncubierto', 'beneficiarioRealFinanciero',
   ).get()
   for (const s of existingSnaps.docs) existingMap.set(s.id, s.data())
 
@@ -130,10 +130,14 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
         data.ocasionalEnriquecido = false
       }
 
-      // Interés encubierto: el beneficiario real es el destinatario de CHQOCA, no el proveedor del comprobante.
-      const clasif = esInteresFinancieroDisfrazado(oca?.beneficiario, proveedoresFinancieros)
+      // Interés encubierto: beneficiario real de CHQOCA o destinatario del cheque en cheques.
+      const clasif = esInteresFinancieroDisfrazado(oca?.beneficiario || row.destinatario, proveedoresFinancieros)
       data.esInteresEncubierto = clasif.esInteresEncubierto
       data.beneficiarioRealFinanciero = clasif.beneficiarioReal
+      if (!oca) {
+        data.esProveedorFinanciero = clasif.esInteresEncubierto
+        data.tipoProveedor = clasif.esInteresEncubierto ? 'financiero' : null
+      }
 
       if (!prev) {
         data.createdBy = actorUid
@@ -171,6 +175,7 @@ export async function sincronizarChequesDesdeVientri(actorUid: string): Promise<
           || prevMotivoRechazo !== (motivoRechazoId ?? null)
           || prevOcasional !== nowOcasional
           || (prev.esInteresEncubierto === true) !== clasif.esInteresEncubierto
+          || (prev.esProveedorFinanciero === true) !== (data.esProveedorFinanciero === true)
           || ((prev.beneficiarioRealFinanciero as string | null | undefined) ?? null) !== clasif.beneficiarioReal
 
         if (!changed) {

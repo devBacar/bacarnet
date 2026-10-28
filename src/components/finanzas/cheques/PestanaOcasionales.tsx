@@ -107,28 +107,99 @@ export function PestanaOcasionales() {
     <>
       {subTabs}
       {resumen ? (
-        <div className="mb-4 grid gap-3 sm:grid-cols-4">
-          <ResumenCard
-            icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
-            label="Total ocasionales"
-            value={String(resumen.totalCheques)}
-          />
-          <ResumenCard
-            icon={<Link2 className="h-4 w-4 text-violet-500" />}
-            label="Financieros"
-            value={String(resumen.financieros)}
-          />
-          <ResumenCard
-            icon={<RefreshCw className="h-4 w-4 text-blue-500" />}
-            label="Con renovación"
-            value={String(resumen.conRenovacion)}
-          />
-          <ResumenCard
-            icon={<DollarSign className="h-4 w-4 text-green-500" />}
-            label="Con USD"
-            value={String(resumen.conUsd)}
-          />
-        </div>
+        <>
+          <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <ResumenCard
+              icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
+              label="Compromisos pendientes"
+              value={String(resumen.pendientesCantidad ?? resumen.totalCheques)}
+              subvalue={
+                resumen.pendientesMontoCentavos != null
+                  ? formatMoneyCentavos(resumen.pendientesMontoCentavos, 'ARS')
+                  : undefined
+              }
+              hint={
+                resumen.fechasImposiblesCantidad
+                  ? `Total: ${resumen.totalCheques} (${resumen.fechasImposiblesCantidad} fecha inv.)`
+                  : `Total ocasionales: ${resumen.totalCheques}`
+              }
+            />
+            <ResumenCard
+              icon={<Link2 className="h-4 w-4 text-violet-500" />}
+              label="Circuito financiero"
+              value={String(resumen.financieros)}
+              subvalue={
+                resumen.financierosMontoCentavos != null
+                  ? formatMoneyCentavos(resumen.financierosMontoCentavos, 'ARS')
+                  : undefined
+              }
+              hint="No son proveedores reales"
+            />
+            <ResumenCard
+              icon={<Link2 className="h-4 w-4 text-slate-500" />}
+              label="Gasto real proveedor"
+              value={String(resumen.gastoRealCantidad ?? Math.max(0, resumen.totalCheques - resumen.financieros))}
+              subvalue={
+                resumen.gastoRealMontoCentavos != null
+                  ? formatMoneyCentavos(resumen.gastoRealMontoCentavos, 'ARS')
+                  : undefined
+              }
+              hint="Fuera del circuito"
+            />
+            <ResumenCard
+              icon={<RefreshCw className="h-4 w-4 text-blue-500" />}
+              label="Con renovación"
+              value={String(resumen.conRenovacion)}
+              subvalue={
+                resumen.costoFinanciero.cantidadCadenas > 0
+                  ? `Interés: ${formatMoneyCentavos(resumen.costoFinanciero.interesTotalCentavos, 'ARS')}`
+                  : undefined
+              }
+              hint={
+                resumen.costoFinanciero.cantidadCadenas > 0
+                  ? `${resumen.costoFinanciero.cantidadCadenas} cadenas · Tasa ${(resumen.costoFinanciero.tasaImplicitaPromedio * 100).toFixed(1)}%`
+                  : undefined
+              }
+            />
+            <ResumenCard
+              icon={<DollarSign className="h-4 w-4 text-green-500" />}
+              label="Operaciones USD"
+              value={String(resumen.conUsd)}
+              subvalue={
+                resumen.totalMontoUsd
+                  ? `US$ ${resumen.totalMontoUsd.toLocaleString('es-AR')}`
+                  : undefined
+              }
+              hint={
+                resumen.cotizacionPromedioUsd
+                  ? `TC prom. $ ${resumen.cotizacionPromedioUsd.toLocaleString('es-AR')}`
+                  : undefined
+              }
+            />
+          </div>
+
+          {resumen.porMes && resumen.porMes.length > 0 ? (
+            <div className="surface-card mb-4 rounded-2xl border border-neutral-200 p-3 dark:border-zinc-800">
+              <p className="text-body-muted text-xs font-medium uppercase tracking-wide">
+                Concentración de vencimientos pendientes por mes
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {resumen.porMes.map((m) => (
+                  <div
+                    key={m.mes}
+                    className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800/60"
+                  >
+                    <span className="text-heading font-semibold">{m.mes}</span>
+                    <span className="text-body-muted ml-1.5">({m.cantidad})</span>
+                    <span className="text-brand-primary ml-2 font-semibold tabular-nums">
+                      {formatMoneyCentavos(m.montoCentavos, 'ARS')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </>
       ) : null}
 
       {resumen && resumen.costoFinanciero.cantidadCadenas > 0 ? (
@@ -324,7 +395,13 @@ function OcasionalRow({ ch, onAbrir, onVerCadena }: { ch: ChequeOcasionalItem; o
             </span>
           ) : null}
           {!ch.esProveedorFinanciero && !ch.esRenovacion && ch.renovadoPor.length === 0 && !ch.operacionUsd ? (
-            <span className="text-body-muted text-xs">Gasto real</span>
+            ch.revisar.length > 0 || !ch.beneficiario.trim() ? (
+              <span className="inline-block rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+                A revisar
+              </span>
+            ) : (
+              <span className="text-body-muted text-xs">Gasto real</span>
+            )
           ) : null}
         </div>
       </td>
@@ -335,7 +412,19 @@ function OcasionalRow({ ch, onAbrir, onVerCadena }: { ch: ChequeOcasionalItem; o
   )
 }
 
-function ResumenCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function ResumenCard({
+  icon,
+  label,
+  value,
+  subvalue,
+  hint,
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  subvalue?: string
+  hint?: string
+}) {
   return (
     <div className="surface-card rounded-2xl border border-neutral-200 p-3 dark:border-zinc-800">
       <div className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
@@ -343,6 +432,8 @@ function ResumenCard({ icon, label, value }: { icon: React.ReactNode; label: str
         {label}
       </div>
       <p className="text-heading mt-1 text-lg font-bold tabular-nums">{value}</p>
+      {subvalue ? <p className="text-brand-primary text-xs font-semibold tabular-nums">{subvalue}</p> : null}
+      {hint ? <p className="text-body-muted mt-0.5 text-[11px]">{hint}</p> : null}
     </div>
   )
 }
@@ -353,6 +444,31 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
     queryFn: () => fetchOcasionalDetalle(id),
   })
   const ch = data?.cheque
+  const clasif = data?.clasificacion
+  const cadena = data?.cadena
+  const renovDe = data?.renovacionDeDetalle ?? []
+  const renovPor = data?.renovadoPorDetalle ?? []
+
+  const sumaViejosCentavos = renovDe.reduce((s, r) => s + (r.montoCentavos ?? 0), 0)
+  const todosViejosConMonto = renovDe.length > 0 && renovDe.every((r) => r.montoCentavos !== null)
+  const interesPasoCentavos =
+    ch && todosViejosConMonto && renovDe.length === 1
+      ? ch.montoCentavos - sumaViejosCentavos
+      : null
+
+  const equivalenteUsdCentavos =
+    ch?.operacionUsd
+      ? Math.round(ch.operacionUsd.montoUsd * ch.operacionUsd.cotizacion * 100)
+      : null
+
+  const rolLabel =
+    clasif?.rolEnCadena === 'capital'
+      ? 'Capital inicial de la cadena'
+      : clasif?.rolEnCadena === 'mixto'
+        ? 'Eslabón intermedio (renovado)'
+        : clasif?.rolEnCadena === 'interes'
+          ? 'Eslabón vigente (capital + interés acumulado)'
+          : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -372,53 +488,156 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
                 <p className="text-body-muted text-sm">
                   {ch.beneficiario || '—'} · {ch.estado || (ch.pagado ? 'Pagado' : 'Pendiente')}
                 </p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {ch.esProveedorFinanciero || clasif?.clasificacion === 'operacion_financiera' ? (
+                    <span className="inline-block rounded border border-violet-300 bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
+                      Circuito financiero (interés / divisa)
+                    </span>
+                  ) : (
+                    <span className="inline-block rounded border border-neutral-300 bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      Gasto real de proveedor
+                    </span>
+                  )}
+                  {rolLabel ? (
+                    <span className="inline-block rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                      {rolLabel}
+                    </span>
+                  ) : null}
+                </div>
               </div>
               <p className="text-brand-primary whitespace-nowrap text-lg font-semibold">
                 {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
               </p>
             </header>
 
-            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+              <dt className="text-body-muted">Beneficiario real (DESTINATARIO)</dt>
+              <dd className="font-medium">{ch.beneficiario || '—'}</dd>
               <dt className="text-body-muted">Emisión</dt>
               <dd>{formatFecha(ch.fechaEmision)}</dd>
               <dt className="text-body-muted">Vencimiento</dt>
               <dd>{formatFecha(ch.fechaVencimiento)}</dd>
               <dt className="text-body-muted">Pagado</dt>
-              <dd>{ch.pagado ? 'Sí' : 'No'}</dd>
-              {ch.esProveedorFinanciero ? (
-                <>
-                  <dt className="text-body-muted">Proveedor</dt>
-                  <dd>Financiero{ch.tipoProveedor === 'ficticio' ? ' (ficticio)' : ''}</dd>
-                </>
-              ) : null}
-              {ch.operacionUsd ? (
-                <>
-                  <dt className="text-body-muted">Operación USD</dt>
-                  <dd>
-                    US$ {ch.operacionUsd.montoUsd.toLocaleString('es-AR', { minimumFractionDigits: 2 })} @{' '}
-                    {ch.operacionUsd.cotizacion.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
-                  </dd>
-                </>
-              ) : null}
-              {ch.renovacionDe.length > 0 ? (
-                <>
-                  <dt className="text-body-muted">Renueva a</dt>
-                  <dd className="font-mono text-xs">{ch.renovacionDe.join(', ')}</dd>
-                </>
-              ) : null}
-              {ch.renovadoPor.length > 0 ? (
-                <>
-                  <dt className="text-body-muted">Renovado por</dt>
-                  <dd className="font-mono text-xs">{ch.renovadoPor.join(', ')}</dd>
-                </>
-              ) : null}
+              <dd>{ch.pagado ? 'Sí' : 'No (Compromiso pendiente)'}</dd>
               {ch.obsOriginal ? (
                 <>
-                  <dt className="text-body-muted">OBS</dt>
-                  <dd>{ch.obsOriginal}</dd>
+                  <dt className="text-body-muted">OBS original</dt>
+                  <dd className="font-mono text-xs">{ch.obsOriginal}</dd>
                 </>
               ) : null}
             </dl>
+
+            {ch.operacionUsd ? (
+              <div className="mt-4 rounded-xl border border-green-200 bg-green-50/60 p-3 text-sm dark:border-green-900/60 dark:bg-green-950/20">
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-800 dark:text-green-300">
+                  Cálculo Operación en Dólares (OBS)
+                </p>
+                <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                  <dt className="text-body-muted">Monto USD</dt>
+                  <dd className="font-semibold">
+                    US$ {ch.operacionUsd.montoUsd.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  </dd>
+                  <dt className="text-body-muted">Tipo de cambio pactado</dt>
+                  <dd className="font-semibold">
+                    $ {ch.operacionUsd.cotizacion.toLocaleString('es-AR', { minimumFractionDigits: 2 })}
+                  </dd>
+                  {equivalenteUsdCentavos !== null ? (
+                    <>
+                      <dt className="text-body-muted">Equivalente (USD × TC)</dt>
+                      <dd className="font-semibold">{formatMoneyCentavos(equivalenteUsdCentavos, 'ARS')}</dd>
+                      <dt className="text-body-muted">Importe de este cheque</dt>
+                      <dd className="font-semibold">
+                        {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
+                        {ch.montoCentavos < equivalenteUsdCentavos
+                          ? ' (fraccionado en varios cheques)'
+                          : ch.montoCentavos > equivalenteUsdCentavos
+                            ? ` (+${formatMoneyCentavos(ch.montoCentavos - equivalenteUsdCentavos, 'ARS')} s/ equivalente)`
+                            : ''}
+                      </dd>
+                    </>
+                  ) : null}
+                </dl>
+              </div>
+            ) : null}
+
+            {(renovDe.length > 0 || renovPor.length > 0 || cadena) ? (
+              <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/50 p-3 text-sm dark:border-violet-900/60 dark:bg-violet-950/20">
+                <p className="text-xs font-semibold uppercase tracking-wide text-violet-900 dark:text-violet-300">
+                  Tracking de Renovación y Costo Financiero
+                </p>
+
+                {renovDe.length > 0 ? (
+                  <div className="mt-2">
+                    <p className="text-body-muted text-xs font-medium">
+                      Reemplaza a ({renovDe.length} {renovDe.length === 1 ? 'cheque viejo' : 'cheques viejos'}):
+                    </p>
+                    <ul className="mt-1 space-y-1 text-xs">
+                      {renovDe.map((r) => (
+                        <li key={r.numeroCheque} className="flex flex-wrap items-center justify-between gap-2 font-mono">
+                          <span>{r.numeroCheque}</span>
+                          <span>
+                            {r.montoCentavos !== null ? formatMoneyCentavos(r.montoCentavos, 'ARS') : 'Monto s/d'}
+                            {r.fechaVencimiento ? ` · vto ${formatFecha(r.fechaVencimiento)}` : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {todosViejosConMonto && renovDe.length > 1 ? (
+                      <p className="text-body-muted mt-1 text-xs">
+                        Suma cheques reemplazados:{' '}
+                        <span className="text-heading font-semibold">
+                          {formatMoneyCentavos(sumaViejosCentavos, 'ARS')}
+                        </span>
+                      </p>
+                    ) : null}
+                    {interesPasoCentavos !== null ? (
+                      <p className="mt-1 text-xs">
+                        Diferencia / interés en este cheque:{' '}
+                        <span className="font-semibold text-red-600 dark:text-red-400">
+                          {formatMoneyCentavos(interesPasoCentavos, 'ARS')}
+                          {sumaViejosCentavos > 0
+                            ? ` (${((interesPasoCentavos / sumaViejosCentavos) * 100).toFixed(1)}%)`
+                            : ''}
+                        </span>
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {renovPor.length > 0 ? (
+                  <div className="mt-2">
+                    <p className="text-body-muted text-xs font-medium">Renovado posteriormente por:</p>
+                    <ul className="mt-1 space-y-1 text-xs">
+                      {renovPor.map((r) => (
+                        <li key={r.numeroCheque} className="flex flex-wrap items-center justify-between gap-2 font-mono">
+                          <span>{r.numeroCheque}</span>
+                          <span>
+                            {r.montoCentavos !== null ? formatMoneyCentavos(r.montoCentavos, 'ARS') : 'Monto s/d'}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {cadena ? (
+                  <div className="mt-2 border-t border-violet-200/70 pt-2 text-xs dark:border-violet-800/50">
+                    <p className="text-body-muted">
+                      Cadena completa ({cadena.cheques.length} eslabones):{' '}
+                      <span className="text-heading font-medium">
+                        {formatMoneyCentavos(cadena.capitalInicialCentavos, 'ARS')} →{' '}
+                        {formatMoneyCentavos(cadena.montoFinalCentavos, 'ARS')}
+                      </span>{' '}
+                      · Interés:{' '}
+                      <span className="font-semibold text-red-600 dark:text-red-400">
+                        {formatMoneyCentavos(cadena.interesTotalCentavos, 'ARS')} (
+                        {(cadena.tasaImplicita * 100).toFixed(1)}%)
+                      </span>
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {ch.revisar.length > 0 ? (
               <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">

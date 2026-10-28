@@ -288,24 +288,16 @@ export function CajasWorkspace() {
   }
 
   return (
-    <div data-tour="cajas" className="mx-auto w-full max-w-7xl space-y-5">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-primary">
-            Finanzas
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold text-heading">Cajas</h1>
-          <p className="mt-1 text-sm text-body-muted">
-            Libro de movimientos, cierres y administración en un solo lugar.
-          </p>
-          <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-            <RefreshCw className="h-3.5 w-3.5" />
-            En vivo · se actualiza cada 10 segundos
-            {ultimaActualizacion
-              ? ` · ${ultimaActualizacion.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`
-              : ''}
-          </p>
-        </div>
+    <div data-tour="cajas" className="w-full space-y-4">
+      <header className="mb-4 flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <h1 className="text-heading text-2xl font-bold tracking-tight">Cajas</h1>
+        <p className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+          <RefreshCw className="h-3.5 w-3.5" />
+          En vivo · se actualiza cada 10 segundos
+          {ultimaActualizacion
+            ? ` · ${ultimaActualizacion.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`
+            : ''}
+        </p>
       </header>
 
       {cajas.length > 0 ? (
@@ -344,7 +336,7 @@ export function CajasWorkspace() {
         </button>
       ) : null}
 
-      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-neutral-200 bg-neutral-100 p-1 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800">
         <Tab active={vista === 'libro'} onClick={() => setVista('libro')}>
           Libro de caja
         </Tab>
@@ -356,7 +348,7 @@ export function CajasWorkspace() {
             Administración
           </Tab>
         ) : null}
-      </nav>
+      </div>
 
       {cajas.length === 0 ? (
         <EmptyState esLider={esLider} onCreate={() => setModal({ tipo: 'crear' })} />
@@ -489,12 +481,18 @@ function SaldosEnVivo({
   onSelect: (id: string) => void
 }) {
   return (
-    <section aria-label="Saldos actuales de las cajas" data-tour="cajas-saldos">
-      <div className="mb-2 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-heading">Saldos que debería tener cada caja</h2>
-        <span className="text-xs text-body-muted">{cajas.length} {cajas.length === 1 ? 'caja' : 'cajas'}</span>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+    <section
+      aria-label="Saldos actuales de las cajas"
+      data-tour="cajas-saldos"
+      className="flex flex-col overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900"
+    >
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
+        <h2 className="text-brand-primary text-[15px] font-medium">Saldos que debería tener cada caja</h2>
+        <span className="text-brand-primary text-xs font-medium">
+          {cajas.length} {cajas.length === 1 ? 'caja' : 'cajas'}
+        </span>
+      </header>
+      <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-3">
         {cajas.map((item) => {
           const active = item.id === cajaId
           return (
@@ -545,10 +543,8 @@ function Tab({
       type="button"
       data-tour={tour}
       onClick={onClick}
-      className={`min-w-max flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${
-        active
-          ? 'bg-white text-heading shadow-sm dark:bg-zinc-800'
-          : 'text-body-muted hover:text-heading'
+      className={`rounded-lg px-4 py-2 text-sm font-medium ${
+        active ? 'bg-brand-primary text-white' : 'text-body-muted hover:text-heading'
       }`}
     >
       {children}
@@ -659,7 +655,15 @@ function LibroCaja({
   ]
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+    <section className="overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
+        <div className="text-brand-primary flex items-center gap-2 text-[15px] font-medium">
+          {caja.tipo === 'principal' ? <Landmark className="h-4 w-4" /> : <WalletCards className="h-4 w-4" />}
+          <span>
+            {caja.nombre} ({caja.tipo === 'principal' ? 'Caja principal' : 'Caja chica'} · {caja.moneda})
+          </span>
+        </div>
+      </header>
       <div className="sticky top-0 z-10 border-b border-neutral-200 bg-white/95 p-5 backdrop-blur dark:border-zinc-700 dark:bg-zinc-900/95">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
           <div>

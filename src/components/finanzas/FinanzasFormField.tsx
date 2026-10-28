@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-const inputClass = 'input-surface w-full rounded-lg border px-3 py-2'
+const inputClass = 'input-surface w-full rounded-lg border px-3 py-2 text-sm'
 
 type FinanzasFormFieldProps = {
   label: string

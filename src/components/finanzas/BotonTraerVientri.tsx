@@ -21,17 +21,17 @@ export function BotonTraerVientri() {
         ? 'text-green-800 dark:text-green-200'
         : 'text-neutral-700 dark:text-neutral-200'
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
         onClick={() => traer.mutate()}
         disabled={traer.isPending}
-        className="rounded-lg border-2 border-blue-600 bg-white px-4 py-2 text-base font-semibold text-blue-900 hover:bg-blue-50 disabled:cursor-wait disabled:opacity-60 dark:bg-neutral-900 dark:text-blue-100 dark:hover:bg-blue-950"
+        className="rounded-xl bg-brand-primary px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
       >
-        {traer.isPending ? 'Trayendo datos de Vientri… (puede tardar un minuto)' : 'Traer datos de Vientri ahora'}
+        {traer.isPending ? 'Trayendo datos de Vientri…' : 'Traer datos de Vientri ahora'}
       </button>
       {(resultado || traer.isError) && !traer.isPending && (
-        <p role="status" className={`text-base ${color}`}>
+        <p role="status" className={`text-sm ${color}`}>
           {traer.isError ? (traer.error as Error).message : resultado?.mensaje}
         </p>
       )}

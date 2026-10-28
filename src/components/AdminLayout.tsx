@@ -8,8 +8,8 @@ export function AdminLayout() {
   const closeMobileNav = useCallback(() => setMobileNavOpen(false), [])
 
   return (
-    <div className="flex min-h-screen flex-col bg-white dark:bg-zinc-950 lg:flex-row">
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950 lg:hidden">
+    <div className="flex h-screen flex-col overflow-hidden bg-white dark:bg-zinc-950 lg:flex-row">
+      <header className="flex shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950 lg:hidden">
         <button
           type="button"
           onClick={() => setMobileNavOpen(true)}
@@ -27,7 +27,7 @@ export function AdminLayout() {
 
       <Sidebar mobileOpen={mobileNavOpen} onMobileClose={closeMobileNav} />
 
-      <main className="min-w-0 flex-1 overflow-auto px-4 py-6 dark:bg-zinc-950 sm:px-6 lg:px-10 lg:py-8 xl:px-12">
+      <main className="min-w-0 flex-1 overflow-y-auto scrollbar-overlay px-4 py-6 dark:bg-zinc-950 sm:px-6 lg:px-10 lg:py-8 xl:px-12">
         <Outlet />
       </main>
     </div>

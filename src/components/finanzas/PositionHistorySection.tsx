@@ -257,16 +257,21 @@ export function PositionHistorySection({ rows, isLoading, error }: PositionHisto
     <section
       data-tour="saldos-historial"
       aria-labelledby="finanzas-historial-heading"
-      className="surface-card rounded-2xl border border-t-4 border-amber-200 border-t-amber-400 bg-gradient-to-b from-amber-50/80 to-transparent to-40% p-4 dark:border-amber-900/50 dark:border-t-amber-500 dark:from-amber-950/25"
+      className="flex flex-col overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900"
     >
-      <h2 id="finanzas-historial-heading" className="text-heading text-base font-semibold">
-        Historial de cierres
-      </h2>
-      <p className="text-body-muted mt-0.5 text-xs">
-        Cómo quedó la posición a las 15 hs de cada día, con el descubierto que tenía cada banco. Tocá un
-        día para verlo por banco.
-      </p>
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
+        <div>
+          <h2 id="finanzas-historial-heading" className="text-brand-primary text-[15px] font-medium">
+            Historial de cierres
+          </h2>
+          <p className="text-brand-primary text-[13px]">
+            Cómo quedó la posición a las 15 hs de cada día, con el descubierto que tenía cada banco. Tocá un
+            día para verlo por banco.
+          </p>
+        </div>
+      </header>
 
+      <div className="p-4">
       {isLoading ? (
         <div className="mt-3 h-16 animate-pulse rounded-xl bg-neutral-100 dark:bg-zinc-800" />
       ) : error ? (
@@ -437,6 +442,7 @@ export function PositionHistorySection({ rows, isLoading, error }: PositionHisto
           ) : null}
         </>
       )}
+      </div>
     </section>
   )
 }

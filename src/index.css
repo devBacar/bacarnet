@@ -628,3 +628,82 @@
     }
   }
 }
+
+/* --- Scrollbar visual: track transparente, barrita fina --- */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 120, 120, 0.35) transparent;
+}
+
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.35);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 120, 0.6);
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  * {
+    scrollbar-color: rgba(200, 200, 200, 0.3) transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(200, 200, 200, 0.3);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(200, 200, 200, 0.55);
+  }
+}
+
+.dark,
+.dark * {
+  scrollbar-color: rgba(200, 200, 200, 0.3) transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(200, 200, 200, 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(200, 200, 200, 0.55);
+}
+
+/* Clase utilitaria para que la scrollbar flote sobre el contenido */
+.scrollbar-overlay {
+  overflow: overlay;
+}
+
+/* Ocultar barra de scroll dentro de cualquier modal manteniendo el desplazamiento */
+[role='dialog'],
+[role='dialog'] *,
+.app-modal-scroll,
+.fixed.inset-0 * {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+[role='dialog']::-webkit-scrollbar,
+[role='dialog'] *::-webkit-scrollbar,
+.app-modal-scroll::-webkit-scrollbar,
+.fixed.inset-0 *::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

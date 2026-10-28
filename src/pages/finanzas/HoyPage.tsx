@@ -157,8 +157,7 @@ export function FinanzasHoyPage() {
   }
 
   return (
-    <div className="-mx-[var(--layout-padding-x)] bg-neutral-100 px-[var(--layout-padding-x)] py-4 dark:bg-zinc-950">
-    <div className="mx-auto grid min-w-0 max-w-7xl gap-4">
+    <div className="grid min-w-0 gap-4">
       {isLoading ? <p className="text-body-muted text-[15px]">Armando el día…</p> : null}
       {isError ? (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40">
@@ -368,7 +367,6 @@ export function FinanzasHoyPage() {
         onClose={() => setDescubiertoCuenta(null)}
         onSave={(body) => void guardarDescubierto(body)}
       />
-    </div>
     </div>
   )
 }

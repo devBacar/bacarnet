@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Fragment, useState } from 'react'
 import { BotonTraerVientri } from '../../components/finanzas/BotonTraerVientri'
 import { DescargarLimpiezaVientri } from '../../components/finanzas/DescargarLimpiezaVientri'
+import { finanzasInputClass } from '../../components/finanzas/FinanzasFormField'
 import { FranjaVientri } from '../../components/finanzas/FranjaVientri'
 import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import {
@@ -36,10 +37,10 @@ function fecha(f: string | null): string {
 }
 
 function botonClase(activo: boolean) {
-  return `rounded-full border-2 px-4 py-1.5 text-base ${
+  return `rounded-full border px-3 py-1 text-xs font-medium ${
     activo
-      ? 'border-blue-600 bg-blue-50 font-semibold text-blue-900 dark:bg-blue-950 dark:text-blue-100'
-      : 'border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100'
+      ? 'border-brand-primary bg-brand-primary text-white'
+      : 'border-neutral-300 bg-white text-neutral-700 hover:border-neutral-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-neutral-200'
   }`
 }
 
@@ -72,12 +73,18 @@ export function FinanzasVientriPage() {
   }
 
   return (
-    <div className="text-base">
-      <FranjaVientri estado={estadoQ.data} cargando={estadoQ.isLoading} />
-      <BotonTraerVientri />
-      <DescargarLimpiezaVientri />
+    <div className="text-sm">
+      <header className="mb-4 flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <h1 className="text-heading text-2xl font-bold tracking-tight">Vientri</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <BotonTraerVientri />
+          <DescargarLimpiezaVientri />
+        </div>
+      </header>
 
-      <div className="mb-4 flex flex-wrap gap-2" role="tablist">
+      <FranjaVientri estado={estadoQ.data} cargando={estadoQ.isLoading} />
+
+      <div className="mb-4 inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800" role="tablist">
         {PESTANAS.map((p) => (
           <button
             key={p.id}
@@ -85,10 +92,10 @@ export function FinanzasVientriPage() {
             role="tab"
             aria-selected={pestana === p.id}
             onClick={() => cambiarPestana(p.id)}
-            className={`rounded-lg border-2 px-5 py-2 text-base ${
+            className={`rounded-lg px-4 py-2 text-sm font-medium ${
               pestana === p.id
-                ? 'border-blue-600 bg-blue-50 font-semibold text-blue-900 dark:bg-blue-950 dark:text-blue-100'
-                : 'border-neutral-300 bg-white text-neutral-800 dark:border-neutral-600 dark:bg-neutral-900 dark:text-neutral-100'
+                ? 'bg-brand-primary text-white'
+                : 'text-body-muted hover:text-heading'
             }`}
           >
             {p.label}
@@ -114,19 +121,21 @@ export function FinanzasVientriPage() {
         </div>
       ) : null}
 
-      <label className="mb-4 block">
-        <span className="mb-1 block text-sm font-medium text-neutral-700 dark:text-neutral-300">Buscar</span>
-        <input
-          type="search"
-          value={q}
-          onChange={(ev) => {
-            setQ(ev.target.value)
-            setPage(1)
-          }}
-          placeholder="Número, nombre, CUIT o importe"
-          className="w-full rounded-lg border-2 border-neutral-300 px-4 py-2 text-base dark:border-neutral-600 dark:bg-neutral-900"
-        />
-      </label>
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <label className="text-sm">
+          <span className="text-body-muted mb-1 block">Buscar</span>
+          <input
+            type="search"
+            value={q}
+            onChange={(ev) => {
+              setQ(ev.target.value)
+              setPage(1)
+            }}
+            placeholder="Número, nombre, CUIT o importe"
+            className={finanzasInputClass}
+          />
+        </label>
+      </div>
 
       {datos.isLoading ? <p className="py-6 text-neutral-600">Cargando…</p> : null}
       {datos.isError ? (
@@ -176,16 +185,16 @@ function TablaCheques({ items, emitidos }: { items: VientriCheque[]; emitidos: b
   const [abierto, setAbierto] = useState<string | null>(null)
   if (items.length === 0) return <p className="py-6 text-neutral-600">No hay cheques con este filtro.</p>
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-base">
-        <thead>
-          <tr className="border-b-2 border-neutral-300 text-left text-sm text-neutral-600 dark:text-neutral-400">
-            <th className="py-2 pr-3">Número</th>
-            <th className="py-2 pr-3">Banco</th>
-            <th className="py-2 pr-3">{emitidos ? 'Para' : 'De quién'}</th>
-            <th className="py-2 pr-3">Fecha de pago</th>
-            <th className="py-2 pr-3 text-right">Importe</th>
-            <th className="py-2 pr-3">Estado</th>
+    <div className="overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+      <table className="w-full border-collapse text-sm">
+        <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-left text-xs font-medium text-brand-primary">
+          <tr>
+            <th className="px-3 py-2.5">Número</th>
+            <th className="px-3 py-2.5">Banco</th>
+            <th className="px-3 py-2.5">{emitidos ? 'Para' : 'De quién'}</th>
+            <th className="px-3 py-2.5">Fecha de pago</th>
+            <th className="px-3 py-2.5 text-right">Importe</th>
+            <th className="px-3 py-2.5">Estado</th>
           </tr>
         </thead>
         <tbody>
@@ -240,15 +249,15 @@ function TablaPendientes({ items, lado }: { items: VientriPendiente[]; lado: Pes
   if (items.length === 0) return <p className="py-6 text-neutral-600">No hay comprobantes pendientes.</p>
   const hoy = new Date().toISOString().slice(0, 10)
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full border-collapse text-base">
-        <thead>
-          <tr className="border-b-2 border-neutral-300 text-left text-sm text-neutral-600 dark:text-neutral-400">
-            <th className="py-2 pr-3">{lado === 'cobrar' ? 'Cliente' : lado === 'pagar' ? 'Proveedor' : 'Persona'}</th>
-            <th className="py-2 pr-3">Comprobante</th>
-            <th className="py-2 pr-3">Vence</th>
-            <th className="py-2 pr-3 text-right">Total</th>
-            <th className="py-2 pr-3 text-right">Falta</th>
+    <div className="overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+      <table className="w-full border-collapse text-sm">
+        <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-left text-xs font-medium text-brand-primary">
+          <tr>
+            <th className="px-3 py-2.5">{lado === 'cobrar' ? 'Cliente' : lado === 'pagar' ? 'Proveedor' : 'Persona'}</th>
+            <th className="px-3 py-2.5">Comprobante</th>
+            <th className="px-3 py-2.5">Vence</th>
+            <th className="px-3 py-2.5 text-right">Total</th>
+            <th className="px-3 py-2.5 text-right">Falta</th>
           </tr>
         </thead>
         <tbody>

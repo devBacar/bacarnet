@@ -45,15 +45,15 @@ export function DescargarLimpiezaVientri() {
     }
   }
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2">
       <button
         type="button"
         onClick={descargar}
-        className="rounded-lg border-2 border-neutral-400 bg-white px-4 py-2 text-base text-neutral-900 hover:bg-neutral-50 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+        className="rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800"
       >
-        Descargar cheques viejos para corregir en Vientri
+        Descargar cheques viejos
       </button>
-      {estado && <p className="text-base text-neutral-700 dark:text-neutral-200">{estado}</p>}
+      {estado && <p className="text-sm text-neutral-700 dark:text-neutral-200">{estado}</p>}
     </div>
   )
 }

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 export function AppHeader({ children }: { children: ReactNode }) {
   return (
     <header
-      className="sticky top-0 z-40 border-b"
+      className="shrink-0 border-b"
       style={{
         backgroundColor: 'var(--color-navbar-bg)',
         borderColor: 'var(--color-navbar-border)',

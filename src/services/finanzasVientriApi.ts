@@ -159,3 +159,32 @@ export interface ChequeParaLimpiar {
 export function fetchLimpiezaVientri() {
   return vientriFetch<{ fechaDatos: string | null; desde: string | null; items: ChequeParaLimpiar[] }>('/limpieza')
 }
+
+export interface ComprobanteSaldoCliente {
+  clave: string
+  comprobante: string
+  fecha: string | null
+  fechaVencimiento: string | null
+  totalCentavos: number
+  pendienteCentavos: number
+}
+
+export interface SaldoCliente {
+  personaId: number
+  nombre: string
+  cuit: string | null
+  deudaCentavos: number
+  favorCentavos: number
+  saldoCentavos: number
+  comprobantes: ComprobanteSaldoCliente[]
+}
+
+export interface PaginaSaldosCliente extends Pagina<SaldoCliente> {
+  totalFavorCentavos: number
+  totalDeudaCentavos: number
+}
+
+/** Cuenta corriente por cliente (deuda real, saldo a favor, neto), igual al criterio de Vientri. */
+export function fetchSaldosClienteVientri(f: { q?: string; soloFavor?: boolean; page?: number }) {
+  return vientriFetch<PaginaSaldosCliente>(`/clientes${qs({ q: f.q, soloFavor: f.soloFavor ? '1' : undefined, page: f.page })}`)
+}

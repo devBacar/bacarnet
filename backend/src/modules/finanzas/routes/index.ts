@@ -10,6 +10,7 @@ import { finanzasCashflowRouter } from '../cashflow/routes/cashflow.routes.js'
 import { finanzasReglasCategorizacionRouter } from '../movimientos/routes/reglas-categorizacion.routes.js'
 import { finanzasHoyRouter } from '../hoy/routes/hoy.routes.js'
 import { finanzasCajaDiaRouter } from '../hoy/routes/caja-dia.routes.js'
+import { finanzasCargaDiariaRouter } from '../hoy/routes/carga-diaria.routes.js'
 import { finanzasCompromisosMesRouter } from '../hoy/routes/compromisos-mes.routes.js'
 import { finanzasExtractosRouter } from '../extractos/routes/extractos.routes.js'
 import { finanzasChequesRouter } from '../cheques/routes/cheques.routes.js'
@@ -24,6 +25,7 @@ export const finanzasRouter = Router()
 finanzasRouter.use('/hoy', finanzasHoyRouter)
 finanzasRouter.use('/caja-dia', finanzasCajaDiaRouter)
 finanzasRouter.use('/compromisos-mes', finanzasCompromisosMesRouter)
+finanzasRouter.use('/carga-diaria', finanzasCargaDiariaRouter)
 finanzasRouter.use('/cuentas', finanzasCuentasRouter)
 finanzasRouter.use('/cashflow', finanzasCashflowRouter)
 finanzasRouter.use('/agenda', finanzasAgendaRouter)

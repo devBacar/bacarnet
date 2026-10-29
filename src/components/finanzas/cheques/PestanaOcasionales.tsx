@@ -20,7 +20,7 @@ import {
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
 import { CadenasRenovacion } from './CadenasRenovacion'
-import { OperacionesDolares } from './OperacionesDolares'
+import { BotonNuevaOperacionUsd, OperacionesDolares } from './OperacionesDolares'
 
 function formatFecha(iso: string | null): string {
   if (!iso) return '—'
@@ -128,6 +128,7 @@ export function PestanaOcasionales() {
             e.target.value = ''
           }}
         />
+        <BotonNuevaOperacionUsd />
         <button
           type="button"
           disabled={importMutation.isPending}

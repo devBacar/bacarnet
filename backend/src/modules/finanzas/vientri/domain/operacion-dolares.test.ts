@@ -15,32 +15,33 @@ describe('calcularDetalle', () => {
       importeCentavos: 550000000, // $5.500.000
     })
     expect(d.dias).toBe(55)
-    // tasaDiaria = 0.065/30 ≈ 0.002166...
-    // tasaEquiv = 0.002166... × 55 × 550000000 ≈ 65541667
-    expect(d.tasaEquivalenteCentavos).toBeCloseTo(65541667, -2)
+    // tasaDiaria = 0.065 * 12 / 365 ≈ 0.002136986
+    // tasaEquiv = 0.002136986 × 55 × 550000000 ≈ 64,614,247
+    const tasaDiaria = (0.065 * 12) / 365
+    const esperadoTasa = Math.round(tasaDiaria * 55 * 550000000)
+    expect(d.tasaEquivalenteCentavos).toBe(esperadoTasa)
     // descuento = 0.025 × 550000000 = 13750000
     expect(d.descuentoCentavos).toBe(13750000)
-    // liquidar = 550000000 - 65541667 - 13750000 ≈ 470708333
-    expect(d.importeLiquidarCentavos).toBeCloseTo(470708333, -2)
+    expect(d.importeLiquidarCentavos).toBe(550000000 - esperadoTasa - 13750000)
   })
 
   it('cheque a 75 días, $5.749.391', () => {
     const d = calcularDetalle(FECHA_OP, TASA_MENSUAL, IMPUESTO, {
-      numeroCheque: '39316536',
       fechaCobro: '2026-11-23',
       importeCentavos: 574939100, // $5.749.391
     })
     expect(d.dias).toBe(75)
+    expect(d.numeroCheque).toBe('')
     expect(d.descuentoCentavos).toBe(Math.round(0.025 * 574939100))
   })
 
   it('cheque a 91 días, $5.800.000', () => {
     const d = calcularDetalle(FECHA_OP, TASA_MENSUAL, IMPUESTO, {
-      numeroCheque: '39316547',
       fechaCobro: '2026-12-09',
       importeCentavos: 580000000,
     })
     expect(d.dias).toBe(91)
+    expect(d.numeroCheque).toBe('')
   })
 })
 

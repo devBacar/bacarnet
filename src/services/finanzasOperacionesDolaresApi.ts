@@ -13,6 +13,7 @@ export interface OperacionDolaresDetalle {
 
 export interface OperacionDolares {
   id: string
+  numero: number
   fecha: string
   inversor: string
   inversorNormalizado: string
@@ -43,7 +44,7 @@ export interface OperacionDolaresInput {
   cashCentavos: number
   notas: string
   cheques: Array<{
-    numeroCheque: string
+    numeroCheque?: string
     fechaCobro: string
     importeCentavos: number
   }>

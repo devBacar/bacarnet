@@ -17,11 +17,17 @@ export async function crearOperacionDolares(
 
   const calculado = calcularOperacion(input)
   const ahora = new Date().toISOString()
-  const ref = coleccion().doc()
+
+  const snap = await coleccion().orderBy('numero', 'desc').limit(1).get()
+  const ultimoNumero = snap.empty ? 0 : ((snap.docs[0]!.data() as OperacionDolares).numero ?? 0)
+  const numero = ultimoNumero + 1
+  const id = `op-${String(numero).padStart(4, '0')}`
+  const ref = coleccion().doc(id)
 
   const operacion: OperacionDolares = {
     ...calculado,
-    id: ref.id,
+    id,
+    numero,
     estado: 'activa',
     creadoPor: actor,
     creadoEn: ahora,
@@ -51,6 +57,7 @@ export async function actualizarOperacionDolares(
   const operacion: OperacionDolares = {
     ...calculado,
     id,
+    numero: existente.numero,
     estado: 'activa',
     creadoPor: existente.creadoPor,
     creadoEn: existente.creadoEn,

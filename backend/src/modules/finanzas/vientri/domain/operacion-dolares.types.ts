@@ -1,17 +1,18 @@
 /** Operación de compra de dólares pagada con cheques ocasionales. */
 
 export interface OperacionDolaresDetalle {
-  numeroCheque: string
+  numeroCheque: string          // puede quedar vacío si aún no se asignó
   fechaCobro: string            // YYYY-MM-DD
   dias: number                  // días desde fecha operación hasta cobro
   importeCentavos: number       // valor nominal del cheque
   tasaEquivalenteCentavos: number // interés calculado = tasaDiaria × días × importe
-  descuentoCentavos: number     // impuesto = imp% × importe
+  descuentoCentavos: number     // impuesto al cheque = imp% × importe
   importeLiquidarCentavos: number // importe - tasaEquivalente - descuento
 }
 
 export interface OperacionDolares {
-  id: string
+  id: string                    // 'op-0001', 'op-0002', ...
+  numero: number                // secuencial (1, 2, 3...)
   fecha: string                 // YYYY-MM-DD — fecha de la operación
   inversor: string              // nombre del financiero (ej. "MANA")
   inversorNormalizado: string
@@ -53,7 +54,7 @@ export interface OperacionDolaresInput {
   cashCentavos: number
   notas: string
   cheques: Array<{
-    numeroCheque: string
+    numeroCheque?: string
     fechaCobro: string
     importeCentavos: number
   }>

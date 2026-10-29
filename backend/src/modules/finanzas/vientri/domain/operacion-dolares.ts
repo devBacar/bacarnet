@@ -15,16 +15,16 @@ export function calcularDetalle(
   fechaOperacion: string,
   tasaMensual: number,
   impuestoPorcentaje: number,
-  cheque: { numeroCheque: string; fechaCobro: string; importeCentavos: number },
+  cheque: { numeroCheque?: string; fechaCobro: string; importeCentavos: number },
 ): OperacionDolaresDetalle {
   const dias = diasEntre(fechaOperacion, cheque.fechaCobro)
-  const tasaDiaria = tasaMensual / 30
+  const tasaDiaria = (tasaMensual * 12) / 365
   const tasaEquivalenteCentavos = Math.round(tasaDiaria * dias * cheque.importeCentavos)
   const descuentoCentavos = Math.round(impuestoPorcentaje * cheque.importeCentavos)
   const importeLiquidarCentavos = cheque.importeCentavos - tasaEquivalenteCentavos - descuentoCentavos
 
   return {
-    numeroCheque: cheque.numeroCheque,
+    numeroCheque: cheque.numeroCheque ?? '',
     fechaCobro: cheque.fechaCobro,
     dias,
     importeCentavos: cheque.importeCentavos,
@@ -34,7 +34,7 @@ export function calcularDetalle(
   }
 }
 
-export function calcularOperacion(input: OperacionDolaresInput): Omit<OperacionDolares, 'id' | 'creadoPor' | 'creadoEn' | 'actualizadoEn' | 'estado'> {
+export function calcularOperacion(input: OperacionDolaresInput): Omit<OperacionDolares, 'id' | 'numero' | 'creadoPor' | 'creadoEn' | 'actualizadoEn' | 'estado'> {
   const detalles = input.cheques.map((ch) =>
     calcularDetalle(input.fecha, input.tasaMensual, input.impuestoPorcentaje, ch),
   )
@@ -96,14 +96,11 @@ export function validarOperacionInput(input: OperacionDolaresInput): ErrorValida
 
   for (let i = 0; i < input.cheques.length; i++) {
     const ch = input.cheques[i]!
-    if (!ch.numeroCheque.trim()) {
-      errores.push({ campo: `cheques[${i}].numeroCheque`, mensaje: `Cheque ${i + 1}: número requerido` })
-    }
     if (!ch.fechaCobro || !/^\d{4}-\d{2}-\d{2}$/.test(ch.fechaCobro)) {
-      errores.push({ campo: `cheques[${i}].fechaCobro`, mensaje: `Cheque ${i + 1}: fecha de cobro requerida` })
+      errores.push({ campo: `cheques[${i}].fechaCobro`, mensaje: `Movimiento ${i + 1}: fecha de cobro requerida` })
     }
     if (ch.importeCentavos <= 0) {
-      errores.push({ campo: `cheques[${i}].importeCentavos`, mensaje: `Cheque ${i + 1}: importe debe ser positivo` })
+      errores.push({ campo: `cheques[${i}].importeCentavos`, mensaje: `Movimiento ${i + 1}: importe debe ser positivo` })
     }
   }
 

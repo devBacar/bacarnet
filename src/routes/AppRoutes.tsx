@@ -45,6 +45,7 @@ import {
   RrhhHorasExtraPage,
   TableroFinanzasPage,
   NegocioBoard,
+  CopsBoard,
 } from '../pages'
 import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
 import { ProtectedRoute } from './ProtectedRoute'
@@ -128,6 +129,8 @@ export function AppRoutes() {
               <Route path="tableros/finanzas" element={<TableroFinanzasPage />} />
               {/* Tablero React de Finanzas – Negocio: datos.json de la carpeta de Drive; acceso por la API. */}
               <Route path="tableros/negocio" element={<NegocioBoard />} />
+              {/* Tablero COPS: snapshot vía proxy /api/cops; requiere usuario de workspace. */}
+              <Route path="tableros/cops" element={<CopsBoard />} />
             </Route>
 
             <Route path="tableros/desarrollo-proyectos" element={<DesarrolloProyectosBoard />} />

@@ -48,7 +48,18 @@ export interface VientriEnAgenda {
 }
 
 /** De dónde salió el compromiso o el cobro. Sin el campo: cargado a mano en Bacarnet. */
-export type OrigenAgenda = 'vientri' | 'inversiones' | 'planilla'
+export type OrigenAgenda = 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+
+/** Cheque de cartera propia (emitido) reflejado en la Agenda. Solo lectura desde Vientri. */
+export interface VientriChequeEnAgenda {
+  clave: string
+  estado: string
+  numero: string
+  bancoNombre: string | null
+  /** AAAA-MM-DD que mandó Vientri (para no pisar una fecha reprogramada en Bacarnet). */
+  fechaVencimiento: string
+  fechaDatos: string
+}
 
 /** Cuota de una inversión (solo con origen 'inversiones'). Monto, fecha y moneda se cambian desde Inversiones. */
 export interface InversionEnAgenda {
@@ -103,9 +114,10 @@ export interface CompromisoPagoDocument {
    * Ese monto ya no se puede pagar por otro lado hasta que se hagan o se rechacen.
    */
   transferenciasEnFirma?: Array<{ transferenciaId: string; montoCentavos: number }>
-  /** 'vientri' si lo creó la importación diaria de Vientri; los cargados a mano no lo tienen. */
+  /** 'vientri' / 'vientri-cheque' si lo creó la importación diaria de Vientri; los cargados a mano no lo tienen. */
   origen?: OrigenAgenda
   vientri?: VientriEnAgenda
+  vientriCheque?: VientriChequeEnAgenda
   inversion?: InversionEnAgenda
   planilla?: PlanillaEnAgenda
   /**

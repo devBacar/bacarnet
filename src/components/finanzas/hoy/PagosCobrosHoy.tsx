@@ -1,6 +1,17 @@
 import { useState, type ReactNode } from 'react'
 import type { CobroAtrasadoHoy, HoyResponse, IngresoHoy, PagoHoy } from '../../../services/finanzasHoyApi'
+import { etiquetaMedioPago, etiquetaOrigenCompromiso } from './etiquetasCompromiso'
 import { Etiqueta, MenuAcciones, Monto, Tarjeta, Vacio, botonChico, botonChicoSecundario, linkChico } from './TarjetasHoy'
+
+/** Chips de cómo se paga y de dónde vino (junto al nombre). */
+function EtiquetasTipoPago({ pago }: { pago: PagoHoy }) {
+  return (
+    <>
+      <Etiqueta tono="gris">{etiquetaMedioPago(pago.medioPago)}</Etiqueta>
+      <Etiqueta tono="gris">{etiquetaOrigenCompromiso(pago.id)}</Etiqueta>
+    </>
+  )
+}
 
 const FILAS_VISIBLES = 4
 
@@ -130,12 +141,17 @@ export function PagosHoy({
               nombre={pago.aQuien}
               detalle={
                 <>
-                  {pago.concepto} · {pago.comoPagar}
+                  {pago.concepto}
                   {pago.estimada ? ' · fecha estimada' : null}
                   {pago.urgencia !== 'Normal' ? ` · urgencia ${pago.urgencia.toLowerCase()}` : null}
                 </>
               }
-              etiqueta={pago.vencido && pago.vencidoTexto ? <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta> : undefined}
+              etiqueta={
+                <>
+                  <EtiquetasTipoPago pago={pago} />
+                  {pago.vencido && pago.vencidoTexto ? <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta> : null}
+                </>
+              }
               centavos={pago.montoCentavos}
               accion={
                 puedeOperar ? (
@@ -330,7 +346,7 @@ export function PagosAtrasados({
       nombre={pago.aQuien}
       detalle={
         <>
-          {pago.concepto} · {pago.comoPagar}
+          {pago.concepto}
           {pago.estimada ? ' · fecha estimada' : null}
           {pago.urgencia !== 'Normal' ? ` · urgencia ${pago.urgencia.toLowerCase()}` : null}
           {pago.aviso ? (
@@ -341,7 +357,12 @@ export function PagosAtrasados({
           ) : null}
         </>
       }
-      etiqueta={pago.vencidoTexto ? <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta> : undefined}
+      etiqueta={
+        <>
+          <EtiquetasTipoPago pago={pago} />
+          {pago.vencidoTexto ? <Etiqueta tono="rojo">{pago.vencidoTexto}</Etiqueta> : null}
+        </>
+      }
       centavos={pago.montoCentavos}
       accion={
         puedeOperar ? (

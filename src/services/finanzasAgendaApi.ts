@@ -46,8 +46,8 @@ export interface CompromisoAgendaItem {
   observacion?: string | null
   acumuladoCentavos?: number
   restanteCentavos?: number
-  /** 'vientri' si vino de la carga diaria de Vientri: comprobante, proveedor, importe y moneda no se editan acá. */
-  origen?: 'vientri' | 'inversiones' | 'planilla' | null
+  /** 'vientri' / 'vientri-cheque' si vino de la carga diaria de Vientri: comprobante, proveedor, importe y moneda no se editan acá. */
+  origen?: 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla' | null
   vientri?: VientriEnAgendaItem | null
   posibleDuplicado?: { id: string; descripcion: string } | null
 }
@@ -81,7 +81,7 @@ export interface CobroAgendaItem {
   alertaVencimiento: VencimientoAlerta
   moneda?: 'ARS' | 'USD'
   comprobante?: string | null
-  origen?: 'vientri' | 'inversiones' | 'planilla' | null
+  origen?: 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla' | null
   vientri?: VientriEnAgendaItem | null
   posibleDuplicado?: { id: string; descripcion: string } | null
 }

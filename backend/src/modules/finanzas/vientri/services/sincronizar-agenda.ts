@@ -75,7 +75,13 @@ async function leerManuales(lado: LadoAgenda): Promise<ManualAgenda[]> {
   const snap = await adminDb().collection(coleccion).get()
   return snap.docs
     // Lo de Inversores tiene su propio id y nunca es un duplicado de una factura de Vientri.
-    .filter((d) => d.get('origen') !== 'vientri' && d.get('origen') !== 'inversiones' && d.get('anulado') !== true)
+    .filter(
+      (d) =>
+        d.get('origen') !== 'vientri' &&
+        d.get('origen') !== 'vientri-cheque' &&
+        d.get('origen') !== 'inversiones' &&
+        d.get('anulado') !== true,
+    )
     .map((d) => {
       const x = d.data()
       const nombre = String(x.proveedorONombre ?? x.clienteONombre ?? '')

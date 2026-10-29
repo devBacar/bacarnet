@@ -539,14 +539,18 @@ export async function patchCompromisoAgenda(
   const current = await getCompromisoDocument(compromisoId)
   if (!current) throw new Error('Compromiso no encontrado')
   const cambios = leerEdicionCompromiso(body)
-  if (current.origen === 'vientri') {
+  if (current.origen === 'vientri' || current.origen === 'vientri-cheque') {
     const tocaDatosDeVientri =
       (cambios.concepto != null && cambios.concepto !== current.concepto) ||
       (cambios.proveedorONombre != null && cambios.proveedorONombre !== current.proveedorONombre) ||
       (cambios.montoCentavos != null && cambios.montoCentavos !== current.montoCentavos) ||
       (cambios.moneda != null && cambios.moneda !== (current.moneda ?? 'ARS'))
     if (tocaDatosDeVientri) {
-      throw new Error('Este pago viene de Vientri: el comprobante, el proveedor, el importe y la moneda se corrigen en Vientri.')
+      throw new Error(
+        current.origen === 'vientri-cheque'
+          ? 'Este pago es un cheque de Vientri: el concepto, el destinatario, el importe y la moneda se corrigen en Vientri. La fecha sí se puede pasar de día acá.'
+          : 'Este pago viene de Vientri: el comprobante, el proveedor, el importe y la moneda se corrigen en Vientri.',
+      )
     }
   }
   if (current.origen === 'inversiones') {

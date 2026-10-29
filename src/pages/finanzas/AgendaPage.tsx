@@ -548,8 +548,8 @@ function CompromisosTable({
                 <td className="px-3 py-3">
                   <div className="font-medium">
                     {row.concepto}
-                    {row.origen === 'vientri' ? (
-                    <span className="ml-2 inline-block rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100" title="Cargado en Vientri. El importe y el proveedor se corrigen en Vientri.">
+                    {row.origen === 'vientri' || row.origen === 'vientri-cheque' ? (
+                    <span className="ml-2 inline-block rounded border border-blue-300 bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-900 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-100" title={row.origen === 'vientri-cheque' ? 'Cheque de Vientri. El importe se corrige en Vientri; la fecha se puede pasar de día acá.' : 'Cargado en Vientri. El importe y el proveedor se corrigen en Vientri.'}>
                       Vientri
                     </span>
                   ) : null}
@@ -1057,7 +1057,7 @@ function AltaAgendaModal({
   onSave: (body: Record<string, unknown>) => Promise<void>
 }) {
   const [saving, setSaving] = useState(false)
-  const deVientri = compromiso?.origen === 'vientri'
+  const deVientri = compromiso?.origen === 'vientri' || compromiso?.origen === 'vientri-cheque'
   const [form, setForm] = useState({
     concepto: compromiso?.concepto ?? '',
     proveedorONombre: compromiso?.proveedorONombre ?? '',

@@ -50,7 +50,11 @@ export function FinanzasVientriPage() {
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
 
-  const estadoQ = useQuery({ queryKey: ['finanzas', 'vientri', 'estado'], queryFn: fetchEstadoVientri })
+  const estadoQ = useQuery({
+    queryKey: ['finanzas', 'vientri', 'estado'],
+    queryFn: fetchEstadoVientri,
+    refetchInterval: (query) => (query.state.data?.importando ? 5000 : false),
+  })
 
   const esCheques = pestana === 'recibidos' || pestana === 'emitidos'
   const chequesQ = useQuery({
@@ -82,7 +86,7 @@ export function FinanzasVientriPage() {
         </div>
       </header>
 
-      <FranjaVientri estado={estadoQ.data} cargando={estadoQ.isLoading} />
+      <FranjaVientri estado={estadoQ.data?.estado ?? null} cargando={estadoQ.isLoading} />
 
       <div className="mb-4 inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800" role="tablist">
         {PESTANAS.map((p) => (

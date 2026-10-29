@@ -107,9 +107,9 @@ function qs(params: Record<string, string | number | undefined>): string {
   return s ? `?${s}` : ''
 }
 
-export async function fetchEstadoVientri(): Promise<EstadoVientri | null> {
-  const r = await vientriFetch<{ estado: EstadoVientri | null }>('/estado')
-  return r.estado
+export async function fetchEstadoVientri(): Promise<{ estado: EstadoVientri | null; importando: boolean }> {
+  const r = await vientriFetch<{ estado: EstadoVientri | null; importando: boolean }>('/estado')
+  return { estado: r.estado, importando: r.importando === true }
 }
 
 export function fetchChequesVientri(f: { direccion: 'emitido' | 'recibido'; estado?: string; q?: string; page?: number }) {
@@ -121,12 +121,15 @@ export function fetchPendientesVientri(f: { lado: 'pagar' | 'cobrar' | 'revisar'
 }
 
 export interface ResultadoTraerVientri {
-  estado: 'importado' | 'sin_novedades' | 'sin_archivo' | 'ocupado' | 'error'
+  estado: 'en_progreso' | 'sin_novedades' | 'sin_archivo' | 'ocupado' | 'error'
   mensaje: string
   fechaDatos: string | null
 }
 
-/** Trae la última copia de Vientri desde Drive (si hay una nueva). Pide permiso de cheques. */
+/**
+ * Dispara en Drive la búsqueda de una copia nueva de Vientri. Responde al toque: si hay algo
+ * nuevo, queda importando en segundo plano (usar /estado para ver cuándo termina). Pide permiso de cheques.
+ */
 export async function traerVientriAhora(): Promise<ResultadoTraerVientri> {
   const user = auth.currentUser
   if (!user) throw new Error('No autenticado')

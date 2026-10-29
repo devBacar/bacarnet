@@ -7,6 +7,7 @@ import { sincronizarChequesDesdeVientri } from '../../cheques/services/sincroniz
 import { CarpetaInvalidaError, procesarCarpeta } from '../domain/procesar.js'
 import { ARCHIVOS_REQUERIDOS } from '../domain/control.js'
 import { aplicarVentana } from '../domain/ventana.js'
+import { importarChequesOcasionales } from './importar-cheques-ocasionales.js'
 import { agendaVientriActivada, sincronizarAgenda } from './sincronizar-agenda.js'
 import {
   cerrarImportacion,
@@ -178,6 +179,21 @@ export async function importarVientri(opts: {
       console.log('[importar-vientri] sync cheques:', syncResult.insertados, 'ins', syncResult.actualizados, 'upd')
     } catch (err) {
       console.error('[importar-vientri] sync cheques falló (la importación se completó)', err)
+    }
+
+    // Cheques ocasionales (cadenas de renovación, operaciones USD): salen del campo obs de cheques_propios.csv.
+    // Si la exportación es vieja y no trae obs, se sigue con la carga manual de CSV.
+    try {
+      const propios = textos.get('cheques_propios.csv')
+      const primeraLinea = (propios ?? '').split('\n', 1)[0].replace('\r', '')
+      if (propios && primeraLinea.split(';').includes('obs')) {
+        const oca = await importarChequesOcasionales({ csv: propios, origen: 'script', actor: opts.actor, desde: ventana.desde })
+        console.log('[importar-vientri] cheques ocasionales:', oca.mensaje)
+      } else {
+        console.log('[importar-vientri] cheques_propios.csv sin columna obs: cheques ocasionales sin actualizar')
+      }
+    } catch (err) {
+      console.error('[importar-vientri] cheques ocasionales falló (la importación se completó)', err)
     }
   }
   return { ok: true, importacionId, fechaDatos, mensaje, simulado: simular, conteos, resumen: resumenFinal }

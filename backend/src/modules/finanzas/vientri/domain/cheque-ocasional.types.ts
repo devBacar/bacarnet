@@ -7,9 +7,15 @@ export interface OperacionUsdParseada {
   cotizacion: number
 }
 
+export interface TasaExplicitaParseada {
+  montoPesosCentavos: number
+  tasaPorcentaje: number
+}
+
 export interface ObsParseada {
   renovacion: RenovacionParseada | null
   operacionUsd: OperacionUsdParseada | null
+  tasaExplicita: TasaExplicitaParseada | null
   obsOriginal: string
 }
 
@@ -49,6 +55,8 @@ export interface ChequeOcasionalDoc {
   numeroCheque: string
   beneficiario: string
   beneficiarioNormalizado: string
+  beneficiarioFormal: string | null
+  beneficiarioCuit: string | null
   montoCentavos: number
   fechaVencimiento: string | null
   fechaEmision: string | null
@@ -61,8 +69,10 @@ export interface ChequeOcasionalDoc {
   renovacionDe: string[]
   renovadoPor: string[]
   operacionUsd: OperacionUsdParseada | null
+  tasaExplicita: TasaExplicitaParseada | null
   obsOriginal: string
   revisar: string[]
   vientriId: number
+  vientriChqId: number | null
   baja: boolean
 }

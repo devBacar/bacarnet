@@ -20,6 +20,7 @@ import {
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
 import { CadenasRenovacion } from './CadenasRenovacion'
+import { OperacionesDolares } from './OperacionesDolares'
 
 function formatFecha(iso: string | null): string {
   if (!iso) return '—'
@@ -45,7 +46,7 @@ export function PestanaOcasionales() {
   const [busqueda, setBusqueda] = useState('')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
-  const [subvista, setSubvista] = useState<'cheques' | 'cadenas' | 'usd'>('cheques')
+  const [subvista, setSubvista] = useState<'cheques' | 'cadenas' | 'usd' | 'operaciones'>('cheques')
   const [beneficiarioCadenas, setBeneficiarioCadenas] = useState('')
   const [detalleId, setDetalleId] = useState<string | null>(null)
 
@@ -94,7 +95,8 @@ export function PestanaOcasionales() {
         {([
           ['cheques', 'Cheques'],
           ['cadenas', 'Cadenas'],
-          ['usd', 'Operaciones USD (fraccionadas)'],
+          ['usd', 'USD (agrupadas)'],
+          ['operaciones', 'Operaciones USD'],
         ] as const).map(([val, label]) => (
           <button
             key={val}
@@ -152,6 +154,15 @@ export function PestanaOcasionales() {
           beneficiarioFiltro={beneficiarioCadenas}
           onLimpiarFiltro={() => setBeneficiarioCadenas('')}
         />
+      </>
+    )
+  }
+
+  if (subvista === 'operaciones') {
+    return (
+      <>
+        {subTabs}
+        <OperacionesDolares />
       </>
     )
   }

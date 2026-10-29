@@ -7,6 +7,7 @@ describe('parsearObs', () => {
       const r = parsearObs('Renovacion cheque n° 38842801')
       expect(r.renovacion).toEqual({ chequeIds: ['38842801'] })
       expect(r.operacionUsd).toBeNull()
+      expect(r.tasaExplicita).toBeNull()
     })
 
     it('extrae varios números separados por coma', () => {
@@ -74,6 +75,23 @@ describe('parsearObs', () => {
     it('parsea u$20.000 TC $1.560', () => {
       const r = parsearObs('u$20.000 TC $1.560')
       expect(r.operacionUsd).toEqual({ montoUsd: 20000, cotizacion: 1560 })
+    })
+  })
+
+  describe('tasa explícita ($X al Y%)', () => {
+    it('parsea $67.731.213 al 42.5%', () => {
+      const r = parsearObs('$67.731.213 al 42.5%')
+      expect(r.tasaExplicita).toEqual({ montoPesosCentavos: 6773121300, tasaPorcentaje: 42.5 })
+    })
+
+    it('parsea $56.217.717 al 38.5%', () => {
+      const r = parsearObs('$56.217.717 al 38.5%')
+      expect(r.tasaExplicita).toEqual({ montoPesosCentavos: 5621771700, tasaPorcentaje: 38.5 })
+    })
+
+    it('no matchea texto sin el patrón', () => {
+      const r = parsearObs('Renovacion cheque 12345')
+      expect(r.tasaExplicita).toBeNull()
     })
   })
 

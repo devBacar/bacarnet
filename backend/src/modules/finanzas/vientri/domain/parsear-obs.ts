@@ -1,9 +1,10 @@
-import type { ObsParseada, OperacionUsdParseada, RenovacionParseada } from './cheque-ocasional.types.js'
+import type { ObsParseada, OperacionUsdParseada, RenovacionParseada, TasaExplicitaParseada } from './cheque-ocasional.types.js'
 
 const RE_RENOVACION_CON_IDS = /renovaci[oó]n\s+cheques?\s*(?:n[°ºo]?\s*)?([\d\s,y/]+)/i
 const RE_RENOVACION_SOLA = /^renovaci[oó]n$/i
 
 const RE_USD = /u\$?\s*s?d?\s*([\d.]+)\s*tc\s*\$?\s*([\d.]+)/i
+const RE_TASA_EXPLICITA = /\$([\d.]+)\s+al\s+([\d.,]+)%/i
 
 function limpiarNumero(raw: string): number {
   return Number(raw.replace(/\./g, '').replace(',', '.').trim())
@@ -48,11 +49,23 @@ function parsearUsd(obs: string): OperacionUsdParseada | null {
   return { montoUsd, cotizacion }
 }
 
+function parsearTasaExplicita(obs: string): TasaExplicitaParseada | null {
+  const m = RE_TASA_EXPLICITA.exec(obs)
+  if (!m) return null
+  const montoPesos = limpiarNumero(m[1])
+  const tasaRaw = m[2].replace(',', '.')
+  const tasa = Number(tasaRaw)
+  if (!Number.isFinite(montoPesos) || montoPesos <= 0) return null
+  if (!Number.isFinite(tasa) || tasa <= 0) return null
+  return { montoPesosCentavos: Math.round(montoPesos * 100), tasaPorcentaje: tasa }
+}
+
 export function parsearObs(obs: string | null | undefined): ObsParseada {
   const texto = (obs ?? '').trim()
   return {
     renovacion: parsearRenovacion(texto),
     operacionUsd: parsearUsd(texto),
+    tasaExplicita: parsearTasaExplicita(texto),
     obsOriginal: texto,
   }
 }

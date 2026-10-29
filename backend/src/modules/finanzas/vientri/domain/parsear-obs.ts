@@ -1,4 +1,4 @@
-import type { ObsParseada, OperacionUsdParseada, RenovacionParseada, TasaExplicitaParseada } from './cheque-ocasional.types.js'
+import type { ObsParseada, OperacionUsdParseada, RenovacionParseada, RolEnOperacion, TasaExplicitaParseada } from './cheque-ocasional.types.js'
 
 const RE_RENOVACION_CON_IDS = /renovaci[oó]n\s+cheques?\s*(?:n[°ºo]?\s*)?([\d\s,y/]+)/i
 const RE_RENOVACION_SOLA = /^renovaci[oó]n$/i
@@ -60,12 +60,30 @@ function parsearTasaExplicita(obs: string): TasaExplicitaParseada | null {
   return { montoPesosCentavos: Math.round(montoPesos * 100), tasaPorcentaje: tasa }
 }
 
+const RE_INTERES = /\b(inter[eé]s(es)?|int)\b/i
+const RE_CAPITAL_DIRECTO = /\b(capital|cap)\b/i
+const RE_CAPITAL_REFERENCIA = /de\s+capital\s+\$/i
+const RE_MIXTO_KI = /\bk\s*\+\s*i\b/i
+const RE_RENOVACION_GENERICA = /\brenovaci[oó]n\b/i
+
+function detectarRol(obs: string): RolEnOperacion {
+  if (RE_MIXTO_KI.test(obs)) return 'mixto'
+  const tieneInteres = RE_INTERES.test(obs)
+  const tieneCapital = RE_CAPITAL_DIRECTO.test(obs) && !RE_CAPITAL_REFERENCIA.test(obs)
+  const tieneRenovacion = RE_RENOVACION_GENERICA.test(obs)
+  if (tieneInteres && (tieneCapital || tieneRenovacion)) return 'mixto'
+  if (tieneInteres) return 'interes'
+  if (tieneCapital || tieneRenovacion) return 'capital'
+  return null
+}
+
 export function parsearObs(obs: string | null | undefined): ObsParseada {
   const texto = (obs ?? '').trim()
   return {
     renovacion: parsearRenovacion(texto),
     operacionUsd: parsearUsd(texto),
     tasaExplicita: parsearTasaExplicita(texto),
+    rol: detectarRol(texto),
     obsOriginal: texto,
   }
 }

@@ -95,6 +95,68 @@ describe('parsearObs', () => {
     })
   })
 
+  describe('rol en operación', () => {
+    it('"Interes" → interes', () => {
+      expect(parsearObs('Interes').rol).toBe('interes')
+    })
+
+    it('"Intereses" → interes', () => {
+      expect(parsearObs('Intereses').rol).toBe('interes')
+    })
+
+    it('"intereses olmos" → interes', () => {
+      expect(parsearObs('intereses olmos').rol).toBe('interes')
+    })
+
+    it('"op patio olmos int" → interes', () => {
+      expect(parsearObs('op patio olmos int').rol).toBe('interes')
+    })
+
+    it('"Renovacion" sola → capital', () => {
+      expect(parsearObs('Renovacion').rol).toBe('capital')
+    })
+
+    it('"Renovacion cheques n° 123" → capital', () => {
+      expect(parsearObs('Renovacion cheques n° 123').rol).toBe('capital')
+    })
+
+    it('"Cap + Int" → mixto', () => {
+      expect(parsearObs('P.Olmos (Carni Cap + Int)').rol).toBe('mixto')
+    })
+
+    it('"Capital + Intereses Renovacion" → mixto', () => {
+      expect(parsearObs('Capital + Intereses Renovacion Op Sergio Piva MADRE').rol).toBe('mixto')
+    })
+
+    it('"INTERESES Y CAP" → mixto', () => {
+      expect(parsearObs('INTERESES Y CAP').rol).toBe('mixto')
+    })
+
+    it('"int+cap" → mixto', () => {
+      expect(parsearObs('int+cap').rol).toBe('mixto')
+    })
+
+    it('"k+i" (Montoya k+i) → mixto', () => {
+      expect(parsearObs('Montoya k+i').rol).toBe('mixto')
+    })
+
+    it('"Renovacion 33842219 + intereses" → mixto', () => {
+      expect(parsearObs('Renovacion 33842219 + intereses').rol).toBe('mixto')
+    })
+
+    it('"Interes 6% de capital $1440000" → interes (capital es referencia)', () => {
+      expect(parsearObs('Interes 6% de capital $1440000').rol).toBe('interes')
+    })
+
+    it('OBS sin keywords → null', () => {
+      expect(parsearObs('u$70.000 TC1565').rol).toBeNull()
+    })
+
+    it('OBS vacío → null', () => {
+      expect(parsearObs('').rol).toBeNull()
+    })
+  })
+
   describe('sin patrón', () => {
     it('OBS vacío', () => {
       const r = parsearObs('')

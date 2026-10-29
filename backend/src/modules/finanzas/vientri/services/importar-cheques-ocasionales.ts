@@ -99,6 +99,7 @@ function filaADoc(
     renovadoPor: [],
     operacionUsd: obs.operacionUsd,
     tasaExplicita: obs.tasaExplicita,
+    rolEnOperacion: obs.rol,
     obsOriginal: obs.obsOriginal,
     revisar,
     vientriId,

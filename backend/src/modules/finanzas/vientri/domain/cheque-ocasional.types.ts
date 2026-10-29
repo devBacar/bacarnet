@@ -16,11 +16,13 @@ export interface ObsParseada {
   renovacion: RenovacionParseada | null
   operacionUsd: OperacionUsdParseada | null
   tasaExplicita: TasaExplicitaParseada | null
+  rol: RolEnOperacion
   obsOriginal: string
 }
 
 export type ClasificacionCheque = 'gasto_real' | 'operacion_financiera'
 
+export type RolEnOperacion = 'capital' | 'interes' | 'mixto' | null
 export type RolEnCadena = 'capital' | 'interes' | 'mixto' | null
 
 export interface CostoEslabon {
@@ -29,6 +31,11 @@ export interface CostoEslabon {
   montoViejoCentavos: number
   montoNuevoCentavos: number
   interesCentavos: number
+  fechaEmisionViejo: string | null
+  fechaVtoViejo: string | null
+  fechaEmisionNuevo: string | null
+  fechaVtoNuevo: string | null
+  diasEntreEmisiones: number | null
 }
 
 export interface CadenaRenovacion {
@@ -42,6 +49,9 @@ export interface CadenaRenovacion {
   interesTotalCentavos: number
   tasaImplicita: number
   operacionUsd: OperacionUsdParseada | null
+  fechaInicio: string | null
+  fechaFin: string | null
+  diasTotales: number | null
 }
 
 export interface ChequeClasificado {
@@ -70,6 +80,7 @@ export interface ChequeOcasionalDoc {
   renovadoPor: string[]
   operacionUsd: OperacionUsdParseada | null
   tasaExplicita: TasaExplicitaParseada | null
+  rolEnOperacion: RolEnOperacion
   obsOriginal: string
   revisar: string[]
   vientriId: number

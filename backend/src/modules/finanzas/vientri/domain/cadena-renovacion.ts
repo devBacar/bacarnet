@@ -6,6 +6,12 @@ import type {
   OperacionUsdParseada,
 } from './cheque-ocasional.types.js'
 
+function diasEntre(a: string, b: string): number {
+  const msA = new Date(a + 'T12:00:00Z').getTime()
+  const msB = new Date(b + 'T12:00:00Z').getTime()
+  return Math.round((msB - msA) / 86_400_000)
+}
+
 /**
  * Arma un mapa de número de cheque (completo y corto) → doc.
  */
@@ -97,12 +103,20 @@ export function reconstruirCadenas(docs: ChequeOcasionalDoc[]): CadenaRenovacion
     for (let i = 0; i < chequesDeCadena.length - 1; i++) {
       const viejo = chequesDeCadena[i]!
       const nuevo = chequesDeCadena[i + 1]!
+      const diasEntreEmisiones = viejo.fechaEmision && nuevo.fechaEmision
+        ? diasEntre(viejo.fechaEmision, nuevo.fechaEmision)
+        : null
       eslabones.push({
         chequeViejo: viejo.numeroCheque,
         chequeNuevo: nuevo.numeroCheque,
         montoViejoCentavos: viejo.montoCentavos,
         montoNuevoCentavos: nuevo.montoCentavos,
         interesCentavos: nuevo.montoCentavos - viejo.montoCentavos,
+        fechaEmisionViejo: viejo.fechaEmision,
+        fechaVtoViejo: viejo.fechaVencimiento,
+        fechaEmisionNuevo: nuevo.fechaEmision,
+        fechaVtoNuevo: nuevo.fechaVencimiento,
+        diasEntreEmisiones,
       })
     }
 
@@ -112,6 +126,10 @@ export function reconstruirCadenas(docs: ChequeOcasionalDoc[]): CadenaRenovacion
 
     const operacionUsd: OperacionUsdParseada | null =
       chequesDeCadena.find((c) => c.operacionUsd !== null)?.operacionUsd ?? null
+
+    const fechaInicio = chequesDeCadena[0]!.fechaEmision
+    const fechaFin = chequesDeCadena[chequesDeCadena.length - 1]!.fechaVencimiento
+    const diasTotales = fechaInicio && fechaFin ? diasEntre(fechaInicio, fechaFin) : null
 
     cadenas.push({
       id: `cadena-${raiz.numeroCheque}`,
@@ -124,6 +142,9 @@ export function reconstruirCadenas(docs: ChequeOcasionalDoc[]): CadenaRenovacion
       interesTotalCentavos: interesTotal,
       tasaImplicita: capitalInicial > 0 ? interesTotal / capitalInicial : 0,
       operacionUsd,
+      fechaInicio,
+      fechaFin,
+      diasTotales,
     })
   }
 

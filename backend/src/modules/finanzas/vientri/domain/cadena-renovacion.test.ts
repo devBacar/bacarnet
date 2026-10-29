@@ -7,6 +7,8 @@ function cheque(overrides: Partial<ChequeOcasionalDoc> = {}): ChequeOcasionalDoc
     numeroCheque: '44001234',
     beneficiario: 'Test',
     beneficiarioNormalizado: 'test',
+    beneficiarioFormal: null,
+    beneficiarioCuit: null,
     montoCentavos: 500000000,
     fechaVencimiento: '2027-01-15',
     fechaEmision: '2026-10-01',
@@ -19,9 +21,12 @@ function cheque(overrides: Partial<ChequeOcasionalDoc> = {}): ChequeOcasionalDoc
     renovacionDe: [],
     renovadoPor: [],
     operacionUsd: null,
+    tasaExplicita: null,
+    rolEnOperacion: null,
     obsOriginal: '',
     revisar: [],
     vientriId: 1,
+    vientriChqId: null,
     baja: false,
     ...overrides,
   }
@@ -48,6 +53,46 @@ describe('reconstruirCadenas', () => {
     expect(c.eslabones).toHaveLength(2)
     expect(c.eslabones[0]!.interesCentavos).toBe(80000000)
     expect(c.eslabones[1]!.interesCentavos).toBe(90000000)
+  })
+
+  it('calcula fechas en eslabones y cadena', () => {
+    const docs = [
+      cheque({ numeroCheque: 'D1', montoCentavos: 100000, fechaEmision: '2026-01-10', fechaVencimiento: '2026-04-10', renovadoPor: ['D2'], beneficiarioNormalizado: 'x', vientriId: 1 }),
+      cheque({ numeroCheque: 'D2', montoCentavos: 120000, fechaEmision: '2026-04-05', fechaVencimiento: '2026-07-05', renovacionDe: ['D1'], renovadoPor: ['D3'], beneficiarioNormalizado: 'x', vientriId: 2 }),
+      cheque({ numeroCheque: 'D3', montoCentavos: 145000, fechaEmision: '2026-07-01', fechaVencimiento: '2026-10-01', renovacionDe: ['D2'], beneficiarioNormalizado: 'x', vientriId: 3 }),
+    ]
+
+    const cadenas = reconstruirCadenas(docs)
+    expect(cadenas).toHaveLength(1)
+    const c = cadenas[0]!
+
+    expect(c.fechaInicio).toBe('2026-01-10')
+    expect(c.fechaFin).toBe('2026-10-01')
+    expect(c.diasTotales).toBe(264)
+
+    expect(c.eslabones[0]!.fechaEmisionViejo).toBe('2026-01-10')
+    expect(c.eslabones[0]!.fechaVtoViejo).toBe('2026-04-10')
+    expect(c.eslabones[0]!.fechaEmisionNuevo).toBe('2026-04-05')
+    expect(c.eslabones[0]!.diasEntreEmisiones).toBe(85)
+
+    expect(c.eslabones[1]!.fechaEmisionViejo).toBe('2026-04-05')
+    expect(c.eslabones[1]!.fechaEmisionNuevo).toBe('2026-07-01')
+    expect(c.eslabones[1]!.diasEntreEmisiones).toBe(87)
+  })
+
+  it('maneja fechas null sin romper', () => {
+    const docs = [
+      cheque({ numeroCheque: 'N1', montoCentavos: 100000, fechaEmision: null, fechaVencimiento: null, renovadoPor: ['N2'], beneficiarioNormalizado: 'y', vientriId: 1 }),
+      cheque({ numeroCheque: 'N2', montoCentavos: 120000, fechaEmision: null, fechaVencimiento: null, renovacionDe: ['N1'], beneficiarioNormalizado: 'y', vientriId: 2 }),
+    ]
+
+    const cadenas = reconstruirCadenas(docs)
+    expect(cadenas).toHaveLength(1)
+    const c = cadenas[0]!
+    expect(c.fechaInicio).toBeNull()
+    expect(c.fechaFin).toBeNull()
+    expect(c.diasTotales).toBeNull()
+    expect(c.eslabones[0]!.diasEntreEmisiones).toBeNull()
   })
 
   it('no arma cadena de un cheque suelto sin renovaciones', () => {

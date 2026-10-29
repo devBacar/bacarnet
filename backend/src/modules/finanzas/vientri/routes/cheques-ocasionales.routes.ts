@@ -75,6 +75,8 @@ async function leerActivosConEslabonesDeVientri(activos: ChequeOcasionalDoc[]): 
         numeroCheque: numCompleto,
         beneficiario: benef,
         beneficiarioNormalizado: benefNorm,
+        beneficiarioFormal: null,
+        beneficiarioCuit: null,
         montoCentavos: typeof ch.montoCentavos === 'number' ? ch.montoCentavos : 0,
         fechaVencimiento: typeof ch.fechaPago === 'string' ? ch.fechaPago : null,
         fechaEmision: typeof ch.fechaEmision === 'string' ? ch.fechaEmision : null,
@@ -87,9 +89,12 @@ async function leerActivosConEslabonesDeVientri(activos: ChequeOcasionalDoc[]): 
         renovacionDe: Array.isArray(ch.renovacionDe) ? (ch.renovacionDe as string[]) : [],
         renovadoPor: [],
         operacionUsd: null,
+        tasaExplicita: null,
+        rolEnOperacion: null,
         obsOriginal: typeof ch.observaciones === 'string' ? ch.observaciones : '',
         revisar: [],
         vientriId: 0,
+        vientriChqId: null,
         baja: false,
       }
 
@@ -126,6 +131,8 @@ async function leerActivosConEslabonesDeVientri(activos: ChequeOcasionalDoc[]): 
         numeroCheque,
         beneficiario: benef,
         beneficiarioNormalizado: benefNorm,
+        beneficiarioFormal: null,
+        beneficiarioCuit: null,
         montoCentavos: v.montoCentavos ?? 0,
         fechaVencimiento: v.fechaVencimiento ?? null,
         fechaEmision: v.fechaEmision ?? null,
@@ -138,9 +145,12 @@ async function leerActivosConEslabonesDeVientri(activos: ChequeOcasionalDoc[]): 
         renovacionDe: [],
         renovadoPor: [],
         operacionUsd: null,
+        tasaExplicita: null,
+        rolEnOperacion: null,
         obsOriginal: '',
         revisar: v.revisar ?? [],
         vientriId,
+        vientriChqId: null,
         baja: false,
       }
 

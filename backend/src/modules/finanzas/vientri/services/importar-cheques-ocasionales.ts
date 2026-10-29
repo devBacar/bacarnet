@@ -12,6 +12,7 @@ import { leerCsv, leerCsvSinHeader, exigirColumnas, type FilaCsv } from '../doma
 import { NOMBRE_ESTADO_CHQ } from '../domain/cheques.js'
 import { parsearObs } from '../domain/parsear-obs.js'
 import type { ProveedorOcasional } from '../domain/prooca.js'
+import { filtrarVentanaConCadenas } from '../domain/ventana-ocasionales.js'
 import { aBool, aCentavos, aEntero, aFecha, aTexto, fechaImposible } from '../domain/valores.js'
 import {
   cerrarImportacion,
@@ -148,6 +149,8 @@ export async function importarChequesOcasionales(opts: {
   actor: string
   simular?: boolean
   proocaIndex?: Map<number, ProveedorOcasional>
+  /** 'YYYY-MM-DD': ventana de Finanzas; además se conservan los cheques viejos de cadenas de renovación abiertas. */
+  desde?: string
 }): Promise<ResultadoImportacionOcasionales> {
   const simular = opts.simular === true
 
@@ -161,12 +164,13 @@ export async function importarChequesOcasionales(opts: {
   const proveedoresFinancieros = await nombresNormalizadosProveedoresFinancieros()
   const proocaIndex = opts.proocaIndex ?? new Map<number, ProveedorOcasional>()
 
-  const docs: ChequeOcasionalDoc[] = []
+  const todos: ChequeOcasionalDoc[] = []
   for (const f of tabla.filas) {
     const doc = filaADoc(f, proveedoresFinancieros, proocaIndex)
-    if (doc) docs.push(doc)
+    if (doc) todos.push(doc)
   }
 
+  const docs = opts.desde ? filtrarVentanaConCadenas(todos, opts.desde) : todos
   resolverRenovadoPor(docs)
 
   const resumen = {

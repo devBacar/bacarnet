@@ -121,6 +121,17 @@ function CadenaCard({ cadena }: { cadena: CadenaRenovacion }) {
           <span className="text-body-muted">Tasa implícita:</span>{' '}
           <span className="text-heading font-medium">{(cadena.tasaImplicita * 100).toFixed(1)}%</span>
         </span>
+        {cadena.fechaInicio || cadena.fechaFin ? (
+          <span>
+            <span className="text-body-muted">Período:</span>{' '}
+            <span className="text-heading font-medium">
+              {cadena.fechaInicio ?? '?'} → {cadena.fechaFin ?? '?'}
+            </span>
+            {cadena.diasTotales != null ? (
+              <span className="text-body-muted"> ({cadena.diasTotales} días)</span>
+            ) : null}
+          </span>
+        ) : null}
         {cadena.operacionUsd ? (
           <span
             className="inline-block rounded border border-green-300 bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-900 dark:border-green-700 dark:bg-green-900/40 dark:text-green-200"
@@ -139,22 +150,32 @@ function CadenaCard({ cadena }: { cadena: CadenaRenovacion }) {
             <thead className="text-body-muted text-left">
               <tr>
                 <th className="px-2 py-1">Cheque viejo</th>
+                <th className="px-2 py-1">Emisión</th>
+                <th className="px-2 py-1">Vto</th>
                 <th className="px-2 py-1">Cheque nuevo</th>
+                <th className="px-2 py-1">Emisión</th>
+                <th className="px-2 py-1">Vto</th>
                 <th className="px-2 py-1 text-right">Monto viejo</th>
                 <th className="px-2 py-1 text-right">Monto nuevo</th>
                 <th className="px-2 py-1 text-right">Interés</th>
+                <th className="px-2 py-1 text-right">Días</th>
               </tr>
             </thead>
             <tbody>
               {cadena.eslabones.map((e) => (
                 <tr key={`${e.chequeViejo}-${e.chequeNuevo}`} className="border-t border-subtle">
                   <td className="px-2 py-1 font-mono">{e.chequeViejo}</td>
+                  <td className="px-2 py-1 whitespace-nowrap">{e.fechaEmisionViejo ?? '-'}</td>
+                  <td className="px-2 py-1 whitespace-nowrap">{e.fechaVtoViejo ?? '-'}</td>
                   <td className="px-2 py-1 font-mono">{e.chequeNuevo}</td>
+                  <td className="px-2 py-1 whitespace-nowrap">{e.fechaEmisionNuevo ?? '-'}</td>
+                  <td className="px-2 py-1 whitespace-nowrap">{e.fechaVtoNuevo ?? '-'}</td>
                   <td className="px-2 py-1 text-right">{formatMoneyCentavos(e.montoViejoCentavos, 'ARS')}</td>
                   <td className="px-2 py-1 text-right">{formatMoneyCentavos(e.montoNuevoCentavos, 'ARS')}</td>
                   <td className="px-2 py-1 text-right font-medium text-red-600 dark:text-red-400">
                     {formatMoneyCentavos(e.interesCentavos, 'ARS')}
                   </td>
+                  <td className="px-2 py-1 text-right">{e.diasEntreEmisiones ?? '-'}</td>
                 </tr>
               ))}
             </tbody>

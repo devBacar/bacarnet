@@ -11,6 +11,8 @@ import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
 import { leerCsv, leerCsvSinHeader, exigirColumnas, type FilaCsv } from '../domain/csv.js'
 import { NOMBRE_ESTADO_CHQ } from '../domain/cheques.js'
 import { parsearObs } from '../domain/parsear-obs.js'
+import type { ProveedorOcasional } from '../domain/prooca.js'
+import { filtrarVentanaConCadenas } from '../domain/ventana-ocasionales.js'
 import { aBool, aCentavos, aEntero, aFecha, aTexto, fechaImposible } from '../domain/valores.js'
 import {
   cerrarImportacion,
@@ -45,6 +47,7 @@ function esObsFinanciero(obsTexto: string, proveedoresFinancieros: Set<string>):
 function filaADoc(
   f: FilaCsv,
   proveedoresFinancieros: Set<string>,
+  proocaIndex: Map<number, ProveedorOcasional>,
 ): ChequeOcasionalDoc | null {
   const vientriId = aEntero(f.vientri_id) ?? aEntero(f.numero)
   if (vientriId === null) return null
@@ -54,10 +57,16 @@ function filaADoc(
   const beneficiarioNorm = normalizarNombre(beneficiario)
   const obs = parsearObs(f.obs)
 
+  const idPerRecibe = aEntero(f.id_persona_recibe)
+  const prooca = idPerRecibe !== null ? proocaIndex.get(idPerRecibe) ?? null : null
+  const beneficiarioFormal = prooca?.nombre ?? null
+  const beneficiarioCuit = prooca?.cuit ?? null
+
   const esProveedorFinanciero =
     (beneficiarioNorm !== '' && proveedoresFinancieros.has(beneficiarioNorm))
     || obs.renovacion !== null
     || obs.operacionUsd !== null
+    || obs.tasaExplicita !== null
     || (beneficiarioNorm === '' && esObsFinanciero(obs.obsOriginal, proveedoresFinancieros))
 
   const estadoCodigo = aEntero(f.id_estado)
@@ -75,6 +84,8 @@ function filaADoc(
     numeroCheque: (f.numero_completo || f.numero || '').trim(),
     beneficiario,
     beneficiarioNormalizado: beneficiarioNorm,
+    beneficiarioFormal,
+    beneficiarioCuit,
     montoCentavos,
     fechaVencimiento,
     fechaEmision: aFecha(f.fecha_emision),
@@ -87,9 +98,12 @@ function filaADoc(
     renovacionDe: obs.renovacion?.chequeIds ?? [],
     renovadoPor: [],
     operacionUsd: obs.operacionUsd,
+    tasaExplicita: obs.tasaExplicita,
+    rolEnOperacion: obs.rol,
     obsOriginal: obs.obsOriginal,
     revisar,
     vientriId,
+    vientriChqId: aEntero(f.id_cheque),
     baja: aBool(f.baja),
   }
 }
@@ -135,6 +149,9 @@ export async function importarChequesOcasionales(opts: {
   origen: 'script' | 'manual'
   actor: string
   simular?: boolean
+  proocaIndex?: Map<number, ProveedorOcasional>
+  /** 'YYYY-MM-DD': ventana de Finanzas; además se conservan los cheques viejos de cadenas de renovación abiertas. */
+  desde?: string
 }): Promise<ResultadoImportacionOcasionales> {
   const simular = opts.simular === true
 
@@ -146,13 +163,15 @@ export async function importarChequesOcasionales(opts: {
   if (tieneHeader) exigirColumnas(tabla, 'cheques_ocasionales.csv', COLUMNAS_CON_HEADER)
 
   const proveedoresFinancieros = await nombresNormalizadosProveedoresFinancieros()
+  const proocaIndex = opts.proocaIndex ?? new Map<number, ProveedorOcasional>()
 
-  const docs: ChequeOcasionalDoc[] = []
+  const todos: ChequeOcasionalDoc[] = []
   for (const f of tabla.filas) {
-    const doc = filaADoc(f, proveedoresFinancieros)
-    if (doc) docs.push(doc)
+    const doc = filaADoc(f, proveedoresFinancieros, proocaIndex)
+    if (doc) todos.push(doc)
   }
 
+  const docs = opts.desde ? filtrarVentanaConCadenas(todos, opts.desde) : todos
   resolverRenovadoPor(docs)
 
   const resumen = {

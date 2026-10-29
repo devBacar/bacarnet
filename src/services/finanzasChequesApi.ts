@@ -374,6 +374,11 @@ export interface CostoEslabonItem {
   montoViejoCentavos: number
   montoNuevoCentavos: number
   interesCentavos: number
+  fechaEmisionViejo: string | null
+  fechaVtoViejo: string | null
+  fechaEmisionNuevo: string | null
+  fechaVtoNuevo: string | null
+  diasEntreEmisiones: number | null
 }
 
 export interface CadenaRenovacion {
@@ -387,6 +392,9 @@ export interface CadenaRenovacion {
   interesTotalCentavos: number
   tasaImplicita: number
   operacionUsd: OperacionUsdItem | null
+  fechaInicio: string | null
+  fechaFin: string | null
+  diasTotales: number | null
 }
 
 export interface ChequeClasificado {

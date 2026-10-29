@@ -382,6 +382,8 @@ export async function confirmarCobroLlegado(input: {
     cuit: null,
     email: null,
     contraparte: null,
+    fechaConfirmado: null,
+    origen: cobro.origen === 'vientri' || cobro.origen === 'vientri-cheque' || cobro.origen === 'inversiones' || cobro.origen === 'planilla' ? cobro.origen : 'manual',
   }
   const extra = cobro as unknown as Record<string, unknown>
   if (typeof extra.cuit === 'string') comoHoy.cuit = extra.cuit

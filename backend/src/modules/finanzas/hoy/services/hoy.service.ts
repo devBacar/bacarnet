@@ -47,6 +47,10 @@ function medioDe(value: MedioPago | undefined): CompromisoHoy['medioPago'] {
   return 'transferencia'
 }
 
+function origenDe(value: string | undefined): CompromisoHoy['origen'] {
+  return value === 'vientri' || value === 'vientri-cheque' || value === 'inversiones' || value === 'planilla' ? value : 'manual'
+}
+
 function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy | null {
   const fechaVencimiento = diaDe(data.fechaVencimiento)
   if (!fechaVencimiento) return null
@@ -68,6 +72,7 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
       pagos: listarPagos(data.pagos),
       transferenciasEnFirma: listarTransferenciasEnFirma(data.transferenciasEnFirma),
     }),
+    montoTotalCentavos: data.montoCentavos,
     fechaVencimiento,
     urgencia: parsePrioridadUrgencia(data.urgenciaManual),
     medioPago: medioDe(data.medioPago),
@@ -77,6 +82,8 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
     sinFecha:
       data.vientri?.sinFechaDePago === true && data.vientri.fechaEstimada !== true && fechaVencimiento === data.vientri.fechaVencimiento,
     estimada: data.vientri?.fechaEstimada === true && fechaVencimiento === data.vientri.fechaVencimiento,
+    fechaPago: diaDe(data.fechaPago),
+    origen: origenDe(data.origen),
   }
 }
 
@@ -98,6 +105,8 @@ function mapCobro(id: string, data: CobroEsperadoDocument): CobroHoy | null {
     contraparte: textoOpcional(data, 'contraparte'),
     sinFecha: data.vientri?.sinFechaDePago === true && data.vientri.fechaEstimada !== true && fechaEsperada === data.vientri.fechaVencimiento,
     estimada: data.vientri?.fechaEstimada === true && fechaEsperada === data.vientri.fechaVencimiento,
+    fechaConfirmado: diaDe(data.fechaConfirmado),
+    origen: origenDe(data.origen),
   }
 }
 

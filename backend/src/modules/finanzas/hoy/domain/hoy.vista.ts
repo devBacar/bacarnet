@@ -22,6 +22,7 @@ import type {
   FirmasHoy,
   HoyVista,
   IngresoFilaHoy,
+  MovimientoDelDiaHoy,
   MovimientoHoy,
   PagoFilaHoy,
   SemanaFilaHoy,
@@ -206,6 +207,37 @@ export function seleccionarPagosSinFecha(compromisos: CompromisoHoy[], hoy: stri
     .filter((row) => compromisoAbierto(row.estado) && row.sinFecha === true && row.montoCentavos > 0)
     .sort((a, b) => b.montoCentavos - a.montoCentavos)
     .map((row) => filaPago(row, hoy, movimientos))
+}
+
+/** Pagado hoy, sea cual sea su vencimiento original: para que el día no se vea vacío cuando sí se pagó. */
+export function seleccionarPagadosHoy(compromisos: CompromisoHoy[], hoy: string): { totalCentavos: number; filas: MovimientoDelDiaHoy[] } {
+  const filas = compromisos
+    .filter((row) => row.estado === 'pagado' && row.fechaPago === hoy)
+    .sort((a, b) => b.montoCentavos - a.montoCentavos)
+    .map((row) => ({
+      id: row.id,
+      aQuienODeQuien: row.proveedorONombre,
+      concepto: row.concepto,
+      montoCentavos: row.montoTotalCentavos,
+      medioPago: row.medioPago,
+      origen: row.origen,
+    }))
+  return { totalCentavos: filas.reduce((s, f) => s + f.montoCentavos, 0), filas }
+}
+
+/** Cobrado hoy, sea cual sea su fecha esperada original: para que el día no se vea vacío cuando sí se cobró. */
+export function seleccionarCobradosHoy(cobros: CobroHoy[], hoy: string): { totalCentavos: number; filas: MovimientoDelDiaHoy[] } {
+  const filas = cobros
+    .filter((row) => row.estado === 'confirmado' && row.fechaConfirmado === hoy)
+    .sort((a, b) => b.montoCentavos - a.montoCentavos)
+    .map((row) => ({
+      id: row.id,
+      aQuienODeQuien: row.clienteONombre,
+      concepto: row.concepto ?? row.clienteONombre,
+      montoCentavos: row.montoCentavos,
+      origen: row.origen,
+    }))
+  return { totalCentavos: filas.reduce((s, f) => s + f.montoCentavos, 0), filas }
 }
 
 export function seleccionarIngresos(
@@ -454,6 +486,8 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const cobrosAtrasados = listarCobrosAtrasados(input.cobros, hoy, ingresos.llegados)
   const firmas = transferenciasSinFirmar(input.transferencias, input.now)
   const chequesADebitar = armarChequesADebitar({ cheques: input.cheques, hoy, bancos })
+  const pagadosHoy = seleccionarPagadosHoy(input.compromisos, hoy)
+  const cobradosHoy = seleccionarCobradosHoy(input.cobros, hoy)
   const vacio =
     pagos.length === 0 &&
     pagosAtrasados.length === 0 &&
@@ -462,7 +496,9 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
     semana.filas == null &&
     cobrosAtrasados.length === 0 &&
     firmas == null &&
-    chequesADebitar.filas.length === 0
+    chequesADebitar.filas.length === 0 &&
+    pagadosHoy.filas.length === 0 &&
+    cobradosHoy.filas.length === 0
 
   return {
     saludo: saludoDelDia(input.now),
@@ -473,6 +509,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
     pagosSinFecha: { totalCentavos: suma(pagosSinFecha), filas: pagosSinFecha },
     ingresos: { filas: ingresos.filas },
     cobrosSinFecha: { cantidad: cobrosSinFecha.length, totalCentavos: suma(cobrosSinFecha) },
+    resueltoHoy: { pagos: pagadosHoy, cobros: cobradosHoy },
     dia: {
       saldoInicialCentavos,
       pagosCentavos,

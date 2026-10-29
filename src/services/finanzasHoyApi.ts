@@ -102,6 +102,15 @@ export interface ChequeCarteraHoy {
   montoCentavos: number
 }
 
+export interface MovimientoDelDiaHoy {
+  id: string
+  aQuienODeQuien: string
+  concepto: string
+  montoCentavos: number
+  medioPago?: 'transferencia' | 'efectivo' | 'cheque'
+  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+}
+
 export interface HoyResponse {
   saludo: string
   fecha: string
@@ -114,6 +123,11 @@ export interface HoyResponse {
   pagosSinFecha?: { totalCentavos: number; filas: PagoHoy[] }
   ingresos: { filas: IngresoHoy[] }
   cobrosSinFecha?: { cantidad: number; totalCentavos: number }
+  /** Ya pagado/cobrado hoy (informativo): para que el día no se vea vacío cuando sí hubo movimiento. */
+  resueltoHoy?: {
+    pagos: { totalCentavos: number; filas: MovimientoDelDiaHoy[] }
+    cobros: { totalCentavos: number; filas: MovimientoDelDiaHoy[] }
+  }
   dia: {
     saldoInicialCentavos: number
     pagosCentavos: number

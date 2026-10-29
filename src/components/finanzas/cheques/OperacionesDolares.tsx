@@ -10,6 +10,7 @@ import {
 } from '../../../services/finanzasOperacionesDolaresApi'
 import { FinanzasFormField, finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
+import { CargaDiariaPanel, EtiquetaCargaDia } from '../cargaDiaria/CargaDiariaPanel'
 
 function formatFecha(iso: string | null): string {
   if (!iso) return '—'
@@ -202,6 +203,7 @@ function ModalFormOperacion({ onClose }: { onClose: () => void }) {
   const [importeOriginal, setImporteOriginal] = useState('')
   const [notas, setNotas] = useState('')
   const [lineas, setLineas] = useState<MovimientoLinea[]>([lineaVacia()])
+  const [lineaActiva, setLineaActiva] = useState(0)
   const [errMsg, setErrMsg] = useState<string | null>(null)
 
   const mutation = useMutation({
@@ -347,6 +349,17 @@ function ModalFormOperacion({ onClose }: { onClose: () => void }) {
           </div>
         ) : null}
 
+        {/* Asistente: qué días están livianos de pagos */}
+        <div className="mt-4">
+          <CargaDiariaPanel
+            diaElegido={lineas[lineaActiva]?.fechaCobro}
+            onElegirDia={(fecha) => {
+              const vacia = lineas.findIndex((l) => !l.fechaCobro)
+              actualizarLinea(vacia >= 0 ? vacia : Math.min(lineaActiva, lineas.length - 1), 'fechaCobro', fecha)
+            }}
+          />
+        </div>
+
         {/* Movimientos de cheques */}
         <div className="mt-4">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -386,7 +399,9 @@ function ModalFormOperacion({ onClose }: { onClose: () => void }) {
                           className={`${finanzasInputClass} text-sm`}
                           value={l.fechaCobro}
                           onChange={(e) => actualizarLinea(i, 'fechaCobro', e.target.value)}
+                          onFocus={() => setLineaActiva(i)}
                         />
+                        <EtiquetaCargaDia fecha={l.fechaCobro} />
                       </td>
                       <td className="px-2 py-2">
                         <input

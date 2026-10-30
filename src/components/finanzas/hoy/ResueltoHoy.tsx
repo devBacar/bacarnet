@@ -69,8 +69,8 @@ function GrupoMedio({ medio, totalCentavos, filas }: { medio: MedioResueltoHoy; 
 }
 
 /**
- * Lo que vence hoy de verdad y ya está resuelto (pagado/cobrado), agrupado por medio real
- * (un cheque cuenta el día de su vencimiento, no el día en que se armó la orden de pago).
+ * Plata que de verdad ya se movió del banco hoy, agrupada por medio real. Un cheque cuenta recién cuando
+ * el banco lo debitó/acreditó (no cuando se armó la orden de pago ni el día en que vence en el papel).
  * Informativo: no se puede accionar desde acá.
  */
 export function ResueltoHoy({ resueltoHoy }: { resueltoHoy: HoyResponse['resueltoHoy'] }) {
@@ -83,12 +83,12 @@ export function ResueltoHoy({ resueltoHoy }: { resueltoHoy: HoyResponse['resuelt
   return (
     <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
       <Tarjeta
-        titulo="Pagado hoy"
+        titulo="Salió del banco hoy"
         subtitulo={pagos.filas.length > 0 ? <Monto centavos={pagos.totalCentavos} /> : undefined}
-        ayuda="Lo que vence hoy de verdad, ya resuelto. Un cheque cuenta el día en que vence, no el día en que se armó la orden de pago."
+        ayuda="Solo lo que el banco ya movió de verdad. Un cheque cuenta recién cuando el banco lo debitó, no el día que vence en el papel ni el día que se armó la orden de pago."
       >
         {gruposPagos.length === 0 ? (
-          <Vacio texto="No vence nada pagado hoy." />
+          <Vacio texto="Todavía no salió nada del banco hoy." />
         ) : (
           <ul className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
             {gruposPagos.map((g) => (
@@ -98,12 +98,12 @@ export function ResueltoHoy({ resueltoHoy }: { resueltoHoy: HoyResponse['resuelt
         )}
       </Tarjeta>
       <Tarjeta
-        titulo="Cobrado hoy"
+        titulo="Ingresó al banco hoy"
         subtitulo={cobros.filas.length > 0 ? <Monto centavos={cobros.totalCentavos} /> : undefined}
-        ayuda="Lo que vence hoy de verdad, ya resuelto. Un cheque cuenta el día en que vence, no el día en que se recibió."
+        ayuda="Solo lo que el banco ya acreditó de verdad. Un cheque cuenta recién cuando el banco lo acreditó, no el día que vence en el papel ni el día que se recibió."
       >
         {gruposCobros.length === 0 ? (
-          <Vacio texto="No vence nada cobrado hoy." />
+          <Vacio texto="Todavía no ingresó nada al banco hoy." />
         ) : (
           <ul className="max-h-[22rem] space-y-2 overflow-y-auto pr-1">
             {gruposCobros.map((g) => (

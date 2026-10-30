@@ -273,13 +273,22 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
     cheques: chequesEmitidos.map(mapCheque),
   })
   const resueltoHoy = {
-    pagos: { ...vista.resueltoHoy.pagos, filas: await marcarDebitadoPorBanco(vista.resueltoHoy.pagos.filas, 'emitido') },
-    cobros: { ...vista.resueltoHoy.cobros, filas: await marcarDebitadoPorBanco(vista.resueltoHoy.cobros.filas, 'recibido') },
+    pagos: envolverResuelto(await marcarDebitadoPorBanco(vista.resueltoHoy.pagos.filas, 'emitido')),
+    cobros: envolverResuelto(await marcarDebitadoPorBanco(vista.resueltoHoy.cobros.filas, 'recibido')),
   }
   return { ...vista, resueltoHoy, hayDatosDemo: datosDemo }
 }
 
-/** Para los cheques de "Pagado/Cobrado hoy", avisa si el banco ya los debitó/acreditó de verdad. */
+function envolverResuelto(filas: MovimientoDelDiaHoy[]): { totalCentavos: number; filas: MovimientoDelDiaHoy[] } {
+  return { totalCentavos: filas.reduce((s, f) => s + f.montoCentavos, 0), filas }
+}
+
+/**
+ * "Salió/Ingresó al banco hoy": solo lo que el banco de verdad ya movió, no lo que vence hoy en el papel.
+ * Para cheques (físico/echeq) exige que el banco los haya debitado/acreditado (si todavía no, se descarta: está
+ * en "Pagos/Cobros de hoy" como pendiente). Efectivo/transferencia/otro medio no tienen ese cruce con el banco
+ * todavía, así que se dejan como vienen (por vencimiento real).
+ */
 async function marcarDebitadoPorBanco(
   filas: MovimientoDelDiaHoy[],
   direccion: 'emitido' | 'recibido',
@@ -287,13 +296,17 @@ async function marcarDebitadoPorBanco(
   const numeros = filas
     .filter((f) => (f.medio === 'cheque_fisico' || f.medio === 'echeq') && f.chequeNumero)
     .map((f) => f.chequeNumero as string)
-  if (numeros.length === 0) return filas
-  const estados = await getEstadoBancoPorNumeros(direccion, numeros)
-  return filas.map((f) => {
-    if (!((f.medio === 'cheque_fisico' || f.medio === 'echeq') && f.chequeNumero)) return f
-    const info = estados.get(f.chequeNumero)
-    return { ...f, debitadoPorBanco: info ? info.estado === 'debitado' : null }
-  })
+  const estados = numeros.length > 0 ? await getEstadoBancoPorNumeros(direccion, numeros) : new Map()
+  return filas
+    .map((f) => {
+      if (!((f.medio === 'cheque_fisico' || f.medio === 'echeq') && f.chequeNumero)) return f
+      const info = estados.get(f.chequeNumero)
+      return { ...f, debitadoPorBanco: info ? info.estado === 'debitado' : null }
+    })
+    .filter((f) => {
+      if (f.medio !== 'cheque_fisico' && f.medio !== 'echeq') return true
+      return f.debitadoPorBanco === true
+    })
 }
 
 /** Cheques recibidos que se pueden usar para pagar, del más parecido al monto al más lejano. */

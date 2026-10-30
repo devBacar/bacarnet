@@ -1,7 +1,7 @@
 import { auth } from './firebase'
 import { resolveApiUrl } from './resolveApiUrl'
 
-/** Snapshot COPS (contrato front↔back). `rrhh` y `liquidacion` son opcionales. */
+/** Snapshot COSP (contrato front↔back). `rrhh` y `liquidacion` son opcionales. */
 export interface CopsSnapshot {
   empresaId: string
   empresaNombre: string
@@ -74,13 +74,13 @@ export async function fetchCopsSnapshot(): Promise<CopsSnapshot> {
     headers: { Authorization: `Bearer ${token}` },
   })
   if (res.status === 401) {
-    throw new CopsApiError('Acceso no autorizado — contactar a administrador COPS', 401)
+    throw new CopsApiError('Acceso no autorizado — contactar a administrador COSP', 401)
   }
   if (res.status === 503) {
     throw new CopsApiError('Datos aún no disponibles, reintentando...', 503)
   }
   if (!res.ok) {
-    throw new CopsApiError(await mensajeDeError(res, 'No se pudo cargar el tablero COPS'), res.status)
+    throw new CopsApiError(await mensajeDeError(res, 'No se pudo cargar el tablero COSP'), res.status)
   }
   return (await res.json()) as CopsSnapshot
 }

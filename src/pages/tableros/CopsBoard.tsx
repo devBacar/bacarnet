@@ -14,12 +14,12 @@ const REFETCH_MS = 5 * 60_000
 
 function mensajeError(err: unknown): string {
   if (err instanceof CopsApiError) {
-    if (err.status === 401) return 'Acceso no autorizado — contactar a administrador COPS'
+    if (err.status === 401) return 'Acceso no autorizado — contactar a administrador COSP'
     if (err.status === 503) return 'Datos aún no disponibles, reintentando...'
     return err.message
   }
   if (err instanceof Error) return err.message
-  return 'No se pudo cargar el tablero COPS.'
+  return 'No se pudo cargar el tablero COSP.'
 }
 
 export function CopsBoard() {
@@ -45,7 +45,7 @@ export function CopsBoard() {
         </Link>
         <h1 className="text-heading flex items-center gap-2 text-xl font-semibold">
           <Shield className="h-6 w-6 shrink-0 text-[var(--color-primary)]" aria-hidden />
-          COPS
+          COSP
           {data?.empresaNombre ? (
             <span className="text-body-muted text-[15px] font-normal">· {data.empresaNombre}</span>
           ) : null}

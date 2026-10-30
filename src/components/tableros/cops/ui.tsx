@@ -44,7 +44,7 @@ export function KpiCops({
 
 export function SkeletonCops() {
   return (
-    <div className="grid gap-4" aria-busy="true" aria-label="Cargando tablero COPS">
+    <div className="grid gap-4" aria-busy="true" aria-label="Cargando tablero COSP">
       {[1, 2, 3].map((i) => (
         <div key={i} className="surface-muted h-28 animate-pulse rounded-xl" />
       ))}

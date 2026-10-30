@@ -1,6 +1,7 @@
 import { KeyRound, LayoutDashboard, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { TABLEROS_INTERNOS } from '../constants/tablerosInternos'
 import { BoardAccessModal } from '../components/BoardAccessModal'
 import { useAuth } from '../context'
 import { useBoardsQuery } from '../hooks/queries/useCatalogQueries'
@@ -44,6 +45,26 @@ export function BoardList() {
           HTML y archivos asociados.
         </p>
       </header>
+
+      <section>
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-[0.14em] text-neutral-500 dark:text-zinc-400">
+          Tableros internos
+        </h2>
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {TABLEROS_INTERNOS.map((tablero) => (
+            <li key={tablero.id}>
+              <Link
+                to={tablero.to}
+                className="flex h-full flex-col rounded-xl border border-neutral-200 bg-white p-5 transition-colors hover:text-brand-primary dark:border-zinc-800 dark:bg-zinc-900"
+              >
+                <LayoutDashboard className="h-5 w-5 text-brand-primary" />
+                <h3 className="mt-3 font-semibold">{tablero.nombre}</h3>
+                <p className="mt-1 text-xs text-neutral-500 dark:text-zinc-400">{tablero.descripcion}</p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       {loading ? (
         <div className="flex items-center gap-2 py-16 text-sm text-neutral-500 dark:text-zinc-400">

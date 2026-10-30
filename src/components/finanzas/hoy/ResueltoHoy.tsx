@@ -50,8 +50,13 @@ function GrupoMedio({ medio, totalCentavos, filas }: { medio: MedioResueltoHoy; 
                   {fila.concepto}
                   {fila.chequeNumero ? ` · ${fila.chequeNumero}` : ''}
                 </p>
-                <div className="mt-0.5">
+                <div className="mt-0.5 flex flex-wrap gap-1">
                   <Etiqueta tono="gris">{etiquetaOrigenCompromiso(fila.id)}</Etiqueta>
+                  {fila.debitadoPorBanco === true ? (
+                    <Etiqueta tono="verde">Ya lo movió el banco</Etiqueta>
+                  ) : fila.debitadoPorBanco === false ? (
+                    <Etiqueta tono="ambar">El banco todavía no lo movió</Etiqueta>
+                  ) : null}
                 </div>
               </div>
               <Monto centavos={fila.montoCentavos} className="shrink-0 font-medium" />

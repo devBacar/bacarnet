@@ -25,10 +25,12 @@ import type {
 } from '../domain/hoy.tipos.js'
 import {
   countChequesFiltrados,
+  getEstadoBancoPorNumeros,
   pageCheques,
   type ChequesFiltro,
   type ChequeListadoItem,
 } from '../../cheques/services/cheques.repository.js'
+import type { MovimientoDelDiaHoy } from '../domain/hoy.tipos.js'
 import { armarVistaHoy } from '../domain/hoy.vista.js'
 import { hayDatosDemo } from './hoy.demo.js'
 
@@ -270,7 +272,28 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
     transferencias: transferenciasHoy,
     cheques: chequesEmitidos.map(mapCheque),
   })
-  return { ...vista, hayDatosDemo: datosDemo }
+  const resueltoHoy = {
+    pagos: { ...vista.resueltoHoy.pagos, filas: await marcarDebitadoPorBanco(vista.resueltoHoy.pagos.filas, 'emitido') },
+    cobros: { ...vista.resueltoHoy.cobros, filas: await marcarDebitadoPorBanco(vista.resueltoHoy.cobros.filas, 'recibido') },
+  }
+  return { ...vista, resueltoHoy, hayDatosDemo: datosDemo }
+}
+
+/** Para los cheques de "Pagado/Cobrado hoy", avisa si el banco ya los debitó/acreditó de verdad. */
+async function marcarDebitadoPorBanco(
+  filas: MovimientoDelDiaHoy[],
+  direccion: 'emitido' | 'recibido',
+): Promise<MovimientoDelDiaHoy[]> {
+  const numeros = filas
+    .filter((f) => (f.medio === 'cheque_fisico' || f.medio === 'echeq') && f.chequeNumero)
+    .map((f) => f.chequeNumero as string)
+  if (numeros.length === 0) return filas
+  const estados = await getEstadoBancoPorNumeros(direccion, numeros)
+  return filas.map((f) => {
+    if (!((f.medio === 'cheque_fisico' || f.medio === 'echeq') && f.chequeNumero)) return f
+    const info = estados.get(f.chequeNumero)
+    return { ...f, debitadoPorBanco: info ? info.estado === 'debitado' : null }
+  })
 }
 
 /** Cheques recibidos que se pueden usar para pagar, del más parecido al monto al más lejano. */

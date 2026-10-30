@@ -112,6 +112,8 @@ export interface MovimientoDelDiaHoy {
   medio: MedioResueltoHoy
   chequeNumero: string | null
   origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  /** Solo para cheque_fisico/echeq: si el banco ya lo debitó/acreditó. null si no se pudo chequear. */
+  debitadoPorBanco: boolean | null
 }
 
 export interface HoyResponse {

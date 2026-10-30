@@ -273,6 +273,37 @@ export function chequeDocId(direccion: ChequeDireccion, numero: string): string 
   return `${direccion}_${numero}`
 }
 
+export interface ChequeEstadoBanco {
+  estado: ChequeEstado
+  movimientoFecha: string | null
+  fechaAcreditacion: string | null
+}
+
+/** Para saber si el banco ya debitó/acreditó cheques puntuales (p. ej. en "Pagado/Cobrado hoy"). */
+export async function getEstadoBancoPorNumeros(
+  direccion: ChequeDireccion,
+  numeros: string[],
+): Promise<Map<string, ChequeEstadoBanco>> {
+  const resultado = new Map<string, ChequeEstadoBanco>()
+  const unicos = [...new Set(numeros.filter((n) => n.trim() !== ''))]
+  if (unicos.length === 0) return resultado
+  const refs = unicos.map((n) => collection().doc(chequeDocId(direccion, n)))
+  for (let i = 0; i < refs.length; i += GETALL_LIMIT) {
+    const batch = refs.slice(i, i + GETALL_LIMIT)
+    const snaps = await adminDb().getAll(...batch)
+    for (let j = 0; j < snaps.length; j++) {
+      if (!snaps[j].exists) continue
+      const data = snaps[j].data() as DocumentData
+      resultado.set(unicos[i + j], {
+        estado: (data.estado ?? 'en_cartera') as ChequeEstado,
+        movimientoFecha: typeof data.movimientoFecha === 'string' ? data.movimientoFecha : null,
+        fechaAcreditacion: typeof data.fechaAcreditacion === 'string' ? data.fechaAcreditacion : null,
+      })
+    }
+  }
+  return resultado
+}
+
 const GETALL_LIMIT = 500
 
 export async function findExistingNumeros(

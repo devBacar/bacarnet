@@ -237,6 +237,7 @@ export function seleccionarPagadosHoy(compromisos: CompromisoHoy[], hoy: string)
           montoCentavos: leg.montoCentavos,
           medio: medioDesdeDesglose(leg.medio),
           chequeNumero: leg.chequeNumero,
+          debitadoPorBanco: null,
           origen: row.origen,
         })
       })
@@ -248,6 +249,7 @@ export function seleccionarPagadosHoy(compromisos: CompromisoHoy[], hoy: string)
         montoCentavos: row.montoTotalCentavos,
         medio: medioDesdeCompromiso(row.medioPago),
         chequeNumero: null,
+        debitadoPorBanco: null,
         origen: row.origen,
       })
     }
@@ -272,6 +274,7 @@ export function seleccionarCobradosHoy(cobros: CobroHoy[], hoy: string): { total
           montoCentavos: leg.montoCentavos,
           medio: medioDesdeDesglose(leg.medio),
           chequeNumero: leg.chequeNumero,
+          debitadoPorBanco: null,
           origen: row.origen,
         })
       })
@@ -283,6 +286,7 @@ export function seleccionarCobradosHoy(cobros: CobroHoy[], hoy: string): { total
         montoCentavos: row.montoCentavos,
         medio: 'transferencia',
         chequeNumero: null,
+        debitadoPorBanco: null,
         origen: row.origen,
       })
     }

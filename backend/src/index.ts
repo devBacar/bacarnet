@@ -240,7 +240,7 @@ export const importarVientriDiario = onSchedule(
     schedule: '30 6-8 * * *',
     timeZone: 'America/Argentina/Buenos_Aires',
     timeoutSeconds: 540,
-    memory: '1GiB',
+    memory: '2GiB',
   },
   async () => {
     const { runScheduledVientri } = await import('./modules/finanzas/vientri/scheduledVientri.js')

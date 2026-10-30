@@ -8,6 +8,7 @@
  * - Si la factura ya no tiene saldo en Vientri, se cierra (pagada / cobrada) "según Vientri".
  * - Si sigue con saldo pero quedó fuera de los 12 meses, no se toca.
  */
+import type { LegDesglosePago } from './desglose-pago.js'
 import { plazoPara, type PlazoEstimado, type PlazosHistoricos } from './plazos.js'
 import type { VientriPendienteDoc } from './tipos.js'
 
@@ -76,7 +77,7 @@ export type OperacionAgenda =
   | { tipo: 'crear'; id: string; datos: DatosVientriAgenda; posibleDuplicado: PosibleDuplicado | null }
   | { tipo: 'actualizar'; id: string; datos: DatosVientriAgenda; cambiarFecha: boolean }
   | { tipo: 'reabrir'; id: string; datos: DatosVientriAgenda }
-  | { tipo: 'cerrar'; id: string }
+  | { tipo: 'cerrar'; id: string; desglosePago: LegDesglosePago[] | null }
 
 export function idAgendaVientri(clave: string): string {
   return `vientri-${clave}`
@@ -139,6 +140,8 @@ export function planAgenda(opts: {
   manuales?: ManualAgenda[]
   /** Plazos históricos para estimar la fecha de lo que no tiene vencimiento en Vientri. */
   plazos?: PlazosHistoricos
+  /** Con qué se pagó/cobró de verdad cada factura, por clave (ver domain/desglose-pago.ts). */
+  desglosesPago?: Map<string, LegDesglosePago[]>
 }): ResultadoPlanAgenda {
   const dia = (s: string) => Date.parse(`${s.slice(0, 10)}T12:00:00Z`) / 86_400_000
   const buscarDuplicado = (datos: DatosVientriAgenda): PosibleDuplicado | null => {
@@ -198,7 +201,7 @@ export function planAgenda(opts: {
     const clave = ex.id.replace(/^vientri-/, '')
     // Sigue debiéndose y solo quedó fuera de los 12 meses: no se toca. Un resto de redondeo sí se cierra.
     if (opts.clavesConSaldo.has(clave) && !clavesResiduo.has(clave)) continue
-    operaciones.push({ tipo: 'cerrar', id: ex.id })
+    operaciones.push({ tipo: 'cerrar', id: ex.id, desglosePago: opts.desglosesPago?.get(clave) ?? null })
   }
 
   const posiblesDuplicados = operaciones.filter((o) => o.tipo === 'crear' && o.posibleDuplicado).length

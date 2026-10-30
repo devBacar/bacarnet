@@ -9,6 +9,7 @@ import { ARCHIVOS_REQUERIDOS } from '../domain/control.js'
 import { aplicarVentana } from '../domain/ventana.js'
 import { importarChequesOcasionales } from './importar-cheques-ocasionales.js'
 import { agendaVientriActivada, sincronizarAgenda } from './sincronizar-agenda.js'
+import { sincronizarAgendaCheques } from './sincronizar-agenda-cheques.js'
 import {
   cerrarImportacion,
   contarColeccion,
@@ -151,14 +152,26 @@ export async function importarVientri(opts: {
 
   // Agenda: se calcula siempre; se escribe solo si está activada (vientriEstado/config.agenda) y no es simulación.
   const agendaActiva = await agendaVientriActivada()
+  const escribirAgenda = agendaActiva && !simular
   const agenda = await sincronizarAgenda({
     pendientesEnVentana: pendientes,
     todosLosPendientes: proc.pendientes,
     fechaDatos,
-    escribir: agendaActiva && !simular,
+    escribir: escribirAgenda,
     plazos: proc.plazos,
+    desglosesPago: proc.desglosesPago,
   })
-  const resumenFinal = { ...resumen, agenda: { activa: agendaActiva, ...agenda } }
+  const agendaCheques = await sincronizarAgendaCheques({
+    chequesEnVentana: cheques,
+    todosLosCheques: proc.cheques,
+    fechaDatos,
+    escribir: escribirAgenda,
+  })
+  const resumenFinal = {
+    ...resumen,
+    agenda: { activa: agendaActiva, ...agenda },
+    agendaCheques: { activa: agendaActiva, ...agendaCheques },
+  }
 
   const mensaje = `Importado: ${resumen.cheques} cheques, ${resumen.pendientesPagar} a pagar, ${resumen.pendientesCobrar} a cobrar.`
   if (!simular) {

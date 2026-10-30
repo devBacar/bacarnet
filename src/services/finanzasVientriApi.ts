@@ -107,9 +107,9 @@ function qs(params: Record<string, string | number | undefined>): string {
   return s ? `?${s}` : ''
 }
 
-export async function fetchEstadoVientri(): Promise<EstadoVientri | null> {
-  const r = await vientriFetch<{ estado: EstadoVientri | null }>('/estado')
-  return r.estado
+export async function fetchEstadoVientri(): Promise<{ estado: EstadoVientri | null; importando: boolean }> {
+  const r = await vientriFetch<{ estado: EstadoVientri | null; importando: boolean }>('/estado')
+  return { estado: r.estado, importando: r.importando === true }
 }
 
 export function fetchChequesVientri(f: { direccion: 'emitido' | 'recibido'; estado?: string; q?: string; page?: number }) {
@@ -121,12 +121,15 @@ export function fetchPendientesVientri(f: { lado: 'pagar' | 'cobrar' | 'revisar'
 }
 
 export interface ResultadoTraerVientri {
-  estado: 'importado' | 'sin_novedades' | 'sin_archivo' | 'ocupado' | 'error'
+  estado: 'en_progreso' | 'sin_novedades' | 'sin_archivo' | 'ocupado' | 'error'
   mensaje: string
   fechaDatos: string | null
 }
 
-/** Trae la última copia de Vientri desde Drive (si hay una nueva). Pide permiso de cheques. */
+/**
+ * Dispara en Drive la búsqueda de una copia nueva de Vientri. Responde al toque: si hay algo
+ * nuevo, queda importando en segundo plano (usar /estado para ver cuándo termina). Pide permiso de cheques.
+ */
 export async function traerVientriAhora(): Promise<ResultadoTraerVientri> {
   const user = auth.currentUser
   if (!user) throw new Error('No autenticado')
@@ -155,4 +158,33 @@ export interface ChequeParaLimpiar {
 
 export function fetchLimpiezaVientri() {
   return vientriFetch<{ fechaDatos: string | null; desde: string | null; items: ChequeParaLimpiar[] }>('/limpieza')
+}
+
+export interface ComprobanteSaldoCliente {
+  clave: string
+  comprobante: string
+  fecha: string | null
+  fechaVencimiento: string | null
+  totalCentavos: number
+  pendienteCentavos: number
+}
+
+export interface SaldoCliente {
+  personaId: number
+  nombre: string
+  cuit: string | null
+  deudaCentavos: number
+  favorCentavos: number
+  saldoCentavos: number
+  comprobantes: ComprobanteSaldoCliente[]
+}
+
+export interface PaginaSaldosCliente extends Pagina<SaldoCliente> {
+  totalFavorCentavos: number
+  totalDeudaCentavos: number
+}
+
+/** Cuenta corriente por cliente (deuda real, saldo a favor, neto), igual al criterio de Vientri. */
+export function fetchSaldosClienteVientri(f: { q?: string; soloFavor?: boolean; page?: number }) {
+  return vientriFetch<PaginaSaldosCliente>(`/clientes${qs({ q: f.q, soloFavor: f.soloFavor ? '1' : undefined, page: f.page })}`)
 }

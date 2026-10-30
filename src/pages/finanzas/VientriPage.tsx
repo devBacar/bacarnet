@@ -10,12 +10,14 @@ import {
   fetchChequesVientri,
   fetchEstadoVientri,
   fetchPendientesVientri,
+  fetchSaldosClienteVientri,
   type EstadoChequeVientri,
+  type SaldoCliente,
   type VientriCheque,
   type VientriPendiente,
 } from '../../services/finanzasVientriApi'
 
-type Pestana = 'recibidos' | 'emitidos' | 'pagar' | 'cobrar' | 'revisar'
+type Pestana = 'recibidos' | 'emitidos' | 'pagar' | 'cobrar' | 'revisar' | 'clientes'
 
 const PESTANAS: Array<{ id: Pestana; label: string }> = [
   { id: 'recibidos', label: 'Cheques recibidos' },
@@ -23,6 +25,7 @@ const PESTANAS: Array<{ id: Pestana; label: string }> = [
   { id: 'pagar', label: 'A pagar' },
   { id: 'cobrar', label: 'A cobrar' },
   { id: 'revisar', label: 'Sin clasificar' },
+  { id: 'clientes', label: 'Cuenta corriente clientes' },
 ]
 
 const FILTROS_RECIBIDOS: Array<EstadoChequeVientri | ''> = ['en_cartera', 'depositado', 'vendido', 'entregado', 'rechazado', '']
@@ -49,10 +52,16 @@ export function FinanzasVientriPage() {
   const [estado, setEstado] = useState<EstadoChequeVientri | ''>('en_cartera')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
+  const [soloFavor, setSoloFavor] = useState(false)
 
-  const estadoQ = useQuery({ queryKey: ['finanzas', 'vientri', 'estado'], queryFn: fetchEstadoVientri })
+  const estadoQ = useQuery({
+    queryKey: ['finanzas', 'vientri', 'estado'],
+    queryFn: fetchEstadoVientri,
+    refetchInterval: (query) => (query.state.data?.importando ? 5000 : false),
+  })
 
   const esCheques = pestana === 'recibidos' || pestana === 'emitidos'
+  const esClientes = pestana === 'clientes'
   const chequesQ = useQuery({
     queryKey: ['finanzas', 'vientri', 'cheques', pestana, estado, q, page],
     queryFn: () =>
@@ -62,7 +71,12 @@ export function FinanzasVientriPage() {
   const pendientesQ = useQuery({
     queryKey: ['finanzas', 'vientri', 'pendientes', pestana, q, page],
     queryFn: () => fetchPendientesVientri({ lado: pestana as 'pagar' | 'cobrar' | 'revisar', q, page }),
-    enabled: !esCheques,
+    enabled: !esCheques && !esClientes,
+  })
+  const clientesQ = useQuery({
+    queryKey: ['finanzas', 'vientri', 'clientes', q, soloFavor, page],
+    queryFn: () => fetchSaldosClienteVientri({ q, soloFavor, page }),
+    enabled: esClientes,
   })
   const datos = esCheques ? chequesQ : pendientesQ
 
@@ -82,7 +96,7 @@ export function FinanzasVientriPage() {
         </div>
       </header>
 
-      <FranjaVientri estado={estadoQ.data} cargando={estadoQ.isLoading} />
+      <FranjaVientri estado={estadoQ.data?.estado ?? null} cargando={estadoQ.isLoading} />
 
       <div className="mb-4 inline-flex flex-wrap rounded-xl border border-neutral-200 p-1 dark:border-zinc-800" role="tablist">
         {PESTANAS.map((p) => (
@@ -131,48 +145,100 @@ export function FinanzasVientriPage() {
               setQ(ev.target.value)
               setPage(1)
             }}
-            placeholder="Número, nombre, CUIT o importe"
+            placeholder={esClientes ? 'Nombre o CUIT' : 'Número, nombre, CUIT o importe'}
             className={finanzasInputClass}
           />
         </label>
+        {esClientes ? (
+          <label className="flex items-end gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={soloFavor}
+              onChange={(ev) => {
+                setSoloFavor(ev.target.checked)
+                setPage(1)
+              }}
+            />
+            <span>Solo con saldo a favor</span>
+          </label>
+        ) : null}
       </div>
 
-      {datos.isLoading ? <p className="py-6 text-neutral-600">Cargando…</p> : null}
-      {datos.isError ? (
-        <p className="py-6 font-semibold text-red-700">{(datos.error as Error).message}</p>
-      ) : null}
-
-      {datos.data ? (
+      {esClientes ? (
         <>
-          <p className="mb-2 text-neutral-700 dark:text-neutral-300">
-            <strong>{datos.data.total.toLocaleString('es-AR')}</strong> {esCheques ? 'cheques' : 'comprobantes'} ·{' '}
-            <strong>{pesos(datos.data.totalCentavos)}</strong>
-          </p>
-          {esCheques ? (
-            <TablaCheques items={(chequesQ.data?.items ?? []) as VientriCheque[]} emitidos={pestana === 'emitidos'} />
-          ) : (
-            <TablaPendientes items={(pendientesQ.data?.items ?? []) as VientriPendiente[]} lado={pestana} />
-          )}
-          {datos.data.pages > 1 ? (
-            <div className="mt-4 flex items-center gap-3">
-              <button type="button" className={botonClase(false)} disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                Anterior
-              </button>
-              <span>
-                Página {datos.data.page} de {datos.data.pages}
-              </span>
-              <button
-                type="button"
-                className={botonClase(false)}
-                disabled={page >= datos.data.pages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Siguiente
-              </button>
-            </div>
+          {clientesQ.isLoading ? <p className="py-6 text-neutral-600">Cargando…</p> : null}
+          {clientesQ.isError ? (
+            <p className="py-6 font-semibold text-red-700">{(clientesQ.error as Error).message}</p>
+          ) : null}
+          {clientesQ.data ? (
+            <>
+              <p className="mb-2 text-neutral-700 dark:text-neutral-300">
+                <strong>{clientesQ.data.total.toLocaleString('es-AR')}</strong> clientes con saldo · deuda real{' '}
+                <strong>{pesos(clientesQ.data.totalDeudaCentavos)}</strong> · a favor{' '}
+                <strong>{pesos(clientesQ.data.totalFavorCentavos)}</strong>
+              </p>
+              <TablaSaldosCliente items={clientesQ.data.items} />
+              {clientesQ.data.pages > 1 ? (
+                <div className="mt-4 flex items-center gap-3">
+                  <button type="button" className={botonClase(false)} disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                    Anterior
+                  </button>
+                  <span>
+                    Página {clientesQ.data.page} de {clientesQ.data.pages}
+                  </span>
+                  <button
+                    type="button"
+                    className={botonClase(false)}
+                    disabled={page >= clientesQ.data.pages}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              ) : null}
+            </>
           ) : null}
         </>
-      ) : null}
+      ) : (
+        <>
+          {datos.isLoading ? <p className="py-6 text-neutral-600">Cargando…</p> : null}
+          {datos.isError ? (
+            <p className="py-6 font-semibold text-red-700">{(datos.error as Error).message}</p>
+          ) : null}
+
+          {datos.data ? (
+            <>
+              <p className="mb-2 text-neutral-700 dark:text-neutral-300">
+                <strong>{datos.data.total.toLocaleString('es-AR')}</strong> {esCheques ? 'cheques' : 'comprobantes'} ·{' '}
+                <strong>{pesos(datos.data.totalCentavos)}</strong>
+              </p>
+              {esCheques ? (
+                <TablaCheques items={(chequesQ.data?.items ?? []) as VientriCheque[]} emitidos={pestana === 'emitidos'} />
+              ) : (
+                <TablaPendientes items={(pendientesQ.data?.items ?? []) as VientriPendiente[]} lado={pestana} />
+              )}
+              {datos.data.pages > 1 ? (
+                <div className="mt-4 flex items-center gap-3">
+                  <button type="button" className={botonClase(false)} disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                    Anterior
+                  </button>
+                  <span>
+                    Página {datos.data.page} de {datos.data.pages}
+                  </span>
+                  <button
+                    type="button"
+                    className={botonClase(false)}
+                    disabled={page >= datos.data.pages}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Siguiente
+                  </button>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      )}
 
       <p className="mt-6 text-sm text-neutral-600 dark:text-neutral-400">
         Estos datos vienen de Vientri y se ven al día siguiente de cargarlos. Para corregir algo, hacelo en Vientri.
@@ -239,6 +305,69 @@ function TablaCheques({ items, emitidos }: { items: VientriCheque[]; emitidos: b
               </Fragment>
             )
           })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TablaSaldosCliente({ items }: { items: SaldoCliente[] }) {
+  const [abierto, setAbierto] = useState<number | null>(null)
+  if (items.length === 0) return <p className="py-6 text-neutral-600">No hay clientes con saldo.</p>
+  return (
+    <div className="overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+      <table className="w-full border-collapse text-sm">
+        <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-left text-xs font-medium text-brand-primary">
+          <tr>
+            <th className="px-3 py-2.5">Cliente</th>
+            <th className="px-3 py-2.5 text-right">Deuda real</th>
+            <th className="px-3 py-2.5 text-right">Saldo a favor</th>
+            <th className="px-3 py-2.5 text-right">Neto</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((c) => (
+            <Fragment key={c.personaId}>
+              <tr
+                className="cursor-pointer border-b border-neutral-200 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                onClick={() => setAbierto(abierto === c.personaId ? null : c.personaId)}
+              >
+                <td className="py-2 pr-3">
+                  {c.nombre}
+                  {c.cuit ? <span className="text-body-muted ml-2 text-xs">CUIT {c.cuit}</span> : null}
+                </td>
+                <td className="py-2 pr-3 text-right tabular-nums">{c.deudaCentavos > 0 ? pesos(c.deudaCentavos) : '—'}</td>
+                <td className="py-2 pr-3 text-right tabular-nums text-emerald-700 dark:text-emerald-400">
+                  {c.favorCentavos > 0 ? pesos(c.favorCentavos) : '—'}
+                </td>
+                <td
+                  className={`py-2 pr-3 text-right font-semibold tabular-nums ${c.saldoCentavos < 0 ? 'text-emerald-700 dark:text-emerald-400' : ''}`}
+                >
+                  {pesos(c.saldoCentavos)}
+                </td>
+              </tr>
+              {abierto === c.personaId ? (
+                <tr className="bg-neutral-50 dark:bg-neutral-900">
+                  <td colSpan={4} className="px-3 py-3">
+                    <ul className="space-y-1 text-sm">
+                      {c.comprobantes.map((cp) => (
+                        <li key={cp.clave} className="flex justify-between gap-3">
+                          <span>
+                            {cp.comprobante} · {fecha(cp.fechaVencimiento)}
+                          </span>
+                          <span
+                            className={`tabular-nums ${cp.pendienteCentavos < 0 ? 'text-emerald-700 dark:text-emerald-400' : ''}`}
+                          >
+                            {pesos(cp.pendienteCentavos)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </td>
+                </tr>
+              ) : null}
+            </Fragment>
+          ))}
         </tbody>
       </table>
     </div>

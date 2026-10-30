@@ -6,6 +6,8 @@ import {
   avisoDescubierto,
   creditoConfirmaCobro,
   listarCobrosAtrasados,
+  seleccionarCobradosHoy,
+  seleccionarPagadosHoy,
   transferenciasSinFirmar,
 } from './hoy.vista.js'
 
@@ -21,6 +23,9 @@ function compromiso(partial: Partial<CompromisoHoy> & Pick<CompromisoHoy, 'id' |
     estado: 'pendiente',
     cuentaId: null,
     chequeId: null,
+    montoTotalCentavos: partial.montoCentavos,
+    fechaPago: null,
+    origen: 'manual',
     ...partial,
   }
 }
@@ -33,6 +38,8 @@ function cobro(partial: Partial<CobroHoy> & Pick<CobroHoy, 'id' | 'fechaEsperada
     cuit: null,
     email: null,
     contraparte: null,
+    fechaConfirmado: null,
+    origen: 'manual',
     ...partial,
   }
 }
@@ -361,6 +368,55 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(lista[1]).toMatchObject({ haceDias: 20, haceTexto: 'Hace 20 días', email: 'a@b.com' })
     expect(lista[1]?.textoReclamo).toContain('Grande')
     expect(lista[1]?.textoReclamo).toContain('Bacar')
+  })
+
+  it('seleccionarPagadosHoy: toma lo pagado hoy sin importar cuándo vencía, con el monto total', () => {
+    const compromisos = [
+      compromiso({ id: 'pagado-hoy', fechaVencimiento: '2026-09-20', montoCentavos: 0, montoTotalCentavos: 5_000, estado: 'pagado', fechaPago: HOY, proveedorONombre: 'Permaquim' }),
+      compromiso({ id: 'pagado-ayer', fechaVencimiento: HOY, montoCentavos: 0, montoTotalCentavos: 1_000, estado: 'pagado', fechaPago: '2026-09-29' }),
+      compromiso({ id: 'pendiente', fechaVencimiento: HOY, montoCentavos: 2_000, estado: 'pendiente' }),
+    ]
+    const resultado = seleccionarPagadosHoy(compromisos, HOY)
+    expect(resultado.filas.map((f) => f.id)).toEqual(['pagado-hoy'])
+    expect(resultado.filas[0]).toMatchObject({ aQuienODeQuien: 'Permaquim', montoCentavos: 5_000 })
+    expect(resultado.totalCentavos).toBe(5_000)
+  })
+
+  it('seleccionarPagadosHoy: con desglose real, usa el vencimiento del cheque, no el día de la orden', () => {
+    const compromisos = [
+      compromiso({
+        id: 'permaquim',
+        fechaVencimiento: HOY,
+        montoCentavos: 0,
+        montoTotalCentavos: 1_000_000,
+        estado: 'pagado',
+        fechaPago: HOY,
+        proveedorONombre: 'Permaquim S.A.',
+        desglosePago: [
+          { medio: 'echeq', fechaVencimiento: '2027-02-05', montoCentavos: 400_000, chequeNumero: 'E-CHEQ 1' },
+          { medio: 'echeq', fechaVencimiento: HOY, montoCentavos: 300_000, chequeNumero: 'E-CHEQ 2' },
+          { medio: 'otro_medio', fechaVencimiento: HOY, montoCentavos: 50_000, chequeNumero: null },
+        ],
+      }),
+    ]
+    const resultado = seleccionarPagadosHoy(compromisos, HOY)
+    // El e-cheq que vence en 2027 no entra: esa plata todavía no sale hoy.
+    expect(resultado.filas).toHaveLength(2)
+    expect(resultado.totalCentavos).toBe(350_000)
+    expect(resultado.filas.find((f) => f.chequeNumero === 'E-CHEQ 2')).toMatchObject({ medio: 'echeq', montoCentavos: 300_000 })
+    expect(resultado.filas.find((f) => f.medio === 'otro')).toMatchObject({ montoCentavos: 50_000, chequeNumero: null })
+  })
+
+  it('seleccionarCobradosHoy: toma lo cobrado hoy sin importar la fecha esperada', () => {
+    const cobros = [
+      cobro({ id: 'cobrado-hoy', fechaEsperada: '2026-08-01', montoCentavos: 3_000, estado: 'confirmado', fechaConfirmado: HOY, clienteONombre: 'Cliente X' }),
+      cobro({ id: 'cobrado-otro-dia', fechaEsperada: HOY, montoCentavos: 999, estado: 'confirmado', fechaConfirmado: '2026-09-29' }),
+      cobro({ id: 'esperado', fechaEsperada: HOY, montoCentavos: 1_000 }),
+    ]
+    const resultado = seleccionarCobradosHoy(cobros, HOY)
+    expect(resultado.filas.map((f) => f.id)).toEqual(['cobrado-hoy'])
+    expect(resultado.filas[0]).toMatchObject({ aQuienODeQuien: 'Cliente X', montoCentavos: 3_000 })
+    expect(resultado.totalCentavos).toBe(3_000)
   })
 
   it('avisa transferencias que siguen en Falta firmar hace más de 2 horas', () => {

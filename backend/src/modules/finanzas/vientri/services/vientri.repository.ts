@@ -149,6 +149,13 @@ export async function soltarCandado(): Promise<void> {
   await adminDb().collection(VIENTRI_ESTADO).doc(CANDADO_DOC).delete()
 }
 
+/** true si hay una importación en curso (candado tomado y todavía no vencido). */
+export async function hayImportacionEnCurso(): Promise<boolean> {
+  const snap = await adminDb().collection(VIENTRI_ESTADO).doc(CANDADO_DOC).get()
+  const hasta = snap.exists ? snap.get('hasta') : null
+  return hasta instanceof Timestamp && hasta.toMillis() > Date.now()
+}
+
 const LIMPIEZA_DOC = 'limpieza'
 
 /** Cheques viejos que en Vientri siguen abiertos: listado para que Administración los corrija. */

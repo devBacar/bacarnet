@@ -8,6 +8,8 @@ export interface CompromisoHoy {
   concepto: string
   proveedorONombre: string
   montoCentavos: number
+  /** Monto total del compromiso (sin descontar lo ya pagado). Para mostrar lo pagado hoy. */
+  montoTotalCentavos: number
   /** YYYY-MM-DD en Argentina. */
   fechaVencimiento: string
   urgencia: UrgenciaHoy
@@ -20,6 +22,18 @@ export interface CompromisoHoy {
   sinFecha?: boolean
   /** La fecha no viene de Vientri: se estimó según lo que tarda este proveedor en cobrar. */
   estimada?: boolean
+  /** YYYY-MM-DD en Argentina. Solo si estado === 'pagado'. */
+  fechaPago: string | null
+  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  /** Con qué se pagó de verdad (cheques con su vencimiento real, etc.). Solo en origen 'vientri'. */
+  desglosePago?: DesglosePagoHoy[] | null
+}
+
+export interface DesglosePagoHoy {
+  medio: 'cheque_fisico' | 'echeq' | 'otro_medio'
+  fechaVencimiento: string | null
+  montoCentavos: number
+  chequeNumero: string | null
 }
 
 export interface CobroHoy {
@@ -37,6 +51,11 @@ export interface CobroHoy {
   sinFecha?: boolean
   /** La fecha no viene de Vientri: se estimó según lo que tarda este cliente en pagar. */
   estimada?: boolean
+  /** YYYY-MM-DD en Argentina. Solo si estado === 'confirmado'. */
+  fechaConfirmado: string | null
+  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  /** Con qué se cobró de verdad (cheques con su vencimiento real, etc.). Solo en origen 'vientri'. */
+  desglosePago?: DesglosePagoHoy[] | null
 }
 
 export interface MovimientoHoy {
@@ -146,6 +165,22 @@ export interface CobroAtrasadoHoy {
   estimada?: boolean
 }
 
+/** Agrupación por medio real para "resuelto hoy": qué plata sale/entra hoy y por qué vía. */
+export type MedioResueltoHoy = 'efectivo' | 'transferencia' | 'cheque_fisico' | 'echeq' | 'otro'
+
+/** Pagado o cobrado hoy: informativo, no se puede accionar desde acá. */
+export interface MovimientoDelDiaHoy {
+  id: string
+  aQuienODeQuien: string
+  concepto: string
+  montoCentavos: number
+  medio: MedioResueltoHoy
+  chequeNumero: string | null
+  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  /** Solo para cheque_fisico/echeq: si el banco ya lo debitó/acreditó. null si no se pudo chequear. */
+  debitadoPorBanco: boolean | null
+}
+
 export interface FirmasHoy {
   cantidad: number
   montoCentavos: number
@@ -204,6 +239,8 @@ export interface HoyVista {
   pagosSinFecha: { totalCentavos: number; filas: PagoFilaHoy[] }
   ingresos: { filas: IngresoFilaHoy[] }
   cobrosSinFecha: { cantidad: number; totalCentavos: number }
+  /** Ya resuelto hoy (pagado/cobrado): informativo, para no ver el día "vacío" cuando sí hubo movimiento. */
+  resueltoHoy: { pagos: { totalCentavos: number; filas: MovimientoDelDiaHoy[] }; cobros: { totalCentavos: number; filas: MovimientoDelDiaHoy[] } }
   dia: {
     saldoInicialCentavos: number
     pagosCentavos: number

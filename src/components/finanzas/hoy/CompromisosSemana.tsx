@@ -13,6 +13,7 @@ import {
   type MonedaCompromiso,
   type MontosMoneda,
 } from '../../../services/finanzasCompromisosMesApi'
+import { reprogramarPagoHoy } from '../../../services/finanzasHoyApi'
 import { formatMoneyCentavos } from '../formatMoney'
 import { hoyArgentina, sumarDias } from './cajaDelDia/fechasCaja'
 import { COMPROMISO_VACIO } from './compromisosMes/compromisoVacio'
@@ -23,12 +24,13 @@ import {
   lunesDe,
   mesesDe,
   rangoSemana,
-  textoComoSePaga,
   textoPagoParcial,
   tituloDiaLista,
   type FilaListaSemana,
 } from './compromisosSemana/semana'
-import { botonChico, Tarjeta, Vacio } from './TarjetasHoy'
+import { etiquetaMedioPago, etiquetaOrigenCompromiso } from './etiquetasCompromiso'
+import { ReprogramarModal } from './ModalesHoy'
+import { botonChico, botonChicoSecundario, Etiqueta, Tarjeta, Vacio } from './TarjetasHoy'
 
 const control =
   'inline-flex items-center justify-center rounded-md border border-[var(--color-primary-muted)] bg-white p-1.5 text-neutral-800 transition hover:bg-neutral-50 disabled:opacity-40 dark:bg-zinc-900 dark:text-gray-100 dark:hover:bg-zinc-800'
@@ -120,6 +122,7 @@ function medioDe(medio: string): PagoDesdePlanilla['medioPago'] {
 }
 
 function textoCheque(fila: FilaListaSemana): string {
+  if (fila.medioPago !== 'cheque') return ''
   if (fila.chequeAsignado) {
     const numero = fila.chequeAsignado.numero ? ` N.º ${fila.chequeAsignado.numero}` : ''
     return `cheque${numero} ya emitido`
@@ -128,14 +131,21 @@ function textoCheque(fila: FilaListaSemana): string {
   return 'cheque sin emitir todavía'
 }
 
-function FilaCompromiso({ fila, onPagar }: { fila: FilaListaSemana; onPagar: (pago: PagoDesdePlanilla) => void }) {
-  const como = fila.cuota ? `${textoComoSePaga(fila.medioPago)} y cuota ${fila.cuota}` : textoComoSePaga(fila.medioPago)
+function FilaCompromiso({
+  fila,
+  onPagar,
+  onPostergar,
+}: {
+  fila: FilaListaSemana
+  onPagar: (pago: PagoDesdePlanilla) => void
+  onPostergar: (fila: FilaListaSemana) => void
+}) {
   const parcial = textoPagoParcial(fila.acumuladoCentavos, fila.importeCentavos, fila.diferenciaCentavos, (centavos) =>
     formatMoneyCentavos(centavos, fila.moneda),
   )
   const detalle = [
     fila.proveedorONombre,
-    como,
+    fila.cuota ? `cuota ${fila.cuota}` : '',
     textoCheque(fila),
     parcial ?? '',
     fila.enFirmaCentavos > 0 ? `${formatMoneyCentavos(fila.enFirmaCentavos, fila.moneda)} en firma` : '',
@@ -143,8 +153,10 @@ function FilaCompromiso({ fila, onPagar }: { fila: FilaListaSemana; onPagar: (pa
     .filter((parte) => parte.trim().length > 0)
     .join(' · ')
   const puedeAgenda = usePermisosFinanzas().agenda
-  const puedePagar =
-    puedeAgenda && fila.faltaCentavos > 0 && fila.estado !== 'pagado' && fila.estado !== 'confeccionada_pendiente_autorizacion'
+  const bloqueado =
+    fila.estado === 'pagado' || fila.estado === 'confeccionada_pendiente_autorizacion'
+  const puedePagar = puedeAgenda && fila.faltaCentavos > 0 && !bloqueado
+  const puedePostergar = puedeAgenda && !bloqueado
   const monto =
     fila.faltaCentavos > 0
       ? formatMoneyCentavos(fila.faltaCentavos, fila.moneda)
@@ -157,6 +169,8 @@ function FilaCompromiso({ fila, onPagar }: { fila: FilaListaSemana; onPagar: (pa
       <div className="col-span-2 min-w-0 sm:col-span-1">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-heading break-words text-[15px] font-medium">{fila.concepto}</span>
+          <Etiqueta tono="gris">{etiquetaMedioPago(fila.medioPago)}</Etiqueta>
+          <Etiqueta tono="gris">{etiquetaOrigenCompromiso(fila.compromisoId)}</Etiqueta>
         </p>
         {detalle ? <p className="mt-0.5 break-words text-xs text-neutral-500 dark:text-neutral-400">{detalle}</p> : null}
         {parcial ? (
@@ -176,7 +190,17 @@ function FilaCompromiso({ fila, onPagar }: { fila: FilaListaSemana; onPagar: (pa
           </span>
         ) : null}
       </div>
-      <div className="justify-self-end">
+      <div className="flex shrink-0 items-center justify-end gap-1.5 justify-self-end">
+        {puedeAgenda ? (
+          <button
+            type="button"
+            className={botonChicoSecundario}
+            disabled={!puedePostergar}
+            onClick={() => onPostergar(fila)}
+          >
+            Postergar
+          </button>
+        ) : null}
         {puedePagar ? (
           <button
             type="button"
@@ -208,6 +232,8 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
   const [lunes, setLunes] = useState(() => lunesDe(hoy))
   const [alta, setAlta] = useState(false)
   const [abiertos, setAbiertos] = useState<Record<string, boolean>>(() => ({ [hoy]: true }))
+  const [postergar, setPostergar] = useState<FilaListaSemana | null>(null)
+  const [guardandoFecha, setGuardandoFecha] = useState(false)
 
   const dias = diasDeLaSemana(lunes)
   const meses = mesesDe(dias)
@@ -273,7 +299,7 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
           </button>
         </>
       }
-      ayuda="Solo lo que se paga con cheque. Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá."
+      ayuda="Cheque, transferencia o efectivo. Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá."
     >
       {cargando ? <p className="text-body-muted py-2 text-[13px]">Cargando la semana…</p> : null}
       {error ? (
@@ -313,7 +339,12 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
                 {tiene && abierto ? (
                   <div className="divide-y divide-neutral-200 dark:divide-zinc-800">
                     {dia.filas.map((fila) => (
-                      <FilaCompromiso key={fila.compromisoId} fila={fila} onPagar={onPagar} />
+                      <FilaCompromiso
+                        key={fila.compromisoId}
+                        fila={fila}
+                        onPagar={onPagar}
+                        onPostergar={setPostergar}
+                      />
                     ))}
                   </div>
                 ) : null}
@@ -333,6 +364,29 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
             toast.success('Compromiso cargado')
             setAlta(false)
             recargar()
+          }}
+        />
+      ) : null}
+
+      {postergar ? (
+        <ReprogramarModal
+          titulo="Postergar el pago"
+          detalle={`${postergar.proveedorONombre} · ${postergar.concepto}`}
+          guardando={guardandoFecha}
+          onClose={() => setPostergar(null)}
+          onConfirmar={(fecha) => {
+            const fila = postergar
+            setGuardandoFecha(true)
+            void reprogramarPagoHoy(fila.compromisoId, fecha)
+              .then((mensaje) => {
+                setPostergar(null)
+                toast.success(mensaje)
+                recargar()
+              })
+              .catch((err: unknown) => {
+                toast.error(err instanceof Error ? err.message : 'No se pudo cambiar la fecha')
+              })
+              .finally(() => setGuardandoFecha(false))
           }}
         />
       ) : null}

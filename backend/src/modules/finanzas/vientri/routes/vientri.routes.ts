@@ -1,15 +1,19 @@
 import { Router } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
-import { leerEstado, leerLimpieza, listarPorCampos, VIENTRI_CHEQUES, VIENTRI_PENDIENTES } from '../services/vientri.repository.js'
-import { traerVientriDesdeDrive } from '../services/traer-desde-drive.js'
+import { hayImportacionEnCurso, leerEstado, leerLimpieza, listarPorCampos, VIENTRI_CHEQUES, VIENTRI_PENDIENTES } from '../services/vientri.repository.js'
+import { iniciarTraerVientriDesdeDrive } from '../services/traer-desde-drive.js'
+import { armarSaldosCliente } from '../domain/saldos-cliente.js'
+import type { VientriPendienteDoc } from '../domain/tipos.js'
 
 /**
  * Montado en /api/finanzas/vientri. Solo lectura: los datos se corrigen en Vientri.
  * GET /estado       fecha de los datos y resumen de la última importación
  * GET /cheques      ?direccion=recibido|emitido&estado=...&revisar=1&q=&page=
  * GET /pendientes   ?lado=pagar|cobrar|revisar&q=&page=
+ * GET /clientes     cuenta corriente por cliente: deuda real, saldo a favor y neto (?soloFavor=1&q=)
  * GET /limpieza     cheques viejos que en Vientri siguen abiertos (para Administración)
- * POST /traer-ahora trae la última copia de Vientri desde Drive (si hay una nueva). Pide finanzas_cheques.
+ * POST /traer-ahora dispara en segundo plano traer la última copia de Vientri (si hay una nueva).
+ *                    Responde al toque; /estado.importando dice si todavía está corriendo. Pide finanzas_cheques.
  */
 export const finanzasVientriRouter = Router()
 finanzasVientriRouter.use(requireWorkspaceUser, requireViewFinanzas)
@@ -48,7 +52,8 @@ function paginar(items: Array<Record<string, unknown>>, page: number, campoImpor
 
 finanzasVientriRouter.get('/estado', async (_req, res) => {
   try {
-    res.json({ estado: await leerEstado() })
+    const [estado, importando] = await Promise.all([leerEstado(), hayImportacionEnCurso()])
+    res.json({ estado, importando })
   } catch (err) {
     console.error('[finanzas/vientri] estado', err)
     res.status(500).json({ error: 'No se pudo leer el estado de Vientri' })
@@ -105,13 +110,35 @@ finanzasVientriRouter.get('/pendientes', async (req, res) => {
 
 finanzasVientriRouter.post('/traer-ahora', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
   try {
-    const r = await traerVientriDesdeDrive({ origen: 'manual', actor: req.authedUser?.uid ?? 'desconocido' })
+    const r = await iniciarTraerVientriDesdeDrive({ actor: req.authedUser?.uid ?? 'desconocido' })
     const { estado, mensaje } = r
     const fechaDatos = 'fechaDatos' in r ? r.fechaDatos : null
-    res.status(r.estado === 'error' ? 500 : 200).json({ estado, mensaje, fechaDatos })
+    res.json({ estado, mensaje, fechaDatos })
   } catch (err) {
     console.error('[finanzas/vientri] traer-ahora', err)
     res.status(500).json({ error: 'No se pudieron traer los datos de Vientri' })
+  }
+})
+
+finanzasVientriRouter.get('/clientes', async (req, res) => {
+  try {
+    const q = one(req.query.q)
+    const soloFavor = one(req.query.soloFavor) === '1'
+    const filas = (await listarPorCampos(VIENTRI_PENDIENTES, [['lado', 'cobrar']])) as unknown as VientriPendienteDoc[]
+    let clientes = armarSaldosCliente(filas)
+    if (soloFavor) clientes = clientes.filter((c) => c.favorCentavos > 0)
+    if (q) {
+      const nq = normalizar(q)
+      clientes = clientes.filter((c) => normalizar(c.nombre).includes(nq) || normalizar(c.cuit ?? '').includes(nq))
+    }
+    const total = clientes.length
+    const totalFavorCentavos = clientes.reduce((s, c) => s + c.favorCentavos, 0)
+    const totalDeudaCentavos = clientes.reduce((s, c) => s + c.deudaCentavos, 0)
+    const pagina = paginar(clientes as unknown as Array<Record<string, unknown>>, Number(one(req.query.page) ?? 1), 'saldoCentavos')
+    res.json({ ...pagina, total, totalFavorCentavos, totalDeudaCentavos })
+  } catch (err) {
+    console.error('[finanzas/vientri] clientes', err)
+    res.status(500).json({ error: 'No se pudo armar la cuenta corriente de clientes' })
   }
 })
 

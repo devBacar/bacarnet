@@ -102,6 +102,20 @@ export interface ChequeCarteraHoy {
   montoCentavos: number
 }
 
+export type MedioResueltoHoy = 'efectivo' | 'transferencia' | 'cheque_fisico' | 'echeq' | 'otro'
+
+export interface MovimientoDelDiaHoy {
+  id: string
+  aQuienODeQuien: string
+  concepto: string
+  montoCentavos: number
+  medio: MedioResueltoHoy
+  chequeNumero: string | null
+  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  /** Solo para cheque_fisico/echeq: si el banco ya lo debitó/acreditó. null si no se pudo chequear. */
+  debitadoPorBanco: boolean | null
+}
+
 export interface HoyResponse {
   saludo: string
   fecha: string
@@ -114,6 +128,11 @@ export interface HoyResponse {
   pagosSinFecha?: { totalCentavos: number; filas: PagoHoy[] }
   ingresos: { filas: IngresoHoy[] }
   cobrosSinFecha?: { cantidad: number; totalCentavos: number }
+  /** Ya pagado/cobrado hoy (informativo): para que el día no se vea vacío cuando sí hubo movimiento. */
+  resueltoHoy?: {
+    pagos: { totalCentavos: number; filas: MovimientoDelDiaHoy[] }
+    cobros: { totalCentavos: number; filas: MovimientoDelDiaHoy[] }
+  }
   dia: {
     saldoInicialCentavos: number
     pagosCentavos: number

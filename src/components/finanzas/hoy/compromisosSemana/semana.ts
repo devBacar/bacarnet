@@ -284,7 +284,7 @@ function sumarFalta(filas: readonly FilaListaSemana[]): MontosMoneda {
  * Lista de la semana: un bloque por día hábil.
  * En la semana actual solo desde hoy; semanas futuras completas.
  * Lo atrasado vive en Pagos/Cobros atrasados (no se lista acá).
- * Solo cheques: lo que se paga por transferencia o efectivo ya se resuelve en Pagos de hoy/atrasados.
+ * Incluye todos los medios (cheque, transferencia, efectivo).
  */
 export function armarListaSemana(input: {
   planillas: PlanillaCompromisosMes[]
@@ -299,9 +299,7 @@ export function armarListaSemana(input: {
       if (columna.tipo === 'feriado') feriados.add(columna.fecha)
     }
   }
-  const filas = unirFilas(input.planillas)
-    .filter((fila) => fila.medioPago === 'cheque')
-    .map((fila) => aLista(fila, input.dias))
+  const filas = unirFilas(input.planillas).map((fila) => aLista(fila, input.dias))
   const desde = input.esEstaSemana ? input.dias.filter((dia) => dia >= input.hoy) : input.dias
   const dias: DiaListaSemana[] = []
   for (const fecha of desde) {

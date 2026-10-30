@@ -58,7 +58,7 @@ describe('obtenerSnapshotCops', () => {
     await expect(obtenerSnapshotCops(fetchFn as unknown as typeof fetch)).rejects.toBeInstanceOf(CopsServiceError)
     await expect(obtenerSnapshotCops(fetchFn as unknown as typeof fetch)).rejects.toMatchObject({
       status: 401,
-      message: 'Acceso no autorizado — contactar a administrador COPS',
+      message: 'Acceso no autorizado — contactar a administrador COSP',
     })
   })
 

@@ -60,7 +60,7 @@ export async function obtenerSnapshotCops(fetchFn: typeof fetch = fetch): Promis
   }
 
   if (res.status === 401 || res.status === 403) {
-    throw new CopsServiceError(401, 'Acceso no autorizado — contactar a administrador COPS')
+    throw new CopsServiceError(401, 'Acceso no autorizado — contactar a administrador COSP')
   }
   if (!res.ok) {
     throw new CopsServiceError(503, 'Datos aún no disponibles, reintentando...')

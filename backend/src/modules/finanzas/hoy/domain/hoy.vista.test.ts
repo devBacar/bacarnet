@@ -382,6 +382,31 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(resultado.totalCentavos).toBe(5_000)
   })
 
+  it('seleccionarPagadosHoy: con desglose real, usa el vencimiento del cheque, no el día de la orden', () => {
+    const compromisos = [
+      compromiso({
+        id: 'permaquim',
+        fechaVencimiento: HOY,
+        montoCentavos: 0,
+        montoTotalCentavos: 1_000_000,
+        estado: 'pagado',
+        fechaPago: HOY,
+        proveedorONombre: 'Permaquim S.A.',
+        desglosePago: [
+          { medio: 'echeq', fechaVencimiento: '2027-02-05', montoCentavos: 400_000, chequeNumero: 'E-CHEQ 1' },
+          { medio: 'echeq', fechaVencimiento: HOY, montoCentavos: 300_000, chequeNumero: 'E-CHEQ 2' },
+          { medio: 'otro_medio', fechaVencimiento: HOY, montoCentavos: 50_000, chequeNumero: null },
+        ],
+      }),
+    ]
+    const resultado = seleccionarPagadosHoy(compromisos, HOY)
+    // El e-cheq que vence en 2027 no entra: esa plata todavía no sale hoy.
+    expect(resultado.filas).toHaveLength(2)
+    expect(resultado.totalCentavos).toBe(350_000)
+    expect(resultado.filas.find((f) => f.chequeNumero === 'E-CHEQ 2')).toMatchObject({ medio: 'echeq', montoCentavos: 300_000 })
+    expect(resultado.filas.find((f) => f.medio === 'otro')).toMatchObject({ montoCentavos: 50_000, chequeNumero: null })
+  })
+
   it('seleccionarCobradosHoy: toma lo cobrado hoy sin importar la fecha esperada', () => {
     const cobros = [
       cobro({ id: 'cobrado-hoy', fechaEsperada: '2026-08-01', montoCentavos: 3_000, estado: 'confirmado', fechaConfirmado: HOY, clienteONombre: 'Cliente X' }),

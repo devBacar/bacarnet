@@ -159,6 +159,7 @@ export async function importarVientri(opts: {
     fechaDatos,
     escribir: escribirAgenda,
     plazos: proc.plazos,
+    desglosesPago: proc.desglosesPago,
   })
   const agendaCheques = await sincronizarAgendaCheques({
     chequesEnVentana: cheques,

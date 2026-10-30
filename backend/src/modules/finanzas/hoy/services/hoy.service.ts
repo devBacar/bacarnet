@@ -84,6 +84,7 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
     estimada: data.vientri?.fechaEstimada === true && fechaVencimiento === data.vientri.fechaVencimiento,
     fechaPago: diaDe(data.fechaPago),
     origen: origenDe(data.origen),
+    desglosePago: data.vientri?.desglosePago ?? null,
   }
 }
 
@@ -107,6 +108,7 @@ function mapCobro(id: string, data: CobroEsperadoDocument): CobroHoy | null {
     estimada: data.vientri?.fechaEstimada === true && fechaEsperada === data.vientri.fechaVencimiento,
     fechaConfirmado: diaDe(data.fechaConfirmado),
     origen: origenDe(data.origen),
+    desglosePago: data.vientri?.desglosePago ?? null,
   }
 }
 

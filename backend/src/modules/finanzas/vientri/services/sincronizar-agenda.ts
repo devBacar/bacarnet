@@ -17,6 +17,7 @@ import {
   type OperacionAgenda,
   type PosibleDuplicado,
 } from '../domain/agenda.js'
+import type { DesglosePago, LegDesglosePago } from '../domain/desglose-pago.js'
 import type { PlazosHistoricos } from '../domain/plazos.js'
 import type { VientriPendienteDoc } from '../domain/tipos.js'
 import { VIENTRI_ESTADO } from './vientri.repository.js'
@@ -164,7 +165,12 @@ export async function sincronizarAgenda(opts: {
   fechaDatos: string
   escribir: boolean
   plazos?: PlazosHistoricos
+  /** Con qué se pagó/cobró de verdad cada factura, por id de comprobante (ver domain/desglose-pago.ts). */
+  desglosesPago?: Map<number, DesglosePago>
 }): Promise<Record<LadoAgenda, ConteoAgenda>> {
+  const desglosesPorClave = new Map<string, LegDesglosePago[]>()
+  for (const [id, d] of opts.desglosesPago ?? []) desglosesPorClave.set(`cmp-${id}`, d.legs)
+
   const resultado = {} as Record<LadoAgenda, ConteoAgenda>
   for (const lado of ['pagar', 'cobrar'] as const) {
     const existentes = await leerExistentes(lado)
@@ -173,7 +179,16 @@ export async function sincronizarAgenda(opts: {
       opts.todosLosPendientes.filter((p) => p.lado === lado && p.pendienteCentavos > 0).map((p) => p.clave),
     )
     const manuales = await leerManuales(lado)
-    const plan = planAgenda({ lado, enVentana: opts.pendientesEnVentana, clavesConSaldo, existentes, fechaDatos: opts.fechaDatos, manuales, plazos: opts.plazos })
+    const plan = planAgenda({
+      lado,
+      enVentana: opts.pendientesEnVentana,
+      clavesConSaldo,
+      existentes,
+      fechaDatos: opts.fechaDatos,
+      manuales,
+      plazos: opts.plazos,
+      desglosesPago: desglosesPorClave,
+    })
     const conteo: ConteoAgenda = {
       crear: 0,
       actualizar: 0,
@@ -237,6 +252,7 @@ async function aplicar(
           ...(lado === 'pagar'
             ? { fechaPago: fecha, pagadoPor: ACTOR_VIENTRI }
             : { fechaConfirmado: fecha, confirmadoPor: ACTOR_VIENTRI }),
+          ...(op.desglosePago ? { 'vientri.desglosePago': op.desglosePago } : {}),
         })
         batch.set(
           ref.collection(HISTORIAL_SUB).doc(),

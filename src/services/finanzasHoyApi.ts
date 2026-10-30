@@ -102,12 +102,15 @@ export interface ChequeCarteraHoy {
   montoCentavos: number
 }
 
+export type MedioResueltoHoy = 'efectivo' | 'transferencia' | 'cheque_fisico' | 'echeq' | 'otro'
+
 export interface MovimientoDelDiaHoy {
   id: string
   aQuienODeQuien: string
   concepto: string
   montoCentavos: number
-  medioPago?: 'transferencia' | 'efectivo' | 'cheque'
+  medio: MedioResueltoHoy
+  chequeNumero: string | null
   origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
 }
 

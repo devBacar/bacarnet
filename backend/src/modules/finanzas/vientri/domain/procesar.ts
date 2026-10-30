@@ -3,6 +3,7 @@ import { armarCheques, COLUMNAS_CHEQUES, COLUMNAS_CHEQUES_PROPIOS, type Resultad
 import { armarPendientes, COLUMNAS_COMPROBANTES, indiceComprobantes } from './comprobantes.js'
 import { ARCHIVOS_REQUERIDOS, leerControl, verificarArchivo, type ControlCorrida, type ResultadoControl } from './control.js'
 import { CsvError, exigirColumnas, leerCsv, type TablaCsv } from './csv.js'
+import { armarDesglosesPago, type DesglosePago } from './desglose-pago.js'
 import { calcularPlazos, type PlazosHistoricos } from './plazos.js'
 import { COLUMNAS_PERSONAS, indicePersonas, mapearPersona } from './personas.js'
 import type { VientriChequeDoc, VientriPendienteDoc, VientriPersonaDoc } from './tipos.js'
@@ -18,6 +19,8 @@ export interface ResultadoProcesamiento {
   tiposComprobante: Array<Record<string, string>>
   /** Plazos reales de pago/cobro de cada cliente y proveedor, para estimar fechas. */
   plazos: PlazosHistoricos
+  /** Con qué se pagó/cobró de verdad cada factura (cheques con su vencimiento real, etc.), por id de comprobante. */
+  desglosesPago: Map<number, DesglosePago>
 }
 
 export class CarpetaInvalidaError extends Error {
@@ -90,8 +93,14 @@ export function procesarCarpeta(textos: Map<string, string>): ResultadoProcesami
   const { cheques, resumen } = armarCheques(t('cheques.csv').filas, t('cheques_propios.csv').filas, { personas: indice, bancos, comprobantes })
   const pendientes = armarPendientes(t('comprobantes.csv').filas, indice, monedas)
   const plazos = calcularPlazos(t('comprobantes.csv').filas, t('aplicaciones.csv').filas, control.fechaDatos)
+  const desglosesPago = armarDesglosesPago(
+    t('comprobantes.csv').filas,
+    t('aplicaciones.csv').filas,
+    t('medios_pago.csv').filas,
+    t('cheques.csv').filas,
+  )
   const tipos = textos.get('tipos_comprobante.csv')
   const tiposComprobante = tipos ? leerCsv(tipos).filas : []
 
-  return { control, verificacion, personas, cheques, pendientes, resumenCheques: resumen, tiposComprobante, plazos }
+  return { control, verificacion, personas, cheques, pendientes, resumenCheques: resumen, tiposComprobante, plazos, desglosesPago }
 }

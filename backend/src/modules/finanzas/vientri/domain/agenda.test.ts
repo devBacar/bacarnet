@@ -113,7 +113,7 @@ describe('planAgenda', () => {
       clavesConSaldo: new Set(['viejo']),
       existentes: [ex({ id: 'vientri-c1' }), ex({ id: 'vientri-viejo' })],
     })
-    expect(r.operaciones).toEqual([{ tipo: 'cerrar', id: 'vientri-c1' }])
+    expect(r.operaciones).toEqual([{ tipo: 'cerrar', id: 'vientri-c1', desglosePago: null }])
   })
 
   it('reabre si lo cerró Vientri y volvió a tener saldo; respeta el cierre manual', () => {
@@ -165,6 +165,6 @@ describe('fechas de pago, impuestos y residuos', () => {
   })
   it('cierra un resto de redondeo que ya estaba cargado', () => {
     const r = planAgenda({ ...base, enVentana: [pend({ pendienteCentavos: 4 })], clavesConSaldo: new Set(['c1']), existentes: [ex({})] })
-    expect(r.operaciones).toEqual([{ tipo: 'cerrar', id: 'vientri-c1' }])
+    expect(r.operaciones).toEqual([{ tipo: 'cerrar', id: 'vientri-c1', desglosePago: null }])
   })
 })

@@ -25,6 +25,15 @@ export interface CompromisoHoy {
   /** YYYY-MM-DD en Argentina. Solo si estado === 'pagado'. */
   fechaPago: string | null
   origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  /** Con qué se pagó de verdad (cheques con su vencimiento real, etc.). Solo en origen 'vientri'. */
+  desglosePago?: DesglosePagoHoy[] | null
+}
+
+export interface DesglosePagoHoy {
+  medio: 'cheque_fisico' | 'echeq' | 'otro_medio'
+  fechaVencimiento: string | null
+  montoCentavos: number
+  chequeNumero: string | null
 }
 
 export interface CobroHoy {
@@ -45,6 +54,8 @@ export interface CobroHoy {
   /** YYYY-MM-DD en Argentina. Solo si estado === 'confirmado'. */
   fechaConfirmado: string | null
   origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  /** Con qué se cobró de verdad (cheques con su vencimiento real, etc.). Solo en origen 'vientri'. */
+  desglosePago?: DesglosePagoHoy[] | null
 }
 
 export interface MovimientoHoy {
@@ -154,13 +165,17 @@ export interface CobroAtrasadoHoy {
   estimada?: boolean
 }
 
+/** Agrupación por medio real para "resuelto hoy": qué plata sale/entra hoy y por qué vía. */
+export type MedioResueltoHoy = 'efectivo' | 'transferencia' | 'cheque_fisico' | 'echeq' | 'otro'
+
 /** Pagado o cobrado hoy: informativo, no se puede accionar desde acá. */
 export interface MovimientoDelDiaHoy {
   id: string
   aQuienODeQuien: string
   concepto: string
   montoCentavos: number
-  medioPago?: MedioPagoHoy
+  medio: MedioResueltoHoy
+  chequeNumero: string | null
   origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
 }
 

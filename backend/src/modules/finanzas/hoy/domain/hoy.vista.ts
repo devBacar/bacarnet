@@ -22,6 +22,7 @@ import type {
   FirmasHoy,
   HoyVista,
   IngresoFilaHoy,
+  MedioResueltoHoy,
   MovimientoDelDiaHoy,
   MovimientoHoy,
   PagoFilaHoy,
@@ -209,34 +210,84 @@ export function seleccionarPagosSinFecha(compromisos: CompromisoHoy[], hoy: stri
     .map((row) => filaPago(row, hoy, movimientos))
 }
 
-/** Pagado hoy, sea cual sea su vencimiento original: para que el día no se vea vacío cuando sí se pagó. */
+function medioDesdeDesglose(medio: 'cheque_fisico' | 'echeq' | 'otro_medio'): MedioResueltoHoy {
+  return medio === 'otro_medio' ? 'otro' : medio
+}
+
+function medioDesdeCompromiso(medioPago: CompromisoHoy['medioPago']): MedioResueltoHoy {
+  return medioPago === 'cheque' ? 'cheque_fisico' : medioPago === 'efectivo' ? 'efectivo' : 'transferencia'
+}
+
+/**
+ * Pagado hoy: no por cuándo se armó la orden de pago, sino por cuándo vence de verdad cada medio
+ * (un cheque vence el día del cheque, no el día en que se firmó la orden). Si no hay desglose real
+ * (cargado a mano, o pagado antes de tener este dato), se usa la fecha y el medio del compromiso.
+ */
 export function seleccionarPagadosHoy(compromisos: CompromisoHoy[], hoy: string): { totalCentavos: number; filas: MovimientoDelDiaHoy[] } {
-  const filas = compromisos
-    .filter((row) => row.estado === 'pagado' && row.fechaPago === hoy)
-    .sort((a, b) => b.montoCentavos - a.montoCentavos)
-    .map((row) => ({
-      id: row.id,
-      aQuienODeQuien: row.proveedorONombre,
-      concepto: row.concepto,
-      montoCentavos: row.montoTotalCentavos,
-      medioPago: row.medioPago,
-      origen: row.origen,
-    }))
+  const filas: MovimientoDelDiaHoy[] = []
+  for (const row of compromisos) {
+    if (row.estado !== 'pagado') continue
+    if (row.desglosePago && row.desglosePago.length > 0) {
+      row.desglosePago.forEach((leg, i) => {
+        if (leg.fechaVencimiento !== hoy || leg.montoCentavos === 0) return
+        filas.push({
+          id: `${row.id}-${i}`,
+          aQuienODeQuien: row.proveedorONombre,
+          concepto: row.concepto,
+          montoCentavos: leg.montoCentavos,
+          medio: medioDesdeDesglose(leg.medio),
+          chequeNumero: leg.chequeNumero,
+          origen: row.origen,
+        })
+      })
+    } else if (row.fechaPago === hoy) {
+      filas.push({
+        id: row.id,
+        aQuienODeQuien: row.proveedorONombre,
+        concepto: row.concepto,
+        montoCentavos: row.montoTotalCentavos,
+        medio: medioDesdeCompromiso(row.medioPago),
+        chequeNumero: null,
+        origen: row.origen,
+      })
+    }
+  }
+  filas.sort((a, b) => b.montoCentavos - a.montoCentavos)
   return { totalCentavos: filas.reduce((s, f) => s + f.montoCentavos, 0), filas }
 }
 
-/** Cobrado hoy, sea cual sea su fecha esperada original: para que el día no se vea vacío cuando sí se cobró. */
+/** Cobrado hoy: mismo criterio que seleccionarPagadosHoy, con el vencimiento real de cada medio. */
 export function seleccionarCobradosHoy(cobros: CobroHoy[], hoy: string): { totalCentavos: number; filas: MovimientoDelDiaHoy[] } {
-  const filas = cobros
-    .filter((row) => row.estado === 'confirmado' && row.fechaConfirmado === hoy)
-    .sort((a, b) => b.montoCentavos - a.montoCentavos)
-    .map((row) => ({
-      id: row.id,
-      aQuienODeQuien: row.clienteONombre,
-      concepto: row.concepto ?? row.clienteONombre,
-      montoCentavos: row.montoCentavos,
-      origen: row.origen,
-    }))
+  const filas: MovimientoDelDiaHoy[] = []
+  for (const row of cobros) {
+    if (row.estado !== 'confirmado') continue
+    const concepto = row.concepto ?? row.clienteONombre
+    if (row.desglosePago && row.desglosePago.length > 0) {
+      row.desglosePago.forEach((leg, i) => {
+        if (leg.fechaVencimiento !== hoy || leg.montoCentavos === 0) return
+        filas.push({
+          id: `${row.id}-${i}`,
+          aQuienODeQuien: row.clienteONombre,
+          concepto,
+          montoCentavos: leg.montoCentavos,
+          medio: medioDesdeDesglose(leg.medio),
+          chequeNumero: leg.chequeNumero,
+          origen: row.origen,
+        })
+      })
+    } else if (row.fechaConfirmado === hoy) {
+      filas.push({
+        id: row.id,
+        aQuienODeQuien: row.clienteONombre,
+        concepto,
+        montoCentavos: row.montoCentavos,
+        medio: 'transferencia',
+        chequeNumero: null,
+        origen: row.origen,
+      })
+    }
+  }
+  filas.sort((a, b) => b.montoCentavos - a.montoCentavos)
   return { totalCentavos: filas.reduce((s, f) => s + f.montoCentavos, 0), filas }
 }
 

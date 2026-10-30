@@ -45,6 +45,13 @@ export interface VientriEnAgenda {
   fechaEstimada?: boolean
   plazoDias?: number | null
   plazoOrigen?: 'historia' | 'general' | null
+  /** Con qué se pagó/cobró de verdad (cheques con su vencimiento real, etc.). Se agrega al cerrarse. */
+  desglosePago?: Array<{
+    medio: 'cheque_fisico' | 'echeq' | 'otro_medio'
+    fechaVencimiento: string | null
+    montoCentavos: number
+    chequeNumero: string | null
+  }>
 }
 
 /** De dónde salió el compromiso o el cobro. Sin el campo: cargado a mano en Bacarnet. */

@@ -15,16 +15,19 @@ import {
   actualizarMovimiento,
   aplicarReglasCategorizacion,
   completarContrapartes,
+  confirmarLoteCheques,
   crearCategoriaMovimiento,
   crearReglaCategorizacion,
   eliminarCategoriaMovimiento,
   fetchCategoriasMovimientos,
   fetchMovimientos,
+  fetchSugerenciaLoteCheques,
   fusionarCategoriaMovimiento,
   patchCategoriaMovimiento,
   type CategoriaMovimiento,
   type MovimientoListItem,
   type MovimientoTipo,
+  type SugerenciaLoteCheques,
 } from '../../services/finanzasMovimientosApi'
 import {
   CategoriaMovimientoChip,
@@ -86,6 +89,7 @@ export function FinanzasMovimientosPage() {
   const [completando, setCompletando] = useState(false)
   const [chequeDetalle, setChequeDetalle] = useState<ChequeListItem | null>(null)
   const [chequeCargando, setChequeCargando] = useState(false)
+  const [loteMovimiento, setLoteMovimiento] = useState<MovimientoListItem | null>(null)
   const categoriaFiltroId = useId()
 
   const { data: cuentasData } = useQuery({
@@ -437,6 +441,19 @@ export function FinanzasMovimientosPage() {
                         >
                           {row.reservadoPorChequeId.replace(/^(recibido|emitido)_/, '')}
                         </button>
+                      ) : row.reservadoPorChequeIds && row.reservadoPorChequeIds.length > 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-blue-100 px-1.5 py-0.5 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                          {row.reservadoPorChequeIds.length} cheques
+                        </span>
+                      ) : puedeCategorias ? (
+                        <button
+                          type="button"
+                          className="rounded border border-neutral-300 px-1.5 py-0.5 text-neutral-700 hover:bg-neutral-100 dark:border-zinc-700 dark:text-gray-300 dark:hover:bg-zinc-800"
+                          title="Buscar qué cheques podrían sumar exacto este movimiento"
+                          onClick={() => setLoteMovimiento(row)}
+                        >
+                          Sugerir cheques
+                        </button>
                       ) : null}
                     </td>
                     <td className="px-3 py-1.5">
@@ -511,6 +528,16 @@ export function FinanzasMovimientosPage() {
           </div>
         </div>
       ) : null}
+      {loteMovimiento ? (
+        <LoteChequesModal
+          movimiento={loteMovimiento}
+          onClose={() => setLoteMovimiento(null)}
+          onConciliado={() => {
+            setLoteMovimiento(null)
+            void queryClient.invalidateQueries({ queryKey: ['finanzas', 'movimientos'] })
+          }}
+        />
+      ) : null}
     </>
   )
 }
@@ -569,6 +596,123 @@ function ChequeDetalleModal({ cheque, onClose }: { cheque: ChequeListItem; onClo
           >
             Cerrar
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Cuando el banco junta varios cheques en una sola línea, esto busca qué combinación suma exacto
+ * ese monto. Nunca concilia solo: siempre hace falta que una persona confirme con el botón.
+ */
+function LoteChequesModal({
+  movimiento,
+  onClose,
+  onConciliado,
+}: {
+  movimiento: MovimientoListItem
+  onClose: () => void
+  onConciliado: () => void
+}) {
+  const [sugerencia, setSugerencia] = useState<SugerenciaLoteCheques | null>(null)
+  const [cargando, setCargando] = useState(true)
+  const [confirmando, setConfirmando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelado = false
+    setCargando(true)
+    setError(null)
+    fetchSugerenciaLoteCheques(movimiento.id)
+      .then((r) => { if (!cancelado) setSugerencia(r) })
+      .catch((err: unknown) => { if (!cancelado) setError(err instanceof Error ? err.message : 'No se pudo armar la sugerencia') })
+      .finally(() => { if (!cancelado) setCargando(false) })
+    return () => { cancelado = true }
+  }, [movimiento.id])
+
+  async function confirmar() {
+    const combinacion = sugerencia?.resultado.combinacion
+    if (!combinacion || combinacion.length === 0) return
+    setConfirmando(true)
+    try {
+      await confirmarLoteCheques(movimiento.id, combinacion.map((c) => c.id))
+      toast.success('Conciliado')
+      onConciliado()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo conciliar')
+    } finally {
+      setConfirmando(false)
+    }
+  }
+
+  const combinacion = sugerencia?.resultado.combinacion ?? null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-lg dark:bg-zinc-900">
+        <h2 className="text-heading text-base font-semibold">¿Qué cheques son este movimiento?</h2>
+        <p className="text-body-muted mt-1 text-[13px]">
+          {movimiento.descripcion} · {formatMoneyCentavos(movimiento.montoCentavos, 'ARS')} · {formatFecha(movimiento.fechaProceso)}
+        </p>
+
+        <div className="mt-4">
+          {cargando ? <p className="text-sm text-neutral-600">Buscando…</p> : null}
+          {error ? <p className="text-sm font-medium text-red-700">{error}</p> : null}
+
+          {!cargando && !error && sugerencia ? (
+            sugerencia.resultado.demasiadosCandidatos ? (
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                Hay demasiados cheques pendientes para buscar una combinación de forma segura. Revisalo a mano en Vientri o en Cheques.
+              </p>
+            ) : sugerencia.resultado.ambigua ? (
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                Encontré más de una combinación de cheques que suma este monto exacto: no puedo elegir solo, porque podría equivocarme
+                con plata real. Revisalo a mano.
+              </p>
+            ) : combinacion ? (
+              <>
+                <p className="text-sm text-neutral-700 dark:text-neutral-300">
+                  Estos {combinacion.length} cheques suman exacto el monto del movimiento:
+                </p>
+                <ul className="mt-2 space-y-1.5 text-sm">
+                  {combinacion.map((c) => (
+                    <li key={c.id} className="flex items-center justify-between gap-3 rounded border border-neutral-200 px-2.5 py-1.5 dark:border-zinc-700">
+                      <span>
+                        Cheque {c.numero}
+                        {c.destinatario || c.cliente || c.emisor ? ` · ${c.destinatario ?? c.cliente ?? c.emisor}` : ''}
+                      </span>
+                      <span className="font-medium tabular-nums">{formatMoneyCentavos(c.montoCentavos, 'ARS')}</span>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p className="text-sm text-neutral-600">
+                No encontré ninguna combinación de cheques pendientes que sume exacto este monto. Revisalo a mano.
+              </p>
+            )
+          ) : null}
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            className="rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-800 hover:bg-neutral-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-gray-100 dark:hover:bg-zinc-700"
+            onClick={onClose}
+          >
+            Cerrar
+          </button>
+          {combinacion ? (
+            <button
+              type="button"
+              className="rounded-lg bg-brand-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+              disabled={confirmando}
+              onClick={() => void confirmar()}
+            >
+              {confirmando ? 'Confirmando…' : 'Confirmar y conciliar'}
+            </button>
+          ) : null}
         </div>
       </div>
     </div>

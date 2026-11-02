@@ -33,6 +33,7 @@ export interface MovimientoListItem {
   categoriaId: string | null
   nota: string | null
   reservadoPorChequeId: string | null
+  reservadoPorChequeIds: string[] | null
 }
 
 export interface MovimientosListResponse {
@@ -126,6 +127,46 @@ export async function fetchMovimientoById(id: string): Promise<MovimientoListIte
     throw new Error(body?.error ?? 'No se pudo obtener el movimiento')
   }
   return body.movimiento
+}
+
+export interface ChequeDeLote {
+  id: string
+  numero: string
+  montoCentavos: number
+  fechaPago: string
+  emisor: string | null
+  cliente: string | null
+  destinatario: string | null
+}
+
+export interface SugerenciaLoteCheques {
+  movimientoId: string
+  montoCentavos: number
+  resultado: {
+    combinacion: ChequeDeLote[] | null
+    ambigua: boolean
+    demasiadosCandidatos: boolean
+  }
+}
+
+/** Para un movimiento sin conciliar, pide qué cheques podrían sumar exacto ese monto (un lote). */
+export async function fetchSugerenciaLoteCheques(movimientoId: string): Promise<SugerenciaLoteCheques> {
+  const res = await movimientosFetch(`/${encodeURIComponent(movimientoId)}/sugerir-cheques`, { method: 'POST' })
+  const body = (await res.json().catch(() => ({}))) as SugerenciaLoteCheques & { error?: string }
+  if (!res.ok) throw new Error(body.error ?? 'No se pudo armar la sugerencia')
+  return body
+}
+
+/** Concilia el movimiento contra los cheques que la persona ya confirmó. */
+export async function confirmarLoteCheques(movimientoId: string, chequeIds: string[]): Promise<void> {
+  const res = await movimientosFetch(`/${encodeURIComponent(movimientoId)}/conciliar-lote`, {
+    method: 'POST',
+    body: JSON.stringify({ chequeIds }),
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(body.error ?? 'No se pudo conciliar')
+  }
 }
 
 export async function fetchMovimientos(filters: MovimientosListFilters): Promise<MovimientosListResponse> {

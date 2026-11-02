@@ -58,6 +58,18 @@ describe('parsearObs', () => {
       expect(r.renovacion?.chequeIds).toEqual(['39585511', '39585512', '39585513'])
     })
 
+    it('"Renovacion cheques bco julio 04135676/77/78" extrae IDs tras texto intermedio', () => {
+      const r = parsearObs('Renovacion cheques bco julio 04135676/77/78')
+      expect(r.renovacion?.chequeIds).toEqual(['04135676', '04135677', '04135678'])
+    })
+
+    it('"RENOVACION CH 37307049 37307050 37307066 37307067 37307068" extrae IDs separados por espacios', () => {
+      const r = parsearObs('RENOVACION CH 37307049 37307050 37307066 37307067 37307068')
+      expect(r.renovacion?.chequeIds).toEqual([
+        '37307049', '37307050', '37307066', '37307067', '37307068',
+      ])
+    })
+
     it('"renovacion olmos" → renovación sin IDs', () => {
       const r = parsearObs('renovacion olmos')
       expect(r.renovacion).toEqual({ chequeIds: [] })

@@ -89,6 +89,7 @@ export interface VientriPendienteDoc {
   descuentoProntoPago: number | null
   cuotas: number | null
   prestamo: boolean
+  obs: string | null
   revisar: string[]
   fecsys: string | null
 }

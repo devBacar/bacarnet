@@ -382,6 +382,38 @@ describe('agruparOperacionesRenovacion', () => {
     expect(op.interesCentavos).toBe(100000000)
   })
 
+  it('sub-divide grupo cuando renovacionDe son disjuntos (caso POVO)', () => {
+    // Op A: 2 viejos (100, 101) → 2 nuevos (200, 201) con OBS explícita
+    const vA1 = doc({ numeroCheque: '020-923-5000-100', montoCentavos: 300000000, fechaEmision: '2026-07-13', fechaVencimiento: '2026-07-27', beneficiario: 'POVO', beneficiarioNormalizado: 'povo', pagado: true, obsOriginal: 'int+cap' })
+    const vA2 = doc({ numeroCheque: '020-923-5000-101', montoCentavos: 300000000, fechaEmision: '2026-07-13', fechaVencimiento: '2026-07-27', beneficiario: 'POVO', beneficiarioNormalizado: 'povo', pagado: true, obsOriginal: 'int+cap' })
+    const nA1 = doc({ numeroCheque: '020-923-5000-200', montoCentavos: 320000000, fechaEmision: '2026-08-03', fechaVencimiento: '2026-08-26', beneficiario: 'POVO', beneficiarioNormalizado: 'povo', esRenovacion: true, renovacionDe: ['100', '101'], obsOriginal: 'Renovacion 100/101' })
+    const nA2 = doc({ numeroCheque: '020-923-5000-201', montoCentavos: 320000000, fechaEmision: '2026-08-03', fechaVencimiento: '2026-08-26', beneficiario: 'POVO', beneficiarioNormalizado: 'povo', esRenovacion: true, renovacionDe: ['100', '101'], obsOriginal: 'Renovacion 100/101' })
+
+    // Op B: 1 viejo (150) → 2 nuevos (202, 203) con OBS distinta, misma fecha/beneficiario/banco
+    const vB1 = doc({ numeroCheque: '020-923-5000-150', montoCentavos: 500000000, fechaEmision: '2026-07-13', fechaVencimiento: '2026-07-30', beneficiario: 'POVO', beneficiarioNormalizado: 'povo', pagado: true, obsOriginal: 'int+cap' })
+    const nB1 = doc({ numeroCheque: '020-923-5000-202', montoCentavos: 270000000, fechaEmision: '2026-08-03', fechaVencimiento: '2026-08-29', beneficiario: 'POVO', beneficiarioNormalizado: 'povo', esRenovacion: true, renovacionDe: ['150'], obsOriginal: 'Renovacion 150' })
+    const nB2 = doc({ numeroCheque: '020-923-5000-203', montoCentavos: 270000000, fechaEmision: '2026-08-03', fechaVencimiento: '2026-08-29', beneficiario: 'POVO', beneficiarioNormalizado: 'povo', esRenovacion: true, renovacionDe: ['150'], obsOriginal: 'Renovacion 150' })
+
+    const ops = agruparOperacionesRenovacion([vA1, vA2, vB1, nA1, nA2, nB1, nB2])
+
+    // Deben ser 2 operaciones separadas, no 1 mezclada
+    expect(ops).toHaveLength(2)
+
+    const opA = ops.find(o => o.chequesViejos.some(c => c.numeroCheque.endsWith('100')))!
+    expect(opA).toBeDefined()
+    expect(opA.chequesViejos).toHaveLength(2)
+    expect(opA.chequesNuevos).toHaveLength(2)
+    expect(opA.totalViejosCentavos).toBe(600000000)
+    expect(opA.totalNuevosCentavos).toBe(640000000)
+
+    const opB = ops.find(o => o.chequesViejos.some(c => c.numeroCheque.endsWith('150')))!
+    expect(opB).toBeDefined()
+    expect(opB.chequesViejos).toHaveLength(1)
+    expect(opB.chequesNuevos).toHaveLength(2)
+    expect(opB.totalViejosCentavos).toBe(500000000)
+    expect(opB.totalNuevosCentavos).toBe(540000000)
+  })
+
   it('descarta auto-vínculo si interés implícito > 50%', () => {
     // 1 viejo de $5M, nuevos de $25M = 400% interés → no vincular
     const viejo = doc({ numeroCheque: '020-923-5000-10000', montoCentavos: 500000000, fechaEmision: '2026-01-01', fechaVencimiento: '2026-06-10', beneficiario: 'MANA', beneficiarioNormalizado: 'mana', pagado: true, obsOriginal: 'Renovacion' })

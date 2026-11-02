@@ -67,6 +67,7 @@ export interface ChequeEnOperacion {
   fechaVencimiento: string | null
   fechaEmision: string | null
   rol: 'capital' | 'interes' | 'mixto' | null
+  pagado: boolean
 }
 
 export interface OperacionRenovacion {

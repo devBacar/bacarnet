@@ -100,6 +100,7 @@ export function armarPendientes(
       descuentoProntoPago: aCentavos(f.dto_pronto_pago) !== null ? (aCentavos(f.dto_pronto_pago) as number) / 100 : null,
       cuotas: aEntero(f.cuotas),
       prestamo: aEntero(f.id_linea_prestamo) !== null && aEntero(f.id_linea_prestamo) !== 0,
+      obs: aTexto(f.obs),
       revisar,
       fecsys: aTexto(f.fecsys),
     })

@@ -5,6 +5,7 @@ import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailMod
 import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
 import { CargaHoyResumen } from '../../components/finanzas/cargaDiaria/CargaHoyResumen'
 import { CompromisosSemana, type PagoDesdePlanilla } from '../../components/finanzas/hoy/CompromisosSemana'
+import { GuiaHoy } from '../../components/finanzas/hoy/GuiaHoy'
 import {
   ComoLoPagasModal,
   EfectivoModal,
@@ -179,6 +180,7 @@ export function FinanzasHoyPage() {
         <>
           {data.hayDatosDemo ? <FranjaDemo borrando={borrandoDemo} onBorrar={() => void borrarDemo()} /> : null}
           <EncabezadoHoy fecha={data.fecha} />
+          <GuiaHoy />
           <CuatroNumeros data={data} />
           {data.vacio ? (
             <p className="text-[13px] text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>

@@ -577,6 +577,15 @@ export async function fetchSeguimientoRenovaciones(
   return body as SeguimientoRenovacionesResponse
 }
 
+export async function recalcularSeguimiento(): Promise<{ ok: boolean; operaciones: number }> {
+  const res = await ocasionalesFetch('/seguimiento/recalcular', { method: 'POST' })
+  const body = (await res.json().catch(() => null)) as { error?: string; ok?: boolean; operaciones?: number } | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo recalcular el seguimiento')
+  }
+  return body as { ok: boolean; operaciones: number }
+}
+
 export interface ImportarOcasionalesResponse {
   ok: boolean
   mensaje: string

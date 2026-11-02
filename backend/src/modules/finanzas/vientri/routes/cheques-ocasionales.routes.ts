@@ -10,7 +10,7 @@ import { armarSeguimiento } from '../domain/seguimiento.js'
 import type { FiltroSeguimiento, OperacionPersistida } from '../domain/seguimiento.types.js'
 import { leerActivosConEslabonesDeVientri } from '../services/completar-eslabones-vientri.js'
 import { inyectarChqParaAutolink } from '../services/inyectar-chq-autolink.js'
-import { VIENTRI_OPERACIONES_RENOVACION } from '../services/recalcular-seguimiento.js'
+import { recalcularSeguimiento, VIENTRI_OPERACIONES_RENOVACION } from '../services/recalcular-seguimiento.js'
 
 export const finanzasChequesOcasionalesRouter = Router()
 finanzasChequesOcasionalesRouter.use(requireWorkspaceUser, requireViewFinanzas)
@@ -283,6 +283,25 @@ finanzasChequesOcasionalesRouter.get('/seguimiento', async (req, res) => {
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] seguimiento', err)
     res.status(500).json({ error: 'No se pudo obtener el seguimiento de renovaciones' })
+  }
+})
+
+/**
+ * Fuerza el recálculo del seguimiento sin necesidad de re-importar.
+ * Lee los docs existentes de vientriChequesOcasionales y recalcula.
+ */
+finanzasChequesOcasionalesRouter.post('/seguimiento/recalcular', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const docs = await leerTodos()
+    const resultado = await recalcularSeguimiento({
+      docs,
+      importacionId: `manual-${Date.now()}`,
+      borrarFaltantes: true,
+    })
+    res.json({ ok: true, operaciones: resultado.operaciones, conteo: resultado.conteo })
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] recalcular seguimiento', err)
+    res.status(500).json({ error: 'No se pudo recalcular el seguimiento' })
   }
 })
 

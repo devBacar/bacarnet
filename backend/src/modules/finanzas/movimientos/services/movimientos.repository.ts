@@ -338,6 +338,8 @@ export interface MovimientoListadoItem {
   categoriaId: string | null
   nota: string | null
   reservadoPorChequeId: string | null
+  /** Varios cheques juntos (lote), conciliados a mano. */
+  reservadoPorChequeIds: string[] | null
 }
 
 export interface MovimientosListadoFiltro {
@@ -376,6 +378,7 @@ export function toListadoItem(id: string, data: DocumentData): MovimientoListado
     categoriaId: typeof data.categoriaId === 'string' && data.categoriaId ? data.categoriaId : null,
     nota: typeof data.nota === 'string' && data.nota.trim() ? data.nota.trim() : null,
     reservadoPorChequeId: typeof data.reservadoPorChequeId === 'string' && data.reservadoPorChequeId ? data.reservadoPorChequeId : null,
+    reservadoPorChequeIds: Array.isArray(data.reservadoPorChequeIds) && data.reservadoPorChequeIds.length > 0 ? data.reservadoPorChequeIds : null,
   }
 }
 

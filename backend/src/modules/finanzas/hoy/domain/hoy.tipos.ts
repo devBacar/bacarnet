@@ -10,6 +10,8 @@ export interface CompromisoHoy {
   montoCentavos: number
   /** Monto total del compromiso (sin descontar lo ya pagado). Para mostrar lo pagado hoy. */
   montoTotalCentavos: number
+  /** ARS o USD. Para sumar los totales del día hay que convertir los USD, no sumarlos tal cual. */
+  moneda: 'ARS' | 'USD'
   /** YYYY-MM-DD en Argentina. */
   fechaVencimiento: string
   urgencia: UrgenciaHoy
@@ -44,6 +46,8 @@ export interface CobroHoy {
   /** Si la agenda no tiene concepto, se usa el nombre del cliente. */
   concepto: string | null
   montoCentavos: number
+  /** ARS o USD. Para sumar los totales del día hay que convertir los USD, no sumarlos tal cual. */
+  moneda: 'ARS' | 'USD'
   fechaEsperada: string
   estado: EstadoCobroHoy
   cuit: string | null
@@ -114,6 +118,7 @@ export interface PagoFilaHoy {
   aQuien: string
   concepto: string
   montoCentavos: number
+  moneda: 'ARS' | 'USD'
   comoPagar: string
   medioPago: MedioPagoHoy
   proveedorONombre: string
@@ -131,6 +136,7 @@ export interface IngresoFilaHoy {
   cliente: string
   concepto: string
   montoCentavos: number
+  moneda: 'ARS' | 'USD'
   atrasado: boolean
   atrasadoTexto: string | null
   email: string | null
@@ -274,4 +280,8 @@ export interface ArmarHoyInput {
   cuentas: CuentaHoy[]
   transferencias: TransferenciaHoy[]
   cheques: ChequeEnHoy[]
+  /** Para convertir compromisos/cobros en USD a pesos en los totales del día. null si no hay cotización cargada (no se convierte). */
+  tipoCambioUsdArs: number | null
+  /** Para saber si un vencimiento cae en fin de semana/feriado y correrlo al día hábil, igual que "Compromisos de la semana". */
+  feriados: ReadonlySet<string>
 }

@@ -22,6 +22,7 @@ export interface PagoHoy {
   aQuien: string
   concepto: string
   montoCentavos: number
+  moneda: 'ARS' | 'USD'
   comoPagar: string
   medioPago: MedioPagoHoy
   proveedorONombre: string
@@ -30,7 +31,6 @@ export interface PagoHoy {
   chequeEmitido?: boolean
   /** Aviso cuando el cheque ya se emitió y solo falta debitarlo. */
   aviso?: string | null
-  moneda?: 'ARS' | 'USD'
   /** La fecha se estimó según la historia del proveedor. */
   estimada?: boolean
   origen: OrigenCompromisoHoy
@@ -41,6 +41,7 @@ export interface IngresoHoy {
   cliente: string
   concepto: string
   montoCentavos: number
+  moneda: 'ARS' | 'USD'
   atrasado: boolean
   atrasadoTexto: string | null
   email: string | null

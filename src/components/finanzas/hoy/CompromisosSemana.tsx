@@ -28,7 +28,7 @@ import {
   tituloDiaLista,
   type FilaListaSemana,
 } from './compromisosSemana/semana'
-import { etiquetaMedioPago, etiquetaOrigenCompromiso } from './etiquetasCompromiso'
+import { etiquetaMedioPago, etiquetaOrigenPorId } from './etiquetasCompromiso'
 import { ReprogramarModal } from './ModalesHoy'
 import { botonChico, botonChicoSecundario, Etiqueta, Tarjeta, Vacio } from './TarjetasHoy'
 
@@ -170,7 +170,7 @@ function FilaCompromiso({
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-heading break-words text-[15px] font-medium">{fila.concepto}</span>
           <Etiqueta tono="gris">{etiquetaMedioPago(fila.medioPago)}</Etiqueta>
-          <Etiqueta tono="gris">{etiquetaOrigenCompromiso(fila.compromisoId)}</Etiqueta>
+          <Etiqueta tono="gris">{etiquetaOrigenPorId(fila.compromisoId)}</Etiqueta>
         </p>
         {detalle ? <p className="mt-0.5 break-words text-xs text-neutral-500 dark:text-neutral-400">{detalle}</p> : null}
         {parcial ? (

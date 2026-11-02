@@ -167,6 +167,7 @@ function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[])
     sugerenciasBanco: sugerirDebitos(row.montoCentavos, movimientos, hoy, row.cuentaId),
     chequeEmitido,
     aviso: chequeEmitido ? 'Ya tiene cheque emitido, solo falta debitarlo' : null,
+    origen: row.origen,
     ...(row.estimada ? { estimada: true } : {}),
   }
 }
@@ -327,6 +328,7 @@ export function seleccionarIngresos(
       movimientoId: match?.id ?? null,
       cuentaId: match?.cuentaId ?? null,
       textoReclamo: textoReclamo({ concepto, montoCentavos: row.montoCentavos }),
+      origen: row.origen,
       ...(row.estimada ? { estimada: true } : {}),
     }
   })
@@ -476,6 +478,7 @@ export function listarCobrosAtrasados(cobros: CobroHoy[], hoy: string, yaLlegado
         haceTexto: textoHaceDias(dias, false),
         email: row.email?.trim() || null,
         textoReclamo: textoReclamo({ concepto, montoCentavos: row.montoCentavos }),
+        origen: row.origen,
         ...(row.estimada ? { estimada: true } : {}),
       }
     })

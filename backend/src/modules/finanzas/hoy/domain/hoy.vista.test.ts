@@ -8,6 +8,8 @@ import {
   listarCobrosAtrasados,
   seleccionarCobradosHoy,
   seleccionarPagadosHoy,
+  seleccionarPagos,
+  seleccionarPagosAtrasados,
   transferenciasSinFirmar,
 } from './hoy.vista.js'
 
@@ -453,5 +455,24 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(vista.prevision.semana).toBeNull()
     expect(vista.prevision.firmas).toBeNull()
     expect(vista.prevision.cobrosAtrasados).toEqual([])
+  })
+})
+
+describe('origen real en las filas (para distinguir Vientri/Inversores/manual en la pantalla)', () => {
+  it('seleccionarPagos y seleccionarPagosAtrasados llevan el origen real del compromiso', () => {
+    const compromisos = [
+      compromiso({ id: 'inv-1-c1', fechaVencimiento: HOY, montoCentavos: 100_00, origen: 'inversiones' }),
+      compromiso({ id: 'vientri-2', fechaVencimiento: '2026-09-01', montoCentavos: 200_00, origen: 'vientri' }),
+    ]
+    const [hoy] = seleccionarPagos(compromisos, HOY, [])
+    expect(hoy?.origen).toBe('inversiones')
+    const [atrasado] = seleccionarPagosAtrasados(compromisos, HOY, [])
+    expect(atrasado?.origen).toBe('vientri')
+  })
+
+  it('listarCobrosAtrasados lleva el origen real del cobro', () => {
+    const cobros = [cobro({ id: 'inv-1-ingreso', fechaEsperada: '2026-09-01', montoCentavos: 500_00, origen: 'inversiones' })]
+    const [fila] = listarCobrosAtrasados(cobros, HOY, new Set())
+    expect(fila?.origen).toBe('inversiones')
   })
 })

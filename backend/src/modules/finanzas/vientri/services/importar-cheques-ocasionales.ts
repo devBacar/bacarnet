@@ -20,6 +20,7 @@ import {
   sincronizarColeccion,
   type ConteoEscritura,
 } from './vientri.repository.js'
+import { recalcularSeguimiento, type ResultadoSeguimiento } from './recalcular-seguimiento.js'
 
 export const VIENTRI_CHEQUES_OCASIONALES = 'vientriChequesOcasionales'
 
@@ -143,6 +144,8 @@ export interface ResultadoImportacionOcasionales {
     proveedoresFinancieros: number
     fechasImposibles: number
   }
+  seguimiento: ResultadoSeguimiento | null
+  seguimientoError: string | null
 }
 
 export interface ResumenChequesOcasionales {
@@ -222,21 +225,38 @@ export async function importarChequesOcasionales(opts: {
     simular,
   })
 
+  // Seguimiento de renovaciones: derivado de los docs recién sincronizados. Si falla no tumba la
+  // importación (los cheques ya están guardados); el error queda en el resultado y en el log.
+  let seguimiento: ResultadoSeguimiento | null = null
+  let seguimientoError: string | null = null
+  if (!simular && importacionId) {
+    try {
+      seguimiento = await recalcularSeguimiento({ docs, importacionId })
+    } catch (err) {
+      seguimientoError = err instanceof Error ? err.message : 'No se pudo recalcular el seguimiento'
+      console.error('[finanzas/cheques-ocasionales] seguimiento', err)
+    }
+  }
+
   if (importacionId) {
     await cerrarImportacion(importacionId, {
       tipo: 'cheques_ocasionales',
       ok: true,
       resumen,
       conteo,
+      seguimiento,
+      seguimientoError,
     })
   }
 
   return {
     ok: true,
     importacionId,
-    mensaje: `${docs.length} cheques ocasionales procesados (${resumen.conRenovacion} con renovación, ${resumen.conUsd} con USD)`,
+    mensaje: `${docs.length} cheques ocasionales procesados (${resumen.conRenovacion} con renovación, ${resumen.conUsd} con USD)${seguimientoError ? ` — ATENCIÓN: no se pudo recalcular el seguimiento (${seguimientoError})` : ''}`,
     simulado: simular,
     conteo,
     resumen,
+    seguimiento,
+    seguimientoError,
   }
 }

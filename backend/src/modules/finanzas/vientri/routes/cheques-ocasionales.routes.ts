@@ -3,12 +3,14 @@ import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } fro
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { importarChequesOcasionales, VIENTRI_CHEQUES_OCASIONALES } from '../services/importar-cheques-ocasionales.js'
-import { VIENTRI_CHEQUES } from '../services/vientri.repository.js'
 import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
-import type { VientriChequeDoc } from '../domain/tipos.js'
 import { reconstruirCadenas, clasificarCheques, resumirCostoFinanciero } from '../domain/cadena-renovacion.js'
 import { agruparOperacionesRenovacion } from '../domain/operacion-renovacion.js'
-import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
+import { armarSeguimiento } from '../domain/seguimiento.js'
+import type { FiltroSeguimiento, OperacionPersistida } from '../domain/seguimiento.types.js'
+import { leerActivosConEslabonesDeVientri } from '../services/completar-eslabones-vientri.js'
+import { inyectarChqParaAutolink } from '../services/inyectar-chq-autolink.js'
+import { VIENTRI_OPERACIONES_RENOVACION } from '../services/recalcular-seguimiento.js'
 
 export const finanzasChequesOcasionalesRouter = Router()
 finanzasChequesOcasionalesRouter.use(requireWorkspaceUser, requireViewFinanzas)
@@ -24,159 +26,6 @@ async function leerTodos(): Promise<ChequeOcasionalDoc[]> {
   return snap.docs.map((d) => d.data() as ChequeOcasionalDoc)
 }
 
-/**
- * Completa los eslabones viejos que están referenciados en `renovacionDe` pero no están
- * en `vientriChequesOcasionales` (ej. porque el CSV exportó solo PAGADO=0), buscándolos
- * en `vientriCheques`, y resuelve los links inversos `renovadoPor`.
- */
-async function leerActivosConEslabonesDeVientri(activos: ChequeOcasionalDoc[]): Promise<ChequeOcasionalDoc[]> {
-  const clonados: ChequeOcasionalDoc[] = activos.map((d) => ({
-    ...d,
-    renovacionDe: [...d.renovacionDe],
-    renovadoPor: [...d.renovadoPor],
-  }))
-
-  const porNumero = new Map<string, ChequeOcasionalDoc>()
-  for (const d of clonados) {
-    if (d.numeroCheque) {
-      porNumero.set(d.numeroCheque, d)
-      const corto = d.numeroCheque.split('-').pop()
-      if (corto && corto !== d.numeroCheque) porNumero.set(corto, d)
-    }
-  }
-
-  const faltantes = new Set<string>()
-  for (const d of clonados) {
-    for (const numViejo of d.renovacionDe) {
-      if (!porNumero.has(numViejo)) faltantes.add(numViejo)
-    }
-  }
-
-  if (faltantes.size > 0) {
-    // Cruzar primero contra la colección `cheques` (por número completo o sufijo corto)
-    const chSnap = await adminDb().collection('cheques').get()
-    for (const doc of chSnap.docs) {
-      const ch = doc.data() as Record<string, unknown>
-      const numCompleto = String(ch.numero ?? '').trim()
-      if (!numCompleto) continue
-      const numCorto = (numCompleto.split('-').pop() || '').trim()
-      const matchKey = faltantes.has(numCompleto)
-        ? numCompleto
-        : faltantes.has(numCorto)
-          ? numCorto
-          : null
-      if (!matchKey) continue
-      if (porNumero.has(numCompleto)) continue
-
-      const benef = String(ch.beneficiarioRealFinanciero ?? ch.destinatario ?? '').trim()
-      const benefNorm = normalizarNombre(benef)
-      const estadoStr = String(ch.estadoBancario ?? ch.estado ?? 'Renovado')
-
-      const sintetico: ChequeOcasionalDoc = {
-        numeroCheque: numCompleto,
-        beneficiario: benef,
-        beneficiarioNormalizado: benefNorm,
-        beneficiarioFormal: null,
-        beneficiarioCuit: null,
-        montoCentavos: typeof ch.montoCentavos === 'number' ? ch.montoCentavos : 0,
-        fechaVencimiento: typeof ch.fechaPago === 'string' ? ch.fechaPago : null,
-        fechaEmision: typeof ch.fechaEmision === 'string' ? ch.fechaEmision : null,
-        estadoCodigo: null,
-        estado: estadoStr,
-        pagado: ch.estado === 'debitado' || ch.estado === 'renovado' || ch.fechaAcreditacion != null,
-        esProveedorFinanciero: true,
-        tipoProveedor: 'financiero',
-        esRenovacion: false,
-        renovacionDe: Array.isArray(ch.renovacionDe) ? (ch.renovacionDe as string[]) : [],
-        renovadoPor: [],
-        operacionUsd: null,
-        tasaExplicita: null,
-        rolEnOperacion: null,
-        obsOriginal: typeof ch.observaciones === 'string' ? ch.observaciones : '',
-        revisar: [],
-        fechaConciliado: null,
-        vientriId: 0,
-        vientriChqId: null,
-        baja: false,
-      }
-
-      clonados.push(sintetico)
-      porNumero.set(numCompleto, sintetico)
-      if (numCorto && numCorto !== numCompleto) porNumero.set(numCorto, sintetico)
-      faltantes.delete(matchKey)
-      if (faltantes.size === 0) break
-    }
-  }
-
-  if (faltantes.size > 0) {
-    const vSnap = await adminDb().collection(VIENTRI_CHEQUES).get()
-    for (const doc of vSnap.docs) {
-      const v = doc.data() as VientriChequeDoc
-      if (v.baja) continue
-      const numCompleto = (v.numero || '').trim()
-      const numCorto = (v.serie || numCompleto.split('-').pop() || '').trim()
-      const matchKey = faltantes.has(numCompleto)
-        ? numCompleto
-        : faltantes.has(numCorto)
-          ? numCorto
-          : null
-      if (!matchKey) continue
-
-      const numeroCheque = numCompleto || numCorto
-      if (porNumero.has(numeroCheque)) continue
-
-      const benef = (v.destinatario ?? v.entregadoA?.nombre ?? '').trim()
-      const benefNorm = normalizarNombre(benef)
-      const vientriId = v.vientriChqocaId ?? v.vientriChqId ?? 0
-
-      const sintetico: ChequeOcasionalDoc = {
-        numeroCheque,
-        beneficiario: benef,
-        beneficiarioNormalizado: benefNorm,
-        beneficiarioFormal: null,
-        beneficiarioCuit: null,
-        montoCentavos: v.montoCentavos ?? 0,
-        fechaVencimiento: v.fechaVencimiento ?? null,
-        fechaEmision: v.fechaEmision ?? null,
-        estadoCodigo: v.estadoVientriId ?? null,
-        estado: v.estadoVientri || v.estado || 'Renovado',
-        pagado: v.fechaConciliado !== null || v.estado === 'debitado' || v.estado === 'renovado',
-        esProveedorFinanciero: true,
-        tipoProveedor: 'financiero',
-        esRenovacion: false,
-        renovacionDe: [],
-        renovadoPor: [],
-        operacionUsd: null,
-        tasaExplicita: null,
-        rolEnOperacion: null,
-        obsOriginal: '',
-        revisar: v.revisar ?? [],
-        fechaConciliado: typeof v.fechaConciliado === 'string' ? v.fechaConciliado : null,
-        vientriId,
-        vientriChqId: null,
-        baja: false,
-      }
-
-      clonados.push(sintetico)
-      porNumero.set(numeroCheque, sintetico)
-      if (numCorto && numCorto !== numeroCheque) porNumero.set(numCorto, sintetico)
-      faltantes.delete(matchKey)
-      if (faltantes.size === 0) break
-    }
-  }
-
-  for (const nuevo of clonados) {
-    for (const numViejo of nuevo.renovacionDe) {
-      const viejo = porNumero.get(numViejo)
-      if (viejo && !viejo.renovadoPor.includes(nuevo.numeroCheque)) {
-        viejo.renovadoPor.push(nuevo.numeroCheque)
-      }
-    }
-  }
-
-  return clonados
-}
-
 finanzasChequesOcasionalesRouter.get('/', async (req, res) => {
   try {
     const todos = await leerTodos()
@@ -186,7 +35,9 @@ finanzasChequesOcasionalesRouter.get('/', async (req, res) => {
     const q = typeof req.query.q === 'string' ? normalizar(req.query.q.trim()) : ''
     const page = Math.max(1, Number(req.query.page) || 1)
 
-    let filtrados = todos.filter((d) => !d.baja)
+    let filtrados = todos.filter(
+      (d) => !d.baja && !d.revisar.some((r) => r.toLowerCase().includes('imposible')),
+    )
     const esGastoRealValido = (d: ChequeOcasionalDoc) =>
       !d.esProveedorFinanciero
       && !d.esRenovacion
@@ -260,8 +111,8 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
         && d.operacionUsd === null
         && d.beneficiario.trim() !== '',
     )
-    const renovItems = activos.filter((d) => d.renovacionDe.length > 0 || d.renovadoPor.length > 0)
-    const usdItems = activos.filter((d) => d.operacionUsd !== null)
+    const renovItems = validos.filter((d) => d.renovacionDe.length > 0 || d.renovadoPor.length > 0)
+    const usdItems = validos.filter((d) => d.operacionUsd !== null)
 
     const sumMonto = (arr: ChequeOcasionalDoc[]) => arr.reduce((s, d) => s + d.montoCentavos, 0)
 
@@ -272,33 +123,36 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
       {
         beneficiario: string
         beneficiarioNormalizado: string
+        fechaEmision: string | null
         montoUsd: number
         cotizacion: number
         equivalenteCentavos: number
         cantidadCheques: number
         sumaChequesCentavos: number
-        cheques: string[]
+        cheques: Array<{ numeroCheque: string; montoCentavos: number; fechaVencimiento: string | null; fechaEmision: string | null }>
       }
     >()
 
     for (const d of usdItems) {
       if (d.operacionUsd) {
-        const key = `${d.beneficiarioNormalizado}|${d.operacionUsd.montoUsd}|${d.operacionUsd.cotizacion}`
+        const key = `${d.beneficiarioNormalizado}|${d.operacionUsd.montoUsd}|${d.operacionUsd.cotizacion}|${d.fechaEmision ?? ''}`
+        const detalleCheque = { numeroCheque: d.numeroCheque, montoCentavos: d.montoCentavos, fechaVencimiento: d.fechaVencimiento, fechaEmision: d.fechaEmision }
         const existente = gruposUsdMap.get(key)
         if (existente) {
           existente.cantidadCheques += 1
           existente.sumaChequesCentavos += d.montoCentavos
-          existente.cheques.push(d.numeroCheque)
+          existente.cheques.push(detalleCheque)
         } else {
           gruposUsdMap.set(key, {
             beneficiario: d.beneficiario,
             beneficiarioNormalizado: d.beneficiarioNormalizado,
+            fechaEmision: d.fechaEmision,
             montoUsd: d.operacionUsd.montoUsd,
             cotizacion: d.operacionUsd.cotizacion,
             equivalenteCentavos: Math.round(d.operacionUsd.montoUsd * d.operacionUsd.cotizacion * 100),
             cantidadCheques: 1,
             sumaChequesCentavos: d.montoCentavos,
-            cheques: [d.numeroCheque],
+            cheques: [detalleCheque],
           })
           totalMontoUsd += d.operacionUsd.montoUsd
           sumaPonderadaTc += d.operacionUsd.montoUsd * d.operacionUsd.cotizacion
@@ -324,11 +178,11 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
     const porMes = [...porMesMap.values()].sort((a, b) => a.mes.localeCompare(b.mes))
 
     res.json({
-      totalCheques: activos.length,
+      totalCheques: validos.length,
       totalMontoCentavos: sumMonto(validos),
       pendientesCantidad: pendientes.length,
       pendientesMontoCentavos: sumMonto(pendientes),
-      fechasImposiblesCantidad: activos.length - validos.length,
+      fechasImposiblesCantidad: 0,
       financieros: finItems.length,
       financierosMontoCentavos: sumMonto(finItems),
       gastoRealCantidad: gastoRealItems.length,
@@ -381,69 +235,6 @@ finanzasChequesOcasionalesRouter.post('/importar', requireFinanzasPermiso('finan
 })
 
 
-/**
- * Inyecta cheques CHQ regulares pagados/renovados al pool para que el auto-linking
- * implícito (por fechaConciliado/fechaVencimiento) pueda encontrarlos como cheques viejos.
- * Caso principal: MAHUM DIEGO cuyos viejos están en CHQ, no en CHQOCA.
- */
-async function inyectarChqParaAutolink(docs: ChequeOcasionalDoc[]): Promise<ChequeOcasionalDoc[]> {
-  const existentes = new Set<string>()
-  for (const d of docs) {
-    if (d.numeroCheque) existentes.add(d.numeroCheque)
-  }
-
-  const chSnap = await adminDb().collection('cheques').get()
-  const inyectados: ChequeOcasionalDoc[] = []
-
-  for (const doc of chSnap.docs) {
-    const ch = doc.data() as Record<string, unknown>
-    const numCompleto = String(ch.numero ?? '').trim()
-    if (!numCompleto || existentes.has(numCompleto)) continue
-
-    const estado = String(ch.estado ?? '')
-    const pagado = estado === 'renovado' || estado === 'debitado' || ch.fechaAcreditacion != null
-    if (!pagado) continue
-    if (ch.esProveedorFinanciero !== true) continue
-
-    const benef = String(ch.beneficiarioRealFinanciero ?? ch.destinatario ?? '').trim()
-    if (!benef) continue
-    const benefNorm = normalizarNombre(benef)
-
-    const sintetico: ChequeOcasionalDoc = {
-      numeroCheque: numCompleto,
-      beneficiario: benef,
-      beneficiarioNormalizado: benefNorm,
-      beneficiarioFormal: null,
-      beneficiarioCuit: null,
-      montoCentavos: typeof ch.montoCentavos === 'number' ? ch.montoCentavos : 0,
-      fechaVencimiento: typeof ch.fechaPago === 'string' ? ch.fechaPago : null,
-      fechaEmision: typeof ch.fechaEmision === 'string' ? ch.fechaEmision : null,
-      estadoCodigo: null,
-      estado: String(ch.estadoBancario ?? ch.estado ?? ''),
-      pagado: true,
-      esProveedorFinanciero: true,
-      tipoProveedor: 'financiero',
-      esRenovacion: false,
-      renovacionDe: [],
-      renovadoPor: [],
-      operacionUsd: null,
-      tasaExplicita: null,
-      rolEnOperacion: null,
-      obsOriginal: typeof ch.observaciones === 'string' ? ch.observaciones : '',
-      revisar: [],
-      fechaConciliado: typeof ch.fechaAcreditacion === 'string' ? ch.fechaAcreditacion : null,
-      vientriId: 0,
-      vientriChqId: null,
-      baja: false,
-    }
-
-    inyectados.push(sintetico)
-    existentes.add(numCompleto)
-  }
-
-  return inyectados.length > 0 ? [...docs, ...inyectados] : docs
-}
-
 finanzasChequesOcasionalesRouter.get('/operaciones-renovacion', async (_req, res) => {
   try {
     const todos = await leerTodos()
@@ -468,6 +259,30 @@ finanzasChequesOcasionalesRouter.get('/operaciones-renovacion', async (_req, res
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] operaciones-renovacion', err)
     res.status(500).json({ error: 'No se pudieron calcular las operaciones de renovación' })
+  }
+})
+
+function hoyArgentina(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' }).format(new Date())
+}
+
+/**
+ * Seguimiento de operaciones de renovación, agrupado por beneficiario.
+ * Lee la colección persistida (se recalcula en cada importación); abierta/cerrada se calcula con la fecha de hoy.
+ * Query: `estado=abiertas` (default) | `todas`.
+ */
+finanzasChequesOcasionalesRouter.get('/seguimiento', async (req, res) => {
+  try {
+    const filtro: FiltroSeguimiento = req.query.estado === 'todas' ? 'todas' : 'abiertas'
+    const snap = await adminDb().collection(VIENTRI_OPERACIONES_RENOVACION).get()
+    const operaciones = snap.docs.map((d) => {
+      const { huella, importacionId, actualizadoAt, ...rest } = d.data() as OperacionPersistida & Record<string, unknown>
+      return rest as OperacionPersistida
+    })
+    res.json(armarSeguimiento(operaciones, hoyArgentina(), filtro))
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] seguimiento', err)
+    res.status(500).json({ error: 'No se pudo obtener el seguimiento de renovaciones' })
   }
 })
 

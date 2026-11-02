@@ -4,12 +4,13 @@ import {
   ChevronDown,
   ChevronUp,
   DollarSign,
+  Info,
   Link2,
   RefreshCw,
   Search,
   Upload,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../../context'
 import {
   fetchChequesOcasionales,
@@ -18,10 +19,12 @@ import {
   importarOcasionalesCsv,
   type ChequeOcasionalItem,
   type OcasionalesFiltro,
+  type OcasionalesResumenResponse,
 } from '../../../services/finanzasChequesApi'
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
 import { OperacionesRenovacion } from './OperacionesRenovacion'
+import { SeguimientoRenovaciones } from './SeguimientoRenovaciones'
 import { BotonNuevaOperacionUsd, OperacionesDolares } from './OperacionesDolares'
 
 function formatFecha(iso: string | null): string {
@@ -48,7 +51,7 @@ export function PestanaOcasionales() {
   const [busqueda, setBusqueda] = useState('')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
-  const [subvista, setSubvista] = useState<'cheques' | 'renovaciones' | 'usd' | 'operaciones'>('cheques')
+  const [subvista, setSubvista] = useState<'cheques' | 'renovaciones' | 'seguimiento' | 'usd' | 'operaciones'>('cheques')
   const [beneficiarioRenov, setBeneficiarioRenov] = useState('')
   const [detalleId, setDetalleId] = useState<string | null>(null)
   const [mostrarMesesViejos, setMostrarMesesViejos] = useState(false)
@@ -92,61 +95,76 @@ export function PestanaOcasionales() {
     setSubvista('renovaciones')
   }
 
-  const subTabs = (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-      <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
-        {([
-          ['cheques', 'Cheques'],
-          ['renovaciones', 'Renovaciones'],
-          ['usd', 'USD (agrupadas)'],
-          ['operaciones', 'Operaciones USD'],
-        ] as const).map(([val, label]) => (
-          <button
-            key={val}
-            type="button"
-            onClick={() => { setSubvista(val); if (val === 'renovaciones') setBeneficiarioRenov('') }}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              subvista === val
-                ? 'bg-brand-primary text-white shadow-sm'
-                : 'text-body-muted hover:text-heading'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+  const descripcionVista: Record<typeof subvista, string> = {
+    cheques: 'Listado de todos los cheques ocasionales importados desde Vientri. Filtrá por estado, buscá por beneficiario o número.',
+    renovaciones: 'Operaciones de renovación: qué cheques viejos se cambiaron por nuevos, con qué interés y en qué plazo.',
+    seguimiento: 'Cheques pendientes de cobro agrupados por beneficiario. La exposición es la plata que todavía está "en la calle": cheques pendientes o rechazados que aún no se cobraron ni se renovaron. Filtrá por abiertas/todas y navegá la cadena de renovaciones.',
+    usd: 'Operaciones en dólares agrupadas por cotización y beneficiario.',
+    operaciones: 'Detalle de cada operación USD individual con su tipo de cambio y montos.',
+  }
 
-      <div className="flex items-center gap-2">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv,.txt"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0]
-            if (file) {
-              setImportMsg(null)
-              importMutation.mutate(file)
-            }
-            e.target.value = ''
-          }}
-        />
-        <BotonNuevaOperacionUsd />
-        <button
-          type="button"
-          disabled={importMutation.isPending}
-          onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-        >
-          <Upload className="h-3.5 w-3.5" />
-          {importMutation.isPending ? 'Importando…' : 'Importar CSV'}
-        </button>
-        {importMsg ? (
-          <span className={`text-xs ${importMutation.isError ? 'text-danger' : 'text-emerald-600 dark:text-emerald-400'}`}>
-            {importMsg}
-          </span>
-        ) : null}
+  const subTabs = (
+    <div className="mb-4 space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
+          {([
+            ['cheques', 'Cheques'],
+            ['renovaciones', 'Renovaciones'],
+            ['seguimiento', 'Seguimiento'],
+            ['usd', 'USD (agrupadas)'],
+            ['operaciones', 'Operaciones USD'],
+          ] as const).map(([val, label]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => { setSubvista(val); if (val === 'renovaciones') setBeneficiarioRenov('') }}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                subvista === val
+                  ? 'bg-brand-primary text-white shadow-sm'
+                  : 'text-body-muted hover:text-heading'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,.txt"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) {
+                setImportMsg(null)
+                importMutation.mutate(file)
+              }
+              e.target.value = ''
+            }}
+          />
+          <BotonNuevaOperacionUsd />
+          <button
+            type="button"
+            disabled={importMutation.isPending}
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            {importMutation.isPending ? 'Importando…' : 'Importar CSV'}
+          </button>
+          {importMsg ? (
+            <span className={`text-xs ${importMutation.isError ? 'text-danger' : 'text-emerald-600 dark:text-emerald-400'}`}>
+              {importMsg}
+            </span>
+          ) : null}
+        </div>
       </div>
+      <p className="flex items-start gap-1.5 text-xs text-body-muted">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400 dark:text-zinc-500" />
+        {descripcionVista[subvista]}
+      </p>
     </div>
   )
 
@@ -158,6 +176,15 @@ export function PestanaOcasionales() {
           beneficiarioFiltro={beneficiarioRenov}
           onLimpiarFiltro={() => setBeneficiarioRenov('')}
         />
+      </>
+    )
+  }
+
+  if (subvista === 'seguimiento') {
+    return (
+      <>
+        {subTabs}
+        <SeguimientoRenovaciones />
       </>
     )
   }
@@ -196,51 +223,7 @@ export function PestanaOcasionales() {
           {ops.length === 0 ? (
             <p className="text-body-muted py-6 text-center text-sm">No hay operaciones en USD registradas.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-xs">
-                <thead className="border-b border-subtle text-left text-body-muted">
-                  <tr>
-                    <th className="px-2.5 py-2">Beneficiario</th>
-                    <th className="px-2.5 py-2 text-right">Operación USD</th>
-                    <th className="px-2.5 py-2 text-right">TC pactado</th>
-                    <th className="px-2.5 py-2 text-right">Equivalente (USD × TC)</th>
-                    <th className="px-2.5 py-2 text-center">Cheques (fraccionamiento)</th>
-                    <th className="px-2.5 py-2 text-right">Suma cheques ARS</th>
-                    <th className="px-2.5 py-2 text-right">Diferencia vs. Eq.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ops.map((op) => {
-                    const diff = op.sumaChequesCentavos - op.equivalenteCentavos
-                    return (
-                      <tr key={`${op.beneficiarioNormalizado}-${op.montoUsd}-${op.cotizacion}`} className="border-t border-subtle">
-                        <td className="px-2.5 py-2 font-medium">{op.beneficiario}</td>
-                        <td className="px-2.5 py-2 text-right font-semibold text-green-700 dark:text-green-400">
-                          US$ {op.montoUsd.toLocaleString('es-AR')}
-                        </td>
-                        <td className="px-2.5 py-2 text-right tabular-nums">
-                          $ {op.cotizacion.toLocaleString('es-AR')}
-                        </td>
-                        <td className="px-2.5 py-2 text-right tabular-nums">
-                          {formatMoneyCentavos(op.equivalenteCentavos, 'ARS')}
-                        </td>
-                        <td className="px-2.5 py-2 text-center">
-                          <span className="inline-block rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
-                            {op.cantidadCheques} {op.cantidadCheques === 1 ? 'cheque' : 'cheques'}
-                          </span>
-                        </td>
-                        <td className="text-brand-primary px-2.5 py-2 text-right font-semibold tabular-nums">
-                          {formatMoneyCentavos(op.sumaChequesCentavos, 'ARS')}
-                        </td>
-                        <td className={`px-2.5 py-2 text-right tabular-nums ${diff > 0 ? 'text-red-600 dark:text-red-400' : 'text-body-muted'}`}>
-                          {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${formatMoneyCentavos(diff, 'ARS')}`}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <TablaUsdAgrupadas ops={ops} />
           )}
         </div>
       </>
@@ -838,6 +821,103 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+type OpUsdAgrupada = NonNullable<OcasionalesResumenResponse['operacionesUsdAgrupadas']>[number]
+
+function TablaUsdAgrupadas({ ops }: { ops: OpUsdAgrupada[] }) {
+  const [expandida, setExpandida] = useState<string | null>(null)
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-xs">
+        <thead className="border-b border-subtle text-left text-body-muted">
+          <tr>
+            <th className="w-6 px-1 py-2"></th>
+            <th className="px-2.5 py-2">Beneficiario</th>
+            <th className="px-2.5 py-2">Emisión</th>
+            <th className="px-2.5 py-2 text-right">Operación USD</th>
+            <th className="px-2.5 py-2 text-right">TC pactado</th>
+            <th className="px-2.5 py-2 text-right">Equivalente (USD × TC)</th>
+            <th className="px-2.5 py-2 text-center">Cheques (fraccionamiento)</th>
+            <th className="px-2.5 py-2 text-right">Suma cheques ARS</th>
+            <th className="px-2.5 py-2 text-right">Diferencia vs. Eq.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ops.map((op) => {
+            const key = `${op.beneficiarioNormalizado}-${op.montoUsd}-${op.cotizacion}-${op.fechaEmision ?? ''}`
+            const diff = op.sumaChequesCentavos - op.equivalenteCentavos
+            const abierta = expandida === key
+            return (
+              <Fragment key={key}>
+                <tr
+                  className="cursor-pointer border-t border-subtle hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
+                  onClick={() => setExpandida(abierta ? null : key)}
+                >
+                  <td className="px-1 py-2 text-center text-body-muted">
+                    {abierta ? <ChevronUp className="inline h-3.5 w-3.5" /> : <ChevronDown className="inline h-3.5 w-3.5" />}
+                  </td>
+                  <td className="px-2.5 py-2 font-medium">{op.beneficiario}</td>
+                  <td className="whitespace-nowrap px-2.5 py-2 text-body-muted">{formatFecha(op.fechaEmision)}</td>
+                  <td className="px-2.5 py-2 text-right font-semibold text-green-700 dark:text-green-400">
+                    US$ {op.montoUsd.toLocaleString('es-AR')}
+                  </td>
+                  <td className="px-2.5 py-2 text-right tabular-nums">
+                    $ {op.cotizacion.toLocaleString('es-AR')}
+                  </td>
+                  <td className="px-2.5 py-2 text-right tabular-nums">
+                    {formatMoneyCentavos(op.equivalenteCentavos, 'ARS')}
+                  </td>
+                  <td className="px-2.5 py-2 text-center">
+                    <span className="inline-block rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                      {op.cantidadCheques} {op.cantidadCheques === 1 ? 'cheque' : 'cheques'}
+                    </span>
+                  </td>
+                  <td className="text-brand-primary px-2.5 py-2 text-right font-semibold tabular-nums">
+                    {formatMoneyCentavos(op.sumaChequesCentavos, 'ARS')}
+                  </td>
+                  <td className={`px-2.5 py-2 text-right tabular-nums ${diff > 0 ? 'text-red-600 dark:text-red-400' : 'text-body-muted'}`}>
+                    {diff === 0 ? '—' : `${diff > 0 ? '+' : ''}${formatMoneyCentavos(diff, 'ARS')}`}
+                  </td>
+                </tr>
+                {abierta ? (
+                  <tr key={`${key}-detalle`} className="border-t border-dashed border-neutral-200 dark:border-zinc-700">
+                    <td colSpan={9} className="px-2.5 py-2">
+                      <div className="ml-6 rounded-lg border border-neutral-200 bg-neutral-50/80 dark:border-zinc-700 dark:bg-zinc-800/50">
+                        <table className="min-w-full text-xs">
+                          <thead className="text-left text-[11px] text-body-muted">
+                            <tr>
+                              <th className="px-2.5 py-1.5">Nro. cheque</th>
+                              <th className="px-2.5 py-1.5">Emisión</th>
+                              <th className="px-2.5 py-1.5">Vencimiento</th>
+                              <th className="px-2.5 py-1.5 text-right">Importe</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {op.cheques.map((ch) => (
+                              <tr key={ch.numeroCheque} className="border-t border-neutral-200/60 dark:border-zinc-700/60">
+                                <td className="whitespace-nowrap px-2.5 py-1.5 font-mono">{ch.numeroCheque}</td>
+                                <td className="whitespace-nowrap px-2.5 py-1.5">{formatFecha(ch.fechaEmision)}</td>
+                                <td className="whitespace-nowrap px-2.5 py-1.5">{formatFecha(ch.fechaVencimiento)}</td>
+                                <td className="whitespace-nowrap px-2.5 py-1.5 text-right tabular-nums font-medium">
+                                  {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

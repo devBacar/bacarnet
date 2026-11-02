@@ -93,6 +93,7 @@ export interface OperacionRenovacion {
   vinculada: boolean
   tipoVinculo: 'explicito' | 'implicito'
   obsOriginal: string
+  debugAutolink?: string
 }
 
 export interface ChequeOcasionalDoc {

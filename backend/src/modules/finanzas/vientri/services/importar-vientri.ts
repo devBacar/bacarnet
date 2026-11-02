@@ -6,8 +6,9 @@
 import { sincronizarChequesDesdeVientri } from '../../cheques/services/sincronizar-desde-vientri.js'
 import { CarpetaInvalidaError, procesarCarpeta } from '../domain/procesar.js'
 import { ARCHIVOS_REQUERIDOS } from '../domain/control.js'
-import { aplicarVentana } from '../domain/ventana.js'
-import { importarChequesOcasionales } from './importar-cheques-ocasionales.js'
+import { aplicarVentana, MESES_VENTANA, restarMeses } from '../domain/ventana.js'
+import { marcarRenovadosPorCadena } from '../domain/cheques-renovados.js'
+import { armarChequesOcasionales, importarChequesOcasionales } from './importar-cheques-ocasionales.js'
 import { agendaVientriActivada, sincronizarAgenda } from './sincronizar-agenda.js'
 import { sincronizarAgendaCheques } from './sincronizar-agenda-cheques.js'
 import {
@@ -67,6 +68,21 @@ export async function importarVientri(opts: {
       await cerrarImportacion(id, { ok: false, mensaje, verificacion })
     }
     return { ok: false, importacionId: null, fechaDatos: null, mensaje, simulado: simular }
+  }
+
+  // Cheques ocasionales (proveedores financieros) ya renovados: no deben seguir pendientes en la
+  // Agenda aunque Vientri nunca los marque "pagados" (se reemplazan, no se cobran). La única señal
+  // confiable sale del texto de OBS en cheques_propios.csv; si no está, se sigue sin este cruce.
+  try {
+    const propios = textos.get('cheques_propios.csv')
+    const primeraLinea = (propios ?? '').split('\n', 1)[0]?.replace('\r', '') ?? ''
+    if (propios && primeraLinea.split(';').includes('obs')) {
+      const desde = restarMeses(proc.control.fechaDatos, MESES_VENTANA)
+      const { docs: ocasionales } = await armarChequesOcasionales({ csv: propios, desde })
+      proc = { ...proc, cheques: marcarRenovadosPorCadena(proc.cheques, ocasionales) }
+    }
+  } catch (err) {
+    console.error('[importar-vientri] no se pudo cruzar cadenas de renovación de cheques ocasionales (se sigue sin el cruce)', err)
   }
 
   // Solo lo que le sirve a Finanzas: últimos 12 meses (ver domain/ventana.ts).

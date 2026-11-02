@@ -219,6 +219,7 @@ function pagoDesdeCuota(d: InversionDetalle, c: CuotaDetalle): PagoHoy {
     proveedorONombre: d.inversorNombre,
     sugerenciasBanco: [],
     moneda: c.monedaPago,
+    origen: 'inversiones',
   }
 }
 

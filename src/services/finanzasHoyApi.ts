@@ -2,6 +2,7 @@ import { auth } from './firebase'
 import { resolveApiUrl } from './resolveApiUrl'
 
 export type MedioPagoHoy = 'transferencia' | 'efectivo' | 'cheque'
+export type OrigenCompromisoHoy = 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
 
 export interface SugerenciaBanco {
   id: string
@@ -32,6 +33,7 @@ export interface PagoHoy {
   moneda?: 'ARS' | 'USD'
   /** La fecha se estimó según la historia del proveedor. */
   estimada?: boolean
+  origen: OrigenCompromisoHoy
 }
 
 export interface IngresoHoy {
@@ -48,6 +50,7 @@ export interface IngresoHoy {
   cuentaId: string | null
   textoReclamo: string
   estimada?: boolean
+  origen: OrigenCompromisoHoy
 }
 
 export interface BancoHoy {
@@ -76,6 +79,7 @@ export interface CobroAtrasadoHoy {
   email: string | null
   textoReclamo: string
   estimada?: boolean
+  origen: OrigenCompromisoHoy
 }
 
 export interface ChequeADebitarHoy {
@@ -111,7 +115,7 @@ export interface MovimientoDelDiaHoy {
   montoCentavos: number
   medio: MedioResueltoHoy
   chequeNumero: string | null
-  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  origen: OrigenCompromisoHoy
   /** Solo para cheque_fisico/echeq: si el banco ya lo debitó/acreditó. null si no se pudo chequear. */
   debitadoPorBanco: boolean | null
 }

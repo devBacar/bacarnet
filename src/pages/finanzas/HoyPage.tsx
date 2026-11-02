@@ -104,6 +104,15 @@ export function FinanzasHoyPage() {
       proveedorONombre: origen.proveedorONombre,
       sugerenciasBanco: pago?.sugerenciasBanco ?? [],
       moneda: origen.moneda,
+      origen:
+        pago?.origen ??
+        (origen.id.startsWith('inv-')
+          ? 'inversiones'
+          : origen.id.startsWith('vientri-cheque-')
+            ? 'vientri-cheque'
+            : origen.id.startsWith('vientri-')
+              ? 'vientri'
+              : 'planilla'),
     })
   }
 

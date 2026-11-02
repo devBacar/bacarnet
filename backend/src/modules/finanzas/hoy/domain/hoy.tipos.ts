@@ -24,7 +24,7 @@ export interface CompromisoHoy {
   estimada?: boolean
   /** YYYY-MM-DD en Argentina. Solo si estado === 'pagado'. */
   fechaPago: string | null
-  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  origen: OrigenCompromisoHoy
   /** Con qué se pagó de verdad (cheques con su vencimiento real, etc.). Solo en origen 'vientri'. */
   desglosePago?: DesglosePagoHoy[] | null
 }
@@ -53,7 +53,7 @@ export interface CobroHoy {
   estimada?: boolean
   /** YYYY-MM-DD en Argentina. Solo si estado === 'confirmado'. */
   fechaConfirmado: string | null
-  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  origen: OrigenCompromisoHoy
   /** Con qué se cobró de verdad (cheques con su vencimiento real, etc.). Solo en origen 'vientri'. */
   desglosePago?: DesglosePagoHoy[] | null
 }
@@ -100,6 +100,8 @@ export interface SugerenciaBanco {
   cuentaId: string
 }
 
+export type OrigenCompromisoHoy = 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+
 export interface PagoFilaHoy {
   id: string
   urgencia: string
@@ -119,6 +121,7 @@ export interface PagoFilaHoy {
   /** Aviso visible cuando el cheque ya se emitió y solo falta debitarlo. */
   aviso: string | null
   estimada?: boolean
+  origen: OrigenCompromisoHoy
 }
 
 export interface IngresoFilaHoy {
@@ -135,6 +138,7 @@ export interface IngresoFilaHoy {
   cuentaId: string | null
   textoReclamo: string
   estimada?: boolean
+  origen: OrigenCompromisoHoy
 }
 
 export interface BancoFilaHoy {
@@ -163,6 +167,7 @@ export interface CobroAtrasadoHoy {
   email: string | null
   textoReclamo: string
   estimada?: boolean
+  origen: OrigenCompromisoHoy
 }
 
 /** Agrupación por medio real para "resuelto hoy": qué plata sale/entra hoy y por qué vía. */
@@ -176,7 +181,7 @@ export interface MovimientoDelDiaHoy {
   montoCentavos: number
   medio: MedioResueltoHoy
   chequeNumero: string | null
-  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  origen: OrigenCompromisoHoy
   /** Solo para cheque_fisico/echeq: si el banco ya lo debitó/acreditó. null si no se pudo chequear. */
   debitadoPorBanco: boolean | null
 }

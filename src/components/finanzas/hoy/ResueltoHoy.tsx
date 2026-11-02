@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { HoyResponse, MedioResueltoHoy, MovimientoDelDiaHoy } from '../../../services/finanzasHoyApi'
-import { etiquetaOrigenCompromiso } from './etiquetasCompromiso'
+import { etiquetaOrigenCompromiso, tonoOrigenCompromiso } from './etiquetasCompromiso'
 import { Etiqueta, Monto, Tarjeta, Vacio } from './TarjetasHoy'
 
 const ETIQUETA_MEDIO: Record<MedioResueltoHoy, string> = {
@@ -51,7 +51,7 @@ function GrupoMedio({ medio, totalCentavos, filas }: { medio: MedioResueltoHoy; 
                   {fila.chequeNumero ? ` · ${fila.chequeNumero}` : ''}
                 </p>
                 <div className="mt-0.5 flex flex-wrap gap-1">
-                  <Etiqueta tono="gris">{etiquetaOrigenCompromiso(fila.id)}</Etiqueta>
+                  <Etiqueta tono={tonoOrigenCompromiso(fila.origen)}>{etiquetaOrigenCompromiso(fila.origen)}</Etiqueta>
                   {fila.debitadoPorBanco === true ? (
                     <Etiqueta tono="verde">Ya lo movió el banco</Etiqueta>
                   ) : fila.debitadoPorBanco === false ? (

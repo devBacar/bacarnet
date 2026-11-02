@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import type { CobroAtrasadoHoy, HoyResponse, IngresoHoy, PagoHoy } from '../../../services/finanzasHoyApi'
-import { etiquetaMedioPago, etiquetaOrigenCompromiso } from './etiquetasCompromiso'
+import { etiquetaMedioPago, etiquetaOrigenCompromiso, tonoOrigenCompromiso } from './etiquetasCompromiso'
 import { Etiqueta, MenuAcciones, Monto, Tarjeta, Vacio, botonChico, botonChicoSecundario, linkChico } from './TarjetasHoy'
 
 /** Chips de cómo se paga y de dónde vino (junto al nombre). */
@@ -8,9 +8,14 @@ function EtiquetasTipoPago({ pago }: { pago: PagoHoy }) {
   return (
     <>
       <Etiqueta tono="gris">{etiquetaMedioPago(pago.medioPago)}</Etiqueta>
-      <Etiqueta tono="gris">{etiquetaOrigenCompromiso(pago.id)}</Etiqueta>
+      <Etiqueta tono={tonoOrigenCompromiso(pago.origen)}>{etiquetaOrigenCompromiso(pago.origen)}</Etiqueta>
     </>
   )
+}
+
+/** Chip de origen sola, para filas que no tienen medio de pago (cobros). */
+function EtiquetaOrigen({ origen }: { origen: PagoHoy['origen'] }) {
+  return <Etiqueta tono={tonoOrigenCompromiso(origen)}>{etiquetaOrigenCompromiso(origen)}</Etiqueta>
 }
 
 const FILAS_VISIBLES = 4
@@ -234,6 +239,7 @@ export function CobrosHoy({
                   {ingreso.estimada ? ' · fecha estimada' : null}
                 </>
               }
+              etiqueta={<EtiquetaOrigen origen={ingreso.origen} />}
               centavos={ingreso.montoCentavos}
               accion={
                 ingreso.llego ? (
@@ -465,7 +471,12 @@ export function CobrosAtrasados({
               {cobro.estimada ? ' · fecha estimada' : null}
             </>
           }
-          etiqueta={<Etiqueta tono="rojo">{cobro.haceTexto}</Etiqueta>}
+          etiqueta={
+            <>
+              <EtiquetaOrigen origen={cobro.origen} />
+              <Etiqueta tono="rojo">{cobro.haceTexto}</Etiqueta>
+            </>
+          }
           centavos={cobro.montoCentavos}
           accion={
             <button type="button" className={botonChicoSecundario} onClick={() => onReclamar(cobro)}>
@@ -486,7 +497,12 @@ export function CobrosAtrasados({
             {ingreso.estimada ? ' · fecha estimada' : null}
           </>
         }
-        etiqueta={ingreso.atrasadoTexto ? <Etiqueta tono="rojo">{ingreso.atrasadoTexto}</Etiqueta> : undefined}
+        etiqueta={
+          <>
+            <EtiquetaOrigen origen={ingreso.origen} />
+            {ingreso.atrasadoTexto ? <Etiqueta tono="rojo">{ingreso.atrasadoTexto}</Etiqueta> : null}
+          </>
+        }
         centavos={ingreso.montoCentavos}
         accion={
           puedeOperar && ingreso.movimientoId ? (

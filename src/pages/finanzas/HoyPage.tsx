@@ -198,9 +198,10 @@ export function FinanzasHoyPage() {
             <PagosHoy
               pagos={{
                 filas: data.pagos.filas.filter((pago) => !pago.vencido),
-                totalCentavos: data.pagos.filas
-                  .filter((pago) => !pago.vencido)
-                  .reduce((s, f) => s + f.montoCentavos, 0),
+                // Usa el total que ya manda el backend (convierte USD a pesos): sumar de nuevo acá,
+                // fila por fila, sin esa conversión, es lo que hacía que este número y el de arriba
+                // ("Hoy pagás") no coincidieran cuando había pagos en dólares.
+                totalCentavos: data.pagos.totalCentavos,
               }}
               onPagar={setPagoModo}
               onYaPague={setYaPague}

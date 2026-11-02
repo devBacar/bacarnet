@@ -319,12 +319,13 @@ export interface OcasionalesResumenResponse {
   operacionesUsdAgrupadas?: Array<{
     beneficiario: string
     beneficiarioNormalizado: string
+    fechaEmision: string | null
     montoUsd: number
     cotizacion: number
     equivalenteCentavos: number
     cantidadCheques: number
     sumaChequesCentavos: number
-    cheques: string[]
+    cheques: Array<{ numeroCheque: string; montoCentavos: number; fechaVencimiento: string | null; fechaEmision: string | null }>
   }>
   totalMontoUsd?: number
   cotizacionPromedioUsd?: number
@@ -492,6 +493,7 @@ export interface OperacionRenovacionItem {
   vinculada: boolean
   tipoVinculo: 'explicito' | 'implicito'
   obsOriginal: string
+  debugAutolink?: string
 }
 
 export interface ResumenOperacionesRenovacion {
@@ -513,6 +515,66 @@ export async function fetchOperacionesRenovacion(): Promise<OperacionesRenovacio
     throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudieron cargar las operaciones de renovación')
   }
   return body as OperacionesRenovacionResponse
+}
+
+export type EstadoChequeRenov = 'pendiente' | 'debitado' | 'renovado' | 'rechazado' | 'anulado'
+
+export interface ChequeConEstadoItem extends ChequeEnOperacionItem {
+  estado: EstadoChequeRenov
+  operacionSiguienteId: string | null
+}
+
+export interface OperacionSeguimientoItem extends Omit<OperacionRenovacionItem, 'chequesNuevos'> {
+  chequesNuevos: ChequeConEstadoItem[]
+  operacionesAnterioresIds: string[]
+  fechaVtoMax: string | null
+  exposicionCentavos: number
+  estadoOperacion: 'abierta' | 'cerrada'
+  ancestrosIds: string[]
+}
+
+export interface BeneficiarioSeguimientoItem {
+  beneficiario: string
+  beneficiarioNormalizado: string
+  posicionesAbiertas: number
+  rechazadas: number
+  exposicionCentavos: number
+  operaciones: OperacionSeguimientoItem[]
+}
+
+export type SeguimientoEstadoFiltro = 'abiertas' | 'todas'
+
+export interface SeguimientoRenovacionesResponse {
+  hoy: string
+  estado: SeguimientoEstadoFiltro
+  beneficiarios: BeneficiarioSeguimientoItem[]
+  /** Operaciones anteriores referenciadas por `ancestrosIds` que no están en `beneficiarios`. */
+  ancestros: OperacionSeguimientoItem[]
+  totales: {
+    beneficiarios: number
+    operaciones: number
+    posicionesAbiertas: number
+    exposicionCentavos: number
+    vencidosCantidad: number
+    vencidosCentavos: number
+    porVencer7d: number
+    porVencer15d: number
+    porVencer30d: number
+    profundidadMaxCadena: number
+    cadenaMasLargaOp: { id: string; beneficiario: string } | null
+    concentracionTopPct: number
+  }
+}
+
+export async function fetchSeguimientoRenovaciones(
+  estado: SeguimientoEstadoFiltro = 'abiertas',
+): Promise<SeguimientoRenovacionesResponse> {
+  const res = await ocasionalesFetch(`/seguimiento?estado=${estado}`)
+  const body = (await res.json().catch(() => null)) as { error?: string } | SeguimientoRenovacionesResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo cargar el seguimiento de renovaciones')
+  }
+  return body as SeguimientoRenovacionesResponse
 }
 
 export interface ImportarOcasionalesResponse {

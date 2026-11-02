@@ -24,7 +24,10 @@ function indicePorNumero(docs: ChequeOcasionalDoc[]): Map<string, ChequeOcasiona
 }
 
 export function filtrarVentanaConCadenas(docs: ChequeOcasionalDoc[], desde: string): ChequeOcasionalDoc[] {
-  const enVentana = (d: ChequeOcasionalDoc) => d.fechaVencimiento === null || d.fechaVencimiento >= desde
+  const tieneFechaImposible = (d: ChequeOcasionalDoc) =>
+    d.revisar.some((r) => r.toLowerCase().includes('imposible'))
+  const enVentana = (d: ChequeOcasionalDoc) =>
+    !tieneFechaImposible(d) && (d.fechaVencimiento === null || d.fechaVencimiento >= desde)
   const indice = indicePorNumero(docs)
   const conservar = new Set<ChequeOcasionalDoc>(docs.filter(enVentana))
 

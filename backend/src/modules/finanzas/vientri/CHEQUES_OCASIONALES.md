@@ -106,6 +106,9 @@ backend/src/modules/finanzas/vientri/domain/
 ├── parsear-obs.test.ts         — 14+ tests
 ├── operacion-renovacion.ts     — agruparOperacionesRenovacion(): modelo por operación (PRIMARIO)
 ├── operacion-renovacion.test.ts— tests del modelo por operación
+├── seguimiento.types.ts        — EstadoChequeRenov, ChequeConEstado, OperacionPersistida, respuesta del seguimiento
+├── seguimiento.ts              — construirSeguimiento(), derivarSeguimiento(), estadoOperacion(), armarSeguimiento()
+├── seguimiento.test.ts         — tests del seguimiento
 ├── cadena-renovacion.ts        — reconstruirCadenas() (DEPRECADO, reemplazado por operación)
 └── cadena-renovacion.test.ts   — 9+ tests
 ```
@@ -115,14 +118,17 @@ backend/src/modules/finanzas/vientri/domain/
 ```
 backend/src/modules/finanzas/vientri/services/
 ├── importar-cheques-ocasionales.ts       — importarChequesOcasionales({csv, origen, actor, simular})
-└── importar-cheques-ocasionales.test.ts  — 3 tests
+├── importar-cheques-ocasionales.test.ts  — 3 tests
+├── completar-eslabones-vientri.ts        — leerActivosConEslabonesDeVientri(): completa viejos desde cheques / ientriCheques`n├── inyectar-chq-autolink.ts              — inyectarChqParaAutolink(): inyecta CHQ regulares como sintéticos
+├── recalcular-seguimiento.ts             — recalcularSeguimiento(): persiste el seguimiento (upsert)
+└── recalcular-seguimiento.test.ts        — tests del recálculo
 ```
 
 ### Rutas
 
 ```
 backend/src/modules/finanzas/vientri/routes/
-└── cheques-ocasionales.routes.ts  — GET /, GET /cadenas, GET /resumen, GET /operaciones-renovacion
+└── cheques-ocasionales.routes.ts  — GET /, GET /cadenas, GET /resumen, GET /operaciones-renovacion, GET /seguimiento
 ```
 
 Montado en `/api/finanzas/cheques-ocasionales`.
@@ -232,6 +238,58 @@ Sobre 870 cheques con OBS de renovación:
 |---|---|---|
 | P OLMOS | 1 | OBS truncado, no se puede leer el ID completo |
 
+## Seguimiento de renovaciones
+
+Responde "¿qué posiciones siguen abiertas con cada beneficiario y de dónde vienen?". Se calcula sobre las operaciones de `agruparOperacionesRenovacion()` y se **persiste** para no recalcular todo en cada lectura.
+
+### Estado de cada cheque nuevo
+
+Se evalúa en este orden (gana el primero que se cumple):
+
+| Orden | Condición | Estado |
+|---|---|---|
+| 1 | `baja` | se excluye de la operación y de la cadena |
+| 2 | figura como viejo en otra operación, o `estadoCodigo` 5 | `renovado` |
+| 3 | `estadoCodigo` 9 | `anulado` |
+| 4 | `estadoCodigo` 3 | `rechazado` |
+| 5 | `pagado` | `debitado` |
+| 6 | ninguna de las anteriores | `pendiente` |
+
+- **Exposición** = `pendiente` + `rechazado` (el rechazado se resalta en rojo). `debitado`, `anulado` y `renovado` no suman.
+- **Operación cerrada** = todos sus nuevos son `debitado`, `anulado` o `renovado` **y** el máximo `fechaVencimiento` de sus nuevos es anterior a hoy. Si no, está **abierta**. Se calcula al leer con la fecha de hoy (`estadoOperacion(op, hoy)`), no se guarda.
+- **Cadena**: cada operación guarda `operacionesAnterioresIds[]` (operaciones cuyos nuevos aparecen como viejos en esta). Una lista y no un único id porque el fallback cross-operación puede juntar viejos de varias operaciones.
+
+### Persistencia
+
+Colección **`finanzas_vientri_operaciones_renovacion`** (derivada, se regenera desde `vientriChequesOcasionales`).
+
+- ID determinístico: `renov-{beneficiarioNormalizado}-{fechaEmision}-{banco}`. Si dos operaciones comparten base (subgrupos de un mismo grupo) la segunda y siguientes llevan sufijo `-2`, `-3`… Los eCheq no tienen banco: el tramo queda como `?`.
+- Se recalcula al final de `importarChequesOcasionales` (no en modo `simular`) con `recalcularSeguimiento()`: upsert por huella con `sincronizarColeccion`.
+- Por defecto **no borra** las operaciones que dejaron de existir (`borrarFaltantes: false`).
+- Si el recálculo falla, la importación no se cae: el error queda en `seguimientoError` del resultado, en el `mensaje` y en el log.
+- Cada documento es una `OperacionPersistida`: la `OperacionRenovacion` + `chequesNuevos[].estado` / `operacionSiguienteId`, `operacionesAnterioresIds`, `fechaVtoMax` y `exposicionCentavos`.
+
+### Endpoint
+
+`GET /api/finanzas/cheques-ocasionales/seguimiento?estado=abiertas|todas` (default `abiertas`). Lee la colección persistida.
+
+```json
+{
+  "hoy": "YYYY-MM-DD",
+  "estado": "abiertas",
+  "beneficiarios": [BeneficiarioSeguimiento...],
+  "ancestros": [OperacionSeguimientoItem...],
+  "totales": { "beneficiarios": 0, "operaciones": 0, "posicionesAbiertas": 0, "exposicionCentavos": 0 }
+}
+```
+
+- Agrupa por beneficiario con `beneficiariosCompatibles()` (ordenado por exposición descendente).
+- Cada operación trae `estadoOperacion` y `ancestrosIds` (transitivos, del más cercano al más lejano).
+- `ancestros` incluye las operaciones referenciadas por `ancestrosIds` que no están ya en `beneficiarios`, para poder navegar hacia atrás.
+
+### Frontend
+
+`SeguimientoRenovaciones.tsx` (solapa "Seguimiento" en `PestanaOcasionales`): beneficiarios con posiciones abiertas y exposición; al expandir, lista de cheques pendientes/rechazados con vto y monto; "Ver cadena" abre el drill-down con la tabla viejo→nuevo, los estados y los links "viene de" / "se renueva →".
 ## Cadenas de renovación (deprecado)
 
 > **NOTA**: El modelo de cadenas lineales está deprecado en favor del modelo por operación. Se conserva para referencia y migración gradual.
@@ -317,6 +375,10 @@ Response:
 
 Cada `OperacionRenovacionItem` tiene `chequesNuevos[]`, `chequesViejos[]`, totales, interés, tasa, tipo de vínculo.
 
+### `GET /api/finanzas/cheques-ocasionales/seguimiento`
+
+Seguimiento de posiciones abiertas por beneficiario (ver sección *Seguimiento de renovaciones*).
+
 ### `GET /api/finanzas/cheques-ocasionales/resumen`
 
 Resumen ejecutivo con costo financiero.
@@ -389,7 +451,8 @@ El script detecta automáticamente si el CSV tiene header o no (busca las column
 ```
 src/components/finanzas/cheques/
 ├── PestanaOcasionales.tsx         — pestaña contenedora en la pantalla de cheques
-└── OperacionesRenovacion.tsx      — vista de operaciones agrupadas por beneficiario
+├── OperacionesRenovacion.tsx      — vista de operaciones agrupadas por beneficiario
+└── SeguimientoRenovaciones.tsx    — seguimiento de posiciones abiertas y drill-down de cadena
 ```
 
 ### OperacionesRenovacion.tsx
@@ -414,6 +477,10 @@ Pantalla principal de operaciones de renovación. Funcionalidades:
 ```powershell
 # Operaciones de renovación (19 tests)
 npx vitest run backend/src/modules/finanzas/vientri/domain/operacion-renovacion.test.ts
+
+# Seguimiento de renovaciones
+npx vitest run backend/src/modules/finanzas/vientri/domain/seguimiento.test.ts
+npx vitest run backend/src/modules/finanzas/vientri/services/recalcular-seguimiento.test.ts
 
 # Parseo de OBS
 npx vitest run backend/src/modules/finanzas/vientri/domain/parsear-obs.test.ts

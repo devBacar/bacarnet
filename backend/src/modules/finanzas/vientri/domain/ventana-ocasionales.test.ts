@@ -70,4 +70,17 @@ describe('filtrarVentanaConCadenas', () => {
     ]
     expect(numeros(filtrarVentanaConCadenas(docs, DESDE))).toEqual(['020-111-2222-777', '888'])
   })
+
+  it('descarta cheques con fecha imposible (ej. año 2120)', () => {
+    const docs = [
+      cheque({
+        numeroCheque: 'imposible-2120',
+        fechaVencimiento: '2120-05-10',
+        revisar: ['Fecha imposible (2120-05-10)'],
+        vientriId: 1,
+      }),
+      cheque({ numeroCheque: 'valido', fechaVencimiento: '2026-02-01', vientriId: 2 }),
+    ]
+    expect(numeros(filtrarVentanaConCadenas(docs, DESDE))).toEqual(['valido'])
+  })
 })

@@ -26,7 +26,7 @@ function fechaModaVto(cheques: ChequeEnOperacion[]): string | null {
   return mejor
 }
 
-function beneficiariosCompatibles(a: string, b: string): boolean {
+export function beneficiariosCompatibles(a: string, b: string): boolean {
   if (a === b) return true
   const wa = a.split(/\s+/).filter(w => w.length >= 3)
   const wb = b.split(/\s+/).filter(w => w.length >= 3)
@@ -328,6 +328,7 @@ export function agruparOperacionesRenovacion(
     // 2) Fallback: fechaVencimiento del viejo ≈ fechaEmision del nuevo
     // Busca dentro de operaciones coherentes (agrupadas por OBS+beneficiario+fecha)
     let autoVinculado = false
+    let debugAutolink: string | undefined
     if (chequesViejosDocs.length === 0 && primero.fechaEmision) {
       const bancoNuevo = banco ?? '?'
       const totalNuevosEst = chequesNuevosDocs.reduce((s, c) => s + c.montoCentavos, 0)
@@ -341,7 +342,36 @@ export function agruparOperacionesRenovacion(
           }
         }
         autoVinculado = true
+      } else {
+        // Diagnóstico: ¿por qué no matcheó?
+        const benNorm = primero.beneficiarioNormalizado
+        const fechaEm = primero.fechaEmision!
+        let totalPagados = 0
+        let compatBenef = 0
+        let compatBanco = 0
+        let cercaFecha = 0
+        let tasaOk = 0
+        let yaUsados = 0
+        for (const opOrigen of operacionesOrigen) {
+          for (const c of opOrigen.cheques) {
+            totalPagados++
+            if (!beneficiariosCompatibles(benNorm, opOrigen.beneficiarioNormalizado)) continue
+            compatBenef++
+            if (viejosUsados.has(c.numeroCheque)) { yaUsados++; continue }
+            const bancoCand = extraerBanco(c.numeroCheque) ?? '?'
+            if (!bancosCompatibles(bancoCand, bancoNuevo)) continue
+            compatBanco++
+            const fc = c.fechaConciliado
+            const fv = c.fechaVencimiento
+            if ((fc && fechaCerca(fc, fechaEm, 2)) || (fv && fechaCerca(fv, fechaEm, 2))) {
+              cercaFecha++
+            }
+          }
+        }
+        debugAutolink = `pool=${totalPagados} benef=${compatBenef} banco=${compatBanco} fecha±2=${cercaFecha} usados=${yaUsados} (busca fechaEm=${fechaEm} banco=${bancoNuevo} benef=${benNorm})`
       }
+    } else if (chequesViejosDocs.length === 0 && !primero.fechaEmision) {
+      debugAutolink = 'sin fechaEmision en cheque nuevo'
     }
 
     // Marcar viejos usados para no reutilizarlos en otra operación
@@ -387,6 +417,7 @@ export function agruparOperacionesRenovacion(
       vinculada,
       tipoVinculo,
       obsOriginal: primero.obsOriginal,
+      ...(debugAutolink ? { debugAutolink } : {}),
     })
   }
 

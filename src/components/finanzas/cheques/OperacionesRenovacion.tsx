@@ -545,6 +545,19 @@ function OperacionCard({ op, resaltada, chequesRenovados }: { op: OperacionRenov
           {op.obsOriginal ? (
             <p className="text-body-muted font-mono text-[11px]">OBS: {op.obsOriginal}</p>
           ) : null}
+
+          {!op.vinculada ? (
+            <div className="space-y-0.5">
+              <p className="text-body-muted text-[11px] italic">
+                {op.tipoVinculo === 'explicito'
+                  ? 'El cheque anterior mencionado en OBS ya no está en el sistema (anterior a la ventana de datos).'
+                  : 'No se encontró el cheque anterior en el sistema (puede ser anterior a la ventana de datos).'}
+              </p>
+              {op.debugAutolink ? (
+                <p className="font-mono text-[10px] text-neutral-400 dark:text-zinc-500">{op.debugAutolink}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

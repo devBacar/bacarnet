@@ -376,6 +376,31 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(viernes?.quedaCentavos).toBe(10_000_000 - 1_000_000 - 8_000_000 + 2_000_000)
   })
 
+  it('en "Compromisos de esta semana" tampoco se duplica un cheque ya contado como compromiso, y convierte USD', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [
+          compromiso({
+            id: 'vientri-cheque-chq-1',
+            fechaVencimiento: HOY,
+            montoCentavos: 500_000,
+            origen: 'vientri-cheque',
+            medioPago: 'cheque',
+            vientriChequeNumero: '50095064',
+          }),
+          compromiso({ id: 'usd-jueves', fechaVencimiento: '2026-10-01', montoCentavos: 100_00, moneda: 'USD' }),
+        ],
+        cheques: [chequeEnHoy({ id: 'chq-1', numero: '50095064', montoCentavos: 500_000 })],
+        tipoCambioUsdArs: 1500,
+      }),
+    )
+    const hoyFila = vista.prevision.semana?.find((fila) => fila.fecha === HOY)
+    // Antes del fix: 500_000 (compromiso) + 500_000 (cheque) = 1_000_000.
+    expect(hoyFila?.aPagarCentavos).toBe(500_000)
+    const jueves = vista.prevision.semana?.find((fila) => fila.fecha === '2026-10-01')
+    expect(jueves?.aPagarCentavos).toBe(15_000_000)
+  })
+
   it('no muestra atrasados de más de 30 días (quedan archivados, no se borran de la Agenda)', () => {
     const pagos = [
       compromiso({ id: 'reciente', fechaVencimiento: '2026-09-15', montoCentavos: 100_00 }),

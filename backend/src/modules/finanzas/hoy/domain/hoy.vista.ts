@@ -492,27 +492,37 @@ export function armarSemana(input: {
   cobros: CobroHoy[]
   cobrosYaLlegados: Set<string>
   cheques: ChequeEnHoy[]
+  tipoCambioUsdArs: number | null
 }): { filas: SemanaFilaHoy[] | null; diaMasPesado: string | null } {
   const dias = proximosDiasHabiles(input.hoy, 7)
   const pagar = new Map(dias.map((dia) => [dia, 0]))
   const cobrar = new Map(dias.map((dia) => [dia, 0]))
+  // Igual que en "Hoy pagás": un cheque "vientri-cheque" ya está contado como compromiso, así que
+  // no hay que volver a sumarlo cuando aparece también en la lista de cheques del día destino.
+  const numerosConCompromisoPorDia = new Map<string, Set<string>>()
 
   for (const row of input.compromisos) {
     if (!compromisoAbierto(row.estado) || row.sinFecha || row.fechaVencimiento < input.hoy) continue
     const destino = diaDestino(row.fechaVencimiento, dias)
     if (!destino) continue
-    pagar.set(destino, (pagar.get(destino) ?? 0) + row.montoCentavos)
+    pagar.set(destino, (pagar.get(destino) ?? 0) + montoEnArs(row.montoCentavos, row.moneda, input.tipoCambioUsdArs))
+    if (row.origen === 'vientri-cheque' && row.vientriChequeNumero) {
+      const set = numerosConCompromisoPorDia.get(destino) ?? new Set<string>()
+      set.add(row.vientriChequeNumero)
+      numerosConCompromisoPorDia.set(destino, set)
+    }
   }
   for (const cheque of chequesParaLaSemana(input.cheques, input.hoy)) {
     const destino = diaDestino(cheque.fechaPago, dias)
     if (!destino) continue
+    if (numerosConCompromisoPorDia.get(destino)?.has(cheque.numero)) continue
     pagar.set(destino, (pagar.get(destino) ?? 0) + cheque.montoCentavos)
   }
   for (const row of input.cobros) {
     if (row.estado !== 'esperado' || input.cobrosYaLlegados.has(row.id) || row.sinFecha || row.fechaEsperada < input.hoy) continue
     const destino = diaDestino(row.fechaEsperada, dias)
     if (!destino) continue
-    cobrar.set(destino, (cobrar.get(destino) ?? 0) + row.montoCentavos)
+    cobrar.set(destino, (cobrar.get(destino) ?? 0) + montoEnArs(row.montoCentavos, row.moneda, input.tipoCambioUsdArs))
   }
 
   let queda = input.saldoInicialCentavos
@@ -645,6 +655,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
     cobros: input.cobros,
     cobrosYaLlegados: ingresos.llegados,
     cheques: input.cheques,
+    tipoCambioUsdArs,
   })
   const cobrosAtrasados = listarCobrosAtrasados(input.cobros, hoy, ingresos.llegados, feriados)
   const firmas = transferenciasSinFirmar(input.transferencias, input.now)

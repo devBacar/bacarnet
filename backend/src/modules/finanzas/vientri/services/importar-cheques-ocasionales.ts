@@ -144,17 +144,26 @@ export interface ResultadoImportacionOcasionales {
   }
 }
 
-export async function importarChequesOcasionales(opts: {
+export interface ResumenChequesOcasionales {
+  filas: number
+  parseados: number
+  conRenovacion: number
+  conUsd: number
+  proveedoresFinancieros: number
+  fechasImposibles: number
+}
+
+/**
+ * Solo parsea (sin escribir nada): cruza el CSV con el campo OBS y arma los docs con sus
+ * cadenas de renovación resueltas (`renovacionDe`/`renovadoPor`). Se usa tanto para guardar en
+ * `vientriChequesOcasionales` como para cruzar cadenas de renovación contra la Agenda de cheques.
+ */
+export async function armarChequesOcasionales(opts: {
   csv: string
-  origen: 'script' | 'manual'
-  actor: string
-  simular?: boolean
   proocaIndex?: Map<number, ProveedorOcasional>
   /** 'YYYY-MM-DD': ventana de Finanzas; además se conservan los cheques viejos de cadenas de renovación abiertas. */
   desde?: string
-}): Promise<ResultadoImportacionOcasionales> {
-  const simular = opts.simular === true
-
+}): Promise<{ docs: ChequeOcasionalDoc[]; resumen: ResumenChequesOcasionales }> {
   const primeraLinea = opts.csv.split(/\r?\n/, 1)[0] ?? ''
   const tieneHeader = COLUMNAS_CON_HEADER.every((c) => primeraLinea.includes(c))
   const tabla = tieneHeader
@@ -174,7 +183,7 @@ export async function importarChequesOcasionales(opts: {
   const docs = opts.desde ? filtrarVentanaConCadenas(todos, opts.desde) : todos
   resolverRenovadoPor(docs)
 
-  const resumen = {
+  const resumen: ResumenChequesOcasionales = {
     filas: tabla.filas.length,
     parseados: docs.length,
     conRenovacion: docs.filter((d) => d.esRenovacion).length,
@@ -182,6 +191,21 @@ export async function importarChequesOcasionales(opts: {
     proveedoresFinancieros: docs.filter((d) => d.esProveedorFinanciero).length,
     fechasImposibles: docs.filter((d) => d.revisar.some((r) => r.includes('imposible'))).length,
   }
+
+  return { docs, resumen }
+}
+
+export async function importarChequesOcasionales(opts: {
+  csv: string
+  origen: 'script' | 'manual'
+  actor: string
+  simular?: boolean
+  proocaIndex?: Map<number, ProveedorOcasional>
+  /** 'YYYY-MM-DD': ventana de Finanzas; además se conservan los cheques viejos de cadenas de renovación abiertas. */
+  desde?: string
+}): Promise<ResultadoImportacionOcasionales> {
+  const simular = opts.simular === true
+  const { docs, resumen } = await armarChequesOcasionales(opts)
 
   const importacionId = simular
     ? null

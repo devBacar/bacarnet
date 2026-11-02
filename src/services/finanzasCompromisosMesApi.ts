@@ -44,6 +44,7 @@ export interface FilaCompromisoMes {
   compromisoId: string
   concepto: string
   proveedorONombre: string
+  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
   moneda: MonedaCompromiso
   deudaTotalCentavos: number | null
   importeCentavos: number

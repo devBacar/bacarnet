@@ -15,6 +15,7 @@ import { nombresNormalizadosProveedoresFinancieros } from '../../agenda/services
 import { armarPlanillaMes, parseMes, type CompromisoParaPlanilla, type PlanillaMes } from '../domain/compromisos-mes.js'
 import { feriadosNacionales2026 } from '../domain/feriados-nacionales-2026.js'
 import { fechaHoyArgentina } from '../domain/hoy.fechas.js'
+import type { OrigenCompromisoHoy } from '../domain/hoy.tipos.js'
 import { getTipoCambioMes, putTipoCambioMes, type TipoCambioMes } from './tipo-cambio-mes.repository.js'
 
 export class CompromisoMesError extends Error {
@@ -36,6 +37,10 @@ function medioDe(value: MedioPago | undefined): MedioPago {
   return 'transferencia'
 }
 
+function origenDe(value: string | undefined): OrigenCompromisoHoy {
+  return value === 'vientri' || value === 'vientri-cheque' || value === 'inversiones' || value === 'planilla' ? value : 'manual'
+}
+
 function aPlanilla(id: string, data: CompromisoPagoDocument): CompromisoParaPlanilla | null {
   const fechaVencimiento = dia(data.fechaVencimiento)
   if (!fechaVencimiento) return null
@@ -51,6 +56,7 @@ function aPlanilla(id: string, data: CompromisoPagoDocument): CompromisoParaPlan
     estado: data.estado,
     medioPago: medioDe(data.medioPago),
     grupo: normalizarGrupo(data.grupo),
+    origen: origenDe(data.origen),
     moneda: normalizarMoneda(data.moneda),
     deudaTotalCentavos: normalizarCentavosOpcional(data.deudaTotalCentavos),
     cuotaNumero: cuota.cuotaNumero,

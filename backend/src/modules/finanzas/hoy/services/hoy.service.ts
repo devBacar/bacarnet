@@ -87,6 +87,7 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
     fechaPago: diaDe(data.fechaPago),
     origen: origenDe(data.origen),
     desglosePago: data.vientri?.desglosePago ?? null,
+    vientriChequeNumero: data.vientriCheque?.numero ?? null,
   }
 }
 

@@ -8,7 +8,12 @@ import { armarCargaDiaria, type CargaDiaria } from '../domain/carga-diaria.js'
 import type { CompromisoParaPlanilla } from '../domain/compromisos-mes.js'
 import { feriadosNacionales2026 } from '../domain/feriados-nacionales-2026.js'
 import { fechaHoyArgentina } from '../domain/hoy.fechas.js'
+import type { OrigenCompromisoHoy } from '../domain/hoy.tipos.js'
 import { getTipoCambioMes } from './tipo-cambio-mes.repository.js'
+
+function origenDe(value: string | undefined): OrigenCompromisoHoy {
+  return value === 'vientri' || value === 'vientri-cheque' || value === 'inversiones' || value === 'planilla' ? value : 'manual'
+}
 
 export const DIAS_CARGA_MAXIMO = 62
 export const DIAS_CARGA_POR_DEFECTO = 30
@@ -45,6 +50,7 @@ function aCompromiso(id: string, data: CompromisoPagoDocument): CompromisoParaPl
     estado: data.estado,
     medioPago: medioDe(data.medioPago),
     grupo: normalizarGrupo(data.grupo),
+    origen: origenDe(data.origen),
     moneda: normalizarMoneda(data.moneda),
     deudaTotalCentavos: null,
     cuotaNumero: null,

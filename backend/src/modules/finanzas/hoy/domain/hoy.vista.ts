@@ -187,7 +187,14 @@ export function seleccionarPagos(compromisos: CompromisoHoy[], hoy: string, movi
 }
 
 /**
- * Pagos atrasados: vencimiento ya pasado. Primero los más recientes.
+ * Más de esto no se muestra en "Pagos/Cobros atrasados": pasado ese tiempo suele ser facturas que
+ * la empresa usa para cómputo de IVA (no plata real a pagar) o cheques ya renovados que Vientri no
+ * actualizó. No se borra nada de la Agenda, solo deja de aparecer en el día a día de Hoy.
+ */
+export const DIAS_MAXIMOS_ATRASADO = 30
+
+/**
+ * Pagos atrasados: vencimiento ya pasado, hasta DIAS_MAXIMOS_ATRASADO. Primero los más recientes.
  * Incluye todos los medios; si el cheque ya se emitió, la fila lo aclara.
  */
 export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: string, movimientos: MovimientoHoy[]): PagoFilaHoy[] {
@@ -197,7 +204,8 @@ export function seleccionarPagosAtrasados(compromisos: CompromisoHoy[], hoy: str
         compromisoAbierto(row.estado) &&
         !row.sinFecha &&
         row.fechaVencimiento < hoy &&
-        row.montoCentavos > 0,
+        row.montoCentavos > 0 &&
+        diasEntre(row.fechaVencimiento, hoy) <= DIAS_MAXIMOS_ATRASADO,
     )
     .sort((a, b) => b.fechaVencimiento.localeCompare(a.fechaVencimiento) || porUrgenciaYNombre(a, b))
     .map((row) => filaPago(row, hoy, movimientos))
@@ -249,7 +257,7 @@ export function seleccionarPagadosHoy(compromisos: CompromisoHoy[], hoy: string)
         concepto: row.concepto,
         montoCentavos: row.montoTotalCentavos,
         medio: medioDesdeCompromiso(row.medioPago),
-        chequeNumero: null,
+        chequeNumero: row.vientriChequeNumero ?? null,
         debitadoPorBanco: null,
         origen: row.origen,
       })
@@ -465,7 +473,7 @@ export function listarCobrosAtrasados(cobros: CobroHoy[], hoy: string, yaLlegado
   return cobros
     .filter((row) => row.estado === 'esperado' && !yaLlegados.has(row.id) && !row.sinFecha && row.fechaEsperada < hoy)
     .map((row) => ({ row, dias: diasEntre(row.fechaEsperada, hoy) }))
-    .filter((item) => item.dias > 0)
+    .filter((item) => item.dias > 0 && item.dias <= DIAS_MAXIMOS_ATRASADO)
     .sort((a, b) => b.row.montoCentavos - a.row.montoCentavos)
     .map(({ row, dias }) => {
       const concepto = conceptoCobro(row)

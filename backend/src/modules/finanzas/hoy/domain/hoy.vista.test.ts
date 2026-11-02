@@ -358,6 +358,22 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(viernes?.quedaCentavos).toBe(10_000_000 - 1_000_000 - 8_000_000 + 2_000_000)
   })
 
+  it('no muestra atrasados de más de 30 días (quedan archivados, no se borran de la Agenda)', () => {
+    const pagos = [
+      compromiso({ id: 'reciente', fechaVencimiento: '2026-09-15', montoCentavos: 100_00 }),
+      compromiso({ id: 'muy-viejo', fechaVencimiento: '2026-01-01', montoCentavos: 999_00 }),
+    ]
+    const lista = seleccionarPagosAtrasados(pagos, HOY, [])
+    expect(lista.map((p) => p.id)).toEqual(['reciente'])
+
+    const cobros = [
+      cobro({ id: 'reciente-c', fechaEsperada: '2026-09-15', montoCentavos: 100_00 }),
+      cobro({ id: 'muy-viejo-c', fechaEsperada: '2026-01-01', montoCentavos: 999_00 }),
+    ]
+    const listaCobros = listarCobrosAtrasados(cobros, HOY, new Set())
+    expect(listaCobros.map((c) => c.id)).toEqual(['reciente-c'])
+  })
+
   it('lista todos los cobros atrasados, del mayor al menor', () => {
     const cobros = [
       cobro({ id: 'chico', fechaEsperada: '2026-09-20', montoCentavos: 100, clienteONombre: 'Chico' }),
@@ -407,6 +423,26 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(resultado.totalCentavos).toBe(350_000)
     expect(resultado.filas.find((f) => f.chequeNumero === 'E-CHEQ 2')).toMatchObject({ medio: 'echeq', montoCentavos: 300_000 })
     expect(resultado.filas.find((f) => f.medio === 'otro')).toMatchObject({ montoCentavos: 50_000, chequeNumero: null })
+  })
+
+  it('seleccionarPagadosHoy: sin desglose (origen vientri-cheque), usa el número de cheque de la Agenda', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-1',
+        fechaVencimiento: HOY,
+        montoCentavos: 0,
+        montoTotalCentavos: 500_000,
+        estado: 'pagado',
+        fechaPago: HOY,
+        proveedorONombre: 'Bacar Transportadora',
+        medioPago: 'cheque',
+        origen: 'vientri-cheque',
+        vientriChequeNumero: '50095064',
+      }),
+    ]
+    const resultado = seleccionarPagadosHoy(compromisos, HOY)
+    expect(resultado.filas).toHaveLength(1)
+    expect(resultado.filas[0]).toMatchObject({ chequeNumero: '50095064', medio: 'cheque_fisico' })
   })
 
   it('seleccionarCobradosHoy: toma lo cobrado hoy sin importar la fecha esperada', () => {

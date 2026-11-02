@@ -188,6 +188,7 @@ export interface FilaListaSemana {
   compromisoId: string
   concepto: string
   proveedorONombre: string
+  origen: FilaCompromisoMes['origen']
   grupo: string
   moneda: MonedaCompromiso
   cuota: string | null
@@ -227,6 +228,7 @@ function aLista(fila: FilaSemana, dias: string[]): FilaListaSemana & { dia: stri
     compromisoId: fila.compromisoId,
     concepto: fila.concepto,
     proveedorONombre: fila.proveedorONombre,
+    origen: fila.origen,
     grupo: fila.grupo,
     moneda: fila.moneda,
     cuota: fila.cuota,

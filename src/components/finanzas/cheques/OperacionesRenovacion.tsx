@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, History, Link2, Link2Off, Search } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ChevronUp, History, Link2, Link2Off, Search } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../context'
 import {
@@ -182,6 +182,17 @@ export function OperacionesRenovacion({ beneficiarioFiltro, onLimpiarFiltro }: P
     return { interes, capital, ops, explicitas, implicitas }
   }, [grupos])
 
+  // Set de cheques que fueron renovados (aparecen como viejo en alguna operación)
+  const chequesRenovados = useMemo(() => {
+    const set = new Set<string>()
+    for (const op of data?.operaciones ?? []) {
+      for (const v of op.chequesViejos) {
+        set.add(v.numeroCheque)
+      }
+    }
+    return set
+  }, [data])
+
   const hayFiltros = q || vtoDesde || vtoHasta
 
   if (isLoading) return <p className="text-body-muted text-sm">Cargando operaciones de renovación…</p>
@@ -275,13 +286,13 @@ export function OperacionesRenovacion({ beneficiarioFiltro, onLimpiarFiltro }: P
       ) : null}
 
       {grupos.map((g) => (
-        <GrupoBeneficiarioSection key={g.clave} grupo={g} />
+        <GrupoBeneficiarioSection key={g.clave} grupo={g} chequesRenovados={chequesRenovados} />
       ))}
     </div>
   )
 }
 
-function GrupoBeneficiarioSection({ grupo: g }: { grupo: GrupoBeneficiario }) {
+function GrupoBeneficiarioSection({ grupo: g, chequesRenovados }: { grupo: GrupoBeneficiario; chequesRenovados: Set<string> }) {
   const actuales = g.operaciones.filter(esOperacionActual)
   const anteriores = g.operaciones.filter(op => !esOperacionActual(op))
   const [verAnteriores, setVerAnteriores] = useState(false)
@@ -289,7 +300,7 @@ function GrupoBeneficiarioSection({ grupo: g }: { grupo: GrupoBeneficiario }) {
   return (
     <section className="surface-card rounded-2xl border border-neutral-200 p-4 dark:border-zinc-800">
       <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-heading text-sm font-semibold">{g.beneficiario}</h3>
+        <h3 className="text-heading text-sm font-semibold">{g.beneficiario || <span className="text-body-muted italic">(sin beneficiario)</span>}</h3>
         <span className="text-body-muted text-xs">
           {g.operaciones.length} {g.operaciones.length === 1 ? 'operación' : 'operaciones'} · Capital{' '}
           <span className="text-heading font-medium tabular-nums">{formatMoneyCentavos(g.totalNuevosCentavos, 'ARS')}</span>
@@ -308,7 +319,7 @@ function GrupoBeneficiarioSection({ grupo: g }: { grupo: GrupoBeneficiario }) {
       {actuales.length > 0 ? (
         <div className="space-y-3">
           {actuales.map((op) => (
-            <OperacionCard key={op.id} op={op} resaltada />
+            <OperacionCard key={op.id} op={op} resaltada chequesRenovados={chequesRenovados} />
           ))}
         </div>
       ) : null}
@@ -334,7 +345,7 @@ function GrupoBeneficiarioSection({ grupo: g }: { grupo: GrupoBeneficiario }) {
           {verAnteriores ? (
             <div className="mt-2 space-y-3">
               {anteriores.map((op) => (
-                <OperacionCard key={op.id} op={op} />
+                <OperacionCard key={op.id} op={op} chequesRenovados={chequesRenovados} />
               ))}
             </div>
           ) : null}
@@ -345,7 +356,7 @@ function GrupoBeneficiarioSection({ grupo: g }: { grupo: GrupoBeneficiario }) {
       {actuales.length === 0 && anteriores.length === 0 ? (
         <div className="space-y-3">
           {g.operaciones.map((op) => (
-            <OperacionCard key={op.id} op={op} />
+            <OperacionCard key={op.id} op={op} chequesRenovados={chequesRenovados} />
           ))}
         </div>
       ) : null}
@@ -353,7 +364,7 @@ function GrupoBeneficiarioSection({ grupo: g }: { grupo: GrupoBeneficiario }) {
   )
 }
 
-function OperacionCard({ op, resaltada }: { op: OperacionRenovacionItem; resaltada?: boolean }) {
+function OperacionCard({ op, resaltada, chequesRenovados }: { op: OperacionRenovacionItem; resaltada?: boolean; chequesRenovados: Set<string> }) {
   const [abierta, setAbierta] = useState(false)
   const pares = useMemo(() => armarPares(op), [op])
 
@@ -472,7 +483,16 @@ function OperacionCard({ op, resaltada }: { op: OperacionRenovacionItem; resalta
                       {p.viejo ? formatFecha(p.viejo.fechaVencimiento) : ''}
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5 font-mono">
-                      {p.nuevo ? chequeCorto(p.nuevo.numeroCheque) : '—'}
+                      {p.nuevo ? (
+                        <span className="inline-flex items-center gap-1">
+                          {chequeCorto(p.nuevo.numeroCheque)}
+                          {p.nuevo.pagado && !chequesRenovados.has(p.nuevo.numeroCheque) ? (
+                            <span title="Debitado — no se renovó">
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : '—'}
                     </td>
                     <td className="whitespace-nowrap px-2 py-1.5">
                       {p.nuevo ? formatFecha(p.nuevo.fechaEmision) : ''}

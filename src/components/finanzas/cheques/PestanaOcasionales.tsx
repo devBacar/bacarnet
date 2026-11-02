@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
   DollarSign,
   Link2,
   RefreshCw,
@@ -49,6 +51,7 @@ export function PestanaOcasionales() {
   const [subvista, setSubvista] = useState<'cheques' | 'renovaciones' | 'usd' | 'operaciones'>('cheques')
   const [beneficiarioRenov, setBeneficiarioRenov] = useState('')
   const [detalleId, setDetalleId] = useState<string | null>(null)
+  const [mostrarMesesViejos, setMostrarMesesViejos] = useState(false)
 
   const importMutation = useMutation({
     mutationFn: (file: File) => importarOcasionalesCsv(file),
@@ -323,27 +326,58 @@ export function PestanaOcasionales() {
             />
           </div>
 
-          {resumen.porMes && resumen.porMes.length > 0 ? (
-            <div className="surface-card mb-4 rounded-2xl border border-neutral-200 p-3 dark:border-zinc-800">
-              <p className="text-body-muted text-xs font-medium uppercase tracking-wide">
-                Concentración de vencimientos pendientes por mes
-              </p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {resumen.porMes.map((m) => (
-                  <div
-                    key={m.mes}
-                    className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800/60"
-                  >
-                    <span className="text-heading font-semibold">{m.mes}</span>
-                    <span className="text-body-muted ml-1.5">({m.cantidad})</span>
-                    <span className="text-brand-primary ml-2 font-semibold tabular-nums">
-                      {formatMoneyCentavos(m.montoCentavos, 'ARS')}
-                    </span>
-                  </div>
-                ))}
+          {resumen.porMes && resumen.porMes.length > 0 ? (() => {
+            const ahora = new Date()
+            const mesActual = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}`
+            const esMesViejo = (mes: string) => /^\d{4}-\d{2}$/.test(mes) && mes < mesActual
+            const viejos = resumen.porMes.filter((m) => esMesViejo(m.mes))
+            const cercanos = resumen.porMes.filter((m) => !esMesViejo(m.mes))
+            const tienenAmbos = viejos.length > 0 && cercanos.length > 0
+            const visibles = !tienenAmbos || mostrarMesesViejos ? resumen.porMes : cercanos
+
+            return (
+              <div className="surface-card mb-4 rounded-2xl border border-neutral-200 p-3 dark:border-zinc-800">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-body-muted text-xs font-medium uppercase tracking-wide">
+                    Concentración de vencimientos pendientes por mes
+                  </p>
+                  {tienenAmbos ? (
+                    <button
+                      type="button"
+                      onClick={() => setMostrarMesesViejos((v) => !v)}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    >
+                      {mostrarMesesViejos ? (
+                        <>
+                          Ocultar meses anteriores ({viejos.length})
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        </>
+                      ) : (
+                        <>
+                          Ver meses anteriores ({viejos.length})
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        </>
+                      )}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {visibles.map((m) => (
+                    <div
+                      key={m.mes}
+                      className="rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs dark:border-zinc-700 dark:bg-zinc-800/60"
+                    >
+                      <span className="text-heading font-semibold">{m.mes}</span>
+                      <span className="text-body-muted ml-1.5">({m.cantidad})</span>
+                      <span className="text-brand-primary ml-2 font-semibold tabular-nums">
+                        {formatMoneyCentavos(m.montoCentavos, 'ARS')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : null}
+            )
+          })() : null}
         </>
       ) : null}
 

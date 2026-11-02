@@ -8,8 +8,8 @@ function pend(p: Partial<VientriPendienteDoc>): VientriPendienteDoc {
     clave: 'c1', vientriId: 1, lado: 'pagar', tipoId: 1, tipo: 'FCG', comprobante: 'FCG A 0001-00000001',
     persona: { vientriId: 5, nombre: 'Proveedor Ficticio SRL', cuit: '30000000007' }, fecha: '2026-09-20',
     fechaVencimiento: '2026-10-20', totalCentavos: 1_000_00, pendienteCentavos: 1_000_00, divisaId: 1, moneda: null,
-    cotizacion: 1, fechaProntoPago: null, descuentoProntoPago: null, cuotas: null, prestamo: false, revisar: [],
-    fecsys: null, ...p,
+    cotizacion: 1, fechaProntoPago: null, descuentoProntoPago: null, cuotas: null, prestamo: false, obs: null,
+    revisar: [], fecsys: null, ...p,
   }
 }
 

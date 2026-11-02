@@ -1,6 +1,6 @@
 import type { ObsParseada, OperacionUsdParseada, RenovacionParseada, RolEnOperacion, TasaExplicitaParseada } from './cheque-ocasional.types.js'
 
-const RE_RENOVACION_CON_IDS = /renovaci[oó]n\s+(?:(?:cheques?|ch)\s*(?:n[°ºo]?\s*)?)?([\d\s,y/]+)/i
+const RE_RENOVACION_CON_IDS = /renovaci[oó]n\s+(?:(?:cheques?|ch)\s*(?:n[°ºo]?\s*)?)?(?:[a-záéíóúñü\s.]*\s)?([\d\s,y/]+)/i
 const RE_TIENE_RENOVACION = /\brenovaci[oó]n(?:es)?\b/i
 
 const RE_USD = /u\$?\s*s?d?\s*([\d.]+)\s*tc\s*\$?\s*([\d.]+)/i
@@ -11,7 +11,7 @@ function limpiarNumero(raw: string): number {
 }
 
 function expandirBarras(bloque: string): string[] {
-  const partes = bloque.replace(/\s*y\s*/gi, '/').replace(/,/g, '/').split('/')
+  const partes = bloque.replace(/\s*y\s*/gi, '/').replace(/[,\s]+/g, '/').split('/')
   const ids: string[] = []
   let ultimoCompleto = ''
   for (const p of partes) {

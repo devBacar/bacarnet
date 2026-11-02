@@ -21,6 +21,7 @@ function pendiente(p: Partial<VientriPendienteDoc> & { clave: string }): Vientri
     descuentoProntoPago: null,
     cuotas: null,
     prestamo: false,
+    obs: null,
     revisar: [],
     fecsys: null,
     ...p,

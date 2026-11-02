@@ -30,7 +30,7 @@ function normalizar(t: string): string {
 }
 
 function textoBuscable(d: Record<string, unknown>): string {
-  const partes: unknown[] = [d.numero, d.comprobante, d.bancoNombre, d.destinatario, d.montoCentavos, d.pendienteCentavos]
+  const partes: unknown[] = [d.numero, d.comprobante, d.bancoNombre, d.destinatario, d.montoCentavos, d.pendienteCentavos, d.obs]
   for (const k of ['librador', 'entregadoA', 'entregadoPor', 'persona']) {
     const p = d[k] as { nombre?: unknown; cuit?: unknown } | null | undefined
     if (p) partes.push(p.nombre, p.cuit)

@@ -20,7 +20,7 @@ function pendiente(p: Partial<VientriPendienteDoc>): VientriPendienteDoc {
     clave: 'p', vientriId: 1, lado: 'pagar', tipoId: 1, tipo: 'FCG', comprobante: 'FCG 1', persona: null,
     fecha: '2026-09-01', fechaVencimiento: '2026-10-01', totalCentavos: 1, pendienteCentavos: 1, divisaId: 1,
     moneda: '$', cotizacion: 1, fechaProntoPago: null, descuentoProntoPago: null, cuotas: null, prestamo: false,
-    revisar: [], fecsys: null, ...p,
+    obs: null, revisar: [], fecsys: null, ...p,
   }
 }
 

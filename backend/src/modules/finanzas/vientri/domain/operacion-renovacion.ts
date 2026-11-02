@@ -50,6 +50,7 @@ function docAChequeEnOp(d: ChequeOcasionalDoc): ChequeEnOperacion {
     fechaVencimiento: d.fechaVencimiento,
     fechaEmision: d.fechaEmision,
     rol: d.rolEnOperacion,
+    pagado: d.pagado,
   }
 }
 
@@ -77,6 +78,59 @@ function bancosCompatibles(a: string | null, b: string | null): boolean {
 function claveGrupo(d: ChequeOcasionalDoc): string {
   const banco = extraerBanco(d.numeroCheque)
   return `${d.beneficiarioNormalizado}|${d.fechaEmision ?? '?'}|${banco ?? '?'}`
+}
+
+/**
+ * Sub-divide un grupo de cheques nuevos en componentes conectados por renovacionDe.
+ * Dos nuevos van juntos si comparten al menos un viejo en su renovacionDe.
+ * Nuevos sin renovacionDe explícito van a un sub-grupo aparte (auto-linking los resuelve).
+ */
+function subdividirPorRenovacionDe(grupo: ChequeOcasionalDoc[]): ChequeOcasionalDoc[][] {
+  const conRefs: ChequeOcasionalDoc[] = []
+  const sinRefs: ChequeOcasionalDoc[] = []
+  for (const d of grupo) {
+    if (d.renovacionDe.length > 0) conRefs.push(d)
+    else sinRefs.push(d)
+  }
+
+  if (conRefs.length <= 1) return [grupo]
+
+  // Union-Find para componentes conectados
+  const parent = conRefs.map((_, i) => i)
+  function find(x: number): number {
+    while (parent[x] !== x) { parent[x] = parent[parent[x]!]!; x = parent[x]! }
+    return x
+  }
+  function union(a: number, b: number) { parent[find(a)] = find(b) }
+
+  const viejoToIndices = new Map<string, number[]>()
+  for (let i = 0; i < conRefs.length; i++) {
+    for (const id of conRefs[i]!.renovacionDe) {
+      const list = viejoToIndices.get(id)
+      if (list) list.push(i)
+      else viejoToIndices.set(id, [i])
+    }
+  }
+
+  for (const indices of viejoToIndices.values()) {
+    for (let i = 1; i < indices.length; i++) {
+      union(indices[0]!, indices[i]!)
+    }
+  }
+
+  const componentes = new Map<number, ChequeOcasionalDoc[]>()
+  for (let i = 0; i < conRefs.length; i++) {
+    const root = find(i)
+    const comp = componentes.get(root)
+    if (comp) comp.push(conRefs[i]!)
+    else componentes.set(root, [conRefs[i]!])
+  }
+
+  if (componentes.size <= 1) return [grupo]
+
+  const result = [...componentes.values()]
+  if (sinRefs.length > 0) result.push(sinRefs)
+  return result
 }
 
 /**
@@ -239,10 +293,18 @@ export function agruparOperacionesRenovacion(
     return mejorOp
   }
 
+  // Sub-dividir grupos cuando los renovacionDe son disjuntos
+  const subgrupos: ChequeOcasionalDoc[][] = []
+  for (const [, grupo] of grupos) {
+    for (const sub of subdividirPorRenovacionDe(grupo)) {
+      subgrupos.push(sub)
+    }
+  }
+
   const operaciones: OperacionRenovacion[] = []
   const viejosUsados = new Set<string>()
 
-  for (const [, chequesNuevosDocs] of grupos) {
+  for (const chequesNuevosDocs of subgrupos) {
     const primero = chequesNuevosDocs[0]!
     const banco = extraerBanco(primero.numeroCheque)
 

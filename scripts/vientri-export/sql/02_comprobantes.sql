@@ -35,7 +35,8 @@ SELECT c.ID                                              AS vientri_id,
        ISNULL(c.MIGRACIONINICIAL, 0)                     AS migrado,
        CONVERT(char(19), c.FECINS, 126)                  AS fecins,
        CONVERT(char(19), CASE WHEN v.FECSYS > c.FECSYS THEN v.FECSYS ELSE c.FECSYS END, 126) AS fecsys,
-       CASE WHEN c.UTRANSAC = 'ELI' THEN 1 ELSE 0 END    AS baja
+       CASE WHEN c.UTRANSAC = 'ELI' THEN 1 ELSE 0 END    AS baja,
+       RTRIM(c.OBS)                                       AS obs
 FROM CMP c
 OUTER APPLY (SELECT TOP 1 x.FEC_VTO, x.IDCMPESTADO_PROVEEDOR, x.FEC_AUTORIZACION, x.FECHAPRONTOPAGO, x.DTO1PRONTOPAGO,
                     x.CUOTAS, x.IMPORTECUOTA, x.IDLINEAPRESTAMO, x.IMPORTEPENDIENTEALCANCELAR, x.FECSYS

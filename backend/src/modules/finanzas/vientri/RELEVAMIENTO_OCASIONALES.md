@@ -131,7 +131,7 @@ Los cheques tienen importes brutos **distintos** porque cada uno incluye sus pro
 |-------|-------------------|-------------------|
 | `IDCHQ` (id_cheque) | Disponible | Disponible — ahora se almacena como `vientriChqId` |
 | `IDPER_RECIBE` | Disponible pero sin resolver | Ahora resuelto via PROOCA → `beneficiarioFormal` + `beneficiarioCuit` |
-| `FEC_CONCILIADO` | No existía | Disponible — fecha de conciliación bancaria |
+| `FEC_CONCILIADO` | No existía | Disponible — fecha de conciliación bancaria. En renovaciones coincide con FECEMISION del nuevo 91.5% (mejor que FECSYS 86.6%). Se usa para auto-linking. |
 | `$X al Y%` en OBS | No aparecía (pocas filas) | 29 filas con tasa explícita |
 | Historia completa | Solo pendientes | Cadenas de renovación históricas completas |
 
@@ -139,9 +139,9 @@ Los cheques tienen importes brutos **distintos** porque cada uno incluye sus pro
 
 1. **Parseo de rol en OBS** — Exponer `'capital' | 'interes' | 'mixto'` como campo del doc, basado en las palabras clave de OBS.
 2. **Parseo de "Interes X% de capital $Y"** — Extrae tasa y capital explícitos (patrón de Olmos).
-3. **Heurística para renovaciones sin IDs** — Match por fecha emisión + beneficiario + fecha vencimiento cercana.
+3. **Auto-linking con FEC_CONCILIADO** — Para renovaciones sin IDs en OBS: match por FEC_CONCILIADO del viejo = FECEMISION del nuevo (±2 días) + beneficiario. Validado con 91.5% de coincidencia exacta sobre cheques con IDs explícitos. Cubre 84% de los sin IDs (158/189). Ver PLAN_OPERACIONES_RENOVACION.md.
 4. **Cálculo de costo financiero corregido** — Descontar sellado (2.5%) y usar interés simple diario (tasa mensual / 30 × días).
-5. **Agrupación de operaciones** — Cheques con misma fecha emisión + mismo beneficiario + misma OBS = una operación.
+5. **Agrupación de operaciones** — Ya implementado en `operacion-renovacion.ts`. Agrupa por beneficiarioNormalizado + fechaEmision + banco.
 
 ## 9. Preguntas abiertas
 

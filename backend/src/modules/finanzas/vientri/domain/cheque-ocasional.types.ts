@@ -61,6 +61,39 @@ export interface ChequeClasificado {
   cadenaId: string | null
 }
 
+export interface ChequeEnOperacion {
+  numeroCheque: string
+  montoCentavos: number
+  fechaVencimiento: string | null
+  fechaEmision: string | null
+  rol: 'capital' | 'interes' | 'mixto' | null
+}
+
+export interface OperacionRenovacion {
+  id: string
+  beneficiario: string
+  beneficiarioNormalizado: string
+  fechaEmision: string | null
+  banco: string | null
+
+  chequesViejos: ChequeEnOperacion[]
+  chequesNuevos: ChequeEnOperacion[]
+
+  totalViejosCentavos: number
+  totalNuevosCentavos: number
+  interesCentavos: number
+
+  fechaVtoViejos: string | null
+  fechaVtoNuevos: string | null
+  diasRenovacion: number | null
+  tasaImplicita: number
+  tasaMensualEstimada: number | null
+
+  vinculada: boolean
+  tipoVinculo: 'explicito' | 'implicito'
+  obsOriginal: string
+}
+
 export interface ChequeOcasionalDoc {
   numeroCheque: string
   beneficiario: string
@@ -84,6 +117,7 @@ export interface ChequeOcasionalDoc {
   obsOriginal: string
   revisar: string[]
   vientriId: number
+  fechaConciliado: string | null
   vientriChqId: number | null
   baja: boolean
 }

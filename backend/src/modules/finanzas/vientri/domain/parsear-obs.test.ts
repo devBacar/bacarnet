@@ -35,9 +35,47 @@ describe('parsearObs', () => {
       expect(r.renovacion).toEqual({ chequeIds: [] })
     })
 
+    it('"Renovacion cheques" sola marca renovación sin IDs', () => {
+      const r = parsearObs('Renovacion cheques')
+      expect(r.renovacion).toEqual({ chequeIds: [] })
+    })
+
     it('"Renovacion cheque 39584927" sin n°', () => {
       const r = parsearObs('Renovacion cheque 39584927')
       expect(r.renovacion?.chequeIds).toEqual(['39584927'])
+    })
+
+    it('"Renovacion" + números sin palabra "cheques" (caso POVO)', () => {
+      const r = parsearObs('Renovacion 39316283/4/5/6/7/8/9/90')
+      expect(r.renovacion?.chequeIds).toEqual([
+        '39316283', '39316284', '39316285', '39316286',
+        '39316287', '39316288', '39316289', '39316290',
+      ])
+    })
+
+    it('"Renovacion Ch" + números', () => {
+      const r = parsearObs('Renovacion Ch 39585511/12/13')
+      expect(r.renovacion?.chequeIds).toEqual(['39585511', '39585512', '39585513'])
+    })
+
+    it('"renovacion olmos" → renovación sin IDs', () => {
+      const r = parsearObs('renovacion olmos')
+      expect(r.renovacion).toEqual({ chequeIds: [] })
+    })
+
+    it('"patio olmos renovacion" → renovación sin IDs', () => {
+      const r = parsearObs('patio olmos renovacion')
+      expect(r.renovacion).toEqual({ chequeIds: [] })
+    })
+
+    it('"PATIO O. RENOVACION" → renovación sin IDs', () => {
+      const r = parsearObs('PATIO O. RENOVACION')
+      expect(r.renovacion).toEqual({ chequeIds: [] })
+    })
+
+    it('"Op Martin P (Renovacion)" → renovación sin IDs', () => {
+      const r = parsearObs('Op Martin P (Renovacion)')
+      expect(r.renovacion).toEqual({ chequeIds: [] })
     })
 
     it('números con barras expandidos', () => {

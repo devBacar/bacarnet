@@ -75,6 +75,29 @@ describe('importarChequesOcasionales', () => {
     expect(nuevoData.renovacionDe).toEqual(['44000999'])
   })
 
+  it('guarda fechaConciliado cuando está presente', async () => {
+    mockSync.mockClear()
+    const csv = [
+      CSV_HEADER,
+      fila({ vientri_id: '20', fecha_conciliado: '2026-10-15' }),
+      fila({ vientri_id: '21', fecha_conciliado: '' }),
+    ].join('\n')
+
+    await importarChequesOcasionales({ csv, origen: 'script', actor: 'test', simular: true })
+
+    const input = mockSync.mock.calls[0]![0]
+    const conFecha = input.docs.find((d) => d.id === 'oca-20')
+    const sinFecha = input.docs.find((d) => d.id === 'oca-21')
+
+    const conData = conFecha?.data as unknown as { fechaConciliado: string | null; pagado: boolean }
+    const sinData = sinFecha?.data as unknown as { fechaConciliado: string | null; pagado: boolean }
+
+    expect(conData.fechaConciliado).toBe('2026-10-15')
+    expect(conData.pagado).toBe(true)
+    expect(sinData.fechaConciliado).toBeNull()
+    expect(sinData.pagado).toBe(false)
+  })
+
   it('marca fechas imposibles para revisar', async () => {
     const csv = [
       CSV_HEADER,

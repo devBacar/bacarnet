@@ -194,7 +194,6 @@ export function FinanzasHoyPage() {
           {data.vacio ? (
             <p className="text-[13px] text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>
           ) : null}
-          <ResueltoHoy resueltoHoy={data.resueltoHoy} />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosHoy
               pagos={{
@@ -219,6 +218,7 @@ export function FinanzasHoyPage() {
               puedeOperar={permisos.agenda}
             />
           </div>
+          <ResueltoHoy resueltoHoy={data.resueltoHoy} />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosAtrasados
               pagos={fusionarPorId(

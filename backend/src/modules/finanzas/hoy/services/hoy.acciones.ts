@@ -377,6 +377,7 @@ export async function confirmarCobroLlegado(input: {
     clienteONombre: cobro.clienteONombre,
     concepto: null,
     montoCentavos: cobro.montoCentavos,
+    moneda: cobro.moneda === 'USD' ? 'USD' : 'ARS',
     fechaEsperada: hoy,
     estado: cobro.estado,
     cuit: null,

@@ -122,7 +122,7 @@ backend/src/modules/finanzas/vientri/services/
 
 ```
 backend/src/modules/finanzas/vientri/routes/
-└── cheques-ocasionales.routes.ts  — GET /, GET /cadenas, GET /resumen
+└── cheques-ocasionales.routes.ts  — GET /, GET /cadenas, GET /resumen, GET /operaciones-renovacion
 ```
 
 Montado en `/api/finanzas/cheques-ocasionales`.
@@ -170,14 +170,36 @@ Las renovaciones en la práctica ocurren en **bloque**: mismo beneficiario, mism
 `agruparOperacionesRenovacion()` agrupa cheques por `claveGrupo` = beneficiarioNormalizado + fechaEmision + banco:
 
 1. **Linking explícito**: si el OBS del cheque nuevo lista IDs (`renovacionDe`), se buscan los viejos por número
-2. **Auto-linking implícito**: si no hay IDs, se buscan viejos del mismo beneficiario con `fechaConciliado` = `fechaEmision` del nuevo (±2 días), mismo banco, y sanity check de interés ≤50%
+2. **Auto-linking implícito**: si no hay IDs, se buscan viejos del mismo beneficiario con `fechaConciliado` = `fechaEmision` del nuevo (±2 días), mismo banco o banco equivalente, y sanity check de interés ≤50%
+
+### Mecanismos de auto-linking
+
+El auto-linking tiene varias capas que se aplican en orden:
+
+1. **Por operación origen**: agrupa cheques viejos pagados por `obsOriginal|beneficiarioNormalizado|fechaEmision`. Busca dentro de cada grupo por `fechaConciliado ±2 días` (prioridad) o `fechaVencimiento ±2 días` (fallback)
+
+2. **Refinamiento por vencimiento**: si el set de candidatos da tasa negativa o >50% (por un cheque "intruso" pagado tarde con conciliado cercano pero vto lejano), filtra a candidatos con `fechaVencimiento ±5 días` de la emisión del nuevo
+
+3. **Fallback cross-operación**: cuando ninguna operación origen individual tiene suficientes candidatos, junta candidatos de TODAS las operaciones origen del mismo beneficiario. Caso real: MANA con cheques de dos lotes distintos (em=08-25 obs A + em=09-10 obs B) que se renuevan juntos en un solo bloque nuevo
+
+4. **Cadenas A→B→C**: un cheque que es renovación (`esRenovacion: true`) Y está pagado (`pagado: true`) puede servir como origen para otra renovación. Permite cadenas de renovación encadenadas
+
+5. **Bancos equivalentes**: `020-923-5000` ↔ `020-923-5010` son el mismo circuito. `bancosCompatibles()` permite cross-bank matching
+
+6. **Beneficiarios compatibles**: `beneficiariosCompatibles()` matchea nombres que comparten al menos una palabra ≥3 caracteres por prefijo. Ej: "HNA CLAUDIA" ↔ "HERMANA CLAUDIA" matchean por "CLAUDIA"
+
+### Sanity check
+
+El interés implícito debe ser ≥0% y ≤50%. Esto evita falsos positivos (vincular cheques que no son realmente una renovación).
 
 Cada `OperacionRenovacion` tiene:
 - `chequesNuevos[]` — los cheques emitidos en la renovación
 - `chequesViejos[]` — los cheques que se renovaron
-- `montoNuevo` / `montoViejo` — totales en centavos
+- `totalViejosCentavos` / `totalNuevosCentavos` — totales en centavos
 - `interesCentavos` — diferencia (monto nuevo − monto viejo)
 - `tasaImplicita` — interés / monto viejo
+- `vinculada` — true si se encontraron cheques viejos
+- `tipoVinculo` — `'explicito'` (IDs en OBS) o `'implicito'` (auto-link)
 
 ### Análisis de cobertura (datos reales, último año oct/2025–oct/2026)
 
@@ -194,15 +216,21 @@ Sobre 870 cheques con OBS de renovación:
 - FECSYS del viejo = FECEMISION del nuevo: **86.6%** exacto
 - Conclusión: FEC_CONCILIADO es mejor campo para linking
 
-### Casos sin match (31 cheques, 3.6%)
+### Casos resueltos (antes sin match)
+
+| Beneficiario | Cheques | Causa original | Solución |
+|---|---|---|---|
+| MAHUM DIEGO | 8 | Viejos en CHQ regular, no en CHQOCA | Fase 5: inyección de CHQ sintéticos |
+| POVO | ~22 | Cross-bank: nuevos 5010, viejos 5000 | Fase 3: `BANCOS_EQUIVALENTES` |
+| HNA CLAUDIA / HERMANA CLAUDIA | varios | Nombre escrito distinto | `beneficiariosCompatibles()` |
+| MANA (25M) | 11 | Cheque intruso con conc cercano pero vto lejano | Refinamiento por vto ±5 días |
+| MANA (18M) | 6 | Viejos de 2 lotes distintos (obs A y B) | Fallback cross-operación |
+
+### Caso pendiente
 
 | Beneficiario | Cheques | Causa |
 |---|---|---|
-| MAHUM DIEGO | 8 | Viejos no están en tabla CHQOCA (probablemente en CHQ regular) |
 | P OLMOS | 1 | OBS truncado, no se puede leer el ID completo |
-| POVO | ~22 | Cross-bank: nuevos en banco 5010, viejos en banco 5000 |
-
-Para POVO el matching falla porque se filtra por mismo banco. Relajar esa restricción o agregar lógica de bancos equivalentes (5000/5010) cubriría la mayoría.
 
 ## Cadenas de renovación (deprecado)
 
@@ -270,6 +298,25 @@ Response:
 }
 ```
 
+### `GET /api/finanzas/cheques-ocasionales/operaciones-renovacion`
+
+Operaciones de renovación agrupadas con auto-linking.
+
+Response:
+```json
+{
+  "operaciones": [OperacionRenovacionItem...],
+  "resumen": {
+    "vinculadas": 45,
+    "explicitas": 35,
+    "implicitas": 10,
+    "sinMatch": 5
+  }
+}
+```
+
+Cada `OperacionRenovacionItem` tiene `chequesNuevos[]`, `chequesViejos[]`, totales, interés, tasa, tipo de vínculo.
+
 ### `GET /api/finanzas/cheques-ocasionales/resumen`
 
 Resumen ejecutivo con costo financiero.
@@ -319,13 +366,14 @@ El script detecta automáticamente si el CSV tiene header o no (busca las column
 
 ## Qué falta
 
-- [ ] **Guardar `fechaConciliado` en `ChequeOcasionalDoc`** — el importador ya lee `fecha_conciliado` pero solo lo usa para derivar `pagado: boolean`, descartando la fecha. Hay que guardarla como campo explícito para auto-linking.
-- [ ] **Mejorar auto-linking en operaciones** — usar `fechaConciliado` para vincular cheques sin IDs explícitos (ver PLAN_OPERACIONES_RENOVACION.md)
-- [ ] **Bancos equivalentes** — 5000/5010 son el mismo circuito; relajar la restricción de mismo banco para POVO
-- [ ] **Pantallas frontend** — lista de cheques ocasionales, vista de operaciones, resumen de costo financiero
+- [x] ~~Guardar `fechaConciliado` en `ChequeOcasionalDoc`~~ — completado
+- [x] ~~Mejorar auto-linking en operaciones~~ — completado (fechaConciliado, refinamiento vto, cross-operación, cadenas)
+- [x] ~~Bancos equivalentes~~ — completado (020-923-5000 ↔ 5010)
+- [x] ~~Cruce con cheques regulares~~ — completado (inyección de CHQ sintéticos para MAHUM DIEGO)
+- [x] ~~Pantalla de operaciones~~ — completado (OperacionesRenovacion.tsx con actual/anterior)
 - [ ] **Sync con Agenda** — que los cheques ocasionales de proveedores financieros aparezcan como origen `'ocasionales'` en la agenda
 - [ ] **Importación automática** — cuando se integre la copia Vientri completa (hoy es manual por CSV)
-- [ ] **Cruce con cheques regulares** — vincular un CHQOCA con su cheque CHQ regular cuando exista en ambas tablas (resolvería los 8 cheques MAHUM DIEGO)
+- [ ] **Pantalla de resumen ejecutivo** — dashboard con costo financiero total por beneficiario
 
 ## Relación con otros módulos
 
@@ -334,12 +382,46 @@ El script detecta automáticamente si el CSV tiene header o no (busca las column
 - **`vientri/`** — Comparte `sincronizarColeccion`, `crearImportacion`, `cerrarImportacion` del repository
 - **`hoy/`** — El tipo `ChequesRenovadosHoy` existe en `hoy.tipos.ts` para mostrar renovaciones en el dashboard
 
+## Frontend
+
+### Componentes
+
+```
+src/components/finanzas/cheques/
+├── PestanaOcasionales.tsx         — pestaña contenedora en la pantalla de cheques
+└── OperacionesRenovacion.tsx      — vista de operaciones agrupadas por beneficiario
+```
+
+### OperacionesRenovacion.tsx
+
+Pantalla principal de operaciones de renovación. Funcionalidades:
+
+- **Agrupación por beneficiario**: agrupa operaciones usando `beneficiariosCompatibles()` (misma lógica que el backend). HNA CLAUDIA y HERMANA CLAUDIA aparecen juntas
+- **Operación actual vs anterior**: dentro de cada grupo:
+  - **Actual** = cheques nuevos con vencimiento ≥ hoy → resaltada con borde violeta, siempre visible
+  - **Anterior** = todo lo demás → colapsadas detrás de botón "N operaciones anteriores"
+- **Búsqueda**: por beneficiario, número de cheque o importe
+- **Filtros**: rango de vencimiento (desde/hasta)
+- **Filtro por beneficiario**: click desde otra pantalla filtra usando compatibilidad de nombres
+- **Detalle expandible**: cada operación muestra tabla pareada viejo→nuevo con interés y días por par
+
+### Contrato API
+
+`src/services/finanzasChequesApi.ts` — tipos `OperacionRenovacionItem`, `ChequeEnOperacionItem`, `ResumenOperacionesRenovacion` y función `fetchOperacionesRenovacion()`
+
 ## Tests
 
 ```powershell
-# Solo ocasionales
+# Operaciones de renovación (19 tests)
+npx vitest run backend/src/modules/finanzas/vientri/domain/operacion-renovacion.test.ts
+
+# Parseo de OBS
 npx vitest run backend/src/modules/finanzas/vientri/domain/parsear-obs.test.ts
+
+# Cadenas (deprecado)
 npx vitest run backend/src/modules/finanzas/vientri/domain/cadena-renovacion.test.ts
+
+# Importación
 npx vitest run backend/src/modules/finanzas/vientri/services/importar-cheques-ocasionales.test.ts
 
 # Suite completo de finanzas

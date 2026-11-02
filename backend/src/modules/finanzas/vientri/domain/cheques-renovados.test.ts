@@ -13,6 +13,7 @@ function oca(overrides: Partial<ChequeOcasionalDoc> = {}): ChequeOcasionalDoc {
     montoCentavos: 500000000,
     fechaVencimiento: '2027-01-15',
     fechaEmision: '2026-10-01',
+    fechaConciliado: null,
     estadoCodigo: 0,
     estado: 'En cartera',
     pagado: false,

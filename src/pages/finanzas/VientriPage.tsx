@@ -177,6 +177,11 @@ export function FinanzasVientriPage() {
                 <strong>{pesos(clientesQ.data.totalDeudaCentavos)}</strong> · a favor{' '}
                 <strong>{pesos(clientesQ.data.totalFavorCentavos)}</strong>
               </p>
+              <p className="mb-3 text-[13px] text-neutral-600 dark:text-neutral-400">
+                Un cliente puede tener deuda y saldo a favor al mismo tiempo: no es un error. Pasa cuando tiene
+                una nota de crédito que todavía no se cruzó contra una factura puntual en Vientri. Esa plata
+                queda "parada" hasta que alguien la impute en Vientri.
+              </p>
               <TablaSaldosCliente items={clientesQ.data.items} />
               {clientesQ.data.pages > 1 ? (
                 <div className="mt-4 flex items-center gap-3">

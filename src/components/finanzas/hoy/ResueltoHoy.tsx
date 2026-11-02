@@ -76,7 +76,6 @@ function GrupoMedio({ medio, totalCentavos, filas }: { medio: MedioResueltoHoy; 
 export function ResueltoHoy({ resueltoHoy }: { resueltoHoy: HoyResponse['resueltoHoy'] }) {
   if (!resueltoHoy) return null
   const { pagos, cobros } = resueltoHoy
-  if (pagos.filas.length === 0 && cobros.filas.length === 0) return null
   const gruposPagos = agruparPorMedio(pagos.filas)
   const gruposCobros = agruparPorMedio(cobros.filas)
 

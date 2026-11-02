@@ -1,7 +1,7 @@
 import type { ObsParseada, OperacionUsdParseada, RenovacionParseada, RolEnOperacion, TasaExplicitaParseada } from './cheque-ocasional.types.js'
 
-const RE_RENOVACION_CON_IDS = /renovaci[oó]n\s+cheques?\s*(?:n[°ºo]?\s*)?([\d\s,y/]+)/i
-const RE_RENOVACION_SOLA = /^renovaci[oó]n$/i
+const RE_RENOVACION_CON_IDS = /renovaci[oó]n\s+(?:(?:cheques?|ch)\s*(?:n[°ºo]?\s*)?)?([\d\s,y/]+)/i
+const RE_TIENE_RENOVACION = /\brenovaci[oó]n(?:es)?\b/i
 
 const RE_USD = /u\$?\s*s?d?\s*([\d.]+)\s*tc\s*\$?\s*([\d.]+)/i
 const RE_TASA_EXPLICITA = /\$([\d.]+)\s+al\s+([\d.,]+)%/i
@@ -35,7 +35,7 @@ function parsearRenovacion(obs: string): RenovacionParseada | null {
     const ids = expandirBarras(m[1])
     if (ids.length > 0) return { chequeIds: ids }
   }
-  if (RE_RENOVACION_SOLA.test(obs.trim())) return { chequeIds: [] }
+  if (RE_TIENE_RENOVACION.test(obs)) return { chequeIds: [] }
   return null
 }
 

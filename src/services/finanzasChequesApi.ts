@@ -464,6 +464,56 @@ export async function fetchOcasionalesCadenas(): Promise<OcasionalesCadenasRespo
   return body as OcasionalesCadenasResponse
 }
 
+export interface ChequeEnOperacionItem {
+  numeroCheque: string
+  montoCentavos: number
+  fechaVencimiento: string | null
+  fechaEmision: string | null
+  rol: 'capital' | 'interes' | 'mixto' | null
+}
+
+export interface OperacionRenovacionItem {
+  id: string
+  beneficiario: string
+  beneficiarioNormalizado: string
+  fechaEmision: string | null
+  banco: string | null
+  chequesViejos: ChequeEnOperacionItem[]
+  chequesNuevos: ChequeEnOperacionItem[]
+  totalViejosCentavos: number
+  totalNuevosCentavos: number
+  interesCentavos: number
+  fechaVtoViejos: string | null
+  fechaVtoNuevos: string | null
+  diasRenovacion: number | null
+  tasaImplicita: number
+  tasaMensualEstimada: number | null
+  vinculada: boolean
+  tipoVinculo: 'explicito' | 'implicito'
+  obsOriginal: string
+}
+
+export interface ResumenOperacionesRenovacion {
+  vinculadas: number
+  explicitas: number
+  implicitas: number
+  sinMatch: number
+}
+
+export interface OperacionesRenovacionResponse {
+  operaciones: OperacionRenovacionItem[]
+  resumen?: ResumenOperacionesRenovacion
+}
+
+export async function fetchOperacionesRenovacion(): Promise<OperacionesRenovacionResponse> {
+  const res = await ocasionalesFetch('/operaciones-renovacion')
+  const body = (await res.json().catch(() => null)) as { error?: string } | OperacionesRenovacionResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudieron cargar las operaciones de renovación')
+  }
+  return body as OperacionesRenovacionResponse
+}
+
 export interface ImportarOcasionalesResponse {
   ok: boolean
   mensaje: string

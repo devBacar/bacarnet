@@ -19,7 +19,7 @@ import {
 } from '../../../services/finanzasChequesApi'
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
-import { CadenasRenovacion } from './CadenasRenovacion'
+import { OperacionesRenovacion } from './OperacionesRenovacion'
 import { BotonNuevaOperacionUsd, OperacionesDolares } from './OperacionesDolares'
 
 function formatFecha(iso: string | null): string {
@@ -46,8 +46,8 @@ export function PestanaOcasionales() {
   const [busqueda, setBusqueda] = useState('')
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
-  const [subvista, setSubvista] = useState<'cheques' | 'cadenas' | 'usd' | 'operaciones'>('cheques')
-  const [beneficiarioCadenas, setBeneficiarioCadenas] = useState('')
+  const [subvista, setSubvista] = useState<'cheques' | 'renovaciones' | 'usd' | 'operaciones'>('cheques')
+  const [beneficiarioRenov, setBeneficiarioRenov] = useState('')
   const [detalleId, setDetalleId] = useState<string | null>(null)
 
   const importMutation = useMutation({
@@ -84,9 +84,9 @@ export function PestanaOcasionales() {
   const total = data?.total ?? 0
   const paginas = Math.max(1, data?.pages ?? 1)
 
-  const irACadenas = (beneficiarioNormalizado: string) => {
-    setBeneficiarioCadenas(beneficiarioNormalizado)
-    setSubvista('cadenas')
+  const irARenovaciones = (beneficiarioNormalizado: string) => {
+    setBeneficiarioRenov(beneficiarioNormalizado)
+    setSubvista('renovaciones')
   }
 
   const subTabs = (
@@ -94,14 +94,14 @@ export function PestanaOcasionales() {
       <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
         {([
           ['cheques', 'Cheques'],
-          ['cadenas', 'Cadenas'],
+          ['renovaciones', 'Renovaciones'],
           ['usd', 'USD (agrupadas)'],
           ['operaciones', 'Operaciones USD'],
         ] as const).map(([val, label]) => (
           <button
             key={val}
             type="button"
-            onClick={() => { setSubvista(val); if (val === 'cadenas') setBeneficiarioCadenas('') }}
+            onClick={() => { setSubvista(val); if (val === 'renovaciones') setBeneficiarioRenov('') }}
             className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               subvista === val
                 ? 'bg-brand-primary text-white shadow-sm'
@@ -147,13 +147,13 @@ export function PestanaOcasionales() {
     </div>
   )
 
-  if (subvista === 'cadenas') {
+  if (subvista === 'renovaciones') {
     return (
       <>
         {subTabs}
-        <CadenasRenovacion
-          beneficiarioFiltro={beneficiarioCadenas}
-          onLimpiarFiltro={() => setBeneficiarioCadenas('')}
+        <OperacionesRenovacion
+          beneficiarioFiltro={beneficiarioRenov}
+          onLimpiarFiltro={() => setBeneficiarioRenov('')}
         />
       </>
     )
@@ -350,7 +350,7 @@ export function PestanaOcasionales() {
       {resumen && resumen.costoFinanciero.cantidadCadenas > 0 ? (
         <button
           type="button"
-          onClick={() => irACadenas('')}
+          onClick={() => irARenovaciones('')}
           className="surface-card mb-4 block w-full rounded-2xl border border-violet-200 p-3 text-left hover:bg-violet-50/50 dark:border-violet-900/70 dark:hover:bg-violet-950/20"
           title="Ver cadenas de renovación"
         >
@@ -446,7 +446,7 @@ export function PestanaOcasionales() {
                   key={ch.vientriId}
                   ch={ch}
                   onAbrir={() => setDetalleId(`oca-${ch.vientriId}`)}
-                  onVerCadena={() => irACadenas(ch.beneficiarioNormalizado)}
+                  onVerRenov={() => irARenovaciones(ch.beneficiarioNormalizado)}
                 />
               ))}
             </tbody>
@@ -486,7 +486,7 @@ export function PestanaOcasionales() {
   )
 }
 
-function OcasionalRow({ ch, onAbrir, onVerCadena }: { ch: ChequeOcasionalItem; onAbrir: () => void; onVerCadena: () => void }) {
+function OcasionalRow({ ch, onAbrir, onVerRenov }: { ch: ChequeOcasionalItem; onAbrir: () => void; onVerRenov: () => void }) {
   return (
     <tr
       className="cursor-pointer border-t border-subtle hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
@@ -527,7 +527,7 @@ function OcasionalRow({ ch, onAbrir, onVerCadena }: { ch: ChequeOcasionalItem; o
           {ch.esRenovacion || ch.renovadoPor.length > 0 ? (
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onVerCadena() }}
+              onClick={(e) => { e.stopPropagation(); onVerRenov() }}
               title="Ver cadena de renovación"
               className="inline-block rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 hover:bg-amber-200 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
             >

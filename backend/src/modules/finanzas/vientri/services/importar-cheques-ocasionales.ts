@@ -102,6 +102,7 @@ function filaADoc(
     rolEnOperacion: obs.rol,
     obsOriginal: obs.obsOriginal,
     revisar,
+    fechaConciliado: aFecha(f.fecha_conciliado),
     vientriId,
     vientriChqId: aEntero(f.id_cheque),
     baja: aBool(f.baja),

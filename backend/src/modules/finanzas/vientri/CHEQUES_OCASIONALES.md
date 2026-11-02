@@ -38,7 +38,9 @@ Exportada como CSV con separador `;` y encoding UTF-8. Columnas relevantes:
 | `baja` | `0`/`1` |
 | `destinatario` | Nombre del beneficiario (proveedor financiero o real) |
 | `obs` | Observaciones — contiene datos de renovación y operaciones USD |
-| `fecha_conciliado` | Si tiene valor, el cheque fue pagado |
+| `fecha_conciliado` | Fecha de conciliación bancaria (cuándo el banco procesó el pago). En renovaciones, coincide con `fecha_emision` del cheque nuevo el 91.5% de los casos (ver análisis en PLAN_OPERACIONES_RENOVACION.md) |
+| `fecimp` | Timestamp de impresión/creación del cheque en Vientri |
+| `fecsys` | Timestamp de última modificación del registro en Vientri. En cheques renovados, se actualiza al momento de la renovación |
 | `id_persona_recibe` | Referencia a persona en Vientri |
 
 ### Estados de cheque (id_estado)
@@ -102,7 +104,9 @@ backend/src/modules/finanzas/vientri/domain/
 ├── cheque-ocasional.types.ts   — Tipos: ChequeOcasionalDoc, CadenaRenovacion, etc.
 ├── parsear-obs.ts              — parsearObs(): extrae renovaciones y USD del campo OBS
 ├── parsear-obs.test.ts         — 14+ tests
-├── cadena-renovacion.ts        — reconstruirCadenas(), clasificarCheques(), resumirCostoFinanciero()
+├── operacion-renovacion.ts     — agruparOperacionesRenovacion(): modelo por operación (PRIMARIO)
+├── operacion-renovacion.test.ts— tests del modelo por operación
+├── cadena-renovacion.ts        — reconstruirCadenas() (DEPRECADO, reemplazado por operación)
 └── cadena-renovacion.test.ts   — 9+ tests
 ```
 
@@ -159,7 +163,50 @@ Cada documento es un `ChequeOcasionalDoc`:
 }
 ```
 
-## Cadenas de renovación
+## Operaciones de renovación (modelo primario)
+
+Las renovaciones en la práctica ocurren en **bloque**: mismo beneficiario, misma fecha, múltiples cheques. Por eso el modelo correcto es **por operación** (N viejos → M nuevos), no por cadena individual (A→B→C).
+
+`agruparOperacionesRenovacion()` agrupa cheques por `claveGrupo` = beneficiarioNormalizado + fechaEmision + banco:
+
+1. **Linking explícito**: si el OBS del cheque nuevo lista IDs (`renovacionDe`), se buscan los viejos por número
+2. **Auto-linking implícito**: si no hay IDs, se buscan viejos del mismo beneficiario con `fechaConciliado` = `fechaEmision` del nuevo (±2 días), mismo banco, y sanity check de interés ≤50%
+
+Cada `OperacionRenovacion` tiene:
+- `chequesNuevos[]` — los cheques emitidos en la renovación
+- `chequesViejos[]` — los cheques que se renovaron
+- `montoNuevo` / `montoViejo` — totales en centavos
+- `interesCentavos` — diferencia (monto nuevo − monto viejo)
+- `tasaImplicita` — interés / monto viejo
+
+### Análisis de cobertura (datos reales, último año oct/2025–oct/2026)
+
+Sobre 870 cheques con OBS de renovación:
+
+| Método de linking | Cheques | % del total |
+|---|---|---|
+| IDs explícitos en OBS | 681 | 78.3% |
+| Auto-link (FEC_CONCILIADO + beneficiario) | 158 | 18.2% |
+| Sin match | 31 | 3.6% |
+
+**FEC_CONCILIADO vs FECSYS para auto-linking** (validado con IDs explícitos):
+- FEC_CONCILIADO del viejo = FECEMISION del nuevo: **91.5%** exacto
+- FECSYS del viejo = FECEMISION del nuevo: **86.6%** exacto
+- Conclusión: FEC_CONCILIADO es mejor campo para linking
+
+### Casos sin match (31 cheques, 3.6%)
+
+| Beneficiario | Cheques | Causa |
+|---|---|---|
+| MAHUM DIEGO | 8 | Viejos no están en tabla CHQOCA (probablemente en CHQ regular) |
+| P OLMOS | 1 | OBS truncado, no se puede leer el ID completo |
+| POVO | ~22 | Cross-bank: nuevos en banco 5010, viejos en banco 5000 |
+
+Para POVO el matching falla porque se filtra por mismo banco. Relajar esa restricción o agregar lógica de bancos equivalentes (5000/5010) cubriría la mayoría.
+
+## Cadenas de renovación (deprecado)
+
+> **NOTA**: El modelo de cadenas lineales está deprecado en favor del modelo por operación. Se conserva para referencia y migración gradual.
 
 `reconstruirCadenas()` arma cadenas lineales a partir de los links `renovacionDe`/`renovadoPor`:
 
@@ -272,10 +319,13 @@ El script detecta automáticamente si el CSV tiene header o no (busca las column
 
 ## Qué falta
 
-- [ ] **Pantallas frontend** — lista de cheques ocasionales, vista de cadenas, resumen de costo financiero
+- [ ] **Guardar `fechaConciliado` en `ChequeOcasionalDoc`** — el importador ya lee `fecha_conciliado` pero solo lo usa para derivar `pagado: boolean`, descartando la fecha. Hay que guardarla como campo explícito para auto-linking.
+- [ ] **Mejorar auto-linking en operaciones** — usar `fechaConciliado` para vincular cheques sin IDs explícitos (ver PLAN_OPERACIONES_RENOVACION.md)
+- [ ] **Bancos equivalentes** — 5000/5010 son el mismo circuito; relajar la restricción de mismo banco para POVO
+- [ ] **Pantallas frontend** — lista de cheques ocasionales, vista de operaciones, resumen de costo financiero
 - [ ] **Sync con Agenda** — que los cheques ocasionales de proveedores financieros aparezcan como origen `'ocasionales'` en la agenda
 - [ ] **Importación automática** — cuando se integre la copia Vientri completa (hoy es manual por CSV)
-- [ ] **Cruce con cheques regulares** — vincular un CHQOCA con su cheque CHQ regular cuando exista en ambas tablas
+- [ ] **Cruce con cheques regulares** — vincular un CHQOCA con su cheque CHQ regular cuando exista en ambas tablas (resolvería los 8 cheques MAHUM DIEGO)
 
 ## Relación con otros módulos
 

@@ -196,6 +196,32 @@ function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[],
   }
 }
 
+/**
+ * Un cheque emitido en el módulo de Cheques que vence hoy y todavía no tiene compromiso en la
+ * Agenda (si lo tuviera, ya está en `pagos` vía `filaPago` y no hay que repetirlo acá).
+ */
+function filaPagoDeCheque(cheque: ChequeEnHoy): PagoFilaHoy {
+  const aQuien = cheque.destinatario?.trim() || cheque.emisor
+  return {
+    id: `cheque-${cheque.id}`,
+    urgencia: 'Normal',
+    vencido: false,
+    vencidoTexto: null,
+    diasAtraso: 0,
+    aQuien,
+    concepto: `Cheque Nº ${cheque.numero}`,
+    montoCentavos: cheque.montoCentavos,
+    moneda: 'ARS',
+    comoPagar: 'Cheque',
+    medioPago: 'cheque',
+    proveedorONombre: aQuien,
+    sugerenciasBanco: [],
+    chequeEmitido: true,
+    aviso: null,
+    origen: 'vientri-cheque',
+  }
+}
+
 const porUrgenciaYNombre = (a: CompromisoHoy, b: CompromisoHoy) => {
   const urgencia = rankUrgencia(a.urgencia) - rankUrgencia(b.urgencia)
   if (urgencia !== 0) return urgencia
@@ -605,9 +631,10 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
       )
       .map((c) => c.vientriChequeNumero as string),
   )
-  const chequesDelDia = chequesQueVencenHoy(input.cheques, hoy)
+  const filasChequesDelDia = chequesQueVencenHoy(input.cheques, hoy)
     .filter((cheque) => !numerosConCompromisoHoy.has(cheque.numero))
-    .reduce((total, cheque) => total + cheque.montoCentavos, 0)
+    .map(filaPagoDeCheque)
+  const chequesDelDia = filasChequesDelDia.reduce((total, fila) => total + fila.montoCentavos, 0)
   const pagosCentavos = pagosDeCompromisos + chequesDelDia
   const cobrosCentavos = suma(ingresos.filas.filter((fila) => !fila.llego))
   const saldoFinalCentavos = saldoInicialCentavos - pagosCentavos + cobrosCentavos
@@ -626,6 +653,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const cobradosHoy = seleccionarCobradosHoy(input.cobros, hoy)
   const vacio =
     pagos.length === 0 &&
+    filasChequesDelDia.length === 0 &&
     pagosAtrasados.length === 0 &&
     pagosSinFecha.length === 0 &&
     ingresos.filas.length === 0 &&
@@ -640,7 +668,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
     saludo: saludoDelDia(input.now),
     fecha: hoy,
     vacio,
-    pagos: { totalCentavos: pagosDeCompromisos, filas: pagos },
+    pagos: { totalCentavos: pagosCentavos, filas: [...pagos, ...filasChequesDelDia] },
     pagosAtrasados: { totalCentavos: suma(pagosAtrasados), filas: pagosAtrasados },
     pagosSinFecha: { totalCentavos: suma(pagosSinFecha), filas: pagosSinFecha },
     ingresos: { filas: ingresos.filas },

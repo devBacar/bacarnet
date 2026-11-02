@@ -597,6 +597,19 @@ describe('mismo criterio en todo Hoy: día hábil y conversión de USD', () => {
     expect(vista.dia.pagosCentavos).toBe(300_000)
   })
 
+  it('la tarjeta "Pagos de hoy" incluye ese cheque suelto, para que el total de arriba y el de la tarjeta no difieran', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [compromiso({ id: 'factura-1', fechaVencimiento: HOY, montoCentavos: 100_000 })],
+        cheques: [chequeEnHoy({ id: 'chq-3', numero: '999', montoCentavos: 300_000 })],
+      }),
+    )
+    expect(vista.dia.pagosCentavos).toBe(400_000)
+    expect(vista.pagos.totalCentavos).toBe(400_000)
+    expect(vista.pagos.filas).toHaveLength(2)
+    expect(vista.pagos.filas.map((f) => f.id)).toContain('cheque-chq-3')
+  })
+
   it('sin cotización cargada, no convierte (usa el monto tal cual para no inventar un valor)', () => {
     const vista = armarVistaHoy(
       base({

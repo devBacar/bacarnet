@@ -188,3 +188,8 @@ export interface PaginaSaldosCliente extends Pagina<SaldoCliente> {
 export function fetchSaldosClienteVientri(f: { q?: string; soloFavor?: boolean; page?: number }) {
   return vientriFetch<PaginaSaldosCliente>(`/clientes${qs({ q: f.q, soloFavor: f.soloFavor ? '1' : undefined, page: f.page })}`)
 }
+
+/** Misma cuenta corriente, del lado de lo que le debemos (o nos deben a favor) a cada proveedor. */
+export function fetchSaldosProveedorVientri(f: { q?: string; soloFavor?: boolean; page?: number }) {
+  return vientriFetch<PaginaSaldosCliente>(`/proveedores${qs({ q: f.q, soloFavor: f.soloFavor ? '1' : undefined, page: f.page })}`)
+}

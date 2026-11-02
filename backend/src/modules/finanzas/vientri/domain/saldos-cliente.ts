@@ -3,7 +3,7 @@
  * imputadas, por `pendienteCentavos`) por persona, para ver saldo a favor y deuda real.
  * Mismo criterio que la pantalla "17 - Cuenta Corriente Cliente" de Vientri.
  */
-import type { VientriPendienteDoc } from './tipos.js'
+import type { LadoPendiente, VientriPendienteDoc } from './tipos.js'
 
 export interface ComprobanteSaldoCliente {
   clave: string
@@ -28,9 +28,18 @@ export interface SaldoCliente {
 }
 
 export function armarSaldosCliente(pendientesCobrar: VientriPendienteDoc[]): SaldoCliente[] {
+  return armarSaldosPorLado(pendientesCobrar, 'cobrar')
+}
+
+/** Misma cuenta corriente, del lado de lo que BacarNet le debe o le tiene a favor a cada proveedor. */
+export function armarSaldosProveedor(pendientesPagar: VientriPendienteDoc[]): SaldoCliente[] {
+  return armarSaldosPorLado(pendientesPagar, 'pagar')
+}
+
+function armarSaldosPorLado(pendientes: VientriPendienteDoc[], lado: LadoPendiente): SaldoCliente[] {
   const porPersona = new Map<number, SaldoCliente>()
-  for (const p of pendientesCobrar) {
-    if (p.lado !== 'cobrar') continue
+  for (const p of pendientes) {
+    if (p.lado !== lado) continue
     const id = p.persona?.vientriId
     if (id === undefined || id === null) continue
     let s = porPersona.get(id)

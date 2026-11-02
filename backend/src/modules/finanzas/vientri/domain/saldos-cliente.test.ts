@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { armarSaldosCliente } from './saldos-cliente.js'
+import { armarSaldosCliente, armarSaldosProveedor } from './saldos-cliente.js'
 import type { VientriPendienteDoc } from './tipos.js'
 
 function pendiente(p: Partial<VientriPendienteDoc> & { clave: string }): VientriPendienteDoc {
@@ -57,5 +57,18 @@ describe('armarSaldosCliente', () => {
     expect(saldo.favorCentavos).toBe(300_00)
     expect(saldo.deudaCentavos).toBe(0)
     expect(saldo.saldoCentavos).toBe(-300_00)
+  })
+})
+
+describe('armarSaldosProveedor', () => {
+  it('usa el lado "pagar" e ignora "cobrar"', () => {
+    const filas = [
+      pendiente({ clave: 'p1', lado: 'pagar', persona: { vientriId: 10, nombre: 'Proveedor Uno', cuit: null }, pendienteCentavos: 500_00 }),
+      pendiente({ clave: 'c1', lado: 'cobrar', persona: { vientriId: 20, nombre: 'Cliente Uno', cuit: null }, pendienteCentavos: 900_00 }),
+    ]
+    const salida = armarSaldosProveedor(filas)
+    expect(salida).toHaveLength(1)
+    expect(salida[0]!.personaId).toBe(10)
+    expect(salida[0]!.deudaCentavos).toBe(500_00)
   })
 })

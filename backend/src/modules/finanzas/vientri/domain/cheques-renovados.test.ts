@@ -121,7 +121,7 @@ describe('marcarRenovadosPorCadena', () => {
     expect(r[0]!.estado).toBe('debitado')
   })
 
-  it('no toca cheques que están en la tabla Chq (no empiezan con "oca-")', () => {
+  it('también cierra cheques que vienen de la tabla Chq, no solo de CHQOCA', () => {
     const ocasionales = [
       oca({ numeroCheque: 'CHQ-A', vientriId: 1, montoCentavos: 500000000, renovadoPor: ['CHQ-B'] }),
       oca({ numeroCheque: 'CHQ-B', vientriId: 2, montoCentavos: 580000000, renovacionDe: ['CHQ-A'] }),
@@ -130,6 +130,6 @@ describe('marcarRenovadosPorCadena', () => {
 
     const r = marcarRenovadosPorCadena(cheques, ocasionales)
 
-    expect(r[0]!.estado).toBe('en_cartera')
+    expect(r[0]!.estado).toBe('renovado')
   })
 })

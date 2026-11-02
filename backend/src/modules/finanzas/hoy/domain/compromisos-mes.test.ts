@@ -23,6 +23,7 @@ function compromiso(parcial: Partial<CompromisoParaPlanilla> & Pick<CompromisoPa
     estado: parcial.estado ?? 'pendiente',
     medioPago: parcial.medioPago ?? 'transferencia',
     grupo: parcial.grupo ?? 'Otros egresos',
+    origen: parcial.origen ?? 'manual',
     moneda: parcial.moneda ?? 'ARS',
     deudaTotalCentavos: parcial.deudaTotalCentavos ?? null,
     cuotaNumero: parcial.cuotaNumero ?? null,

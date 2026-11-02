@@ -27,6 +27,8 @@ export interface CompromisoHoy {
   origen: OrigenCompromisoHoy
   /** Con qué se pagó de verdad (cheques con su vencimiento real, etc.). Solo en origen 'vientri'. */
   desglosePago?: DesglosePagoHoy[] | null
+  /** Número del cheque, solo en origen 'vientri-cheque' (ese circuito no arma desglosePago). */
+  vientriChequeNumero?: string | null
 }
 
 export interface DesglosePagoHoy {

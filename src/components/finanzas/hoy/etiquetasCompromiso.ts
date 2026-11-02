@@ -36,14 +36,3 @@ export function etiquetaOrigenCompromiso(origen: OrigenCompromisoHoy): string {
 export function tonoOrigenCompromiso(origen: OrigenCompromisoHoy): TonoEstado {
   return TONO_ORIGEN[origen]
 }
-
-/**
- * Aproximación por el id, para pantallas que todavía no traen el origen real (ej. "Compromisos de
- * la semana", que sale de otro endpoint). Usar `etiquetaOrigenCompromiso` cuando se pueda.
- */
-export function etiquetaOrigenPorId(id: string): string {
-  if (id.startsWith('vientri-cheque-')) return ETIQUETA_ORIGEN['vientri-cheque']
-  if (id.startsWith('vientri-')) return ETIQUETA_ORIGEN.vientri
-  if (id.startsWith('inv-')) return ETIQUETA_ORIGEN.inversiones
-  return ETIQUETA_ORIGEN.manual
-}

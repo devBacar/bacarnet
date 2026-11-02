@@ -65,7 +65,20 @@ export function Ayuda({ children, tamano = 'text-[13px]' }: { children: ReactNod
   )
 }
 
-/** Tarjeta compacta: título chico, algo a la derecha (total, botones), contenido y ayuda al pie. */
+function leerAbierta(clave: string): boolean {
+  try {
+    const guardado = window.localStorage.getItem(`bacarnet.tarjeta.${clave}`)
+    return guardado === null ? true : guardado === '1'
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Tarjeta compacta: título chico, algo a la derecha (total, botones), contenido y ayuda al pie.
+ * Se puede desplegar/colapsar haciendo clic en el título; el total de "derecha" se ve siempre,
+ * aunque esté colapsada. El navegador recuerda cómo la dejaste la próxima vez.
+ */
 export function Tarjeta({
   titulo,
   subtitulo,
@@ -75,6 +88,7 @@ export function Tarjeta({
   claseSubtitulo = 'text-brand-primary text-[13px]',
   claseAyuda,
   tour,
+  colapsable = true,
   children,
 }: {
   titulo: ReactNode
@@ -85,22 +99,58 @@ export function Tarjeta({
   claseSubtitulo?: string
   claseAyuda?: string
   tour?: string
+  /** Si se puede desplegar/colapsar. Por defecto sí. */
+  colapsable?: boolean
   children: ReactNode
 }) {
+  const clave = typeof titulo === 'string' ? titulo : tour ?? ''
+  const [abierta, setAbierta] = useState(true)
+  useEffect(() => {
+    if (colapsable && clave) setAbierta(leerAbierta(clave))
+  }, [colapsable, clave])
+
+  function cambiar(valor: boolean) {
+    setAbierta(valor)
+    try {
+      if (clave) window.localStorage.setItem(`bacarnet.tarjeta.${clave}`, valor ? '1' : '0')
+    } catch {
+      /* si el navegador no deja guardar, no pasa nada: solo no se recuerda la próxima vez */
+    }
+  }
+
   return (
     <section
       data-tour={tour}
       className="flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900"
     >
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-primary-muted)] bg-brand-primary-light px-4 py-2.5">
-        <div className="min-w-0">
-          <h2 className={claseTitulo}>{titulo}</h2>
-          {subtitulo ? <p className={claseSubtitulo}>{subtitulo}</p> : null}
-        </div>
+        {colapsable ? (
+          <button
+            type="button"
+            className="flex min-w-0 items-center gap-1.5 text-left"
+            aria-expanded={abierta}
+            onClick={() => cambiar(!abierta)}
+          >
+            <span aria-hidden className="text-brand-primary shrink-0 text-[11px]">{abierta ? '▾' : '▸'}</span>
+            <span className="min-w-0">
+              <h2 className={claseTitulo}>{titulo}</h2>
+              {subtitulo ? <p className={claseSubtitulo}>{subtitulo}</p> : null}
+            </span>
+          </button>
+        ) : (
+          <div className="min-w-0">
+            <h2 className={claseTitulo}>{titulo}</h2>
+            {subtitulo ? <p className={claseSubtitulo}>{subtitulo}</p> : null}
+          </div>
+        )}
         {derecha ? <div className="flex min-w-0 flex-wrap items-center gap-2">{derecha}</div> : null}
       </header>
-      <div className="min-h-0 min-w-0 flex-1 p-4">{children}</div>
-      {ayuda ? <Ayuda tamano={claseAyuda}>{ayuda}</Ayuda> : null}
+      {!colapsable || abierta ? (
+        <>
+          <div className="min-h-0 min-w-0 flex-1 p-4">{children}</div>
+          {ayuda ? <Ayuda tamano={claseAyuda}>{ayuda}</Ayuda> : null}
+        </>
+      ) : null}
     </section>
   )
 }

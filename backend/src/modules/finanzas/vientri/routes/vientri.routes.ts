@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { hayImportacionEnCurso, leerEstado, leerLimpieza, listarPorCampos, VIENTRI_CHEQUES, VIENTRI_PENDIENTES } from '../services/vientri.repository.js'
 import { iniciarTraerVientriDesdeDrive } from '../services/traer-desde-drive.js'
-import { armarSaldosCliente } from '../domain/saldos-cliente.js'
+import { armarSaldosCliente, armarSaldosProveedor } from '../domain/saldos-cliente.js'
 import type { VientriPendienteDoc } from '../domain/tipos.js'
 
 /**
@@ -11,6 +11,7 @@ import type { VientriPendienteDoc } from '../domain/tipos.js'
  * GET /cheques      ?direccion=recibido|emitido&estado=...&revisar=1&q=&page=
  * GET /pendientes   ?lado=pagar|cobrar|revisar&q=&page=
  * GET /clientes     cuenta corriente por cliente: deuda real, saldo a favor y neto (?soloFavor=1&q=)
+ * GET /proveedores  misma cuenta corriente, del lado de lo que le debemos a cada proveedor (?soloFavor=1&q=)
  * GET /limpieza     cheques viejos que en Vientri siguen abiertos (para Administración)
  * POST /traer-ahora dispara en segundo plano traer la última copia de Vientri (si hay una nueva).
  *                    Responde al toque; /estado.importando dice si todavía está corriendo. Pide finanzas_cheques.
@@ -139,6 +140,28 @@ finanzasVientriRouter.get('/clientes', async (req, res) => {
   } catch (err) {
     console.error('[finanzas/vientri] clientes', err)
     res.status(500).json({ error: 'No se pudo armar la cuenta corriente de clientes' })
+  }
+})
+
+finanzasVientriRouter.get('/proveedores', async (req, res) => {
+  try {
+    const q = one(req.query.q)
+    const soloFavor = one(req.query.soloFavor) === '1'
+    const filas = (await listarPorCampos(VIENTRI_PENDIENTES, [['lado', 'pagar']])) as unknown as VientriPendienteDoc[]
+    let proveedores = armarSaldosProveedor(filas)
+    if (soloFavor) proveedores = proveedores.filter((p) => p.favorCentavos > 0)
+    if (q) {
+      const nq = normalizar(q)
+      proveedores = proveedores.filter((p) => normalizar(p.nombre).includes(nq) || normalizar(p.cuit ?? '').includes(nq))
+    }
+    const total = proveedores.length
+    const totalFavorCentavos = proveedores.reduce((s, p) => s + p.favorCentavos, 0)
+    const totalDeudaCentavos = proveedores.reduce((s, p) => s + p.deudaCentavos, 0)
+    const pagina = paginar(proveedores as unknown as Array<Record<string, unknown>>, Number(one(req.query.page) ?? 1), 'saldoCentavos')
+    res.json({ ...pagina, total, totalFavorCentavos, totalDeudaCentavos })
+  } catch (err) {
+    console.error('[finanzas/vientri] proveedores', err)
+    res.status(500).json({ error: 'No se pudo armar la cuenta corriente de proveedores' })
   }
 })
 

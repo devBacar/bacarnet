@@ -11,13 +11,14 @@ import {
   fetchEstadoVientri,
   fetchPendientesVientri,
   fetchSaldosClienteVientri,
+  fetchSaldosProveedorVientri,
   type EstadoChequeVientri,
   type SaldoCliente,
   type VientriCheque,
   type VientriPendiente,
 } from '../../services/finanzasVientriApi'
 
-type Pestana = 'recibidos' | 'emitidos' | 'pagar' | 'cobrar' | 'revisar' | 'clientes'
+type Pestana = 'recibidos' | 'emitidos' | 'pagar' | 'cobrar' | 'revisar' | 'clientes' | 'proveedores'
 
 const PESTANAS: Array<{ id: Pestana; label: string }> = [
   { id: 'recibidos', label: 'Cheques recibidos' },
@@ -26,6 +27,7 @@ const PESTANAS: Array<{ id: Pestana; label: string }> = [
   { id: 'cobrar', label: 'A cobrar' },
   { id: 'revisar', label: 'Sin clasificar' },
   { id: 'clientes', label: 'Cuenta corriente clientes' },
+  { id: 'proveedores', label: 'Cuenta corriente proveedores' },
 ]
 
 const FILTROS_RECIBIDOS: Array<EstadoChequeVientri | ''> = ['en_cartera', 'depositado', 'vendido', 'entregado', 'rechazado', '']
@@ -62,6 +64,8 @@ export function FinanzasVientriPage() {
 
   const esCheques = pestana === 'recibidos' || pestana === 'emitidos'
   const esClientes = pestana === 'clientes'
+  const esProveedores = pestana === 'proveedores'
+  const esCuentaCorriente = esClientes || esProveedores
   const chequesQ = useQuery({
     queryKey: ['finanzas', 'vientri', 'cheques', pestana, estado, q, page],
     queryFn: () =>
@@ -71,13 +75,19 @@ export function FinanzasVientriPage() {
   const pendientesQ = useQuery({
     queryKey: ['finanzas', 'vientri', 'pendientes', pestana, q, page],
     queryFn: () => fetchPendientesVientri({ lado: pestana as 'pagar' | 'cobrar' | 'revisar', q, page }),
-    enabled: !esCheques && !esClientes,
+    enabled: !esCheques && !esCuentaCorriente,
   })
   const clientesQ = useQuery({
     queryKey: ['finanzas', 'vientri', 'clientes', q, soloFavor, page],
     queryFn: () => fetchSaldosClienteVientri({ q, soloFavor, page }),
     enabled: esClientes,
   })
+  const proveedoresQ = useQuery({
+    queryKey: ['finanzas', 'vientri', 'proveedores', q, soloFavor, page],
+    queryFn: () => fetchSaldosProveedorVientri({ q, soloFavor, page }),
+    enabled: esProveedores,
+  })
+  const cuentaCorrienteQ = esClientes ? clientesQ : proveedoresQ
   const datos = esCheques ? chequesQ : pendientesQ
 
   function cambiarPestana(p: Pestana) {
@@ -145,11 +155,11 @@ export function FinanzasVientriPage() {
               setQ(ev.target.value)
               setPage(1)
             }}
-            placeholder={esClientes ? 'Nombre o CUIT' : 'Número, nombre, CUIT o importe'}
+            placeholder={esCuentaCorriente ? 'Nombre o CUIT' : 'Número, nombre, CUIT o importe'}
             className={finanzasInputClass}
           />
         </label>
-        {esClientes ? (
+        {esCuentaCorriente ? (
           <label className="flex items-end gap-2 text-sm">
             <input
               type="checkbox"
@@ -164,37 +174,38 @@ export function FinanzasVientriPage() {
         ) : null}
       </div>
 
-      {esClientes ? (
+      {esCuentaCorriente ? (
         <>
-          {clientesQ.isLoading ? <p className="py-6 text-neutral-600">Cargando…</p> : null}
-          {clientesQ.isError ? (
-            <p className="py-6 font-semibold text-red-700">{(clientesQ.error as Error).message}</p>
+          {cuentaCorrienteQ.isLoading ? <p className="py-6 text-neutral-600">Cargando…</p> : null}
+          {cuentaCorrienteQ.isError ? (
+            <p className="py-6 font-semibold text-red-700">{(cuentaCorrienteQ.error as Error).message}</p>
           ) : null}
-          {clientesQ.data ? (
+          {cuentaCorrienteQ.data ? (
             <>
               <p className="mb-2 text-neutral-700 dark:text-neutral-300">
-                <strong>{clientesQ.data.total.toLocaleString('es-AR')}</strong> clientes con saldo · deuda real{' '}
-                <strong>{pesos(clientesQ.data.totalDeudaCentavos)}</strong> · a favor{' '}
-                <strong>{pesos(clientesQ.data.totalFavorCentavos)}</strong>
+                <strong>{cuentaCorrienteQ.data.total.toLocaleString('es-AR')}</strong>{' '}
+                {esClientes ? 'clientes' : 'proveedores'} con saldo · deuda real{' '}
+                <strong>{pesos(cuentaCorrienteQ.data.totalDeudaCentavos)}</strong> · a favor{' '}
+                <strong>{pesos(cuentaCorrienteQ.data.totalFavorCentavos)}</strong>
               </p>
               <p className="mb-3 text-[13px] text-neutral-600 dark:text-neutral-400">
-                Un cliente puede tener deuda y saldo a favor al mismo tiempo: no es un error. Pasa cuando tiene
-                una nota de crédito que todavía no se cruzó contra una factura puntual en Vientri. Esa plata
-                queda "parada" hasta que alguien la impute en Vientri.
+                {esClientes ? 'Un cliente' : 'Un proveedor'} puede tener deuda y saldo a favor al mismo tiempo: no es
+                un error. Pasa cuando hay una nota de crédito o débito que todavía no se cruzó contra un comprobante
+                puntual en Vientri. Esa plata queda "parada" hasta que alguien la impute en Vientri.
               </p>
-              <TablaSaldosCliente items={clientesQ.data.items} />
-              {clientesQ.data.pages > 1 ? (
+              <TablaSaldosCuentaCorriente items={cuentaCorrienteQ.data.items} tipo={esClientes ? 'cliente' : 'proveedor'} />
+              {cuentaCorrienteQ.data.pages > 1 ? (
                 <div className="mt-4 flex items-center gap-3">
                   <button type="button" className={botonClase(false)} disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
                     Anterior
                   </button>
                   <span>
-                    Página {clientesQ.data.page} de {clientesQ.data.pages}
+                    Página {cuentaCorrienteQ.data.page} de {cuentaCorrienteQ.data.pages}
                   </span>
                   <button
                     type="button"
                     className={botonClase(false)}
-                    disabled={page >= clientesQ.data.pages}
+                    disabled={page >= cuentaCorrienteQ.data.pages}
                     onClick={() => setPage((p) => p + 1)}
                   >
                     Siguiente
@@ -316,15 +327,17 @@ function TablaCheques({ items, emitidos }: { items: VientriCheque[]; emitidos: b
   )
 }
 
-function TablaSaldosCliente({ items }: { items: SaldoCliente[] }) {
+function TablaSaldosCuentaCorriente({ items, tipo }: { items: SaldoCliente[]; tipo: 'cliente' | 'proveedor' }) {
   const [abierto, setAbierto] = useState<number | null>(null)
-  if (items.length === 0) return <p className="py-6 text-neutral-600">No hay clientes con saldo.</p>
+  if (items.length === 0) {
+    return <p className="py-6 text-neutral-600">No hay {tipo === 'cliente' ? 'clientes' : 'proveedores'} con saldo.</p>
+  }
   return (
     <div className="overflow-x-auto rounded-xl border border-neutral-300 bg-white dark:border-zinc-700 dark:bg-zinc-900">
       <table className="w-full border-collapse text-sm">
         <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-left text-xs font-medium text-brand-primary">
           <tr>
-            <th className="px-3 py-2.5">Cliente</th>
+            <th className="px-3 py-2.5">{tipo === 'cliente' ? 'Cliente' : 'Proveedor'}</th>
             <th className="px-3 py-2.5 text-right">Deuda real</th>
             <th className="px-3 py-2.5 text-right">Saldo a favor</th>
             <th className="px-3 py-2.5 text-right">Neto</th>

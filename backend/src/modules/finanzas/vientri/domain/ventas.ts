@@ -1,10 +1,11 @@
 /**
  * Ventas (facturación real) para el tablero "Ventas". Usa comprobantes.csv (ya requerido para
- * pendientes) más tres archivos OPCIONALES que, al escribir esto, el script de exportación de
- * Vientri todavía no genera: items.csv (líneas de cmp, tabla SQL `items`), unegocio.csv (catálogo
- * `UNEGOCIO`) y art.csv (catálogo `ART`). Mientras no estén, se arman igual los comprobantes de
- * venta (con idUnegocio null y sin items) y el tablero muestra "sin datos" en el mix por unidad de
- * negocio e ítem, en vez de romper. Aditivo: no cambia nada de cheques/pendientes/agenda.
+ * pendientes, con id_unegocio/nombre_cf desde el contrato v0.3) más tres archivos OPCIONALES
+ * (items.csv, unegocio.csv, art.csv — contrato v0.3, ver scripts/vientri-export/) que siguen
+ * siendo opcionales acá por las dudas de que llegue una carpeta vieja (v0.2, sin estos archivos):
+ * en ese caso se arman igual los comprobantes de venta (con idUnegocio null y sin items) y el
+ * tablero muestra "sin datos" en el mix por unidad de negocio e ítem, en vez de romper.
+ * Aditivo: no cambia nada de cheques/pendientes/agenda.
  */
 import type { FilaCsv } from './csv.js'
 import { ladoPendiente, textoComprobante } from './comprobantes.js'

@@ -351,12 +351,16 @@ export function PagosAtrasados({
   onYaPague,
   onReprogramar,
   puedeOperar = true,
+  abiertaControlada,
+  onCambiarAbierta,
 }: {
   pagos: PagoHoy[]
   onPagar: (pago: PagoHoy) => void
   onYaPague: (pago: PagoHoy) => void
   onReprogramar: (pago: PagoHoy) => void
   puedeOperar?: boolean
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
 }) {
   const recientes = pagos.filter((f) => (f.diasAtraso ?? 0) <= 30)
   const viejos = pagos.filter((f) => (f.diasAtraso ?? 0) > 30)
@@ -408,6 +412,8 @@ export function PagosAtrasados({
       titulo="Pagos atrasados"
       derecha={pagos.length > 0 ? <Total centavos={total} /> : undefined}
       ayuda="Ya pasó su fecha de pago. No suman en los números de hoy. Si ya se pagaron, marcalos; si se van a pagar otro día, cambiales la fecha."
+      abiertaControlada={abiertaControlada}
+      onCambiarAbierta={onCambiarAbierta}
     >
       {pagos.length === 0 ? (
         <Vacio texto="No hay pagos atrasados." />
@@ -443,6 +449,8 @@ export function CobrosAtrasados({
   onReclamar,
   onConfirmar,
   puedeOperar = true,
+  abiertaControlada,
+  onCambiarAbierta,
 }: {
   atrasados: CobroAtrasadoHoy[]
   /** Cobros atrasados que ya llegaron al banco (salen de «Cobros de hoy»). */
@@ -451,6 +459,8 @@ export function CobrosAtrasados({
   onReclamar: (cobro: CobroAtrasadoHoy) => void
   onConfirmar: (ingreso: IngresoHoy) => void
   puedeOperar?: boolean
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
 }) {
   type Item =
     | { tipo: 'atrasado'; cobro: CobroAtrasadoHoy; haceDias: number }
@@ -540,6 +550,8 @@ export function CobrosAtrasados({
       titulo="Cobros atrasados"
       derecha={items.length > 0 ? <Total centavos={total} /> : undefined}
       ayuda="Ya pasó la fecha en que esperábamos la plata. Reclamá o confirmá si ya entró."
+      abiertaControlada={abiertaControlada}
+      onCambiarAbierta={onCambiarAbierta}
     >
       {items.length === 0 ? (
         <Vacio texto="No hay cobros atrasados." />

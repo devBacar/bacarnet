@@ -73,7 +73,15 @@ function GrupoMedio({ medio, totalCentavos, filas }: { medio: MedioResueltoHoy; 
  * el banco lo debitó/acreditó (no cuando se armó la orden de pago ni el día en que vence en el papel).
  * Informativo: no se puede accionar desde acá.
  */
-export function ResueltoHoy({ resueltoHoy }: { resueltoHoy: HoyResponse['resueltoHoy'] }) {
+export function ResueltoHoy({
+  resueltoHoy,
+  abiertaControlada,
+  onCambiarAbierta,
+}: {
+  resueltoHoy: HoyResponse['resueltoHoy']
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
+}) {
   if (!resueltoHoy) return null
   const { pagos, cobros } = resueltoHoy
   const gruposPagos = agruparPorMedio(pagos.filas)
@@ -85,6 +93,8 @@ export function ResueltoHoy({ resueltoHoy }: { resueltoHoy: HoyResponse['resuelt
         titulo="Salió del banco hoy"
         subtitulo={pagos.filas.length > 0 ? <Monto centavos={pagos.totalCentavos} /> : undefined}
         ayuda="Solo lo que el banco ya movió de verdad. Un cheque cuenta recién cuando el banco lo debitó, no el día que vence en el papel ni el día que se armó la orden de pago."
+        abiertaControlada={abiertaControlada}
+        onCambiarAbierta={onCambiarAbierta}
       >
         {gruposPagos.length === 0 ? (
           <Vacio texto="Todavía no salió nada del banco hoy." />
@@ -100,6 +110,8 @@ export function ResueltoHoy({ resueltoHoy }: { resueltoHoy: HoyResponse['resuelt
         titulo="Ingresó al banco hoy"
         subtitulo={cobros.filas.length > 0 ? <Monto centavos={cobros.totalCentavos} /> : undefined}
         ayuda="Solo lo que el banco ya acreditó de verdad. Un cheque cuenta recién cuando el banco lo acreditó, no el día que vence en el papel ni el día que se recibió."
+        abiertaControlada={abiertaControlada}
+        onCambiarAbierta={onCambiarAbierta}
       >
         {gruposCobros.length === 0 ? (
           <Vacio texto="Todavía no ingresó nada al banco hoy." />

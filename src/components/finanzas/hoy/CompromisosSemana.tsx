@@ -225,7 +225,15 @@ function FilaCompromiso({
   )
 }
 
-export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanilla) => void }) {
+export function CompromisosSemana({
+  onPagar,
+  abiertaControlada,
+  onCambiarAbierta,
+}: {
+  onPagar: (pago: PagoDesdePlanilla) => void
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
+}) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const hoy = hoyArgentina()
@@ -270,6 +278,8 @@ export function CompromisosSemana({ onPagar }: { onPagar: (pago: PagoDesdePlanil
       claseTitulo="text-brand-primary text-base font-semibold"
       claseSubtitulo="text-brand-primary text-xs"
       claseAyuda="text-xs"
+      abiertaControlada={abiertaControlada}
+      onCambiarAbierta={onCambiarAbierta}
       derecha={
         <>
           <span className="inline-flex items-center gap-1">

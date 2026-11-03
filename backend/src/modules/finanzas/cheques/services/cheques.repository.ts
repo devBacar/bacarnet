@@ -174,10 +174,30 @@ function matchInteresEncubierto(data: FirebaseFirestore.DocumentData, interesEnc
   return (data.esInteresEncubierto === true) === interesEncubierto
 }
 
-function matchBusqueda(data: FirebaseFirestore.DocumentData, q: string): boolean {
+export function matchMontoCentavos(montoCentavos: unknown, q: string): boolean {
+  if (typeof montoCentavos !== 'number' || !Number.isFinite(montoCentavos)) return false
+  const limpio = q.replace(/[$\s]/g, '')
+  if (!/\d/.test(limpio)) return false
+  const pesos = montoCentavos / 100
+  const enteroStr = String(Math.trunc(pesos))
+  const decimalComa = pesos.toFixed(2).replace('.', ',')
+  const decimalPunto = pesos.toFixed(2)
+  const formateadoAr = pesos.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const sinPuntos = limpio.replace(/\./g, '')
+  return (
+    enteroStr.includes(limpio) ||
+    decimalComa.includes(limpio) ||
+    decimalPunto.includes(limpio) ||
+    formateadoAr.includes(limpio) ||
+    (sinPuntos !== '' && (enteroStr.includes(sinPuntos) || decimalComa.includes(sinPuntos)))
+  )
+}
+
+export function matchBusqueda(data: FirebaseFirestore.DocumentData, q: string): boolean {
   const norm = q.toLowerCase()
   const fields = [data.numero, data.emisor, data.emisorCuit, data.cliente, data.destinatario]
-  return fields.some((f) => typeof f === 'string' && f.toLowerCase().includes(norm))
+  if (fields.some((f) => typeof f === 'string' && f.toLowerCase().includes(norm))) return true
+  return matchMontoCentavos(data.montoCentavos, norm)
 }
 
 async function loadFiltradoInMemory(filtro: ChequesFiltro): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {

@@ -345,7 +345,7 @@ export function FinanzasChequesPage() {
           <input
             type="text"
             className={`${finanzasInputClass} pl-9`}
-            placeholder="Buscar por número, contraparte o cliente…"
+            placeholder="Buscar por número, contraparte, cliente o importe…"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />

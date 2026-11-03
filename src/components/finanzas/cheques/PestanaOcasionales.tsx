@@ -428,7 +428,7 @@ export function PestanaOcasionales() {
           <input
             type="text"
             className={`${finanzasInputClass} pl-9`}
-            placeholder="Buscar por beneficiario, número…"
+            placeholder="Buscar por beneficiario, número o importe…"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />

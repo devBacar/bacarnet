@@ -13,6 +13,7 @@ import type { FiltroSeguimiento, OperacionPersistida } from '../domain/seguimien
 import { recalcularSeguimiento, VIENTRI_OPERACIONES_RENOVACION } from '../services/recalcular-seguimiento.js'
 import { leerCompletos, reconstruirCompletos } from '../services/completos-ocasionales.js'
 import { VIENTRI_CHEQUES } from '../services/vientri.repository.js'
+import { matchMontoCentavos } from '../../cheques/services/cheques.repository.js'
 
 export const finanzasChequesOcasionalesRouter = Router()
 finanzasChequesOcasionalesRouter.use(requireWorkspaceUser, requireViewFinanzas)
@@ -55,7 +56,7 @@ finanzasChequesOcasionalesRouter.get('/', async (req, res) => {
 
     if (q) {
       filtrados = filtrados.filter((d) =>
-        normalizar(`${d.beneficiario} ${d.numeroCheque} ${d.obsOriginal} ${d.estado}`).includes(q),
+        normalizar(`${d.beneficiario} ${d.numeroCheque} ${d.obsOriginal} ${d.estado}`).includes(q) || matchMontoCentavos(d.montoCentavos, q),
       )
     }
 

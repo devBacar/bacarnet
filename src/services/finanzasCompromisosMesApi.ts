@@ -69,6 +69,8 @@ export interface FilaCompromisoMes {
   arrastreCentavos: number
   /** Una línea por pago, ya escrita para mostrar. */
   pagosResumen?: Array<{ fecha: string; texto: string; linea: string }>
+  /** Para distinguir en la UI un cheque a un proveedor financiero (MANA, LIONEL, etc.) del resto. */
+  esProveedorFinanciero?: boolean
 }
 
 export interface GrupoCompromisoMes {

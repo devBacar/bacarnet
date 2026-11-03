@@ -3,7 +3,6 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
 import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
-import { CargaHoyResumen } from '../../components/finanzas/cargaDiaria/CargaHoyResumen'
 import { CompromisosSemana, type PagoDesdePlanilla } from '../../components/finanzas/hoy/CompromisosSemana'
 import { GuiaHoy } from '../../components/finanzas/hoy/GuiaHoy'
 import {
@@ -276,7 +275,6 @@ export function FinanzasHoyPage() {
               puedeOperar={permisos.agenda}
             />
           ) : null}
-          <CargaHoyResumen />
           <CompromisosSemana onPagar={pagarDesdePlanilla} />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <TarjetaBancos

@@ -75,6 +75,32 @@ function leerAbierta(clave: string): boolean {
 }
 
 /**
+ * Para un par de tarjetas que están una al lado de la otra (misma fila): comparten un solo
+ * abierto/cerrado, así que tocar cualquiera de las dos despliega o colapsa a las dos juntas.
+ * Cada fila usa su propia `clave`, independiente de las demás filas de la pantalla.
+ */
+export function useTarjetaPar(clave: string): [boolean, (valor: boolean) => void] {
+  const claveCompleta = `bacarnet.tarjeta.fila.${clave}`
+  const [abierta, setAbierta] = useState(() => {
+    try {
+      const guardado = window.localStorage.getItem(claveCompleta)
+      return guardado === null ? true : guardado === '1'
+    } catch {
+      return true
+    }
+  })
+  function cambiar(valor: boolean) {
+    setAbierta(valor)
+    try {
+      window.localStorage.setItem(claveCompleta, valor ? '1' : '0')
+    } catch {
+      /* si el navegador no deja guardar, no pasa nada: solo no se recuerda la próxima vez */
+    }
+  }
+  return [abierta, cambiar]
+}
+
+/**
  * Tarjeta compacta: título chico, algo a la derecha (total, botones), contenido y ayuda al pie.
  * Se puede desplegar/colapsar haciendo clic en el título; el total de "derecha" se ve siempre,
  * aunque esté colapsada. El navegador recuerda cómo la dejaste la próxima vez.

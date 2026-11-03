@@ -489,6 +489,29 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(resultado.filas[0]).toMatchObject({ chequeNumero: '50095064', medio: 'cheque_fisico' })
   })
 
+  it('seleccionarPagadosHoy: sin desglose, si el cheque real es un e-cheque no lo muestra como "cheque físico"', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-2',
+        fechaVencimiento: HOY,
+        montoCentavos: 0,
+        montoTotalCentavos: 624_067_06,
+        estado: 'pagado',
+        fechaPago: HOY,
+        proveedorONombre: 'Bacar Transportadora',
+        medioPago: 'cheque',
+        origen: 'vientri-cheque',
+        vientriChequeNumero: '50096771',
+      }),
+    ]
+    // Antes del fix: como no hay desglosePago, se asumía siempre "cheque_fisico" sin mirar el cheque
+    // real, aunque el cheque 50096771 sea un e-cheque de verdad.
+    const resultado = seleccionarPagadosHoy(compromisos, HOY, [
+      chequeEnHoy({ id: 'chq-2', numero: '50096771', montoCentavos: 624_067_06, tipo: 'echeq' }),
+    ])
+    expect(resultado.filas[0]).toMatchObject({ chequeNumero: '50096771', medio: 'echeq' })
+  })
+
   it('seleccionarCobradosHoy: toma lo cobrado hoy sin importar la fecha esperada', () => {
     const cobros = [
       cobro({ id: 'cobrado-hoy', fechaEsperada: '2026-08-01', montoCentavos: 3_000, estado: 'confirmado', fechaConfirmado: HOY, clienteONombre: 'Cliente X' }),

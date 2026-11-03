@@ -1,6 +1,8 @@
 import { auth } from './firebase'
 import { resolveApiUrl } from './resolveApiUrl'
 
+export type TipoOperacion = 'usd' | 'renovacion_pesos'
+
 export interface OperacionDolaresDetalle {
   numeroCheque: string
   fechaCobro: string
@@ -14,6 +16,7 @@ export interface OperacionDolaresDetalle {
 export interface OperacionDolares {
   id: string
   numero: number
+  tipo: TipoOperacion
   fecha: string
   inversor: string
   inversorNormalizado: string
@@ -22,6 +25,9 @@ export interface OperacionDolares {
   impuestoPorcentaje: number
   montoUsd: number
   cashCentavos: number
+  capitalRenovadoCentavos: number
+  cantidadChequesViejos: number
+  interesPorcentaje: number
   detalles: OperacionDolaresDetalle[]
   totalChequesCentavos: number
   totalLiquidarCentavos: number
@@ -35,6 +41,7 @@ export interface OperacionDolares {
 }
 
 export interface OperacionDolaresInput {
+  tipo: TipoOperacion
   fecha: string
   inversor: string
   cotizacion: number
@@ -42,6 +49,9 @@ export interface OperacionDolaresInput {
   impuestoPorcentaje: number
   montoUsd: number
   cashCentavos: number
+  capitalRenovadoCentavos: number
+  cantidadChequesViejos: number
+  interesPorcentaje: number
   notas: string
   cheques: Array<{
     numeroCheque?: string

@@ -4,6 +4,7 @@ vi.mock('../../../../lib/firebase/admin.js', () => ({ adminDb: vi.fn() }))
 
 vi.mock('../../agenda/services/proveedores-financieros.repository.js', () => ({
   nombresNormalizadosProveedoresFinancieros: vi.fn(async () => new Set(['presta plata', 'cambia dolares'])),
+  crearProveedorFinancieroDoc: vi.fn(async () => 'provfin-test'),
 }))
 
 vi.mock('./vientri.repository.js', () => ({
@@ -12,10 +13,20 @@ vi.mock('./vientri.repository.js', () => ({
   cerrarImportacion: vi.fn(async () => {}),
 }))
 
+vi.mock('./recalcular-seguimiento.js', () => ({
+  recalcularSeguimiento: vi.fn(async () => ({ operaciones: 0, actualizados: 0 })),
+}))
+
+vi.mock('./completos-ocasionales.js', () => ({
+  reconstruirCompletos: vi.fn(async () => ({ total: 3, reales: 3, sinteticos: 0, conteo: { nuevos: 3, cambiados: 0, iguales: 0, borrados: 0 } })),
+}))
+
 import { importarChequesOcasionales } from './importar-cheques-ocasionales.js'
 import { sincronizarColeccion } from './vientri.repository.js'
+import { crearProveedorFinancieroDoc } from '../../agenda/services/proveedores-financieros.repository.js'
 
 const mockSync = vi.mocked(sincronizarColeccion)
+const mockCrearProv = vi.mocked(crearProveedorFinancieroDoc)
 
 const CSV_HEADER = 'vientri_id;numero;numero_completo;id_banco;importe;pagado;fecha_vto;fecha_emision;id_estado;baja;destinatario;obs;id_cheque;fecha_conciliado;id_persona_recibe'
 
@@ -96,6 +107,38 @@ describe('importarChequesOcasionales', () => {
     expect(conData.pagado).toBe(true)
     expect(sinData.fechaConciliado).toBeNull()
     expect(sinData.pagado).toBe(false)
+  })
+
+  it('crea proveedoresFinancieros nuevos cuando no es simulación', async () => {
+    mockCrearProv.mockClear()
+    const csv = [
+      CSV_HEADER,
+      // "Nuevo Financiero" no está en el set de proveedores, pero OBS tiene renovación → esProveedorFinanciero
+      fila({ vientri_id: '30', destinatario: 'Nuevo Financiero', obs: 'Renovacion cheque n° 44009999' }),
+      // "Presta Plata" ya existe en el set → no se crea
+      fila({ vientri_id: '31', destinatario: 'Presta Plata', obs: '' }),
+      // "Proveedor Real" no es financiero → no se crea
+      fila({ vientri_id: '32', destinatario: 'Proveedor Real', obs: '' }),
+    ].join('\n')
+
+    const r = await importarChequesOcasionales({ csv, origen: 'script', actor: 'uid-test', simular: false })
+
+    expect(r.proveedoresNuevos).toEqual(['Nuevo Financiero'])
+    expect(mockCrearProv).toHaveBeenCalledOnce()
+    expect(mockCrearProv).toHaveBeenCalledWith('Nuevo Financiero', 'uid-test')
+  })
+
+  it('no crea proveedoresFinancieros en simulación', async () => {
+    mockCrearProv.mockClear()
+    const csv = [
+      CSV_HEADER,
+      fila({ vientri_id: '40', destinatario: 'Otro Financiero', obs: 'u$10.000 TC1500' }),
+    ].join('\n')
+
+    const r = await importarChequesOcasionales({ csv, origen: 'script', actor: 'uid-test', simular: true })
+
+    expect(r.proveedoresNuevos).toEqual([])
+    expect(mockCrearProv).not.toHaveBeenCalled()
   })
 
   it('marca fechas imposibles para revisar', async () => {

@@ -9,7 +9,7 @@ function cheque(p: Partial<VientriChequeDoc>): VientriChequeDoc {
     fechaEntregado: null, fechaConciliado: null, estado: 'en_cartera', estadoVientri: 'En cartera', estadoVientriId: 1,
     librador: { vientriId: 9, nombre: 'Cliente Ficticio SA', cuit: '30000000007' }, entregadoPor: null, entregadoA: null,
     destinatario: null, idCmpIngreso: null, cmpIngresoDesc: null, idCmpSalida: null, cmpSalidaDesc: null, idCmpNdRechazo: null, idCmpPagoBanco: null,
-    estadoPrevioId: null, motivoRechazoId: null,
+    estadoPrevioId: null, motivoRechazoId: null, facturasIngreso: [], facturasEgreso: [],
     fuentes: ['Chq'], vientriChqId: 1, vientriChqocaId: null, baja: false, revisar: [], fecsys: null,
     ...p,
   }

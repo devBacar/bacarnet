@@ -4,13 +4,15 @@ import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { importarChequesOcasionales, VIENTRI_CHEQUES_OCASIONALES } from '../services/importar-cheques-ocasionales.js'
 import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
+import { analizarOcasionalesVsEmitidos } from '../domain/analisis-ocasionales-emitidos.js'
+import { analizarInteresVsRenovaciones } from '../domain/analisis-interes-renovacion.js'
 import { reconstruirCadenas, clasificarCheques, resumirCostoFinanciero } from '../domain/cadena-renovacion.js'
 import { agruparOperacionesRenovacion } from '../domain/operacion-renovacion.js'
 import { armarSeguimiento } from '../domain/seguimiento.js'
 import type { FiltroSeguimiento, OperacionPersistida } from '../domain/seguimiento.types.js'
-import { leerActivosConEslabonesDeVientri } from '../services/completar-eslabones-vientri.js'
-import { inyectarChqParaAutolink } from '../services/inyectar-chq-autolink.js'
 import { recalcularSeguimiento, VIENTRI_OPERACIONES_RENOVACION } from '../services/recalcular-seguimiento.js'
+import { leerCompletos, reconstruirCompletos } from '../services/completos-ocasionales.js'
+import { VIENTRI_CHEQUES } from '../services/vientri.repository.js'
 
 export const finanzasChequesOcasionalesRouter = Router()
 finanzasChequesOcasionalesRouter.use(requireWorkspaceUser, requireViewFinanzas)
@@ -78,11 +80,9 @@ finanzasChequesOcasionalesRouter.get('/', async (req, res) => {
 
 finanzasChequesOcasionalesRouter.get('/cadenas', async (_req, res) => {
   try {
-    const todos = await leerTodos()
-    const activos = todos.filter((d) => !d.baja)
-    const completos = await leerActivosConEslabonesDeVientri(activos)
-    const cadenas = reconstruirCadenas(completos)
-    const clasificados = clasificarCheques(completos, cadenas)
+    const pool = await leerCompletos()
+    const cadenas = reconstruirCadenas(pool)
+    const clasificados = clasificarCheques(pool, cadenas)
     res.json({ cadenas, clasificados })
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] cadenas', err)
@@ -92,12 +92,12 @@ finanzasChequesOcasionalesRouter.get('/cadenas', async (_req, res) => {
 
 finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
   try {
-    const todos = await leerTodos()
-    const activos = todos.filter((d) => !d.baja)
-    const completos = await leerActivosConEslabonesDeVientri(activos)
-    const cadenas = reconstruirCadenas(completos)
+    const pool = await leerCompletos()
+    const cadenas = reconstruirCadenas(pool)
     const resumen = resumirCostoFinanciero(cadenas)
 
+    // Stats solo de docs reales (no sintéticos)
+    const activos = pool.filter((d) => d.vientriId !== 0)
     const validos = activos.filter(
       (d) => !d.revisar.some((r) => r.toLowerCase().includes('imposible')),
     )
@@ -129,6 +129,7 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
         equivalenteCentavos: number
         cantidadCheques: number
         sumaChequesCentavos: number
+        obsComun: string
         cheques: Array<{ numeroCheque: string; montoCentavos: number; fechaVencimiento: string | null; fechaEmision: string | null }>
       }
     >()
@@ -152,6 +153,7 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
             equivalenteCentavos: Math.round(d.operacionUsd.montoUsd * d.operacionUsd.cotizacion * 100),
             cantidadCheques: 1,
             sumaChequesCentavos: d.montoCentavos,
+            obsComun: d.obsOriginal,
             cheques: [detalleCheque],
           })
           totalMontoUsd += d.operacionUsd.montoUsd
@@ -237,11 +239,8 @@ finanzasChequesOcasionalesRouter.post('/importar', requireFinanzasPermiso('finan
 
 finanzasChequesOcasionalesRouter.get('/operaciones-renovacion', async (_req, res) => {
   try {
-    const todos = await leerTodos()
-    const activos = todos.filter((d) => !d.baja)
-    const completos = await leerActivosConEslabonesDeVientri(activos)
-    const conChq = await inyectarChqParaAutolink(completos)
-    const operaciones = agruparOperacionesRenovacion(conChq)
+    const pool = await leerCompletos()
+    const operaciones = agruparOperacionesRenovacion(pool)
     const vinculadas = operaciones.filter(o => o.vinculada)
     const explicitas = vinculadas.filter(o => o.tipoVinculo === 'explicito')
     const implicitas = vinculadas.filter(o => o.tipoVinculo === 'implicito')
@@ -305,6 +304,39 @@ finanzasChequesOcasionalesRouter.post('/seguimiento/recalcular', requireFinanzas
   }
 })
 
+finanzasChequesOcasionalesRouter.post('/completos/recalcular', requireFinanzasPermiso('finanzas_cheques'), async (_req, res) => {
+  try {
+    const resultado = await reconstruirCompletos()
+    res.json({ ok: true, ...resultado })
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] recalcular completos', err)
+    res.status(500).json({ error: 'No se pudo recalcular los cheques completos' })
+  }
+})
+
+finanzasChequesOcasionalesRouter.get('/analisis-emitidos', async (_req, res) => {
+  try {
+    const ocasionales = await leerTodos()
+    const snap = await adminDb().collection(VIENTRI_CHEQUES).get()
+    const vientriCheques = snap.docs.map((d) => d.data() as import('../domain/tipos.js').VientriChequeDoc)
+    res.json(analizarOcasionalesVsEmitidos(ocasionales, vientriCheques))
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] analisis-emitidos', err)
+    res.status(500).json({ error: 'No se pudo realizar el análisis' })
+  }
+})
+
+finanzasChequesOcasionalesRouter.get('/analisis-interes', async (_req, res) => {
+  try {
+    const pool = await leerCompletos()
+    const operaciones = agruparOperacionesRenovacion(pool)
+    res.json(analizarInteresVsRenovaciones(pool, operaciones))
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] analisis-interes', err)
+    res.status(500).json({ error: 'No se pudo realizar el análisis de interés vs renovaciones' })
+  }
+})
+
 // Debe ir después de '/cadenas' y '/resumen' para no capturarlas como :id
 finanzasChequesOcasionalesRouter.get('/:id', async (req, res) => {
   try {
@@ -314,14 +346,12 @@ finanzasChequesOcasionalesRouter.get('/:id', async (req, res) => {
       return
     }
     const cheque = snap.data() as ChequeOcasionalDoc
-    const todos = await leerTodos()
-    const activos = todos.filter((d) => !d.baja)
-    const completos = await leerActivosConEslabonesDeVientri(activos)
-    const cadenas = reconstruirCadenas(completos)
-    const clasificados = clasificarCheques(completos, cadenas)
+    const pool = await leerCompletos()
+    const cadenas = reconstruirCadenas(pool)
+    const clasificados = clasificarCheques(pool, cadenas)
 
     const porNumero = new Map<string, ChequeOcasionalDoc>()
-    for (const d of completos) {
+    for (const d of pool) {
       if (d.numeroCheque) {
         porNumero.set(d.numeroCheque, d)
         const corto = d.numeroCheque.split('-').pop()

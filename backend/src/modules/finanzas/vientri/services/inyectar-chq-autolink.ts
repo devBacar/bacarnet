@@ -53,6 +53,7 @@ export async function inyectarChqParaAutolink(docs: ChequeOcasionalDoc[]): Promi
       obsOriginal: typeof ch.observaciones === 'string' ? ch.observaciones : '',
       revisar: [],
       fechaConciliado: typeof ch.fechaAcreditacion === 'string' ? ch.fechaAcreditacion : null,
+      proveedorFinancieroId: null,
       vientriId: 0,
       vientriChqId: null,
       baja: false,

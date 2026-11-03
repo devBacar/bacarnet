@@ -112,7 +112,7 @@ export function PestanaOcasionales() {
             ['renovaciones', 'Renovaciones'],
             ['seguimiento', 'Seguimiento'],
             ['usd', 'USD (agrupadas)'],
-            ['operaciones', 'Operaciones USD'],
+            ['operaciones', 'Operaciones USD / Renovaciones'],
           ] as const).map(([val, label]) => (
             <button
               key={val}
@@ -290,7 +290,7 @@ export function PestanaOcasionales() {
             />
             <ResumenCard
               icon={<DollarSign className="h-4 w-4 text-green-500" />}
-              label="Operaciones USD"
+              label="Operaciones USD / Renovaciones"
               value={
                 resumen.operacionesUsdUnicas != null
                   ? `${resumen.operacionesUsdUnicas} ops (${resumen.conUsd} chq)`
@@ -860,7 +860,14 @@ function TablaUsdAgrupadas({ ops }: { ops: OpUsdAgrupada[] }) {
                   <td className="px-1 py-2 text-center text-body-muted">
                     {abierta ? <ChevronUp className="inline h-3.5 w-3.5" /> : <ChevronDown className="inline h-3.5 w-3.5" />}
                   </td>
-                  <td className="px-2.5 py-2 font-medium">{op.beneficiario}</td>
+                  <td className="px-2.5 py-2">
+                    <span className="font-medium">{op.beneficiario}</span>
+                    {op.obsComun ? (
+                      <p className="text-body-muted mt-0.5 max-w-[200px] truncate font-mono text-[11px]" title={op.obsComun}>
+                        {op.obsComun}
+                      </p>
+                    ) : null}
+                  </td>
                   <td className="whitespace-nowrap px-2.5 py-2 text-body-muted">{formatFecha(op.fechaEmision)}</td>
                   <td className="px-2.5 py-2 text-right font-semibold text-green-700 dark:text-green-400">
                     US$ {op.montoUsd.toLocaleString('es-AR')}

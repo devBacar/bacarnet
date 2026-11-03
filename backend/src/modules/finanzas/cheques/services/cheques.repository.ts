@@ -682,6 +682,7 @@ export interface ComprobantePendiente {
   totalCentavos: number
   pendienteCentavos: number
   moneda: string | null
+  obs: string | null
 }
 
 export async function buscarPendientesPorVientriId(ids: number[]): Promise<Map<number, ComprobantePendiente>> {
@@ -705,6 +706,7 @@ export async function buscarPendientesPorVientriId(ids: number[]): Promise<Map<n
       totalCentavos: typeof d.totalCentavos === 'number' ? d.totalCentavos : 0,
       pendienteCentavos: typeof d.pendienteCentavos === 'number' ? d.pendienteCentavos : 0,
       moneda: typeof d.moneda === 'string' ? d.moneda : null,
+      obs: typeof d.obs === 'string' ? d.obs : null,
     })
   }
   return mapa

@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
-import type { OperacionDolaresInput } from '../domain/operacion-dolares.types.js'
+import type { OperacionDolaresInput, TipoOperacion } from '../domain/operacion-dolares.types.js'
 import {
   crearOperacionDolares,
   actualizarOperacionDolares,
@@ -21,7 +21,10 @@ function parsearInput(body: Record<string, unknown>): OperacionDolaresInput {
       }))
     : []
 
+  const tipo: TipoOperacion = body.tipo === 'renovacion_pesos' ? 'renovacion_pesos' : 'usd'
+
   return {
+    tipo,
     fecha: String(body.fecha ?? ''),
     inversor: String(body.inversor ?? ''),
     cotizacion: Number(body.cotizacion) || 0,
@@ -29,6 +32,9 @@ function parsearInput(body: Record<string, unknown>): OperacionDolaresInput {
     impuestoPorcentaje: Number(body.impuestoPorcentaje) || 0,
     montoUsd: Number(body.montoUsd) || 0,
     cashCentavos: Number(body.cashCentavos) || 0,
+    capitalRenovadoCentavos: Number(body.capitalRenovadoCentavos) || 0,
+    cantidadChequesViejos: Number(body.cantidadChequesViejos) || 0,
+    interesPorcentaje: Number(body.interesPorcentaje) || 0,
     notas: String(body.notas ?? ''),
     cheques,
   }

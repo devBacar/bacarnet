@@ -32,6 +32,7 @@ import {
   type ChequePagoDe,
   type ChequeTipo,
   type ComprobantePendiente,
+  type FacturaCancelada,
   type IngresarChequesRow,
 } from '../../services/finanzasChequesApi'
 
@@ -728,7 +729,26 @@ function emptyRow(): ParsedRow {
 
 const INPUT_CLS = 'w-full rounded border border-transparent bg-transparent px-1 py-0.5 focus:border-neutral-300 focus:outline-none dark:focus:border-zinc-600'
 
-function ComprobanteCard({ label, desc, cmpId, cmp }: { label: string; desc: string | null; cmpId: number | null; cmp: ComprobantePendiente | null }) {
+function FacturasList({ facturas }: { facturas: FacturaCancelada[] }) {
+  if (facturas.length === 0) return null
+  return (
+    <div className="mt-2 space-y-1.5 border-t border-dashed border-subtle pt-2">
+      <p className="text-body-muted text-xs font-medium">Facturas canceladas</p>
+      {facturas.map((f, i) => (
+        <div key={i} className="rounded bg-subtle/50 px-2 py-1 text-xs">
+          <p className="font-medium">{f.comprobante}</p>
+          <div className="text-body-muted flex flex-wrap gap-x-3">
+            {f.persona ? <span>{f.persona}</span> : null}
+            <span>{formatMoneyCentavos(f.totalCentavos, 'ARS')}</span>
+            {f.obs ? <span className="italic">{f.obs}</span> : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ComprobanteCard({ label, desc, cmpId, cmp, facturas }: { label: string; desc: string | null; cmpId: number | null; cmp: ComprobantePendiente | null; facturas?: FacturaCancelada[] }) {
   return (
     <div className="space-y-1">
       <p className="text-body-muted text-xs font-medium uppercase tracking-wide">{label}</p>
@@ -742,6 +762,10 @@ function ComprobanteCard({ label, desc, cmpId, cmp }: { label: string; desc: str
           {cmp.tipo ? <>
             <dt className="text-body-muted">Tipo</dt>
             <dd>{cmp.tipo}</dd>
+          </> : null}
+          {cmp.obs ? <>
+            <dt className="text-body-muted">Concepto</dt>
+            <dd>{cmp.obs}</dd>
           </> : null}
           {cmp.fecha ? <>
             <dt className="text-body-muted">Fecha</dt>
@@ -761,6 +785,7 @@ function ComprobanteCard({ label, desc, cmpId, cmp }: { label: string; desc: str
       ) : (
         <p className="text-body-muted text-xs">Sin datos en Vientri</p>
       )}
+      {facturas && facturas.length > 0 ? <FacturasList facturas={facturas} /> : null}
     </div>
   )
 }
@@ -774,6 +799,8 @@ function ChequeDetalleModal({ chequeId, onClose }: { chequeId: string; onClose: 
   const ch = data?.cheque
   const mov = data?.movimiento
   const cmps = data?.comprobantes
+  const facIngreso = data?.facturasIngreso ?? []
+  const facEgreso = data?.facturasEgreso ?? []
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -930,6 +957,7 @@ function ChequeDetalleModal({ chequeId, onClose }: { chequeId: string; onClose: 
                       desc={ch.vientriCmpIngresoDesc}
                       cmpId={ch.vientriCmpIngreso}
                       cmp={cmps?.ingreso ?? null}
+                      facturas={facIngreso}
                     />
                   ) : null}
                   {ch.vientriCmpSalida ? (
@@ -938,6 +966,7 @@ function ChequeDetalleModal({ chequeId, onClose }: { chequeId: string; onClose: 
                       desc={ch.vientriCmpSalidaDesc}
                       cmpId={ch.vientriCmpSalida}
                       cmp={cmps?.salida ?? null}
+                      facturas={facEgreso}
                     />
                   ) : null}
                 </div>

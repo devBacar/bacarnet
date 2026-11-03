@@ -108,6 +108,8 @@ function cheque(p: Partial<VientriChequeDoc>): VientriChequeDoc {
     idCmpPagoBanco: null,
     estadoPrevioId: null,
     motivoRechazoId: null,
+    facturasIngreso: [],
+    facturasEgreso: [],
     fuentes: ['CHQOCA'],
     vientriChqId: null,
     vientriChqocaId: 99,

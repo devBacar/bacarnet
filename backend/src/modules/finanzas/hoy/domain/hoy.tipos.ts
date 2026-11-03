@@ -129,6 +129,8 @@ export interface PagoFilaHoy {
   aviso: string | null
   estimada?: boolean
   origen: OrigenCompromisoHoy
+  /** Solo para origen 'vientri-cheque': el cheque es del circuito de proveedores financieros (refinanciación). */
+  esProveedorFinanciero?: boolean
 }
 
 export interface IngresoFilaHoy {
@@ -284,4 +286,6 @@ export interface ArmarHoyInput {
   tipoCambioUsdArs: number | null
   /** Para saber si un vencimiento cae en fin de semana/feriado y correrlo al día hábil, igual que "Compromisos de la semana". */
   feriados: ReadonlySet<string>
+  /** Nombres normalizados (ver normalizarNombre) de proveedores del circuito financiero (refinanciación). */
+  proveedoresFinancieros: ReadonlySet<string>
 }

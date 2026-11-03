@@ -9,6 +9,19 @@ import { calcularPlazos, type PlazosHistoricos } from './plazos.js'
 import { COLUMNAS_PERSONAS, indicePersonas, mapearPersona } from './personas.js'
 import type { VientriChequeDoc, VientriPendienteDoc, VientriPersonaDoc } from './tipos.js'
 import { aEntero, aTexto } from './valores.js'
+import {
+  armarArt,
+  armarComprobantesVenta,
+  armarItemsComprobante,
+  armarUnegocio,
+  type VientriArtDoc,
+  type VientriComprobanteDoc,
+  type VientriItemComprobanteDoc,
+  type VientriUnegocioDoc,
+} from './ventas.js'
+
+/** Archivos opcionales para el tablero de Ventas: todavía no los genera el export de Vientri. */
+export const ARCHIVOS_VENTAS_OPCIONALES = ['items.csv', 'unegocio.csv', 'art.csv'] as const
 
 export interface ResultadoProcesamiento {
   control: ControlCorrida
@@ -22,6 +35,13 @@ export interface ResultadoProcesamiento {
   plazos: PlazosHistoricos
   /** Con qué se pagó/cobró de verdad cada factura (cheques con su vencimiento real, etc.), por id de comprobante. */
   desglosesPago: Map<number, DesglosePago>
+  /** Para el tablero de Ventas. items/unegocio/art vienen vacíos si el export todavía no los trae. */
+  ventas: {
+    comprobantes: VientriComprobanteDoc[]
+    items: VientriItemComprobanteDoc[]
+    unegocio: VientriUnegocioDoc[]
+    art: VientriArtDoc[]
+  }
 }
 
 export class CarpetaInvalidaError extends Error {
@@ -104,5 +124,14 @@ export function procesarCarpeta(textos: Map<string, string>): ResultadoProcesami
   const tipos = textos.get('tipos_comprobante.csv')
   const tiposComprobante = tipos ? leerCsv(tipos).filas : []
 
-  return { control, verificacion, personas, cheques, pendientes, resumenCheques: resumen, tiposComprobante, plazos, desglosesPago }
+  const comprobantesVenta = armarComprobantesVenta(t('comprobantes.csv').filas, indice, monedas)
+  const itemsTexto = textos.get('items.csv')
+  const items = itemsTexto ? armarItemsComprobante(leerCsv(itemsTexto).filas) : []
+  const unegocioTexto = textos.get('unegocio.csv')
+  const unegocio = armarUnegocio(unegocioTexto ? leerCsv(unegocioTexto).filas : [])
+  const artTexto = textos.get('art.csv')
+  const art = artTexto ? armarArt(leerCsv(artTexto).filas) : []
+  const ventas = { comprobantes: comprobantesVenta, items, unegocio, art }
+
+  return { control, verificacion, personas, cheques, pendientes, resumenCheques: resumen, tiposComprobante, plazos, desglosesPago, ventas }
 }

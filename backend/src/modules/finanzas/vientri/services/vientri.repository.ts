@@ -8,6 +8,11 @@ export const VIENTRI_PERSONAS = 'vientriPersonas'
 export const VIENTRI_IMPORTACIONES = 'vientriImportaciones'
 export const VIENTRI_ESTADO = 'vientriEstado'
 export const VIENTRI_ESTADO_DOC = 'actual'
+/** Para el tablero de Ventas (ver domain/ventas.ts). */
+export const VIENTRI_COMPROBANTES = 'vientriComprobantes'
+export const VIENTRI_ITEMS_COMPROBANTE = 'vientriItemsComprobante'
+export const VIENTRI_UNEGOCIO = 'vientriUnegocio'
+export const VIENTRI_ART = 'vientriArt'
 
 const LOTE = 400
 

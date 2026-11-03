@@ -14,6 +14,9 @@ import {
   type MontosMoneda,
 } from '../../../services/finanzasCompromisosMesApi'
 import { reprogramarPagoHoy } from '../../../services/finanzasHoyApi'
+import { ComoSeCalcula } from '../cargaDiaria/CargaDiariaPanel'
+import { buscarDia, NIVEL_CLASES, NIVEL_TEXTO, useCargaDiaria } from '../cargaDiaria/cargaDiaria'
+import type { NivelCarga } from '../../../services/finanzasCargaDiariaApi'
 import { formatMoneyCentavos } from '../formatMoney'
 import { hoyArgentina, sumarDias } from './cajaDelDia/fechasCaja'
 import { COMPROMISO_VACIO } from './compromisosMes/compromisoVacio'
@@ -75,6 +78,8 @@ function EncabezadoDia({
   abierto,
   desplegable,
   onToggle,
+  nivel,
+  esDiaDeSueldos,
 }: {
   titulo: string
   valores: MontosMoneda
@@ -82,6 +87,9 @@ function EncabezadoDia({
   abierto: boolean
   desplegable: boolean
   onToggle: () => void
+  /** Qué tan cargado está el día (liviano/medio/pesado), para pintarlo igual que "Cuánto hay que pagar". */
+  nivel?: NivelCarga
+  esDiaDeSueldos?: boolean
 }) {
   const color = esHoy ? 'text-[var(--color-primary)]' : 'text-heading'
   const contenido = (
@@ -96,6 +104,12 @@ function EncabezadoDia({
         <span className="inline-block w-4 shrink-0" aria-hidden />
       )}
       <h3 className={`min-w-0 text-base font-semibold ${color}`}>{titulo}</h3>
+      {nivel && nivel !== 'sin_pagos' ? (
+        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${NIVEL_CLASES[nivel]}`}>
+          {NIVEL_TEXTO[nivel]}
+          {esDiaDeSueldos ? ' · Sueldos' : ''}
+        </span>
+      ) : null}
       <TotalSeccion valores={valores} />
     </>
   )
@@ -170,7 +184,9 @@ function FilaCompromiso({
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-heading break-words text-[15px] font-medium">{fila.concepto}</span>
           <Etiqueta tono="gris">{etiquetaMedioPago(fila.medioPago)}</Etiqueta>
-          <Etiqueta tono={tonoOrigenCompromiso(fila.origen)}>{etiquetaOrigenCompromiso(fila.origen)}</Etiqueta>
+          <Etiqueta tono={tonoOrigenCompromiso(fila.origen, fila.esProveedorFinanciero)}>
+            {etiquetaOrigenCompromiso(fila.origen, fila.esProveedorFinanciero)}
+          </Etiqueta>
         </p>
         {detalle ? <p className="mt-0.5 break-words text-xs text-neutral-500 dark:text-neutral-400">{detalle}</p> : null}
         {parcial ? (
@@ -260,6 +276,11 @@ export function CompromisosSemana({
   const lista = esSemanaPasada ? { dias: [] } : armarListaSemana({ planillas, dias, hoy, esEstaSemana })
   const grupos = planillas[0]?.grupos.map((grupo) => grupo.grupo) ?? [...GRUPOS_COMPROMISO]
 
+  // "Cuánto hay que pagar": mismo semáforo (liviano/medio/pesado) para el día de hoy y para pintar
+  // cada día de la lista de abajo, así no hay dos pantallas con criterios distintos para lo mismo.
+  const { data: carga } = useCargaDiaria()
+  const diaHoyCarga = carga ? buscarDia(carga, hoy) : null
+
   useEffect(() => {
     setAbiertos({ [hoy]: true })
   }, [lunes, hoy])
@@ -311,6 +332,21 @@ export function CompromisosSemana({
       }
       ayuda="Cheque, transferencia o efectivo. Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá."
     >
+      {esEstaSemana && diaHoyCarga ? (
+        <div className={`mb-3 rounded-xl border p-3 ${NIVEL_CLASES[diaHoyCarga.nivel]}`}>
+          <p className="text-xs font-semibold tracking-wide uppercase">Cuánto hay que pagar hoy · {NIVEL_TEXTO[diaHoyCarga.nivel]}</p>
+          <p className="text-xl font-bold tabular-nums">{formatMoneyCentavos(diaHoyCarga.totalCentavos, 'ARS')}</p>
+          <p className="text-xs">
+            {diaHoyCarga.tipo === 'habil'
+              ? `${diaHoyCarga.cantidad} pagos · falta pagar ${formatMoneyCentavos(diaHoyCarga.pendienteCentavos, 'ARS')}`
+              : 'Hoy no es día hábil'}
+            {diaHoyCarga.esDiaDeSueldos ? ' · Hoy se pagan sueldos' : ''}
+          </p>
+          <div className="mt-2">
+            <ComoSeCalcula />
+          </div>
+        </div>
+      ) : null}
       {cargando ? <p className="text-body-muted py-2 text-[13px]">Cargando la semana…</p> : null}
       {error ? (
         <p className="py-2 text-[13px] text-red-700 dark:text-red-300">
@@ -331,6 +367,7 @@ export function CompromisosSemana({
             const titulo = tituloDiaLista(dia.fecha, hoy)
             const tiene = dia.filas.length > 0
             const abierto = Boolean(abiertos[dia.fecha])
+            const nivelDia = carga ? buscarDia(carga, dia.fecha) : null
             return (
               <section
                 key={dia.fecha}
@@ -345,6 +382,8 @@ export function CompromisosSemana({
                   onToggle={() =>
                     setAbiertos((actual) => ({ ...actual, [dia.fecha]: !actual[dia.fecha] }))
                   }
+                  nivel={nivelDia?.nivel}
+                  esDiaDeSueldos={nivelDia?.esDiaDeSueldos}
                 />
                 {tiene && abierto ? (
                   <div className="divide-y divide-neutral-200 dark:divide-zinc-800">

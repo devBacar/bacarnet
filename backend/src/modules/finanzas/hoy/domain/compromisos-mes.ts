@@ -130,6 +130,8 @@ export interface FilaPlanilla {
   deMesAnterior: boolean
   /** Lo que sigue sin pagar de ese vencimiento anterior, en la moneda de la fila. Cero si es de este mes. */
   arrastreCentavos: number
+  /** Para distinguir en la UI un cheque a un proveedor financiero (MANA, LIONEL, etc.) del resto. */
+  esProveedorFinanciero?: boolean
   pagosResumen: LineaPagoPlanilla[]
 }
 
@@ -463,7 +465,10 @@ export function armarPlanillaMes(input: {
     .filter((row) => visibleEnMes(row, input.mes))
     .map((row) => ({
       grupo: grupoVistaPlanilla(row.grupo, row.proveedorONombre, financieros),
-      fila: filaDe(row, columnas, input.feriados, input.mes),
+      fila: {
+        ...filaDe(row, columnas, input.feriados, input.mes),
+        esProveedorFinanciero: financieros.size > 0 && financieros.has(normalizarNombre(row.proveedorONombre)),
+      },
     }))
     .sort((a, b) => {
       const porFecha = a.fila.fechaVencimiento.localeCompare(b.fila.fechaVencimiento)

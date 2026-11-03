@@ -379,6 +379,8 @@ describe('planificado, acumulado y totales', () => {
     expect(gastos?.filas.map((fila) => fila.compromisoId)).toEqual(['comision-echeq'])
     expect(gastos?.subtotal.importe).toEqual({ ars: 50_000, usd: 0 })
     expect(planilla.grupos.map((grupo) => grupo.grupo)).toContain(GRUPO_VISTA_GASTOS_FINANCIEROS)
+    expect(gastos?.filas[0]?.esProveedorFinanciero).toBe(true)
+    expect(proveedores?.filas[0]?.esProveedorFinanciero).toBe(false)
   })
 })
 

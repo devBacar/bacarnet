@@ -202,6 +202,7 @@ export interface FilaListaSemana {
   estado: string
   chequeId: string | null
   chequeAsignado: { numero: string; banco: string | null; propio: boolean } | null
+  esProveedorFinanciero?: boolean
 }
 
 export interface DiaListaSemana {
@@ -242,6 +243,7 @@ function aLista(fila: FilaSemana, dias: string[]): FilaListaSemana & { dia: stri
     estado: fila.estado,
     chequeId: fila.chequeId ?? null,
     chequeAsignado: fila.chequeAsignado ?? null,
+    esProveedorFinanciero: fila.esProveedorFinanciero,
   }
 }
 

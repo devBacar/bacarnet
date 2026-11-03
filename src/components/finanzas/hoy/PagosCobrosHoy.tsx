@@ -1,7 +1,94 @@
 import { useState, type ReactNode } from 'react'
-import type { CobroAtrasadoHoy, HoyResponse, IngresoHoy, PagoHoy } from '../../../services/finanzasHoyApi'
+import type { CobroAtrasadoHoy, HoyResponse, IngresoHoy, MedioResueltoHoy, MovimientoDelDiaHoy, PagoHoy } from '../../../services/finanzasHoyApi'
 import { etiquetaMedioPago, etiquetaOrigenCompromiso, tonoOrigenCompromiso } from './etiquetasCompromiso'
 import { Etiqueta, MenuAcciones, Monto, Tarjeta, Vacio, botonChico, botonChicoSecundario, linkChico } from './TarjetasHoy'
+
+const ETIQUETA_MEDIO: Record<MedioResueltoHoy, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  cheque_fisico: 'Cheque físico',
+  echeq: 'E-cheq',
+  otro: 'Otro medio',
+}
+
+const ORDEN_MEDIO: MedioResueltoHoy[] = ['efectivo', 'transferencia', 'cheque_fisico', 'echeq', 'otro']
+
+function agruparPorMedio(filas: MovimientoDelDiaHoy[]): Array<{ medio: MedioResueltoHoy; totalCentavos: number; filas: MovimientoDelDiaHoy[] }> {
+  const grupos = new Map<MedioResueltoHoy, MovimientoDelDiaHoy[]>()
+  for (const fila of filas) grupos.set(fila.medio, [...(grupos.get(fila.medio) ?? []), fila])
+  return ORDEN_MEDIO.filter((m) => grupos.has(m)).map((medio) => {
+    const filasMedio = grupos.get(medio) ?? []
+    return { medio, totalCentavos: filasMedio.reduce((s, f) => s + f.montoCentavos, 0), filas: filasMedio }
+  })
+}
+
+/** Un medio de pago resuelto (ej. "Transferencia"), desplegable para ver los movimientos. */
+function GrupoMedio({ medio, totalCentavos, filas }: { medio: MedioResueltoHoy; totalCentavos: number; filas: MovimientoDelDiaHoy[] }) {
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <li className="rounded-lg border border-neutral-200 dark:border-zinc-800">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left text-[13px]"
+        aria-expanded={abierto}
+      >
+        <span className="font-medium">
+          {ETIQUETA_MEDIO[medio]} <span className="text-body-muted font-normal">({filas.length})</span>
+        </span>
+        <span className="flex items-center gap-2">
+          <Monto centavos={totalCentavos} className="font-medium" />
+          <span className="text-body-muted">{abierto ? '▲' : '▼'}</span>
+        </span>
+      </button>
+      {abierto ? (
+        <ul className="max-h-64 space-y-2 overflow-y-auto border-t border-neutral-100 px-2.5 py-2 dark:border-zinc-800">
+          {filas.map((fila) => (
+            <li key={fila.id} className="flex items-start justify-between gap-2 text-[13px]">
+              <div className="min-w-0">
+                <p className="truncate font-medium">{fila.aQuienODeQuien}</p>
+                <p className="text-body-muted truncate">
+                  {fila.concepto}
+                  {fila.chequeNumero ? ` · ${fila.chequeNumero}` : ''}
+                </p>
+                <div className="mt-0.5 flex flex-wrap gap-1">
+                  <Etiqueta tono={tonoOrigenCompromiso(fila.origen)}>{etiquetaOrigenCompromiso(fila.origen)}</Etiqueta>
+                  {fila.debitadoPorBanco === true ? (
+                    <Etiqueta tono="verde">Ya lo movió el banco</Etiqueta>
+                  ) : fila.debitadoPorBanco === false ? (
+                    <Etiqueta tono="ambar">El banco todavía no lo movió</Etiqueta>
+                  ) : null}
+                </div>
+              </div>
+              <Monto centavos={fila.montoCentavos} className="shrink-0 font-medium" />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </li>
+  )
+}
+
+/** "Ya salió del banco hoy" / "Ya ingresó al banco hoy": sub-sección plegable, cerrada por default. */
+function SubseccionResuelto({
+  titulo,
+  resuelto,
+}: {
+  titulo: string
+  resuelto?: { totalCentavos: number; filas: MovimientoDelDiaHoy[] }
+}) {
+  if (!resuelto || resuelto.filas.length === 0) return null
+  const grupos = agruparPorMedio(resuelto.filas)
+  return (
+    <SubseccionAtrasados titulo={titulo} cantidad={resuelto.filas.length} totalCentavos={resuelto.totalCentavos} contraidaPorDefecto>
+      <ul className="space-y-2">
+        {grupos.map((g) => (
+          <GrupoMedio key={g.medio} {...g} />
+        ))}
+      </ul>
+    </SubseccionAtrasados>
+  )
+}
 
 /** Chips de cómo se paga y de dónde vino (junto al nombre). */
 function EtiquetasTipoPago({ pago }: { pago: PagoHoy }) {
@@ -115,6 +202,7 @@ export function PagosHoy({
   ayuda = 'Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá.',
   tour = 'hoy-pagos',
   sinFecha = false,
+  resuelto,
   abiertaControlada,
   onCambiarAbierta,
 }: {
@@ -129,6 +217,8 @@ export function PagosHoy({
   tour?: string
   /** Bandeja de facturas sin fecha: el botón principal es "Poner fecha". */
   sinFecha?: boolean
+  /** Lo que ya salió del banco hoy de verdad (informativo, sub-sección cerrada por default). */
+  resuelto?: { totalCentavos: number; filas: MovimientoDelDiaHoy[] }
   /** Para que esta tarjeta se abra/cierre junto con otra (ej. "Cobros de hoy"). */
   abiertaControlada?: boolean
   onCambiarAbierta?: (valor: boolean) => void
@@ -193,6 +283,7 @@ export function PagosHoy({
           )}
         />
       )}
+      {!sinFecha ? <SubseccionResuelto titulo="Ya salió del banco hoy" resuelto={resuelto} /> : null}
     </Tarjeta>
   )
 }
@@ -210,6 +301,7 @@ export function CobrosHoy({
   onReprogramar,
   onReclamar,
   puedeOperar = true,
+  resuelto,
   abiertaControlada,
   onCambiarAbierta,
 }: {
@@ -221,6 +313,8 @@ export function CobrosHoy({
   onReprogramar: (ingreso: IngresoHoy) => void
   onReclamar: (ingreso: IngresoHoy) => void
   puedeOperar?: boolean
+  /** Lo que ya ingresó al banco hoy de verdad (informativo, sub-sección cerrada por default). */
+  resuelto?: { totalCentavos: number; filas: MovimientoDelDiaHoy[] }
   /** Para que esta tarjeta se abra/cierre junto con otra (ej. "Pagos de hoy"). */
   abiertaControlada?: boolean
   onCambiarAbierta?: (valor: boolean) => void
@@ -288,6 +382,7 @@ export function CobrosHoy({
           )}
         />
       )}
+      <SubseccionResuelto titulo="Ya ingresó al banco hoy" resuelto={resuelto} />
       {sinFecha && sinFecha.cantidad > 0 ? (
         <p className="text-body-muted mt-3 border-t border-neutral-100 pt-2 text-[13px] dark:border-zinc-800">
           {sinFecha.cantidad} {sinFecha.cantidad === 1 ? 'factura a cobrar' : 'facturas a cobrar'} sin fecha esperada en Vientri por{' '}

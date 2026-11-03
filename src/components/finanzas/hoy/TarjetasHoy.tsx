@@ -79,14 +79,14 @@ function leerAbierta(clave: string): boolean {
  * abierto/cerrado, así que tocar cualquiera de las dos despliega o colapsa a las dos juntas.
  * Cada fila usa su propia `clave`, independiente de las demás filas de la pantalla.
  */
-export function useTarjetaPar(clave: string): [boolean, (valor: boolean) => void] {
+export function useTarjetaPar(clave: string, abiertaPorDefecto = true): [boolean, (valor: boolean) => void] {
   const claveCompleta = `bacarnet.tarjeta.fila.${clave}`
   const [abierta, setAbierta] = useState(() => {
     try {
       const guardado = window.localStorage.getItem(claveCompleta)
-      return guardado === null ? true : guardado === '1'
+      return guardado === null ? abiertaPorDefecto : guardado === '1'
     } catch {
-      return true
+      return abiertaPorDefecto
     }
   })
   function cambiar(valor: boolean) {

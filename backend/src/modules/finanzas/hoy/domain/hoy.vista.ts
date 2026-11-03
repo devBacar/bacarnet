@@ -203,8 +203,13 @@ function filaPago(
     chequeEmitido,
     aviso: chequeEmitido ? 'Ya tiene cheque emitido, solo falta debitarlo' : null,
     origen: row.origen,
-    ...(row.origen === 'vientri-cheque'
-      ? { esProveedorFinanciero: esProveedorFinanciero(row.proveedorONombre, proveedoresFinancieros) }
+    ...(row.origen === 'vientri-cheque' && row.vientriChequeNumero
+      ? {
+          esProveedorFinanciero: esProveedorFinanciero(row.proveedorONombre, proveedoresFinancieros),
+          // Mismo esquema de id que chequeDocId('emitido', numero) en cheques.repository.ts: así
+          // "Renovar" puede ubicar el documento real del cheque en la colección de cheques.
+          chequeId: `emitido_${row.vientriChequeNumero}`,
+        }
       : {}),
     ...(row.estimada ? { estimada: true } : {}),
   }
@@ -234,6 +239,7 @@ function filaPagoDeCheque(cheque: ChequeEnHoy, proveedoresFinancieros: ReadonlyS
     aviso: null,
     origen: 'vientri-cheque',
     esProveedorFinanciero: esProveedorFinanciero(aQuien, proveedoresFinancieros),
+    chequeId: cheque.id,
   }
 }
 

@@ -77,6 +77,25 @@ export function FinanzasHoyPage() {
   const [guardando, setGuardando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [borrandoDemo, setBorrandoDemo] = useState(false)
+  // Todas las tarjetas colapsables de Hoy se abren/cierran siempre juntas, con un solo
+  // interruptor: tocar el título de cualquiera abre o cierra todas las demás a la vez.
+  const CLAVE_ABIERTA_HOY = 'bacarnet.tarjeta.hoy-todas'
+  const [abiertaHoy, setAbiertaHoy] = useState(() => {
+    try {
+      const guardado = window.localStorage.getItem(CLAVE_ABIERTA_HOY)
+      return guardado === null ? true : guardado === '1'
+    } catch {
+      return true
+    }
+  })
+  function cambiarAbiertaHoy(valor: boolean) {
+    setAbiertaHoy(valor)
+    try {
+      window.localStorage.setItem(CLAVE_ABIERTA_HOY, valor ? '1' : '0')
+    } catch {
+      /* si el navegador no deja guardar, no pasa nada: solo no se recuerda la próxima vez */
+    }
+  }
 
   async function recargar(mensaje: string) {
     toast.success(mensaje)
@@ -207,6 +226,8 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
+              abiertaControlada={abiertaHoy}
+              onCambiarAbierta={cambiarAbiertaHoy}
             />
             <CobrosHoy
               ingresos={data.ingresos.filas.filter((ingreso) => !ingreso.atrasado)}
@@ -217,9 +238,15 @@ export function FinanzasHoyPage() {
               onReprogramar={setReprogramarIngreso}
               onReclamar={setReclamo}
               puedeOperar={permisos.agenda}
+              abiertaControlada={abiertaHoy}
+              onCambiarAbierta={cambiarAbiertaHoy}
             />
           </div>
-          <ResueltoHoy resueltoHoy={data.resueltoHoy} />
+          <ResueltoHoy
+            resueltoHoy={data.resueltoHoy}
+            abiertaControlada={abiertaHoy}
+            onCambiarAbierta={cambiarAbiertaHoy}
+          />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosAtrasados
               pagos={fusionarPorId(
@@ -230,6 +257,8 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
+              abiertaControlada={abiertaHoy}
+              onCambiarAbierta={cambiarAbiertaHoy}
             />
             <CobrosAtrasados
               atrasados={data.prevision.cobrosAtrasados}
@@ -241,6 +270,8 @@ export function FinanzasHoyPage() {
               onReclamar={setReclamo}
               onConfirmar={confirmarIngreso}
               puedeOperar={permisos.agenda}
+              abiertaControlada={abiertaHoy}
+              onCambiarAbierta={cambiarAbiertaHoy}
             />
           </div>
           {data.pagosSinFecha && data.pagosSinFecha.filas.length > 0 ? (
@@ -255,13 +286,20 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
+              abiertaControlada={abiertaHoy}
+              onCambiarAbierta={cambiarAbiertaHoy}
             />
           ) : null}
           <CargaHoyResumen />
-          <CompromisosSemana onPagar={pagarDesdePlanilla} />
+          <CompromisosSemana onPagar={pagarDesdePlanilla} abiertaControlada={abiertaHoy} onCambiarAbierta={cambiarAbiertaHoy} />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
-            <TarjetaBancos dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
-            <TarjetaSemanaGrafico prevision={data.prevision} />
+            <TarjetaBancos
+              dia={data.dia}
+              onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined}
+              abiertaControlada={abiertaHoy}
+              onCambiarAbierta={cambiarAbiertaHoy}
+            />
+            <TarjetaSemanaGrafico prevision={data.prevision} abiertaControlada={abiertaHoy} onCambiarAbierta={cambiarAbiertaHoy} />
           </div>
         </>
       ) : null}

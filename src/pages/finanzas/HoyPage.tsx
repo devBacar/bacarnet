@@ -20,7 +20,6 @@ import {
   PagosAtrasados,
   PagosHoy,
 } from '../../components/finanzas/hoy/PagosCobrosHoy'
-import { ResueltoHoy } from '../../components/finanzas/hoy/ResueltoHoy'
 import {
   CuatroNumeros,
   EncabezadoHoy,
@@ -83,8 +82,7 @@ export function FinanzasHoyPage() {
   // Cada fila de dos tarjetas (una al lado de la otra) comparte su propio interruptor: tocar
   // cualquiera de las dos despliega o colapsa a las dos juntas, sin afectar a las otras filas.
   const [abiertaPagosCobrosHoy, cambiarAbiertaPagosCobrosHoy] = useTarjetaPar('pagos-cobros-hoy')
-  const [abiertaResueltoHoy, cambiarAbiertaResueltoHoy] = useTarjetaPar('resuelto-hoy')
-  const [abiertaAtrasados, cambiarAbiertaAtrasados] = useTarjetaPar('atrasados')
+  const [abiertaAtrasados, cambiarAbiertaAtrasados] = useTarjetaPar('atrasados', false)
   const [abiertaBancosSemana, cambiarAbiertaBancosSemana] = useTarjetaPar('bancos-semana')
 
   async function recargar(mensaje: string) {
@@ -219,6 +217,7 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
+              resuelto={data.resueltoHoy?.pagos}
               abiertaControlada={abiertaPagosCobrosHoy}
               onCambiarAbierta={cambiarAbiertaPagosCobrosHoy}
             />
@@ -231,15 +230,11 @@ export function FinanzasHoyPage() {
               onReprogramar={setReprogramarIngreso}
               onReclamar={setReclamo}
               puedeOperar={permisos.agenda}
+              resuelto={data.resueltoHoy?.cobros}
               abiertaControlada={abiertaPagosCobrosHoy}
               onCambiarAbierta={cambiarAbiertaPagosCobrosHoy}
             />
           </div>
-          <ResueltoHoy
-            resueltoHoy={data.resueltoHoy}
-            abiertaControlada={abiertaResueltoHoy}
-            onCambiarAbierta={cambiarAbiertaResueltoHoy}
-          />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosAtrasados
               pagos={fusionarPorId(

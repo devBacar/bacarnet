@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
 import type { CompromisoParaPlanilla } from './compromisos-mes.js'
 import {
+  agregarChequesSueltos,
   armarColumnasMes,
   armarPlanillaMes,
   arsConvertido,
   clasificarDia,
   esDiaDeSueldos,
+  type ChequeSueltoParaPlanilla,
   GRUPO_VISTA_GASTOS_FINANCIEROS,
   ubicarPlanificado,
 } from './compromisos-mes.js'
@@ -45,6 +47,65 @@ describe('día de pago de sueldos (4to día hábil del mes)', () => {
   it('octubre 2026: 1=jue, 2=vie, (findes), 5=lun, 6=mar → el 4to hábil es el martes 6', () => {
     expect(esDiaDeSueldos('2026-10-06', feriados)).toBe(true)
     expect(esDiaDeSueldos('2026-10-05', feriados)).toBe(false)
+  })
+})
+
+function chequeSuelto(parcial: Partial<ChequeSueltoParaPlanilla> & Pick<ChequeSueltoParaPlanilla, 'id' | 'numero'>): ChequeSueltoParaPlanilla {
+  return {
+    montoCentavos: parcial.montoCentavos ?? 10_000,
+    fechaPago: parcial.fechaPago ?? '2026-09-10',
+    destinatario: parcial.destinatario ?? null,
+    emisor: parcial.emisor ?? 'Alguien',
+    ...parcial,
+  }
+}
+
+describe('cheques sueltos en "Compromisos de esta semana" (mismo criterio que "Hoy pagás")', () => {
+  it('agrega un cheque sin compromiso en la Agenda', () => {
+    const resultado = agregarChequesSueltos([], [chequeSuelto({ id: 'chq-1', numero: '999', montoCentavos: 300_000 })])
+    expect(resultado).toHaveLength(1)
+    expect(resultado[0]).toMatchObject({
+      id: 'cheque-chq-1',
+      montoCentavos: 300_000,
+      origen: 'vientri-cheque',
+      medioPago: 'cheque',
+      chequeId: 'chq-1',
+    })
+  })
+
+  it('no duplica un cheque que ya está contado como compromiso "vientri-cheque" del mismo día', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-1',
+        fechaVencimiento: '2026-09-10',
+        montoCentavos: 500_000,
+        origen: 'vientri-cheque',
+        medioPago: 'cheque',
+        vientriChequeNumero: '50095064',
+      }),
+    ]
+    const resultado = agregarChequesSueltos(compromisos, [
+      chequeSuelto({ id: 'chq-1', numero: '50095064', fechaPago: '2026-09-10', montoCentavos: 500_000 }),
+    ])
+    expect(resultado).toHaveLength(1)
+    expect(resultado[0]?.id).toBe('vientri-cheque-chq-1')
+  })
+
+  it('si el compromiso ya no está abierto (pagado), el cheque suelto sí se agrega', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-1',
+        fechaVencimiento: '2026-09-10',
+        estado: 'pagado',
+        origen: 'vientri-cheque',
+        medioPago: 'cheque',
+        vientriChequeNumero: '50095064',
+      }),
+    ]
+    const resultado = agregarChequesSueltos(compromisos, [
+      chequeSuelto({ id: 'chq-1', numero: '50095064', fechaPago: '2026-09-10' }),
+    ])
+    expect(resultado).toHaveLength(2)
   })
 })
 

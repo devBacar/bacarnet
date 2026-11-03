@@ -27,12 +27,18 @@ const TONO_ORIGEN: Record<OrigenCompromisoHoy, TonoEstado> = {
   planilla: 'ambar',
 }
 
-/** Texto según el dato real de origen (no se adivina por el id). */
-export function etiquetaOrigenCompromiso(origen: OrigenCompromisoHoy): string {
+/**
+ * Texto según el dato real de origen (no se adivina por el id). Para un cheque de Vientri a un
+ * proveedor financiero (circuito de refinanciación: MANA, LIONEL, etc.) distingue esa etiqueta
+ * de un cheque a un proveedor común, porque su seguimiento es distinto (renovaciones).
+ */
+export function etiquetaOrigenCompromiso(origen: OrigenCompromisoHoy, esProveedorFinanciero?: boolean): string {
+  if (origen === 'vientri-cheque' && esProveedorFinanciero) return 'Cheque a proveedor financiero'
   return ETIQUETA_ORIGEN[origen]
 }
 
 /** Color de la etiqueta, distinto por origen, para que no se confundan en una lista larga. */
-export function tonoOrigenCompromiso(origen: OrigenCompromisoHoy): TonoEstado {
+export function tonoOrigenCompromiso(origen: OrigenCompromisoHoy, esProveedorFinanciero?: boolean): TonoEstado {
+  if (origen === 'vientri-cheque' && esProveedorFinanciero) return 'cyan'
   return TONO_ORIGEN[origen]
 }

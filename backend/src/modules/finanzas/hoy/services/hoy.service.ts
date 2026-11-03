@@ -12,6 +12,7 @@ import { presentarEstadoInterbanking } from '../../transferencias/domain/estado-
 import { listTransferenciasConfeccionadas } from '../../transferencias/services/transferencias.repository.js'
 import type { TransferenciaConfeccionadaDocument } from '../../transferencias/domain/transferencia.types.js'
 import { marcarCompromisoPagadoPorTransferenciaHecha } from '../../agenda/services/compromisos.service.js'
+import { nombresNormalizadosProveedoresFinancieros } from '../../agenda/services/proveedores-financieros.repository.js'
 import { esChequeEnCartera, ordenarCartera } from '../domain/cheques-hoy.js'
 import { feriadosNacionales2026 } from '../domain/feriados-nacionales-2026.js'
 import { fechaHoyArgentina, proximosDiasHabiles, sumarDias } from '../domain/hoy.fechas.js'
@@ -239,28 +240,33 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
   await cerrarCompromisosConTransferenciaHecha(input.actorUid, now, transferencias)
   const hoy = fechaHoyArgentina(now)
   const hastaSemana = proximosDiasHabiles(hoy, 7).at(-1) ?? hoy
-  const [compromisos, cobros, cuentas, movimientos, chequesEmitidos, datosDemo, tipoCambio] = await Promise.all([
-    listAllCompromisos(),
-    listAllCobros(),
-    listCuentaDocuments(),
-    listarMovimientos(sumarDias(hoy, -4), hoy),
-    listarCheques({
-      ...FILTRO_CHEQUE_VACIO,
-      direccion: 'emitido',
-      // Incluye cheques emitidos hace tiempo (atrasados viejos) y los de esta semana.
-      desde: sumarDias(hoy, -120),
-      hasta: hastaSemana,
-    }),
-    // Si la consulta falla, la franja DEMO no se muestra; el día se arma igual.
-    hayDatosDemo().catch((err: unknown) => {
-      console.error('[finanzas/hoy] hayDatosDemo', err)
-      return false
-    }),
-    getTipoCambioMes(hoy.slice(0, 7)).catch((err: unknown) => {
-      console.error('[finanzas/hoy] tipo de cambio', err)
-      return null
-    }),
-  ])
+  const [compromisos, cobros, cuentas, movimientos, chequesEmitidos, datosDemo, tipoCambio, proveedoresFinancieros] =
+    await Promise.all([
+      listAllCompromisos(),
+      listAllCobros(),
+      listCuentaDocuments(),
+      listarMovimientos(sumarDias(hoy, -4), hoy),
+      listarCheques({
+        ...FILTRO_CHEQUE_VACIO,
+        direccion: 'emitido',
+        // Incluye cheques emitidos hace tiempo (atrasados viejos) y los de esta semana.
+        desde: sumarDias(hoy, -120),
+        hasta: hastaSemana,
+      }),
+      // Si la consulta falla, la franja DEMO no se muestra; el día se arma igual.
+      hayDatosDemo().catch((err: unknown) => {
+        console.error('[finanzas/hoy] hayDatosDemo', err)
+        return false
+      }),
+      getTipoCambioMes(hoy.slice(0, 7)).catch((err: unknown) => {
+        console.error('[finanzas/hoy] tipo de cambio', err)
+        return null
+      }),
+      nombresNormalizadosProveedoresFinancieros().catch((err: unknown) => {
+        console.error('[finanzas/hoy] proveedores financieros', err)
+        return new Set<string>()
+      }),
+    ])
 
   const cuentasHoy: CuentaHoy[] = cuentas
     .filter((row) => row.data.tipo === 'CC' || row.data.tipo === 'USD')
@@ -299,6 +305,7 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
     cheques: chequesEmitidos.map(mapCheque),
     tipoCambioUsdArs: tipoCambio?.usdArs ?? null,
     feriados: feriadosNacionales2026(),
+    proveedoresFinancieros,
   })
   const [pagosResueltos, cobrosResueltos] = await Promise.all([
     marcarDebitadoPorBanco(vista.resueltoHoy.pagos.filas, 'emitido'),

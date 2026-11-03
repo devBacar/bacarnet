@@ -32,6 +32,7 @@ import { NuevaTransferenciaModal, type PrecargaTransferenciaHoy } from '../../co
 import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas, patchFinanzasDescubierto, type FinanzasCuenta } from '../../services/finanzasApi'
+import { marcarPendienteDeRenovarCheque } from '../../services/finanzasChequesApi'
 import {
   borrarDatosDemoHoy,
   cobrarHoyEnEfectivo,
@@ -75,6 +76,7 @@ export function FinanzasHoyPage() {
   const [descubiertoCuenta, setDescubiertoCuenta] = useState<FinanzasCuenta | null>(null)
   const [savingDescubierto, setSavingDescubierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
+  const [renovando, setRenovando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [borrandoDemo, setBorrandoDemo] = useState(false)
   // Todas las tarjetas colapsables de Hoy se abren/cierran siempre juntas, con un solo
@@ -132,6 +134,9 @@ export function FinanzasHoyPage() {
             : origen.id.startsWith('vientri-')
               ? 'vientri'
               : 'planilla'),
+      // Solo se conoce si el cheque vence hoy (viene de data.pagos.filas); para otro día de la
+      // semana todavía no tenemos el id del cheque acá y no se puede ofrecer "Renovar".
+      chequeId: pago?.chequeId ?? null,
     })
   }
 
@@ -340,6 +345,19 @@ export function FinanzasHoyPage() {
                 toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
               })
               .finally(() => setGuardando(false))
+          }}
+          renovando={renovando}
+          onRenovar={(chequeId) => {
+            setRenovando(true)
+            void marcarPendienteDeRenovarCheque(chequeId)
+              .then(async () => {
+                setPagoModo(null)
+                await recargar('El cheque pasó a Cheques > Ocasionales > Renovaciones.')
+              })
+              .catch((err: unknown) => {
+                toast.error(err instanceof Error ? err.message : 'No se pudo marcar el cheque para renovar')
+              })
+              .finally(() => setRenovando(false))
           }}
         />
       ) : null}

@@ -636,6 +636,38 @@ describe('mismo criterio en todo Hoy: día hábil y conversión de USD', () => {
     expect(vista.pagos.filas.map((f) => f.id)).toContain('cheque-chq-3')
   })
 
+  it('un cheque suelto "pendiente de renovar" no se suma ni aparece: está en gestión, no se paga', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [compromiso({ id: 'factura-1', fechaVencimiento: HOY, montoCentavos: 100_000 })],
+        cheques: [chequeEnHoy({ id: 'chq-3', numero: '999', montoCentavos: 300_000, pendienteRenovacion: true })],
+      }),
+    )
+    expect(vista.dia.pagosCentavos).toBe(100_000)
+    expect(vista.pagos.totalCentavos).toBe(100_000)
+    expect(vista.pagos.filas.map((f) => f.id)).not.toContain('cheque-chq-3')
+  })
+
+  it('un compromiso "vientri-cheque" cuyo cheque está pendiente de renovar tampoco se suma ni aparece', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [
+          compromiso({
+            id: 'vientri-cheque-chq-1',
+            fechaVencimiento: HOY,
+            montoCentavos: 500_000,
+            origen: 'vientri-cheque',
+            medioPago: 'cheque',
+            vientriChequeNumero: '50095064',
+          }),
+        ],
+        cheques: [chequeEnHoy({ id: 'chq-1', numero: '50095064', montoCentavos: 500_000, pendienteRenovacion: true })],
+      }),
+    )
+    expect(vista.dia.pagosCentavos).toBe(0)
+    expect(vista.pagos.filas).toHaveLength(0)
+  })
+
   it('un cheque a un proveedor financiero queda marcado para distinguirlo de un cheque común', () => {
     const vista = armarVistaHoy(
       base({

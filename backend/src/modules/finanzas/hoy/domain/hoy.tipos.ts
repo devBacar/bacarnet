@@ -131,6 +131,8 @@ export interface PagoFilaHoy {
   origen: OrigenCompromisoHoy
   /** Solo para origen 'vientri-cheque': el cheque es del circuito de proveedores financieros (refinanciación). */
   esProveedorFinanciero?: boolean
+  /** Solo para medioPago 'cheque': id en la colección de cheques, para poder "Renovar" desde Hoy. */
+  chequeId?: string | null
 }
 
 export interface IngresoFilaHoy {
@@ -217,6 +219,10 @@ export interface ChequeEnHoy {
   destinatario: string | null
   emisor: string
   cliente: string | null
+  /** Está en la cola de "Pendientes de renovar": no hay que pagarlo hoy, está en gestión. */
+  pendienteRenovacion?: boolean
+  /** Ya se renovó a mano. Queda afuera de Hoy pase lo que pase con el próximo sync de Vientri. */
+  renovadoManualmente?: boolean
 }
 
 export interface ChequeADebitarFila {

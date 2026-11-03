@@ -169,6 +169,8 @@ function mapCheque(row: ChequeListadoItem): ChequeEnHoy {
     destinatario: row.destinatario,
     emisor: row.emisor,
     cliente: row.cliente,
+    pendienteRenovacion: row.pendienteRenovacion,
+    renovadoManualmente: row.renovadoManualmente,
   }
 }
 

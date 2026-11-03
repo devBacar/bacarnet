@@ -116,6 +116,26 @@ export interface ChequeDocument {
   /** ID del motivo de rechazo en Vientri. */
   vientriMotivoRechazoId?: number | null
 
+  /**
+   * Un cheque no se "paga": se renueva (se reemplaza por uno nuevo de mayor monto). Mientras está
+   * pendiente de renovar, no hay que pagarlo hoy pero tampoco está resuelto: queda en la cola de
+   * "Pendientes de renovar" (Cheques > Ocasionales > Renovaciones) hasta que alguien cargue el
+   * cheque nuevo que lo reemplaza.
+   */
+  pendienteRenovacion?: boolean
+  pendienteRenovacionDesde?: Timestamp | null
+  pendienteRenovacionPorUid?: string | null
+  /**
+   * Se confirmó la renovación a mano en Bacarnet (no por el cruce automático con las observaciones
+   * de Vientri). El sync diario de Vientri NUNCA toca este campo: así, si Vientri todavía no vio la
+   * renovación, el próximo sync no puede "deshacerla" pisando el estado de vuelta a pendiente.
+   */
+  renovadoManualmente?: boolean
+  /** Números de cheque que este cheque reemplazó al renovarse (puede ser más de uno). */
+  renovacionDe?: string[] | null
+  /** Números de cheque que reemplazaron a este cheque al renovarse. */
+  renovadoPor?: string[] | null
+
   createdAt: Timestamp
   updatedAt: Timestamp
   createdBy: string

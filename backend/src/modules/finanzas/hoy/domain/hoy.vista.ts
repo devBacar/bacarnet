@@ -203,8 +203,13 @@ function filaPago(
     chequeEmitido,
     aviso: chequeEmitido ? 'Ya tiene cheque emitido, solo falta debitarlo' : null,
     origen: row.origen,
-    ...(row.origen === 'vientri-cheque'
-      ? { esProveedorFinanciero: esProveedorFinanciero(row.proveedorONombre, proveedoresFinancieros) }
+    ...(row.origen === 'vientri-cheque' && row.vientriChequeNumero
+      ? {
+          esProveedorFinanciero: esProveedorFinanciero(row.proveedorONombre, proveedoresFinancieros),
+          // Mismo esquema de id que chequeDocId('emitido', numero) en cheques.repository.ts: así
+          // "Renovar" puede ubicar el documento real del cheque en la colección de cheques.
+          chequeId: `emitido_${row.vientriChequeNumero}`,
+        }
       : {}),
     ...(row.estimada ? { estimada: true } : {}),
   }
@@ -234,6 +239,7 @@ function filaPagoDeCheque(cheque: ChequeEnHoy, proveedoresFinancieros: ReadonlyS
     aviso: null,
     origen: 'vientri-cheque',
     esProveedorFinanciero: esProveedorFinanciero(aQuien, proveedoresFinancieros),
+    chequeId: cheque.id,
   }
 }
 
@@ -637,9 +643,17 @@ export function transferenciasSinFirmar(transferencias: ArmarHoyInput['transfere
 export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const hoy = fechaHoyArgentina(input.now)
   const { feriados, tipoCambioUsdArs, proveedoresFinancieros } = input
-  const pagos = seleccionarPagos(input.compromisos, hoy, input.movimientos, feriados, proveedoresFinancieros)
-  const pagosAtrasados = seleccionarPagosAtrasados(input.compromisos, hoy, input.movimientos, feriados, proveedoresFinancieros)
-  const pagosSinFecha = seleccionarPagosSinFecha(input.compromisos, hoy, input.movimientos, feriados, proveedoresFinancieros)
+  // Un cheque "pendiente de renovar" (o ya renovado a mano) no se paga: está en gestión, o ya se
+  // resolvió, en Cheques > Ocasionales > Renovaciones. No debe aparecer como compromiso a pagar.
+  const numerosResueltosOEnGestion = new Set(
+    input.cheques.filter((c) => c.pendienteRenovacion === true || c.renovadoManualmente === true).map((c) => c.numero),
+  )
+  const compromisos = input.compromisos.filter(
+    (c) => !(c.origen === 'vientri-cheque' && c.vientriChequeNumero && numerosResueltosOEnGestion.has(c.vientriChequeNumero)),
+  )
+  const pagos = seleccionarPagos(compromisos, hoy, input.movimientos, feriados, proveedoresFinancieros)
+  const pagosAtrasados = seleccionarPagosAtrasados(compromisos, hoy, input.movimientos, feriados, proveedoresFinancieros)
+  const pagosSinFecha = seleccionarPagosSinFecha(compromisos, hoy, input.movimientos, feriados, proveedoresFinancieros)
   const cobrosSinFecha = input.cobros.filter((row) => row.estado === 'esperado' && row.sinFecha)
   /** Suma convirtiendo USD a pesos: así el total coincide siempre con lo que se ve en cada fila. */
   const suma = (filas: Array<{ montoCentavos: number; moneda: 'ARS' | 'USD' }>) =>
@@ -651,7 +665,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   // Un cheque "vientri-cheque" ya está contado en pagosDeCompromisos (es la misma plata real, vista
   // como compromiso de la Agenda): sin este filtro se sumaba dos veces en "Hoy pagás".
   const numerosConCompromisoHoy = new Set(
-    input.compromisos
+    compromisos
       .filter(
         (c) =>
           c.origen === 'vientri-cheque' &&
@@ -671,7 +685,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const semana = armarSemana({
     hoy,
     saldoInicialCentavos,
-    compromisos: input.compromisos,
+    compromisos,
     cobros: input.cobros,
     cobrosYaLlegados: ingresos.llegados,
     cheques: input.cheques,

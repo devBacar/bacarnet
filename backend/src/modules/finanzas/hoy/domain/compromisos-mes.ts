@@ -354,6 +354,10 @@ export interface ChequeSueltoParaPlanilla {
   fechaPago: string
   destinatario: string | null
   emisor: string
+  /** Está en la cola de "Pendientes de renovar": no se muestra como a pagar en ningún lado. */
+  pendienteRenovacion?: boolean
+  /** Ya se renovó a mano: no se muestra como a pagar, pase lo que pase con el próximo sync de Vientri. */
+  renovadoManualmente?: boolean
 }
 
 /**
@@ -395,8 +399,17 @@ export function agregarChequesSueltos(
   compromisos: readonly CompromisoParaPlanilla[],
   cheques: readonly ChequeSueltoParaPlanilla[],
 ): CompromisoParaPlanilla[] {
+  // Un cheque "pendiente de renovar" (o ya renovado a mano) no se paga: está en gestión, o ya se
+  // resolvió, en Cheques > Ocasionales > Renovaciones. No debe aparecer como compromiso a pagar.
+  const numerosResueltosOEnGestion = new Set(
+    cheques.filter((c) => c.pendienteRenovacion === true || c.renovadoManualmente === true).map((c) => c.numero),
+  )
+  const compromisosVisibles = compromisos.filter(
+    (row) =>
+      !(row.origen === 'vientri-cheque' && row.vientriChequeNumero && numerosResueltosOEnGestion.has(row.vientriChequeNumero)),
+  )
   const numerosConCompromisoPorDia = new Map<string, Set<string>>()
-  for (const row of compromisos) {
+  for (const row of compromisosVisibles) {
     if (row.origen !== 'vientri-cheque' || !row.vientriChequeNumero) continue
     if (row.estado !== 'pendiente' && row.estado !== 'vencido') continue
     const set = numerosConCompromisoPorDia.get(row.fechaVencimiento) ?? new Set<string>()
@@ -404,9 +417,10 @@ export function agregarChequesSueltos(
     numerosConCompromisoPorDia.set(row.fechaVencimiento, set)
   }
   const sueltos = cheques
+    .filter((cheque) => cheque.pendienteRenovacion !== true && cheque.renovadoManualmente !== true)
     .filter((cheque) => !numerosConCompromisoPorDia.get(cheque.fechaPago)?.has(cheque.numero))
     .map(filaPlanillaDeCheque)
-  return [...compromisos, ...sueltos]
+  return [...compromisosVisibles, ...sueltos]
 }
 
 function entraEnMes(row: CompromisoParaPlanilla, mes: string): boolean {

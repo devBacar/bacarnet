@@ -95,6 +95,7 @@ import {
   marcarPendienteDeRenovar,
   listarPendientesDeRenovar,
   confirmarRenovacionManual,
+  confirmarRenovacionManualBatch,
   ChequeYaRenovadoError,
   ChequeNoEncontradoError,
 } from './cheques.repository.js'
@@ -183,6 +184,19 @@ describe('confirmarRenovacionManual', () => {
     ).rejects.toThrow(ChequeYaRenovadoError)
   })
 
+  it('si el cheque nuevo ya existe como renovadoManualmente, hace arrayUnion de los viejos', async () => {
+    sembrarCheque('emitido_111', { numero: '111', pendienteRenovacion: true })
+    // El cheque nuevo ya existe por una renovación previa
+    sembrarCheque('emitido_999', { numero: '999', renovadoManualmente: true, renovacionDe: ['000'] })
+    await confirmarRenovacionManual({
+      chequeViejoIds: ['emitido_111'],
+      chequeNuevo: { numero: '999', bancoEmisor: null, fechaPago: '2026-12-01', montoCentavos: 100_000, destinatario: null },
+      actorUid: 'uid-1',
+    })
+    const nuevo = store.get('cheques/emitido_999')!
+    expect(nuevo.renovacionDe).toEqual(['000', '111'])
+  })
+
   it('si el sync de Vientri todavía no detectó la renovación y revierte el estado, renovadoManualmente igual lo protege', async () => {
     sembrarCheque('emitido_111', { numero: '111', pendienteRenovacion: true })
     await confirmarRenovacionManual({
@@ -202,5 +216,85 @@ describe('confirmarRenovacionManual', () => {
     expect(
       chequeEmitidoVigente({ ...actual, estado: 'en_cartera' } as { direccion: string; estado: string; renovadoManualmente?: boolean }),
     ).toBe(false)
+  })
+})
+
+describe('confirmarRenovacionManualBatch', () => {
+  it('renueva 2 cheques viejos en 3 cheques nuevos con trazabilidad', async () => {
+    sembrarCheque('emitido_AAA', { numero: 'AAA', montoCentavos: 300_000, pendienteRenovacion: true })
+    sembrarCheque('emitido_BBB', { numero: 'BBB', montoCentavos: 200_000, pendienteRenovacion: true })
+
+    const { chequeNuevoIds } = await confirmarRenovacionManualBatch({
+      chequeViejoIds: ['emitido_AAA', 'emitido_BBB'],
+      chequesNuevos: [
+        { numero: 'N01', bancoEmisor: null, fechaPago: '2026-12-01', montoCentavos: 200_000, destinatario: 'MANA' },
+        { numero: 'N02', bancoEmisor: null, fechaPago: '2027-01-01', montoCentavos: 200_000, destinatario: 'MANA' },
+        { numero: 'N03', bancoEmisor: null, fechaPago: '2027-02-01', montoCentavos: 120_000, destinatario: 'MANA' },
+      ],
+      actorUid: 'uid-1',
+    })
+
+    expect(chequeNuevoIds).toHaveLength(3)
+
+    const viejoA = store.get('cheques/emitido_AAA')!
+    const viejoB = store.get('cheques/emitido_BBB')!
+    expect(viejoA.estado).toBe('renovado')
+    expect(viejoA.renovadoManualmente).toBe(true)
+    expect(viejoA.pendienteRenovacion).toBe(false)
+    expect(viejoA.renovadoPor).toEqual(['N01', 'N02', 'N03'])
+    expect(viejoB.estado).toBe('renovado')
+
+    const nuevo1 = store.get('cheques/emitido_N01')!
+    expect(nuevo1.renovacionDe).toEqual(['AAA', 'BBB'])
+    expect(nuevo1.montoCentavos).toBe(200_000)
+    expect(nuevo1.destinatario).toBe('MANA')
+  })
+
+  it('guarda operacionId en los cheques nuevos si se provee', async () => {
+    sembrarCheque('emitido_XXX', { numero: 'XXX', pendienteRenovacion: true })
+
+    await confirmarRenovacionManualBatch({
+      chequeViejoIds: ['emitido_XXX'],
+      chequesNuevos: [
+        { numero: 'Y01', bancoEmisor: null, fechaPago: '2026-12-01', montoCentavos: 110_000, destinatario: null },
+      ],
+      actorUid: 'uid-1',
+      operacionId: 'op-0042',
+    })
+
+    const nuevo = store.get('cheques/emitido_Y01')!
+    expect(nuevo.operacionId).toBe('op-0042')
+  })
+
+  it('no deja renovar un cheque ya renovado', async () => {
+    sembrarCheque('emitido_ZZZ', { numero: 'ZZZ', estado: 'renovado' })
+    await expect(
+      confirmarRenovacionManualBatch({
+        chequeViejoIds: ['emitido_ZZZ'],
+        chequesNuevos: [{ numero: 'W01', bancoEmisor: null, fechaPago: '2026-12-01', montoCentavos: 100_000, destinatario: null }],
+        actorUid: 'uid-1',
+      }),
+    ).rejects.toThrow(ChequeYaRenovadoError)
+  })
+
+  it('falla si no hay cheques viejos', async () => {
+    await expect(
+      confirmarRenovacionManualBatch({
+        chequeViejoIds: [],
+        chequesNuevos: [{ numero: 'W01', bancoEmisor: null, fechaPago: '2026-12-01', montoCentavos: 100_000, destinatario: null }],
+        actorUid: 'uid-1',
+      }),
+    ).rejects.toThrow('al menos un cheque')
+  })
+
+  it('falla si no hay cheques nuevos', async () => {
+    sembrarCheque('emitido_QQQ', { numero: 'QQQ', pendienteRenovacion: true })
+    await expect(
+      confirmarRenovacionManualBatch({
+        chequeViejoIds: ['emitido_QQQ'],
+        chequesNuevos: [],
+        actorUid: 'uid-1',
+      }),
+    ).rejects.toThrow('al menos un cheque nuevo')
   })
 })

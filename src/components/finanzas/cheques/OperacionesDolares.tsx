@@ -14,6 +14,10 @@ import {
   agregarProveedorFinanciero,
   PROVEEDORES_FINANCIEROS_QUERY_KEY,
 } from '../../../services/finanzasAgendaApi'
+import {
+  fetchPendientesDeRenovar,
+  type ChequePendienteDeRenovar,
+} from '../../../services/finanzasChequesApi'
 import { FinanzasFormField, finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
 import { CargaDiariaPanel, EtiquetaCargaDia } from '../cargaDiaria/CargaDiariaPanel'
@@ -78,6 +82,10 @@ export function BotonNuevaOperacion() {
 
 /** @deprecated Usar BotonNuevaOperacion */
 export const BotonNuevaOperacionUsd = BotonNuevaOperacion
+
+export function ModalNuevaOperacion({ onClose, precargar }: { onClose: () => void; precargar?: PrecargarRenovacion }) {
+  return <ModalFormOperacion onClose={onClose} precargar={precargar} />
+}
 
 function ListaOperaciones({ onNueva, onDetalle }: { onNueva: () => void; onDetalle: (id: string) => void }) {
   const { data: operaciones, isLoading, isError } = useQuery({
@@ -311,11 +319,103 @@ function SelectInversor({ value, onChange }: { value: string; onChange: (v: stri
   )
 }
 
-function ModalFormOperacion({ onClose }: { onClose: () => void }) {
+function PickerChequesViejos({
+  seleccionados,
+  onSeleccion,
+}: {
+  seleccionados: string[]
+  onSeleccion: (ids: string[], capitalCentavos: number, cantidad: number, inversorSugerido: string | null) => void
+}) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['finanzas', 'cheques', 'pendientes-de-renovar'],
+    queryFn: fetchPendientesDeRenovar,
+  })
+
+  const pendientes = data ?? []
+  const selSet = new Set(seleccionados)
+
+  function toggle(id: string) {
+    const next = new Set(selSet)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    const ids = [...next]
+    const chequesSel = pendientes.filter((p) => next.has(p.id))
+    const capital = chequesSel.reduce((s, c) => s + c.montoCentavos, 0)
+    const destinatarios = [...new Set(chequesSel.map((c) => c.destinatario ?? c.emisor).filter(Boolean))]
+    onSeleccion(ids, capital, ids.length, destinatarios.length === 1 ? destinatarios[0]! : null)
+  }
+
+  function seleccionarTodos() {
+    const ids = pendientes.map((p) => p.id)
+    const capital = pendientes.reduce((s, c) => s + c.montoCentavos, 0)
+    const destinatarios = [...new Set(pendientes.map((c) => c.destinatario ?? c.emisor).filter(Boolean))]
+    onSeleccion(ids, capital, ids.length, destinatarios.length === 1 ? destinatarios[0]! : null)
+  }
+
+  if (isLoading) return <p className="text-body-muted mb-3 text-xs">Cargando pendientes de renovar…</p>
+  if (pendientes.length === 0)
+    return (
+      <div className="mb-4 rounded-xl border border-dashed border-amber-300 bg-amber-50/40 p-3 dark:border-amber-800 dark:bg-amber-950/10">
+        <p className="text-body-muted text-[13px]">
+          No hay cheques pendientes de renovar. Marcá cheques como "Renovar" en Hoy para que aparezcan acá.
+        </p>
+      </div>
+    )
+
+  const capitalSel = pendientes.filter((p) => selSet.has(p.id)).reduce((s, c) => s + c.montoCentavos, 0)
+
+  return (
+    <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-heading text-sm font-semibold">Cheques a renovar</p>
+        <button
+          type="button"
+          onClick={seleccionarTodos}
+          className="text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
+        >
+          Seleccionar todos ({pendientes.length})
+        </button>
+      </div>
+      <div className="grid gap-1.5">
+        {pendientes.map((cheque: ChequePendienteDeRenovar) => (
+          <label
+            key={cheque.id}
+            className="flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-[13px] dark:border-amber-900/50 dark:bg-zinc-900"
+          >
+            <span className="flex items-center gap-2">
+              <input type="checkbox" checked={selSet.has(cheque.id)} onChange={() => toggle(cheque.id)} />
+              <span className="text-heading font-medium">
+                Nº {cheque.numero} — {cheque.destinatario ?? cheque.emisor}
+              </span>
+            </span>
+            <span className="font-medium tabular-nums">{formatMoneyCentavos(cheque.montoCentavos, 'ARS')}</span>
+          </label>
+        ))}
+      </div>
+      {selSet.size > 0 ? (
+        <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-300">
+          {selSet.size} seleccionado{selSet.size > 1 ? 's' : ''} — Capital: {formatMoneyCentavos(capitalSel, 'ARS')}
+        </p>
+      ) : (
+        <p className="text-body-muted mt-2 text-xs">
+          Seleccioná los cheques que se renuevan (o dejá vacío para carga manual).
+        </p>
+      )}
+    </div>
+  )
+}
+
+export interface PrecargarRenovacion {
+  chequeViejoIds: string[]
+  capitalCentavos: number
+  inversor?: string
+}
+
+function ModalFormOperacion({ onClose, precargar }: { onClose: () => void; precargar?: PrecargarRenovacion }) {
   const queryClient = useQueryClient()
-  const [tipo, setTipo] = useState<TipoOperacion>('usd')
+  const [tipo, setTipo] = useState<TipoOperacion>(precargar ? 'renovacion_pesos' : 'usd')
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
-  const [inversor, setInversor] = useState('')
+  const [inversor, setInversor] = useState(precargar?.inversor ?? '')
   // USD
   const [cotizacion, setCotizacion] = useState('')
   const [tasaMensual, setTasaMensual] = useState('')
@@ -323,10 +423,16 @@ function ModalFormOperacion({ onClose }: { onClose: () => void }) {
   const [montoUsd, setMontoUsd] = useState('')
   const [importeOriginal, setImporteOriginal] = useState('')
   // Renovación
-  const [capitalRenovado, setCapitalRenovado] = useState('')
-  const [cantidadViejos, setCantidadViejos] = useState('')
+  const [capitalRenovado, setCapitalRenovado] = useState(
+    precargar ? formatImporteInput(String(Math.round(precargar.capitalCentavos / 100))) : '',
+  )
+  const [cantidadViejos, setCantidadViejos] = useState(
+    precargar ? String(precargar.chequeViejoIds.length) : '',
+  )
   const [interesPct, setInteresPct] = useState('')
   const [cantidadNuevos, setCantidadNuevos] = useState('')
+  // Cheques viejos seleccionados
+  const [chequeViejoIds, setChequeViejoIds] = useState<string[]>(precargar?.chequeViejoIds ?? [])
 
   const [notas, setNotas] = useState('')
   const [lineas, setLineas] = useState<MovimientoLinea[]>([lineaVacia()])
@@ -339,6 +445,9 @@ function ModalFormOperacion({ onClose }: { onClose: () => void }) {
     mutationFn: (input: OperacionDolaresInput) => crearOperacionDolares(input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['finanzas', 'operaciones-dolares'] })
+      void queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques', 'pendientes-de-renovar'] })
+      void queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques'] })
+      void queryClient.invalidateQueries({ queryKey: ['finanzas', 'hoy'] })
       onClose()
     },
     onError: (err) => {
@@ -433,6 +542,7 @@ function ModalFormOperacion({ onClose }: { onClose: () => void }) {
           fechaCobro: l.fechaCobro,
           importeCentavos: parsearImporteCentavos(l.importePesos),
         })),
+      chequeViejoIds: esRenov && chequeViejoIds.length > 0 ? chequeViejoIds : undefined,
     }
     mutation.mutate(input)
   }
@@ -467,6 +577,21 @@ function ModalFormOperacion({ onClose }: { onClose: () => void }) {
             <RefreshCw className="h-4 w-4" /> Renovación pesos
           </button>
         </div>
+
+        {/* Picker de cheques a renovar (solo renovación) */}
+        {esRenov ? (
+          <PickerChequesViejos
+            seleccionados={chequeViejoIds}
+            onSeleccion={(ids, capitalCentavos, cantViejos, inversorSugerido) => {
+              setChequeViejoIds(ids)
+              if (capitalCentavos > 0) {
+                setCapitalRenovado(formatImporteInput(String(Math.round(capitalCentavos / 100))))
+              }
+              setCantidadViejos(String(cantViejos))
+              if (inversorSugerido && !inversor) setInversor(inversorSugerido)
+            }}
+          />
+        ) : null}
 
         {/* Campos comunes + específicos */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

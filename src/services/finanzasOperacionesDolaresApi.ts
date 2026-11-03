@@ -20,6 +20,7 @@ export interface OperacionDolares {
   fecha: string
   inversor: string
   inversorNormalizado: string
+  chequeViejoIds?: string[]
   cotizacion: number
   tasaMensual: number
   impuestoPorcentaje: number
@@ -58,6 +59,7 @@ export interface OperacionDolaresInput {
     fechaCobro: string
     importeCentavos: number
   }>
+  chequeViejoIds?: string[]
 }
 
 async function headers() {

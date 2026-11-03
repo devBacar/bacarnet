@@ -19,6 +19,7 @@ export interface OperacionDolares {
   fecha: string                 // YYYY-MM-DD — fecha de la operación
   inversor: string              // nombre del financiero (ej. "MANA")
   inversorNormalizado: string
+  chequeViejoIds?: string[]     // IDs de cheques renovados (solo renovacion_pesos)
 
   // Condiciones pactadas — USD
   cotizacion: number            // tipo de cambio (ej. 1555). 0 para renovación.
@@ -75,4 +76,5 @@ export interface OperacionDolaresInput {
     fechaCobro: string
     importeCentavos: number
   }>
+  chequeViejoIds?: string[]     // IDs de cheques a renovar (solo renovacion_pesos)
 }

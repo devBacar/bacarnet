@@ -8,7 +8,9 @@ function EtiquetasTipoPago({ pago }: { pago: PagoHoy }) {
   return (
     <>
       <Etiqueta tono="gris">{etiquetaMedioPago(pago.medioPago)}</Etiqueta>
-      <Etiqueta tono={tonoOrigenCompromiso(pago.origen)}>{etiquetaOrigenCompromiso(pago.origen)}</Etiqueta>
+      <Etiqueta tono={tonoOrigenCompromiso(pago.origen)}>
+        {etiquetaOrigenCompromiso(pago.origen, pago.esProveedorFinanciero)}
+      </Etiqueta>
     </>
   )
 }

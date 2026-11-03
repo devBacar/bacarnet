@@ -96,6 +96,7 @@ function base(overrides: Partial<ArmarHoyInput> = {}): ArmarHoyInput {
     cheques: [],
     tipoCambioUsdArs: null,
     feriados: new Set(),
+    proveedoresFinancieros: new Set(),
     ...overrides,
   }
 }
@@ -633,6 +634,28 @@ describe('mismo criterio en todo Hoy: día hábil y conversión de USD', () => {
     expect(vista.pagos.totalCentavos).toBe(400_000)
     expect(vista.pagos.filas).toHaveLength(2)
     expect(vista.pagos.filas.map((f) => f.id)).toContain('cheque-chq-3')
+  })
+
+  it('un cheque a un proveedor financiero queda marcado para distinguirlo de un cheque común', () => {
+    const vista = armarVistaHoy(
+      base({
+        cheques: [chequeEnHoy({ id: 'chq-mana', numero: '1', montoCentavos: 100_000, destinatario: 'MANA' })],
+        proveedoresFinancieros: new Set(['mana']),
+      }),
+    )
+    const fila = vista.pagos.filas.find((f) => f.id === 'cheque-chq-mana')
+    expect(fila?.esProveedorFinanciero).toBe(true)
+  })
+
+  it('un cheque a un proveedor común no queda marcado como financiero', () => {
+    const vista = armarVistaHoy(
+      base({
+        cheques: [chequeEnHoy({ id: 'chq-comun', numero: '2', montoCentavos: 100_000, destinatario: 'Ferretería X' })],
+        proveedoresFinancieros: new Set(['mana']),
+      }),
+    )
+    const fila = vista.pagos.filas.find((f) => f.id === 'cheque-chq-comun')
+    expect(fila?.esProveedorFinanciero).toBe(false)
   })
 
   it('sin cotización cargada, no convierte (usa el monto tal cual para no inventar un valor)', () => {

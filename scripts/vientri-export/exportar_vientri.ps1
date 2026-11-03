@@ -1,5 +1,6 @@
 <#
-  Exporta los CSV de Vientri para Bacarnet Finanzas (contrato de datos v0.2).
+  Exporta los CSV de Vientri para Bacarnet Finanzas (contrato de datos v0.3).
+  v0.3: suma items.csv/unegocio.csv/art.csv e id_unegocio/nombre_cf en comprobantes.csv (tablero Ventas).
   Solo LEE la copia de SGA_BACAR adjunta en LocalDB. Nunca se conecta a VIENTRISRV ni escribe en Vientri.
 
   Uso (PowerShell en SIS5):
@@ -24,7 +25,7 @@ param(
 $ErrorActionPreference = "Stop"
 $inv = [System.Globalization.CultureInfo]::InvariantCulture
 $utf8 = New-Object System.Text.UTF8Encoding($false)
-$versionContrato = "0.2"
+$versionContrato = "0.3"
 
 function Abrir-Conexion([string]$base) {
     $cs = "Server=$Servidor;Database=$base;Integrated Security=True;Application Name=ExportVientriBacarnet;Connect Timeout=60"

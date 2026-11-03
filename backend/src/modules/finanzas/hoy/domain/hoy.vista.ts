@@ -318,8 +318,17 @@ function medioDesdeDesglose(medio: 'cheque_fisico' | 'echeq' | 'otro_medio'): Me
   return medio === 'otro_medio' ? 'otro' : medio
 }
 
-function medioDesdeCompromiso(medioPago: CompromisoHoy['medioPago']): MedioResueltoHoy {
-  return medioPago === 'cheque' ? 'cheque_fisico' : medioPago === 'efectivo' ? 'efectivo' : 'transferencia'
+/**
+ * Si el compromiso es un cheque, hay que saber si es físico o electrónico para no mostrarlo mal
+ * agrupado en "Salió del banco hoy". Cuando se conoce el cheque real (por su número), se usa su
+ * tipo real; si no se encuentra, se asume físico (comportamiento de siempre) en vez de romper.
+ */
+function medioDesdeCompromiso(
+  medioPago: CompromisoHoy['medioPago'],
+  tipoChequeReal: 'echeq' | 'fisico' | undefined,
+): MedioResueltoHoy {
+  if (medioPago === 'cheque') return tipoChequeReal === 'echeq' ? 'echeq' : 'cheque_fisico'
+  return medioPago === 'efectivo' ? 'efectivo' : 'transferencia'
 }
 
 /**
@@ -327,7 +336,12 @@ function medioDesdeCompromiso(medioPago: CompromisoHoy['medioPago']): MedioResue
  * (un cheque vence el día del cheque, no el día en que se firmó la orden). Si no hay desglose real
  * (cargado a mano, o pagado antes de tener este dato), se usa la fecha y el medio del compromiso.
  */
-export function seleccionarPagadosHoy(compromisos: CompromisoHoy[], hoy: string): { totalCentavos: number; filas: MovimientoDelDiaHoy[] } {
+export function seleccionarPagadosHoy(
+  compromisos: CompromisoHoy[],
+  hoy: string,
+  cheques: readonly ChequeEnHoy[] = [],
+): { totalCentavos: number; filas: MovimientoDelDiaHoy[] } {
+  const tipoPorNumero = new Map(cheques.filter((c) => c.tipo).map((c) => [c.numero, c.tipo as 'echeq' | 'fisico']))
   const filas: MovimientoDelDiaHoy[] = []
   for (const row of compromisos) {
     if (row.estado !== 'pagado') continue
@@ -346,12 +360,13 @@ export function seleccionarPagadosHoy(compromisos: CompromisoHoy[], hoy: string)
         })
       })
     } else if (row.fechaPago === hoy) {
+      const tipoChequeReal = row.vientriChequeNumero ? tipoPorNumero.get(row.vientriChequeNumero) : undefined
       filas.push({
         id: row.id,
         aQuienODeQuien: row.proveedorONombre,
         concepto: row.concepto,
         montoCentavos: row.montoTotalCentavos,
-        medio: medioDesdeCompromiso(row.medioPago),
+        medio: medioDesdeCompromiso(row.medioPago, tipoChequeReal),
         chequeNumero: row.vientriChequeNumero ?? null,
         debitadoPorBanco: null,
         origen: row.origen,
@@ -695,7 +710,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const cobrosAtrasados = listarCobrosAtrasados(input.cobros, hoy, ingresos.llegados, feriados)
   const firmas = transferenciasSinFirmar(input.transferencias, input.now)
   const chequesADebitar = armarChequesADebitar({ cheques: input.cheques, hoy, bancos })
-  const pagadosHoy = seleccionarPagadosHoy(input.compromisos, hoy)
+  const pagadosHoy = seleccionarPagadosHoy(input.compromisos, hoy, input.cheques)
   const cobradosHoy = seleccionarCobradosHoy(input.cobros, hoy)
   const vacio =
     pagos.length === 0 &&

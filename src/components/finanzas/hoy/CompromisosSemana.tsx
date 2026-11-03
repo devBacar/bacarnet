@@ -157,8 +157,10 @@ function FilaCompromiso({
   const parcial = textoPagoParcial(fila.acumuladoCentavos, fila.importeCentavos, fila.diferenciaCentavos, (centavos) =>
     formatMoneyCentavos(centavos, fila.moneda),
   )
+  // Lo importante arriba (a quién), el resto (concepto, banco, estado del cheque) abajo en gris:
+  // mismo criterio que "Pagos de hoy", para que las dos pantallas se vean consistentes.
   const detalle = [
-    fila.proveedorONombre,
+    fila.concepto,
     fila.cuota ? `cuota ${fila.cuota}` : '',
     textoCheque(fila),
     parcial ?? '',
@@ -166,6 +168,9 @@ function FilaCompromiso({
   ]
     .filter((parte) => parte.trim().length > 0)
     .join(' · ')
+  // "Cheque" (el medio) y "Cheque de Vientri"/"Cheque a proveedor financiero" (el origen) dicen lo
+  // mismo dos veces: con el origen alcanza, que además distingue si es a un proveedor financiero.
+  const mostrarEtiquetaMedio = fila.medioPago !== 'cheque'
   const puedeAgenda = usePermisosFinanzas().agenda
   const bloqueado =
     fila.estado === 'pagado' || fila.estado === 'confeccionada_pendiente_autorizacion'
@@ -182,8 +187,8 @@ function FilaCompromiso({
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
       <div className="col-span-2 min-w-0 sm:col-span-1">
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <span className="text-heading break-words text-[15px] font-medium">{fila.concepto}</span>
-          <Etiqueta tono="gris">{etiquetaMedioPago(fila.medioPago)}</Etiqueta>
+          <span className="text-heading break-words text-[15px] font-medium">{fila.proveedorONombre}</span>
+          {mostrarEtiquetaMedio ? <Etiqueta tono="gris">{etiquetaMedioPago(fila.medioPago)}</Etiqueta> : null}
           <Etiqueta tono={tonoOrigenCompromiso(fila.origen, fila.esProveedorFinanciero)}>
             {etiquetaOrigenCompromiso(fila.origen, fila.esProveedorFinanciero)}
           </Etiqueta>

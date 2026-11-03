@@ -171,6 +171,7 @@ function mapCheque(row: ChequeListadoItem): ChequeEnHoy {
     cliente: row.cliente,
     pendienteRenovacion: row.pendienteRenovacion,
     renovadoManualmente: row.renovadoManualmente,
+    tipo: row.tipo === 'echeq' || row.tipo === 'fisico' ? row.tipo : undefined,
   }
 }
 

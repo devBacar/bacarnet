@@ -90,11 +90,14 @@ function SubseccionResuelto({
   )
 }
 
-/** Chips de cómo se paga y de dónde vino (junto al nombre). */
+/**
+ * Chips de cómo se paga y de dónde vino (junto al nombre). Si es un cheque, "Cheque" y "Cheque de
+ * Vientri"/"Cheque a proveedor financiero" dicen lo mismo dos veces: alcanza con la de origen.
+ */
 function EtiquetasTipoPago({ pago }: { pago: PagoHoy }) {
   return (
     <>
-      <Etiqueta tono="gris">{etiquetaMedioPago(pago.medioPago)}</Etiqueta>
+      {pago.medioPago !== 'cheque' ? <Etiqueta tono="gris">{etiquetaMedioPago(pago.medioPago)}</Etiqueta> : null}
       <Etiqueta tono={tonoOrigenCompromiso(pago.origen, pago.esProveedorFinanciero)}>
         {etiquetaOrigenCompromiso(pago.origen, pago.esProveedorFinanciero)}
       </Etiqueta>

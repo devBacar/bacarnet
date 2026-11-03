@@ -223,6 +223,8 @@ export interface ChequeEnHoy {
   pendienteRenovacion?: boolean
   /** Ya se renovó a mano. Queda afuera de Hoy pase lo que pase con el próximo sync de Vientri. */
   renovadoManualmente?: boolean
+  /** Físico o electrónico. Si no se sabe, no se asume nada (puede venir sin este dato). */
+  tipo?: 'echeq' | 'fisico'
 }
 
 export interface ChequeADebitarFila {

@@ -32,3 +32,11 @@ Corto a propósito. Detalle en `REGLAS.md` (manda sobre todo) y `src/components/
 ## En curso: Inversiones Parte 1 (rama `feature/inversores-base`)
 - Hecho: dominio + tests en `backend/src/modules/finanzas/inversiones/domain/`; contrato API en `src/services/finanzasInversionesApi.ts`; origen `inversiones`/`planilla` y `anulado` en la Agenda.
 - Falta: repos/servicio/rutas de Inversiones, permisos (`finanzas_inversiones`, `finanzas_inversiones_aprobar`), sync con la Agenda, importador de la planilla (`hoy/domain/planilla-excel.ts`) y pantallas.
+
+## En curso: Pantalla Hoy — mejora continua (02-03/11, todo en `main`, deployado)
+- Hecho hoy (PR #92-#98, #102, #104, #106-#110): KPI sin doble conteo ni ignorar USD, cheques sueltos sumados en Hoy y en la semana, cola manual de renovación de cheques (`Cheques > Ocasionales > Renovaciones > Pendientes de renovar`, campo `renovadoManualmente` en el doc del cheque para que el sync de Vientri nunca lo revierta), tarjetas colapsables por fila, etiqueta de origen (Vientri/Inversor/Proveedor financiero) en todos los lugares donde se ve plata, semana unificada en un solo bloque dentro de "Compromisos de esta semana", fix de e-cheques mal agrupados como "cheque físico".
+- Decisión pendiente del usuario: si el gráfico de barras "Esta semana" (pagos/cobros por día) también se fusiona al bloque unificado, o queda aparte (hoy queda aparte).
+- Limitación conocida: "Renovar" desde Compromisos de la semana solo funciona para un cheque que vence **hoy** (falta llevar el `chequeId` para otros días).
+- Pendiente sin empezar: sueldos como "día pesado" todavía no tiene el monto real (el módulo `rrhh/salario/` que lo daría no está terminado ni mergeado); por ahora solo marca el día en rojo sin monto.
+- Ticket #2307 (Jose): ~$1.090M de movimientos bancarios sin conciliar contra ningún compromiso — no investigado todavía.
+- Trabajo activo en el worktree `C:\Users\Admin\Desktop\intranet1-guia-hoy` (rama `main`, sincronizada), no en la carpeta compartida.

@@ -26,7 +26,7 @@ import { formatMoneyCentavos } from '../formatMoney'
 import { OperacionesRenovacion } from './OperacionesRenovacion'
 import { PendientesDeRenovar } from './PendientesDeRenovar'
 import { SeguimientoRenovaciones } from './SeguimientoRenovaciones'
-import { BotonNuevaOperacionUsd, OperacionesDolares } from './OperacionesDolares'
+import { BotonNuevaOperacionUsd, OperacionesDolares, ModalNuevaOperacion, type PrecargarRenovacion } from './OperacionesDolares'
 
 function formatFecha(iso: string | null): string {
   if (!iso) return '—'
@@ -56,6 +56,7 @@ export function PestanaOcasionales() {
   const [beneficiarioRenov, setBeneficiarioRenov] = useState('')
   const [detalleId, setDetalleId] = useState<string | null>(null)
   const [mostrarMesesViejos, setMostrarMesesViejos] = useState(false)
+  const [precargarRenov, setPrecargarRenov] = useState<PrecargarRenovacion | null>(null)
 
   const importMutation = useMutation({
     mutationFn: (file: File) => importarOcasionalesCsv(file),
@@ -173,7 +174,17 @@ export function PestanaOcasionales() {
     return (
       <>
         {subTabs}
-        <PendientesDeRenovar />
+        <PendientesDeRenovar
+          onRenovarConOperacion={(ids, capital) => {
+            setPrecargarRenov({ chequeViejoIds: ids, capitalCentavos: capital })
+          }}
+        />
+        {precargarRenov ? (
+          <ModalNuevaOperacion
+            onClose={() => setPrecargarRenov(null)}
+            precargar={precargarRenov}
+          />
+        ) : null}
         <OperacionesRenovacion
           beneficiarioFiltro={beneficiarioRenov}
           onLimpiarFiltro={() => setBeneficiarioRenov('')}

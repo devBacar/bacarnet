@@ -887,6 +887,122 @@ export async function buscarPendientesPorVientriId(ids: number[]): Promise<Map<n
   return mapa
 }
 
+/**
+ * Variante batch: acepta N cheques nuevos (para operaciones de renovación con distribución).
+ * Misma lógica que confirmarRenovacionManual pero iterando sobre múltiples cheques nuevos.
+ */
+export async function confirmarRenovacionManualBatch(input: {
+  chequeViejoIds: string[]
+  chequesNuevos: Array<{
+    numero: string
+    bancoEmisor: string | null
+    fechaPago: string
+    montoCentavos: number
+    destinatario: string | null
+  }>
+  actorUid: string
+  operacionId?: string
+}): Promise<{ chequeNuevoIds: string[] }> {
+  if (input.chequeViejoIds.length === 0) throw new Error('Elegí al menos un cheque para renovar')
+  if (input.chequesNuevos.length === 0) throw new Error('Debe haber al menos un cheque nuevo')
+
+  const nuevosRefs = input.chequesNuevos.map((cn) => ({
+    id: chequeDocId('emitido', cn.numero),
+    ref: collection().doc(chequeDocId('emitido', cn.numero)),
+    data: cn,
+  }))
+
+  await adminDb().runTransaction(async (tx) => {
+    const viejosRefs = input.chequeViejoIds.map((id) => collection().doc(id))
+    const [viejosSnaps, nuevosSnaps] = await Promise.all([
+      Promise.all(viejosRefs.map((r) => tx.get(r))),
+      Promise.all(nuevosRefs.map((nr) => tx.get(nr.ref))),
+    ])
+
+    const viejosNumeros: string[] = []
+    for (const [i, snap] of viejosSnaps.entries()) {
+      if (!snap.exists) throw new ChequeNoEncontradoError()
+      const data = snap.data() ?? {}
+      if (data.estado === 'renovado' || data.renovadoManualmente === true) throw new ChequeYaRenovadoError()
+      viejosNumeros.push(String(data.numero ?? viejosRefs[i]!.id))
+    }
+
+    const nuevosNumeros = input.chequesNuevos.map((cn) => cn.numero)
+    const now = Timestamp.now()
+
+    for (const [i, nr] of nuevosRefs.entries()) {
+      const cn = nr.data
+      const nuevoSnap = nuevosSnaps[i]!
+      if (nuevoSnap.exists) {
+        if (nuevoSnap.data()?.renovadoManualmente !== true && nuevoSnap.data()?.vientriSync !== true) {
+          throw new ChequeNuevoYaExisteError(cn.numero)
+        }
+        tx.update(nr.ref, {
+          renovacionDe: FieldValue.arrayUnion(...viejosNumeros),
+          ...(input.operacionId ? { operacionId: input.operacionId } : {}),
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+      } else {
+        const nuevoDoc: Omit<ChequeDocument, 'createdAt' | 'updatedAt'> & {
+          createdAt: FirebaseFirestore.FieldValue
+          updatedAt: FirebaseFirestore.FieldValue
+          operacionId?: string
+        } = {
+          numero: cn.numero,
+          tipo: 'fisico',
+          direccion: 'emitido',
+          origen: 'propio',
+          montoCentavos: cn.montoCentavos,
+          fechaEmision: cn.fechaPago,
+          fechaPago: cn.fechaPago,
+          fechaRecibido: null,
+          fechaEntregado: null,
+          emisor: 'Bacarnet',
+          emisorCuit: '',
+          bancoEmisor: cn.bancoEmisor,
+          bancoEmisorCodigo: null,
+          cliente: null,
+          endosante: null,
+          destinatario: cn.destinatario,
+          estado: 'en_cartera',
+          estadoBancario: null,
+          utilizado: null,
+          cmc7: null,
+          observaciones: `Renovación manual de: ${viejosNumeros.join(', ')}`,
+          renovacionDe: viejosNumeros,
+          renovadoManualmente: true,
+          ...(input.operacionId ? { operacionId: input.operacionId } : {}),
+          createdBy: input.actorUid,
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        }
+        tx.set(nr.ref, nuevoDoc)
+      }
+    }
+
+    for (const ref of viejosRefs) {
+      tx.update(ref, {
+        estado: 'renovado',
+        renovadoManualmente: true,
+        pendienteRenovacion: false,
+        renovadoPor: FieldValue.arrayUnion(...nuevosNumeros),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      const entry: ChequeHistorialEstadoDocument = {
+        estadoAnterior: null,
+        estadoNuevo: 'renovado',
+        origen: 'manual',
+        usuario: input.actorUid,
+        nota: `Renovado a mano por cheques Nº ${nuevosNumeros.join(', ')}`,
+        fecha: now,
+      }
+      tx.set(ref.collection(HISTORIAL_ESTADOS_SUB).doc(), entry)
+    }
+  })
+
+  return { chequeNuevoIds: nuevosRefs.map((nr) => nr.id) }
+}
+
 export async function resumenDiario(fecha: string): Promise<{
   cantidadACobrar: number
   totalACobrarCentavos: number

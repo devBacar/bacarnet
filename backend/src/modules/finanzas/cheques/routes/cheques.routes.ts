@@ -11,6 +11,7 @@ import {
   marcarPendienteDeRenovar,
   listarPendientesDeRenovar,
   confirmarRenovacionManual,
+  confirmarRenovacionManualBatch,
   ChequeNoEncontradoError,
   ChequeYaRenovadoError,
   ChequeNuevoYaExisteError,
@@ -300,6 +301,51 @@ finanzasChequesRouter.post('/:id/marcar-pendiente-renovar', requireFinanzasPermi
     if (err instanceof ChequeYaRenovadoError) { res.status(409).json({ error: err.message }); return }
     console.error('[finanzas/cheques] marcar pendiente de renovar', err)
     res.status(400).json({ error: err instanceof Error ? err.message : 'No se pudo marcar el cheque' })
+  }
+})
+
+finanzasChequesRouter.post('/confirmar-renovacion-batch', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const actorUid = req.authedUser?.uid
+    if (!actorUid) { res.status(401).json({ error: 'No autenticado' }); return }
+    const body = req.body as {
+      chequeViejoIds?: unknown
+      chequesNuevos?: unknown[]
+      operacionId?: unknown
+    }
+    if (!Array.isArray(body.chequeViejoIds) || body.chequeViejoIds.some((x) => typeof x !== 'string') || body.chequeViejoIds.length === 0) {
+      res.status(400).json({ error: 'Elegí al menos un cheque para renovar' })
+      return
+    }
+    if (!Array.isArray(body.chequesNuevos) || body.chequesNuevos.length === 0) {
+      res.status(400).json({ error: 'Debe haber al menos un cheque nuevo' })
+      return
+    }
+    const chequesNuevos = (body.chequesNuevos as Array<Record<string, unknown>>).map((cn) => {
+      if (typeof cn.numero !== 'string' || !cn.numero.trim() || typeof cn.fechaPago !== 'string' || !cn.fechaPago.trim() || typeof cn.montoCentavos !== 'number' || cn.montoCentavos <= 0) {
+        throw new Error('Cada cheque nuevo necesita número, fecha de pago y monto')
+      }
+      return {
+        numero: cn.numero.trim(),
+        bancoEmisor: typeof cn.bancoEmisor === 'string' ? cn.bancoEmisor.trim() || null : null,
+        fechaPago: cn.fechaPago.trim(),
+        montoCentavos: cn.montoCentavos,
+        destinatario: typeof cn.destinatario === 'string' ? cn.destinatario.trim() || null : null,
+      }
+    })
+    const resultado = await confirmarRenovacionManualBatch({
+      chequeViejoIds: body.chequeViejoIds as string[],
+      chequesNuevos,
+      actorUid,
+      operacionId: typeof body.operacionId === 'string' ? body.operacionId : undefined,
+    })
+    res.json({ mensaje: 'Renovación confirmada', ...resultado })
+  } catch (err) {
+    if (err instanceof ChequeNoEncontradoError) { res.status(404).json({ error: err.message }); return }
+    if (err instanceof ChequeYaRenovadoError) { res.status(409).json({ error: err.message }); return }
+    if (err instanceof ChequeNuevoYaExisteError) { res.status(409).json({ error: err.message }); return }
+    console.error('[finanzas/cheques] confirmar renovación batch', err)
+    res.status(400).json({ error: err instanceof Error ? err.message : 'No se pudo confirmar la renovación' })
   }
 })
 

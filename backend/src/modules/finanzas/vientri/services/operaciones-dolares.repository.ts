@@ -1,6 +1,7 @@
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { calcularOperacion, validarOperacionInput, type ErrorValidacion } from '../domain/operacion-dolares.js'
 import type { OperacionDolares, OperacionDolaresInput } from '../domain/operacion-dolares.types.js'
+import { confirmarRenovacionManualBatch } from '../../cheques/services/cheques.repository.js'
 
 const COLECCION = 'operacionesDolares'
 
@@ -32,9 +33,28 @@ export async function crearOperacionDolares(
     creadoPor: actor,
     creadoEn: ahora,
     actualizadoEn: ahora,
+    ...(input.chequeViejoIds?.length ? { chequeViejoIds: input.chequeViejoIds } : {}),
   }
 
   await ref.set(operacion)
+
+  if (input.tipo === 'renovacion_pesos' && input.chequeViejoIds && input.chequeViejoIds.length > 0) {
+    await confirmarRenovacionManualBatch({
+      chequeViejoIds: input.chequeViejoIds,
+      chequesNuevos: input.cheques
+        .filter((ch) => ch.importeCentavos > 0)
+        .map((ch) => ({
+          numero: ch.numeroCheque ?? '',
+          bancoEmisor: null,
+          fechaPago: ch.fechaCobro,
+          montoCentavos: ch.importeCentavos,
+          destinatario: input.inversor || null,
+        })),
+      actorUid: actor,
+      operacionId: id,
+    })
+  }
+
   return { ok: true, operacion }
 }
 

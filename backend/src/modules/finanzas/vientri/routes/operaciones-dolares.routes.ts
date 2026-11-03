@@ -37,6 +37,9 @@ function parsearInput(body: Record<string, unknown>): OperacionDolaresInput {
     interesPorcentaje: Number(body.interesPorcentaje) || 0,
     notas: String(body.notas ?? ''),
     cheques,
+    chequeViejoIds: Array.isArray(body.chequeViejoIds)
+      ? (body.chequeViejoIds as unknown[]).filter((x): x is string => typeof x === 'string')
+      : undefined,
   }
 }
 

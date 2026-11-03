@@ -16,7 +16,9 @@ function fechaCorta(ymd: string): string {
   return `${Number(dia)}/${Number(mes)}/${anio}`
 }
 
-export function PendientesDeRenovar() {
+export function PendientesDeRenovar({ onRenovarConOperacion }: {
+  onRenovarConOperacion?: (chequeIds: string[], capitalCentavos: number) => void
+} = {}) {
   const queryClient = useQueryClient()
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set())
   const [cargandoPara, setCargandoPara] = useState<Set<string> | null>(null)
@@ -126,14 +128,30 @@ export function PendientesDeRenovar() {
           </label>
         ))}
       </div>
-      {seleccionados.size > 1 ? (
-        <button
-          type="button"
-          className="mt-2 rounded-lg border border-amber-400 px-3 py-1.5 text-[13px] font-medium text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-900/40"
-          onClick={() => iniciarCarga(seleccionados)}
-        >
-          Renovar los {seleccionados.size} seleccionados juntos
-        </button>
+      {seleccionados.size >= 1 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded-lg border border-amber-400 px-3 py-1.5 text-[13px] font-medium text-amber-900 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-900/40"
+            onClick={() => iniciarCarga(seleccionados)}
+          >
+            Renovar los {seleccionados.size} juntos
+          </button>
+          {onRenovarConOperacion ? (
+            <button
+              type="button"
+              className="rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-[13px] font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-900/40"
+              onClick={() => {
+                const capital = pendientes
+                  .filter((p) => seleccionados.has(p.id))
+                  .reduce((s, c) => s + c.montoCentavos, 0)
+                onRenovarConOperacion([...seleccionados], capital)
+              }}
+            >
+              Renovar con operación →
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {cargandoPara ? (

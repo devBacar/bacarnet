@@ -89,6 +89,8 @@ export function Tarjeta({
   claseAyuda,
   tour,
   colapsable = true,
+  abiertaControlada,
+  onCambiarAbierta,
   children,
 }: {
   titulo: ReactNode
@@ -101,16 +103,30 @@ export function Tarjeta({
   tour?: string
   /** Si se puede desplegar/colapsar. Por defecto sí. */
   colapsable?: boolean
+  /**
+   * Si viene presente, esta tarjeta no maneja su propio abierto/cerrado (ni localStorage):
+   * lo decide quien la usa. Sirve para que dos tarjetas (ej. "Pagos de hoy" y "Cobros de hoy")
+   * se abran y cierren siempre juntas con un solo interruptor.
+   */
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
   children: ReactNode
 }) {
   const clave = typeof titulo === 'string' ? titulo : tour ?? ''
-  const [abierta, setAbierta] = useState(true)
+  const esControlada = abiertaControlada !== undefined
+  const [abiertaPropia, setAbiertaPropia] = useState(true)
   useEffect(() => {
-    if (colapsable && clave) setAbierta(leerAbierta(clave))
-  }, [colapsable, clave])
+    if (!esControlada && colapsable && clave) setAbiertaPropia(leerAbierta(clave))
+  }, [esControlada, colapsable, clave])
+
+  const abierta = esControlada ? abiertaControlada : abiertaPropia
 
   function cambiar(valor: boolean) {
-    setAbierta(valor)
+    if (esControlada) {
+      onCambiarAbierta?.(valor)
+      return
+    }
+    setAbiertaPropia(valor)
     try {
       if (clave) window.localStorage.setItem(`bacarnet.tarjeta.${clave}`, valor ? '1' : '0')
     } catch {

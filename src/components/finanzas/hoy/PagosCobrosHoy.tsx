@@ -113,6 +113,8 @@ export function PagosHoy({
   ayuda = 'Son los mismos compromisos de Agenda: si pagás o cambiás algo acá, se actualiza allá.',
   tour = 'hoy-pagos',
   sinFecha = false,
+  abiertaControlada,
+  onCambiarAbierta,
 }: {
   pagos: HoyResponse['pagos']
   onPagar: (pago: PagoHoy) => void
@@ -125,6 +127,9 @@ export function PagosHoy({
   tour?: string
   /** Bandeja de facturas sin fecha: el botón principal es "Poner fecha". */
   sinFecha?: boolean
+  /** Para que esta tarjeta se abra/cierre junto con otra (ej. "Cobros de hoy"). */
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
 }) {
   const filas = pagos.filas
   const total = filas.length > 0 ? totalDe(filas) : 0
@@ -134,6 +139,8 @@ export function PagosHoy({
       titulo={titulo}
       derecha={filas.length > 0 ? <Total centavos={total} /> : undefined}
       ayuda={ayuda}
+      abiertaControlada={abiertaControlada}
+      onCambiarAbierta={onCambiarAbierta}
     >
       {filas.length === 0 ? (
         <Vacio texto={vacio} />
@@ -201,6 +208,8 @@ export function CobrosHoy({
   onReprogramar,
   onReclamar,
   puedeOperar = true,
+  abiertaControlada,
+  onCambiarAbierta,
 }: {
   ingresos: IngresoHoy[]
   sinFecha?: { cantidad: number; totalCentavos: number }
@@ -210,6 +219,9 @@ export function CobrosHoy({
   onReprogramar: (ingreso: IngresoHoy) => void
   onReclamar: (ingreso: IngresoHoy) => void
   puedeOperar?: boolean
+  /** Para que esta tarjeta se abra/cierre junto con otra (ej. "Pagos de hoy"). */
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
 }) {
   const total = totalDe(ingresos)
   return (
@@ -218,6 +230,8 @@ export function CobrosHoy({
       titulo="Cobros de hoy"
       derecha={ingresos.length > 0 ? <Total centavos={total} /> : undefined}
       ayuda="Se confirman solos cuando entra la plata. También los ves en Agenda › Cobros."
+      abiertaControlada={abiertaControlada}
+      onCambiarAbierta={onCambiarAbierta}
     >
       {ingresos.length === 0 ? (
         <Vacio texto="No hay cobros esperados para hoy." />

@@ -77,6 +77,25 @@ export function FinanzasHoyPage() {
   const [guardando, setGuardando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [borrandoDemo, setBorrandoDemo] = useState(false)
+  // "Pagos de hoy" y "Cobros de hoy" se abren/cierran siempre juntas, para que no quede una
+  // tarjeta colapsada con un espacio en blanco al lado de la otra abierta.
+  const CLAVE_ABIERTA_PAGOS_COBROS = 'bacarnet.tarjeta.pagos-y-cobros-hoy'
+  const [abiertaPagosCobros, setAbiertaPagosCobros] = useState(() => {
+    try {
+      const guardado = window.localStorage.getItem(CLAVE_ABIERTA_PAGOS_COBROS)
+      return guardado === null ? true : guardado === '1'
+    } catch {
+      return true
+    }
+  })
+  function cambiarAbiertaPagosCobros(valor: boolean) {
+    setAbiertaPagosCobros(valor)
+    try {
+      window.localStorage.setItem(CLAVE_ABIERTA_PAGOS_COBROS, valor ? '1' : '0')
+    } catch {
+      /* si el navegador no deja guardar, no pasa nada: solo no se recuerda la próxima vez */
+    }
+  }
 
   async function recargar(mensaje: string) {
     toast.success(mensaje)
@@ -207,6 +226,8 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
+              abiertaControlada={abiertaPagosCobros}
+              onCambiarAbierta={cambiarAbiertaPagosCobros}
             />
             <CobrosHoy
               ingresos={data.ingresos.filas.filter((ingreso) => !ingreso.atrasado)}
@@ -217,6 +238,8 @@ export function FinanzasHoyPage() {
               onReprogramar={setReprogramarIngreso}
               onReclamar={setReclamo}
               puedeOperar={permisos.agenda}
+              abiertaControlada={abiertaPagosCobros}
+              onCambiarAbierta={cambiarAbiertaPagosCobros}
             />
           </div>
           <ResueltoHoy resueltoHoy={data.resueltoHoy} />

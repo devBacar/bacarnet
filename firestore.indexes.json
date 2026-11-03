@@ -255,6 +255,52 @@
       ]
     },
     {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fechaProceso",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "categoriaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fechaProceso",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "categoriaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fechaProceso",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "cheques",
       "queryScope": "COLLECTION",
       "fields": [

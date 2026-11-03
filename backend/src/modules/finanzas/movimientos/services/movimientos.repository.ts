@@ -343,15 +343,30 @@ export interface MovimientoListadoItem {
 }
 
 export interface MovimientosListadoFiltro {
-  cuentaId: string
+  /** null = buscar en todos los bancos a la vez. */
+  cuentaId: string | null
   desde: string
   hasta: string
   tipo: 'debito' | 'credito' | null
   categoriaId: string | null
+  /** Rango de monto en centavos, filtrado en memoria (igual que el texto libre). */
+  montoMinCentavos?: number | null
+  montoMaxCentavos?: number | null
+}
+
+function tieneFiltroMonto(filtro: MovimientosListadoFiltro): boolean {
+  return filtro.montoMinCentavos != null || filtro.montoMaxCentavos != null
+}
+
+function cumpleFiltroMonto(filtro: MovimientosListadoFiltro, montoCentavos: number): boolean {
+  if (filtro.montoMinCentavos != null && montoCentavos < filtro.montoMinCentavos) return false
+  if (filtro.montoMaxCentavos != null && montoCentavos > filtro.montoMaxCentavos) return false
+  return true
 }
 
 function rangoQuery(filtro: MovimientosListadoFiltro, tipo: 'debito' | 'credito' | null): Query {
-  let query: Query = movimientosBancariosCollection().where('cuentaId', '==', filtro.cuentaId)
+  let query: Query = movimientosBancariosCollection()
+  if (filtro.cuentaId) query = query.where('cuentaId', '==', filtro.cuentaId)
   if (tipo) query = query.where('tipo', '==', tipo)
   if (filtro.categoriaId) query = query.where('categoriaId', '==', filtro.categoriaId)
   query = query.where('fechaProceso', '>=', filtro.desde).where('fechaProceso', '<=', filtro.hasta)
@@ -414,10 +429,14 @@ export async function pageMovimientos(input: {
   return snap.docs.map((doc) => toListadoItem(doc.id, doc.data()))
 }
 
-/** Recorre el rango en orden para un texto libre. Firestore no puede filtrar "contiene". */
+/**
+ * Recorre el rango en orden para un texto libre y/o un rango de monto.
+ * Firestore no puede filtrar "contiene" ni combinar desigualdades en dos campos
+ * (fecha y monto) con el índice que ya tenemos, así que ambos se filtran en memoria.
+ */
 export async function scanMovimientosPorTexto(input: {
   filtro: MovimientosListadoFiltro
-  texto: string
+  texto: string | null
   offset: number
   limit: number
 }): Promise<{ total: number; entradasCentavos: number; salidasCentavos: number; items: MovimientoListadoItem[] }> {
@@ -437,18 +456,21 @@ export async function scanMovimientosPorTexto(input: {
     for (const doc of snap.docs) {
       const data = doc.data()
       const item = toListadoItem(doc.id, data)
-      const depositor = typeof data.depositorDescription === 'string' ? data.depositorDescription : null
-      const haystack = [
-        item.descripcion,
-        item.contraparte?.nombre,
-        item.contraparte?.cuit,
-        item.customerCuit,
-        depositor,
-      ]
-        .filter((part): part is string => Boolean(part))
-        .join(' ')
-        .toLocaleLowerCase('es')
-      if (!haystack.includes(needle)) continue
+      if (!cumpleFiltroMonto(input.filtro, item.montoCentavos)) continue
+      if (needle) {
+        const depositor = typeof data.depositorDescription === 'string' ? data.depositorDescription : null
+        const haystack = [
+          item.descripcion,
+          item.contraparte?.nombre,
+          item.contraparte?.cuit,
+          item.customerCuit,
+          depositor,
+        ]
+          .filter((part): part is string => Boolean(part))
+          .join(' ')
+          .toLocaleLowerCase('es')
+        if (!haystack.includes(needle)) continue
+      }
       if (item.tipo === 'credito') entradasCentavos += item.montoCentavos
       else salidasCentavos += item.montoCentavos
       if (total >= input.offset && items.length < input.limit) items.push(item)
@@ -461,6 +483,8 @@ export async function scanMovimientosPorTexto(input: {
 
   return { total, entradasCentavos, salidasCentavos, items }
 }
+
+export { tieneFiltroMonto }
 
 export interface MovimientoCashflowRow {
   moneda: 'ARS' | 'USD'

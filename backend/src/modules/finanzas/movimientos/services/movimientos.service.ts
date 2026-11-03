@@ -20,6 +20,7 @@ import {
   replaceMovimientosRango,
   scanMovimientosPorTexto,
   sumMovimientosCentavos,
+  tieneFiltroMonto,
   toListadoItem,
   tomarTurnoSyncMovimientos,
   actualizarDetalleCajaMismoTexto,
@@ -348,17 +349,21 @@ export interface MovimientosListadoQuery {
   tipo?: string
   categoriaId?: string
   q?: string
+  montoMin?: string
+  montoMax?: string
   page?: string
   limit?: string
 }
 
 export interface MovimientosListadoResponse {
-  cuentaId: string
+  cuentaId: string | null
   desde: string
   hasta: string
   tipo: 'debito' | 'credito' | null
   categoriaId: string | null
   q: string | null
+  montoMinCentavos: number | null
+  montoMaxCentavos: number | null
   page: number
   limit: number
   total: number
@@ -379,11 +384,22 @@ function parsePositiveInt(raw: string | undefined, fallback: number, max: number
   return Math.min(n, max)
 }
 
+/** El filtro viaja en pesos (lo que escribe el usuario); acá se pasa a centavos enteros. */
+function parseMontoCentavos(raw: string | undefined, campo: string): number | null {
+  const trimmed = raw?.trim()
+  if (!trimmed) return null
+  const n = Number(trimmed.replace(',', '.'))
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`${campo} tiene que ser un monto válido`)
+  }
+  return Math.round(n * 100)
+}
+
 export async function listMovimientosApi(query: MovimientosListadoQuery): Promise<MovimientosListadoResponse> {
+  // cuentaId vacío = buscar en todos los bancos a la vez.
   const cuentaId = query.cuentaId?.trim() ?? ''
   const desde = query.desde?.trim() ?? ''
   const hasta = query.hasta?.trim() ?? ''
-  if (!cuentaId) throw new Error('cuentaId es obligatorio')
   if (!ISO_DATE.test(desde) || !ISO_DATE.test(hasta)) {
     throw new Error('desde y hasta son obligatorios, con formato AAAA-MM-DD')
   }
@@ -401,19 +417,34 @@ export async function listMovimientosApi(query: MovimientosListadoQuery): Promis
   const limit = parsePositiveInt(query.limit, MOVIMIENTOS_PAGE_DEFAULT, MOVIMIENTOS_PAGE_MAX)
   const q = query.q?.trim().toLocaleLowerCase('es') ?? ''
   if (q.length > 80) throw new Error('La búsqueda puede tener hasta 80 caracteres')
+  const montoMinCentavos = parseMontoCentavos(query.montoMin, 'El monto mínimo')
+  const montoMaxCentavos = parseMontoCentavos(query.montoMax, 'El monto máximo')
+  if (montoMinCentavos != null && montoMaxCentavos != null && montoMinCentavos > montoMaxCentavos) {
+    throw new Error('El monto mínimo no puede ser mayor al máximo')
+  }
 
-  const filtro = { cuentaId, desde, hasta, tipo, categoriaId: categoriaId || null }
+  const filtro = {
+    cuentaId: cuentaId || null,
+    desde,
+    hasta,
+    tipo,
+    categoriaId: categoriaId || null,
+    montoMinCentavos,
+    montoMaxCentavos,
+  }
   const offset = (page - 1) * limit
 
-  if (q) {
-    const scanned = await scanMovimientosPorTexto({ filtro, texto: q, offset, limit })
+  if (q || tieneFiltroMonto(filtro)) {
+    const scanned = await scanMovimientosPorTexto({ filtro, texto: q || null, offset, limit })
     return {
-      cuentaId,
+      cuentaId: cuentaId || null,
       desde,
       hasta,
       tipo,
       categoriaId: categoriaId || null,
-      q,
+      q: q || null,
+      montoMinCentavos,
+      montoMaxCentavos,
       page,
       limit,
       total: scanned.total,
@@ -434,12 +465,14 @@ export async function listMovimientosApi(query: MovimientosListadoQuery): Promis
   ])
 
   return {
-    cuentaId,
+    cuentaId: cuentaId || null,
     desde,
     hasta,
     tipo,
     categoriaId: categoriaId || null,
     q: null,
+    montoMinCentavos: null,
+    montoMaxCentavos: null,
     page,
     limit,
     total,

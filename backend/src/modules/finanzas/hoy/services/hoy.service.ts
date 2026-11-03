@@ -10,6 +10,7 @@ import type { MovimientoBancarioDocument } from '../../movimientos/domain/movimi
 import { listCuentaDocuments } from '../../services/cuentas.repository.js'
 import { presentarEstadoInterbanking } from '../../transferencias/domain/estado-interbanking.js'
 import { listTransferenciasConfeccionadas } from '../../transferencias/services/transferencias.repository.js'
+import type { TransferenciaConfeccionadaDocument } from '../../transferencias/domain/transferencia.types.js'
 import { marcarCompromisoPagadoPorTransferenciaHecha } from '../../agenda/services/compromisos.service.js'
 import { esChequeEnCartera, ordenarCartera } from '../domain/cheques-hoy.js'
 import { feriadosNacionales2026 } from '../domain/feriados-nacionales-2026.js'
@@ -147,14 +148,11 @@ const FILTRO_CHEQUE_VACIO: Omit<ChequesFiltro, 'direccion' | 'desde' | 'hasta'> 
 
 async function listarCheques(filtro: ChequesFiltro): Promise<ChequeListadoItem[]> {
   const total = await countChequesFiltrados(filtro)
-  const filas: ChequeListadoItem[] = []
   const limit = 300
-  for (let offset = 0; offset < total; offset += limit) {
-    const page = await pageCheques({ filtro, offset, limit })
-    filas.push(...page)
-    if (page.length === 0) break
-  }
-  return filas
+  const offsets: number[] = []
+  for (let offset = 0; offset < total; offset += limit) offsets.push(offset)
+  const paginas = await Promise.all(offsets.map((offset) => pageCheques({ filtro, offset, limit })))
+  return paginas.flat()
 }
 
 function mapCheque(row: ChequeListadoItem): ChequeEnHoy {
@@ -193,39 +191,58 @@ export async function getMovimientoHoy(id: string): Promise<MovimientoHoy | null
 }
 
 /** Cierra pagos cuya transferencia ya quedó hecha, sin consultar al banco. */
-export async function cerrarCompromisosConTransferenciaHecha(actorUid: string, now = new Date()): Promise<void> {
-  const rows = await listTransferenciasConfeccionadas()
-  for (const row of rows) {
+export async function cerrarCompromisosConTransferenciaHecha(
+  actorUid: string,
+  now = new Date(),
+  rowsYaCargadas?: Array<{ id: string; data: TransferenciaConfeccionadaDocument }>,
+): Promise<void> {
+  const rows = rowsYaCargadas ?? (await listTransferenciasConfeccionadas())
+  const aCerrar = rows.filter((row) => {
     const compromisoId = row.data.compromisoPagoId?.trim() ?? ''
-    if (!compromisoId) continue
-    if (row.data.estado === 'rechazada' || row.data.estado === 'cancelada') continue
+    if (!compromisoId) return false
+    if (row.data.estado === 'rechazada' || row.data.estado === 'cancelada') return false
     const presentacion = presentarEstadoInterbanking({
       estado: row.data.estadoInterbanking,
       fechaSolicitud: row.data.fechaSolicitudInterbanking ?? null,
       now,
     })
-    if (presentacion?.tono !== 'hecha') continue
-    await marcarCompromisoPagadoPorTransferenciaHecha({
-      compromisoId,
-      actorUid,
-      cuentaId: row.data.cuentaDebitoId,
-      nota: 'La transferencia quedó hecha en el banco.',
-      transferenciaId: row.id,
-      montoCentavos: row.data.montoCentavos,
-    })
+    return presentacion?.tono === 'hecha'
+  })
+  // Agrupadas por compromiso: si dos transferencias tocan el mismo compromiso (pago parcial),
+  // se procesan en orden entre sí para no pisarse un read-then-write; distintos compromisos sí en paralelo.
+  const porCompromiso = new Map<string, typeof aCerrar>()
+  for (const row of aCerrar) {
+    const compromisoId = row.data.compromisoPagoId?.trim() ?? ''
+    const grupo = porCompromiso.get(compromisoId)
+    if (grupo) grupo.push(row)
+    else porCompromiso.set(compromisoId, [row])
   }
+  await Promise.all(
+    Array.from(porCompromiso.values()).map(async (grupo) => {
+      for (const row of grupo) {
+        await marcarCompromisoPagadoPorTransferenciaHecha({
+          compromisoId: row.data.compromisoPagoId?.trim() ?? '',
+          actorUid,
+          cuentaId: row.data.cuentaDebitoId,
+          nota: 'La transferencia quedó hecha en el banco.',
+          transferenciaId: row.id,
+          montoCentavos: row.data.montoCentavos,
+        })
+      }
+    }),
+  )
 }
 
 export async function armarHoy(input: { actorUid: string; now?: Date }): Promise<HoyVista & { hayDatosDemo: boolean }> {
   const now = input.now ?? new Date()
-  await cerrarCompromisosConTransferenciaHecha(input.actorUid, now)
+  const transferencias = await listTransferenciasConfeccionadas()
+  await cerrarCompromisosConTransferenciaHecha(input.actorUid, now, transferencias)
   const hoy = fechaHoyArgentina(now)
   const hastaSemana = proximosDiasHabiles(hoy, 7).at(-1) ?? hoy
-  const [compromisos, cobros, cuentas, transferencias, movimientos, chequesEmitidos, datosDemo, tipoCambio] = await Promise.all([
+  const [compromisos, cobros, cuentas, movimientos, chequesEmitidos, datosDemo, tipoCambio] = await Promise.all([
     listAllCompromisos(),
     listAllCobros(),
     listCuentaDocuments(),
-    listTransferenciasConfeccionadas(),
     listarMovimientos(sumarDias(hoy, -4), hoy),
     listarCheques({
       ...FILTRO_CHEQUE_VACIO,
@@ -283,9 +300,13 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
     tipoCambioUsdArs: tipoCambio?.usdArs ?? null,
     feriados: feriadosNacionales2026(),
   })
+  const [pagosResueltos, cobrosResueltos] = await Promise.all([
+    marcarDebitadoPorBanco(vista.resueltoHoy.pagos.filas, 'emitido'),
+    marcarDebitadoPorBanco(vista.resueltoHoy.cobros.filas, 'recibido'),
+  ])
   const resueltoHoy = {
-    pagos: envolverResuelto(await marcarDebitadoPorBanco(vista.resueltoHoy.pagos.filas, 'emitido')),
-    cobros: envolverResuelto(await marcarDebitadoPorBanco(vista.resueltoHoy.cobros.filas, 'recibido')),
+    pagos: envolverResuelto(pagosResueltos),
+    cobros: envolverResuelto(cobrosResueltos),
   }
   return { ...vista, resueltoHoy, hayDatosDemo: datosDemo }
 }

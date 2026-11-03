@@ -107,6 +107,31 @@ describe('cheques sueltos en "Compromisos de esta semana" (mismo criterio que "H
     ])
     expect(resultado).toHaveLength(2)
   })
+
+  it('un cheque suelto "pendiente de renovar" no se agrega: está en gestión, no se paga', () => {
+    const resultado = agregarChequesSueltos(
+      [],
+      [chequeSuelto({ id: 'chq-1', numero: '999', montoCentavos: 300_000, pendienteRenovacion: true })],
+    )
+    expect(resultado).toHaveLength(0)
+  })
+
+  it('un compromiso "vientri-cheque" cuyo cheque está pendiente de renovar no aparece', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-1',
+        fechaVencimiento: '2026-09-10',
+        montoCentavos: 500_000,
+        origen: 'vientri-cheque',
+        medioPago: 'cheque',
+        vientriChequeNumero: '50095064',
+      }),
+    ]
+    const resultado = agregarChequesSueltos(compromisos, [
+      chequeSuelto({ id: 'chq-1', numero: '50095064', fechaPago: '2026-09-10', montoCentavos: 500_000, pendienteRenovacion: true }),
+    ])
+    expect(resultado).toHaveLength(0)
+  })
 })
 
 describe('columnas del mes', () => {

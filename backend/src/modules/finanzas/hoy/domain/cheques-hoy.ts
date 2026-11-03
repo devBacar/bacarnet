@@ -29,8 +29,23 @@ export function camposEndoso(destinatario: string): { utilizado: true; destinata
   return { utilizado: true, destinatario: destinatario.trim() }
 }
 
-export function chequeEmitidoVigente(cheque: { direccion: string; estado: string }): boolean {
-  return cheque.direccion === 'emitido' && !NO_SE_DEBITA.has(cheque.estado)
+export function chequeEmitidoVigente(cheque: {
+  direccion: string
+  estado: string
+  pendienteRenovacion?: boolean
+  /**
+   * Renovado a mano en Bacarnet. El sync diario de Vientri nunca toca este campo, así que aunque
+   * Vientri todavía no haya detectado la renovación (y su `estado` diga otra cosa), este cheque no
+   * vuelve a aparecer como vigente.
+   */
+  renovadoManualmente?: boolean
+}): boolean {
+  return (
+    cheque.direccion === 'emitido' &&
+    !NO_SE_DEBITA.has(cheque.estado) &&
+    cheque.pendienteRenovacion !== true &&
+    cheque.renovadoManualmente !== true
+  )
 }
 
 /** Los que entran en "A pagar" de la semana: emitidos vigentes con fecha de pago de hoy en adelante. */

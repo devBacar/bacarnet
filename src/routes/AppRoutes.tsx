@@ -1,53 +1,21 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AdminLayout, PublicLayout, RagAssistantHost } from '../components'
 import {
-  AdminAudit,
-  AdminContent,
-  AdminDashboard,
-  AdminDirectory,
-  AdminDriveLab,
-  AdminResources,
-  AdminShifts,
-  AdminUsers,
   AppsHub,
   BoardList,
   BoardViewerPage,
-  DesarrolloProyectosBoard,
   Directory,
-  DriveDocumentViewerPage,
-  HelpCenter,
   HelpdeskSolicitud,
   Home,
   IntranetHub,
-  MisSolicitudesSistemas,
-  AprobacionesPendientes,
   AccountPendingPage,
   AccountRejectedPage,
-  OfficeUploadPreviewPage,
-  RagAssistantRedirect,
-  RagPilotSistemas,
   Resources,
-  SistemasMesaAyuda,
-  SoporteTi,
-  FinanzasHoyPage,
-  FinanzasCuentasPage,
-  FinanzasAgendaPage,
-  FinanzasTransferenciasPage,
-  FinanzasMovimientosPage,
-  FinanzasExtractosPage,
-  FinanzasCajasPage,
-  FinanzasChequesPage,
-  FinanzasVientriPage,
-  InversionesPage,
-  InversorCuentaPage,
   FinanzasLayout,
   FinanzasIndexRedirect,
-  RrhhHorasExtraPage,
-  TableroFinanzasPage,
-  NegocioBoard,
-  CopsBoard,
 } from '../pages'
-import { WeatherUtilitiesPreview } from '../pages/WeatherUtilitiesPreview'
+import { RouteFallback } from './RouteFallback'
 import { ProtectedRoute } from './ProtectedRoute'
 import { AccountStatusRoute } from './AccountStatusRoute'
 import { AdminRoute } from './AdminRoute'
@@ -59,9 +27,109 @@ import { ModulePermissionRoute } from './ModulePermissionRoute'
 import { FinanzasModuleGate } from './FinanzasModuleGate'
 import { FinanzasFullSectionsGate } from './FinanzasFullSectionsGate'
 
+const AdminAudit = lazy(() => import('../pages/AdminAudit').then((m) => ({ default: m.AdminAudit })))
+const AdminContent = lazy(() =>
+  import('../pages/AdminContent').then((m) => ({ default: m.AdminContent })),
+)
+const AdminDashboard = lazy(() =>
+  import('../pages/AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
+)
+const AdminDirectory = lazy(() =>
+  import('../pages/AdminDirectory').then((m) => ({ default: m.AdminDirectory })),
+)
+const AdminDriveLab = lazy(() =>
+  import('../pages/AdminDriveLab').then((m) => ({ default: m.AdminDriveLab })),
+)
+const AdminResources = lazy(() =>
+  import('../pages/AdminResources').then((m) => ({ default: m.AdminResources })),
+)
+const AdminShifts = lazy(() => import('../pages/AdminShifts').then((m) => ({ default: m.AdminShifts })))
+const AdminUsers = lazy(() => import('../pages/AdminUsers').then((m) => ({ default: m.AdminUsers })))
+const DesarrolloProyectosBoard = lazy(() =>
+  import('../pages/DesarrolloProyectosBoard').then((m) => ({
+    default: m.DesarrolloProyectosBoard,
+  })),
+)
+const DriveDocumentViewerPage = lazy(() =>
+  import('../pages/DriveDocumentViewer').then((m) => ({ default: m.DriveDocumentViewerPage })),
+)
+const HelpCenter = lazy(() => import('../pages/HelpCenter').then((m) => ({ default: m.HelpCenter })))
+const MisSolicitudesSistemas = lazy(() =>
+  import('../pages/MisSolicitudesSistemas').then((m) => ({ default: m.MisSolicitudesSistemas })),
+)
+const AprobacionesPendientes = lazy(() =>
+  import('../pages/AprobacionesPendientes').then((m) => ({ default: m.AprobacionesPendientes })),
+)
+const OfficeUploadPreviewPage = lazy(() =>
+  import('../pages/OfficeUploadPreview').then((m) => ({ default: m.OfficeUploadPreviewPage })),
+)
+const RagAssistantRedirect = lazy(() =>
+  import('../pages/RagAssistantRedirect').then((m) => ({ default: m.RagAssistantRedirect })),
+)
+const RagPilotSistemas = lazy(() =>
+  import('../pages/RagPilotSistemas').then((m) => ({ default: m.RagPilotSistemas })),
+)
+const SistemasMesaAyuda = lazy(() =>
+  import('../pages/SistemasMesaAyuda').then((m) => ({ default: m.SistemasMesaAyuda })),
+)
+const SoporteTi = lazy(() => import('../pages/SoporteTi').then((m) => ({ default: m.SoporteTi })))
+const FinanzasHoyPage = lazy(() =>
+  import('../pages/finanzas/HoyPage').then((m) => ({ default: m.FinanzasHoyPage })),
+)
+const FinanzasCuentasPage = lazy(() =>
+  import('../pages/finanzas/CuentasPage').then((m) => ({ default: m.FinanzasCuentasPage })),
+)
+const FinanzasAgendaPage = lazy(() =>
+  import('../pages/finanzas/AgendaPage').then((m) => ({ default: m.FinanzasAgendaPage })),
+)
+const FinanzasTransferenciasPage = lazy(() =>
+  import('../pages/finanzas/TransferenciasPage').then((m) => ({
+    default: m.FinanzasTransferenciasPage,
+  })),
+)
+const FinanzasMovimientosPage = lazy(() =>
+  import('../pages/finanzas/MovimientosPage').then((m) => ({ default: m.FinanzasMovimientosPage })),
+)
+const FinanzasExtractosPage = lazy(() =>
+  import('../pages/finanzas/ExtractosPage').then((m) => ({ default: m.FinanzasExtractosPage })),
+)
+const FinanzasCajasPage = lazy(() =>
+  import('../pages/finanzas/CajasWorkspace').then((m) => ({
+    default: m.CajasWorkspace,
+  })),
+)
+const FinanzasChequesPage = lazy(() =>
+  import('../pages/finanzas/ChequesPage').then((m) => ({ default: m.FinanzasChequesPage })),
+)
+const FinanzasVientriPage = lazy(() =>
+  import('../pages/finanzas/VientriPage').then((m) => ({ default: m.FinanzasVientriPage })),
+)
+const InversionesPage = lazy(() =>
+  import('../pages/finanzas/InversionesPage').then((m) => ({ default: m.InversionesPage })),
+)
+const InversorCuentaPage = lazy(() =>
+  import('../pages/finanzas/InversorCuentaPage').then((m) => ({ default: m.InversorCuentaPage })),
+)
+const RrhhHorasExtraPage = lazy(() =>
+  import('../pages/rrhh/HorasExtraPage').then((m) => ({ default: m.RrhhHorasExtraPage })),
+)
+const TableroFinanzasPage = lazy(() =>
+  import('../pages/tablero-finanzas/TableroFinanzasPage').then((m) => ({
+    default: m.TableroFinanzasPage,
+  })),
+)
+const NegocioBoard = lazy(() =>
+  import('../pages/tableros/NegocioBoard').then((m) => ({ default: m.NegocioBoard })),
+)
+const CopsBoard = lazy(() => import('../pages/tableros/CopsBoard').then((m) => ({ default: m.CopsBoard })))
+const WeatherUtilitiesPreview = lazy(() =>
+  import('../pages/WeatherUtilitiesPreview').then((m) => ({ default: m.WeatherUtilitiesPreview })),
+)
+
 export function AppRoutes() {
   return (
     <BrowserRouter>
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="support" element={<HelpdeskSolicitud />} />
@@ -165,6 +233,7 @@ export function AppRoutes() {
           </Route>
         </Route>
       </Routes>
+      </Suspense>
       <RagAssistantHost />
     </BrowserRouter>
   )

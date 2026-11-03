@@ -27,6 +27,7 @@ import {
   FranjaDemo,
   TarjetaBancos,
   TarjetaSemanaGrafico,
+  useTarjetaPar,
 } from '../../components/finanzas/hoy/TarjetasHoy'
 import { NuevaTransferenciaModal, type PrecargaTransferenciaHoy } from '../../components/finanzas/NuevaTransferenciaModal'
 import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
@@ -79,25 +80,12 @@ export function FinanzasHoyPage() {
   const [renovando, setRenovando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [borrandoDemo, setBorrandoDemo] = useState(false)
-  // Todas las tarjetas colapsables de Hoy se abren/cierran siempre juntas, con un solo
-  // interruptor: tocar el título de cualquiera abre o cierra todas las demás a la vez.
-  const CLAVE_ABIERTA_HOY = 'bacarnet.tarjeta.hoy-todas'
-  const [abiertaHoy, setAbiertaHoy] = useState(() => {
-    try {
-      const guardado = window.localStorage.getItem(CLAVE_ABIERTA_HOY)
-      return guardado === null ? true : guardado === '1'
-    } catch {
-      return true
-    }
-  })
-  function cambiarAbiertaHoy(valor: boolean) {
-    setAbiertaHoy(valor)
-    try {
-      window.localStorage.setItem(CLAVE_ABIERTA_HOY, valor ? '1' : '0')
-    } catch {
-      /* si el navegador no deja guardar, no pasa nada: solo no se recuerda la próxima vez */
-    }
-  }
+  // Cada fila de dos tarjetas (una al lado de la otra) comparte su propio interruptor: tocar
+  // cualquiera de las dos despliega o colapsa a las dos juntas, sin afectar a las otras filas.
+  const [abiertaPagosCobrosHoy, cambiarAbiertaPagosCobrosHoy] = useTarjetaPar('pagos-cobros-hoy')
+  const [abiertaResueltoHoy, cambiarAbiertaResueltoHoy] = useTarjetaPar('resuelto-hoy')
+  const [abiertaAtrasados, cambiarAbiertaAtrasados] = useTarjetaPar('atrasados')
+  const [abiertaBancosSemana, cambiarAbiertaBancosSemana] = useTarjetaPar('bancos-semana')
 
   async function recargar(mensaje: string) {
     toast.success(mensaje)
@@ -231,8 +219,8 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
-              abiertaControlada={abiertaHoy}
-              onCambiarAbierta={cambiarAbiertaHoy}
+              abiertaControlada={abiertaPagosCobrosHoy}
+              onCambiarAbierta={cambiarAbiertaPagosCobrosHoy}
             />
             <CobrosHoy
               ingresos={data.ingresos.filas.filter((ingreso) => !ingreso.atrasado)}
@@ -243,14 +231,14 @@ export function FinanzasHoyPage() {
               onReprogramar={setReprogramarIngreso}
               onReclamar={setReclamo}
               puedeOperar={permisos.agenda}
-              abiertaControlada={abiertaHoy}
-              onCambiarAbierta={cambiarAbiertaHoy}
+              abiertaControlada={abiertaPagosCobrosHoy}
+              onCambiarAbierta={cambiarAbiertaPagosCobrosHoy}
             />
           </div>
           <ResueltoHoy
             resueltoHoy={data.resueltoHoy}
-            abiertaControlada={abiertaHoy}
-            onCambiarAbierta={cambiarAbiertaHoy}
+            abiertaControlada={abiertaResueltoHoy}
+            onCambiarAbierta={cambiarAbiertaResueltoHoy}
           />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosAtrasados
@@ -262,8 +250,8 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
-              abiertaControlada={abiertaHoy}
-              onCambiarAbierta={cambiarAbiertaHoy}
+              abiertaControlada={abiertaAtrasados}
+              onCambiarAbierta={cambiarAbiertaAtrasados}
             />
             <CobrosAtrasados
               atrasados={data.prevision.cobrosAtrasados}
@@ -275,8 +263,8 @@ export function FinanzasHoyPage() {
               onReclamar={setReclamo}
               onConfirmar={confirmarIngreso}
               puedeOperar={permisos.agenda}
-              abiertaControlada={abiertaHoy}
-              onCambiarAbierta={cambiarAbiertaHoy}
+              abiertaControlada={abiertaAtrasados}
+              onCambiarAbierta={cambiarAbiertaAtrasados}
             />
           </div>
           {data.pagosSinFecha && data.pagosSinFecha.filas.length > 0 ? (
@@ -291,20 +279,18 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
-              abiertaControlada={abiertaHoy}
-              onCambiarAbierta={cambiarAbiertaHoy}
             />
           ) : null}
           <CargaHoyResumen />
-          <CompromisosSemana onPagar={pagarDesdePlanilla} abiertaControlada={abiertaHoy} onCambiarAbierta={cambiarAbiertaHoy} />
+          <CompromisosSemana onPagar={pagarDesdePlanilla} />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <TarjetaBancos
               dia={data.dia}
               onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined}
-              abiertaControlada={abiertaHoy}
-              onCambiarAbierta={cambiarAbiertaHoy}
+              abiertaControlada={abiertaBancosSemana}
+              onCambiarAbierta={cambiarAbiertaBancosSemana}
             />
-            <TarjetaSemanaGrafico prevision={data.prevision} abiertaControlada={abiertaHoy} onCambiarAbierta={cambiarAbiertaHoy} />
+            <TarjetaSemanaGrafico prevision={data.prevision} abiertaControlada={abiertaBancosSemana} onCambiarAbierta={cambiarAbiertaBancosSemana} />
           </div>
         </>
       ) : null}

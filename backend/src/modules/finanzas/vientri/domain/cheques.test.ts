@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { armarCheques, estadoDesdeChq } from './cheques.js'
+import { armarCheques, esBajaChqoca, estadoDesdeChq } from './cheques.js'
 import type { FilaCsv } from './csv.js'
 import type { VientriPersonaDoc } from './tipos.js'
 
@@ -29,6 +29,30 @@ function oca(p: Partial<FilaCsv>): FilaCsv {
     id_cheque: '', id_persona_recibe: '60', destinatario: 'Proveedor Dos', id_estado: '0', baja: '0', fecsys: '', ...p,
   }
 }
+
+describe('esBajaChqoca', () => {
+  it('detecta baja por campo baja', () => {
+    expect(esBajaChqoca({ baja: '1', utransac: 'V' })).toBe(true)
+  })
+  it('detecta baja por UTRANSAC ANU', () => {
+    expect(esBajaChqoca({ baja: '0', utransac: 'ANU' })).toBe(true)
+  })
+  it('detecta baja por UTRANSAC BAJ', () => {
+    expect(esBajaChqoca({ baja: '0', utransac: 'BAJ' })).toBe(true)
+  })
+  it('detecta baja por UTRANSAC ELI', () => {
+    expect(esBajaChqoca({ baja: '0', utransac: 'ELI' })).toBe(true)
+  })
+  it('no marca baja si UTRANSAC es V (vigente)', () => {
+    expect(esBajaChqoca({ baja: '0', utransac: 'V' })).toBe(false)
+  })
+  it('no marca baja si utransac está vacío', () => {
+    expect(esBajaChqoca({ baja: '0', utransac: '' })).toBe(false)
+  })
+  it('no marca baja si utransac no existe', () => {
+    expect(esBajaChqoca({ baja: '0' })).toBe(false)
+  })
+})
 
 describe('estadoDesdeChq', () => {
   it('traduce los estados confirmados de Vientri según el librador', () => {
@@ -114,6 +138,13 @@ describe('armarCheques', () => {
     )
     expect(r.cheques.map((c) => c.clave)).toEqual(['chq-2'])
     expect(r.resumen.bajasReemplazadas).toBe(1)
+  })
+
+  it('marca como anulado un cheque propio con UTRANSAC=ANU', () => {
+    const r = armarCheques([], [oca({ utransac: 'ANU' })], cat)
+    expect(r.cheques).toHaveLength(1)
+    expect(r.cheques[0].estado).toBe('anulado')
+    expect(r.cheques[0].baja).toBe(true)
   })
 
   it('si hay dos candidatos para unir no adivina', () => {

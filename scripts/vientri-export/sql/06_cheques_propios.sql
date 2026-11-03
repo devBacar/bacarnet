@@ -19,7 +19,8 @@ SELECT o.ID                                            AS vientri_id,
        o.IDPER_EMPRESA                                 AS id_empresa,
        CONVERT(char(19), o.FECINS, 126)                AS fecins,
        CONVERT(char(19), o.FECSYS, 126)                AS fecsys,
-       CASE WHEN o.UTRANSAC = 'ELI' THEN 1 ELSE 0 END  AS baja
+       CASE WHEN o.UTRANSAC = 'ELI' THEN 1 ELSE 0 END  AS baja,
+       RTRIM(o.UTRANSAC)                               AS utransac
 FROM CHQOCA o
 LEFT JOIN CHEQUERA q ON q.ID = o.IDCHEQUERA
 WHERE ISNULL(o.IDPER_EMPRESA, 1) = 1

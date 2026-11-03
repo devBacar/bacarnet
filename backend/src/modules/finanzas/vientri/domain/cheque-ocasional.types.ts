@@ -118,6 +118,7 @@ export interface ChequeOcasionalDoc {
   rolEnOperacion: RolEnOperacion
   obsOriginal: string
   revisar: string[]
+  proveedorFinancieroId: string | null
   vientriId: number
   fechaConciliado: string | null
   vientriChqId: number | null

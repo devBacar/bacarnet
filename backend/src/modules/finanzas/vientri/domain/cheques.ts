@@ -11,7 +11,7 @@
  */
 import type { FilaCsv } from './csv.js'
 import { refPersona } from './personas.js'
-import type { EstadoChequeVientri, VientriChequeDoc, VientriPersonaDoc } from './tipos.js'
+import type { EstadoChequeVientri, FacturaCancelada, VientriChequeDoc, VientriPersonaDoc } from './tipos.js'
 import { aBool, aCentavos, aCuit, aEntero, aFecha, aTexto, fechaImposible, serieCheque } from './valores.js'
 
 export const COLUMNAS_CHEQUES = [
@@ -21,6 +21,12 @@ export const COLUMNAS_CHEQUES = [
 export const COLUMNAS_CHEQUES_PROPIOS = [
   'vientri_id', 'numero', 'numero_completo', 'id_banco', 'importe', 'pagado', 'fecha_vto', 'id_cheque', 'baja',
 ] as const
+
+const UTRANSAC_BAJA = new Set(['ELI', 'ANU', 'BAJ'])
+
+export function esBajaChqoca(fila: FilaCsv): boolean {
+  return aBool(fila.baja) || UTRANSAC_BAJA.has((fila.utransac ?? '').toUpperCase().trim())
+}
 
 export const NOMBRE_ESTADO_CHQ: Record<number, string> = {
   1: 'En cartera',
@@ -56,6 +62,7 @@ export interface Catalogos {
   personas: Map<number, VientriPersonaDoc>
   bancos: Map<number, string>
   comprobantes?: Map<number, string>
+  facturasPorOp?: Map<number, FacturaCancelada[]>
 }
 
 interface ChqLeido {
@@ -120,6 +127,8 @@ function desdeChq(c: ChqLeido, cat: Catalogos): VientriChequeDoc {
     idCmpPagoBanco: aEntero(f.id_cmp_pago_banco),
     estadoPrevioId: aEntero(f.id_estado_previo),
     motivoRechazoId: aEntero(f.id_motivo_rechazo),
+    facturasIngreso: idCmpIngreso !== null ? (cat.facturasPorOp?.get(idCmpIngreso) ?? []) : [],
+    facturasEgreso: idCmpSalida !== null ? (cat.facturasPorOp?.get(idCmpSalida) ?? []) : [],
     fuentes: ['Chq'],
     vientriChqId: c.id,
     vientriChqocaId: null,
@@ -196,7 +205,7 @@ export function armarCheques(filasChq: FilaCsv[], filasChqoca: FilaCsv[], cat: C
     const centavos = aCentavos(o.importe) ?? 0
     const bancoId = aEntero(o.id_banco)
     const serie = serieCheque(o.numero_completo || o.numero)
-    const bajaOca = aBool(o.baja)
+    const bajaOca = esBajaChqoca(o)
 
     let pareja: ChqLeido | null = null
     const porEnlace = porId.get(aEntero(o.id_cheque) ?? -1)
@@ -265,6 +274,8 @@ export function armarCheques(filasChq: FilaCsv[], filasChqoca: FilaCsv[], cat: C
       idCmpPagoBanco: null,
       estadoPrevioId: null,
       motivoRechazoId: null,
+      facturasIngreso: [],
+      facturasEgreso: [],
       fuentes: ['CHQOCA'],
       vientriChqId: null,
       vientriChqocaId: oid,

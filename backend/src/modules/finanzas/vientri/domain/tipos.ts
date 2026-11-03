@@ -1,5 +1,12 @@
 /** Documentos que Bacarnet guarda a partir de Vientri. Todo es de solo lectura en Bacarnet. */
 
+export interface FacturaCancelada {
+  comprobante: string
+  persona: string | null
+  totalCentavos: number
+  obs: string | null
+}
+
 export interface PersonaRef {
   vientriId: number
   nombre: string | null
@@ -63,6 +70,10 @@ export interface VientriChequeDoc {
   vientriChqId: number | null
   vientriChqocaId: number | null
   baja: boolean
+  /** Facturas que cancela el comprobante de ingreso (OP). */
+  facturasIngreso: FacturaCancelada[]
+  /** Facturas que cancela el comprobante de salida (OP). */
+  facturasEgreso: FacturaCancelada[]
   /** Motivos para revisar a mano (vacío = todo bien). */
   revisar: string[]
   fecsys: string | null

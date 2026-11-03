@@ -26,6 +26,7 @@ function cheque(overrides: Partial<ChequeOcasionalDoc> = {}): ChequeOcasionalDoc
     obsOriginal: '',
     revisar: [],
     fechaConciliado: null,
+    proveedorFinancieroId: null,
     vientriId: 1,
     vientriChqId: null,
     baja: false,

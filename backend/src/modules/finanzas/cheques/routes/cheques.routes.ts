@@ -228,7 +228,18 @@ finanzasChequesRouter.get('/:id/detalle', async (req, res) => {
       salida: cheque.vientriCmpSalida ? pendientesMap.get(cheque.vientriCmpSalida) ?? null : null,
     }
 
-    res.json({ cheque, movimiento, comprobantes })
+    let facturasIngreso: Array<{ comprobante: string; persona: string | null; totalCentavos: number; obs: string | null }> = []
+    let facturasEgreso: Array<{ comprobante: string; persona: string | null; totalCentavos: number; obs: string | null }> = []
+    if (cheque.vientriClave) {
+      const vSnap = await adminDb().collection('vientriCheques').doc(cheque.vientriClave).get()
+      if (vSnap.exists) {
+        const vData = vSnap.data()!
+        if (Array.isArray(vData.facturasIngreso)) facturasIngreso = vData.facturasIngreso
+        if (Array.isArray(vData.facturasEgreso)) facturasEgreso = vData.facturasEgreso
+      }
+    }
+
+    res.json({ cheque, movimiento, comprobantes, facturasIngreso, facturasEgreso })
   } catch (err) {
     console.error('[finanzas/cheques] get detalle', err)
     res.status(500).json({ error: 'No se pudo obtener el detalle del cheque' })

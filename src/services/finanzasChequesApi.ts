@@ -153,6 +153,7 @@ export interface ComprobantePendiente {
   totalCentavos: number
   pendienteCentavos: number
   moneda: string | null
+  obs: string | null
 }
 
 export interface ChequeDetalleMovimiento {
@@ -166,6 +167,13 @@ export interface ChequeDetalleMovimiento {
   nota: string | null
 }
 
+export interface FacturaCancelada {
+  comprobante: string
+  persona: string | null
+  totalCentavos: number
+  obs: string | null
+}
+
 export interface ChequeDetalleResponse {
   cheque: ChequeListItem
   movimiento: ChequeDetalleMovimiento | null
@@ -173,6 +181,8 @@ export interface ChequeDetalleResponse {
     ingreso: ComprobantePendiente | null
     salida: ComprobantePendiente | null
   }
+  facturasIngreso: FacturaCancelada[]
+  facturasEgreso: FacturaCancelada[]
 }
 
 export async function fetchChequeDetalle(id: string): Promise<ChequeDetalleResponse> {
@@ -325,6 +335,7 @@ export interface OcasionalesResumenResponse {
     equivalenteCentavos: number
     cantidadCheques: number
     sumaChequesCentavos: number
+    obsComun: string
     cheques: Array<{ numeroCheque: string; montoCentavos: number; fechaVencimiento: string | null; fechaEmision: string | null }>
   }>
   totalMontoUsd?: number
@@ -575,6 +586,15 @@ export async function fetchSeguimientoRenovaciones(
     throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo cargar el seguimiento de renovaciones')
   }
   return body as SeguimientoRenovacionesResponse
+}
+
+export async function recalcularSeguimiento(): Promise<{ ok: boolean; operaciones: number }> {
+  const res = await ocasionalesFetch('/seguimiento/recalcular', { method: 'POST' })
+  const body = (await res.json().catch(() => null)) as { error?: string; ok?: boolean; operaciones?: number } | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo recalcular el seguimiento')
+  }
+  return body as { ok: boolean; operaciones: number }
 }
 
 export interface ImportarOcasionalesResponse {

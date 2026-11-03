@@ -6,10 +6,13 @@
  * Segunda pasada: resuelve `renovadoPor` (link inverso).
  */
 import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
-import { nombresNormalizadosProveedoresFinancieros } from '../../agenda/services/proveedores-financieros.repository.js'
+import {
+  crearProveedorFinancieroDoc,
+  nombresNormalizadosProveedoresFinancieros,
+} from '../../agenda/services/proveedores-financieros.repository.js'
 import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
 import { leerCsv, leerCsvSinHeader, exigirColumnas, type FilaCsv } from '../domain/csv.js'
-import { NOMBRE_ESTADO_CHQ } from '../domain/cheques.js'
+import { NOMBRE_ESTADO_CHQ, esBajaChqoca } from '../domain/cheques.js'
 import { parsearObs } from '../domain/parsear-obs.js'
 import type { ProveedorOcasional } from '../domain/prooca.js'
 import { filtrarVentanaConCadenas } from '../domain/ventana-ocasionales.js'
@@ -21,6 +24,7 @@ import {
   type ConteoEscritura,
 } from './vientri.repository.js'
 import { recalcularSeguimiento, type ResultadoSeguimiento } from './recalcular-seguimiento.js'
+import { reconstruirCompletos, type ResultadoCompletos } from './completos-ocasionales.js'
 
 export const VIENTRI_CHEQUES_OCASIONALES = 'vientriChequesOcasionales'
 
@@ -103,10 +107,13 @@ function filaADoc(
     rolEnOperacion: obs.rol,
     obsOriginal: obs.obsOriginal,
     revisar,
+    proveedorFinancieroId: esProveedorFinanciero && beneficiarioNorm !== ''
+      ? `provfin-${beneficiarioNorm.replace(/\//g, '-')}`
+      : null,
     fechaConciliado: aFecha(f.fecha_conciliado),
     vientriId,
     vientriChqId: aEntero(f.id_cheque),
-    baja: aBool(f.baja),
+    baja: esBajaChqoca(f),
   }
 }
 
@@ -130,6 +137,31 @@ function resolverRenovadoPor(docs: ChequeOcasionalDoc[]): void {
   }
 }
 
+export interface ResultadoSyncProveedores {
+  nuevos: string[]
+  yaExistentes: number
+}
+
+async function sincronizarProveedoresFinancierosDesdeCheques(
+  docs: ChequeOcasionalDoc[],
+  actor: string,
+): Promise<ResultadoSyncProveedores> {
+  const existentes = await nombresNormalizadosProveedoresFinancieros()
+  const vistos = new Set<string>()
+  const nuevos: string[] = []
+
+  for (const d of docs) {
+    if (!d.esProveedorFinanciero || d.beneficiarioNormalizado === '') continue
+    if (existentes.has(d.beneficiarioNormalizado)) continue
+    if (vistos.has(d.beneficiarioNormalizado)) continue
+    vistos.add(d.beneficiarioNormalizado)
+    await crearProveedorFinancieroDoc(d.beneficiario, actor)
+    nuevos.push(d.beneficiario)
+  }
+
+  return { nuevos, yaExistentes: existentes.size }
+}
+
 export interface ResultadoImportacionOcasionales {
   ok: boolean
   importacionId: string | null
@@ -146,6 +178,8 @@ export interface ResultadoImportacionOcasionales {
   }
   seguimiento: ResultadoSeguimiento | null
   seguimientoError: string | null
+  proveedoresNuevos: string[]
+  completos: ResultadoCompletos | null
 }
 
 export interface ResumenChequesOcasionales {
@@ -238,6 +272,30 @@ export async function importarChequesOcasionales(opts: {
     }
   }
 
+  // Sync proveedores financieros: crea docs para beneficiarios nuevos detectados por OBS.
+  let proveedoresNuevos: string[] = []
+  if (!simular) {
+    try {
+      const syncResult = await sincronizarProveedoresFinancierosDesdeCheques(docs, opts.actor)
+      proveedoresNuevos = syncResult.nuevos
+      if (proveedoresNuevos.length > 0) {
+        console.log(`[finanzas/cheques-ocasionales] ${proveedoresNuevos.length} proveedores financieros nuevos: ${proveedoresNuevos.join(', ')}`)
+      }
+    } catch (err) {
+      console.error('[finanzas/cheques-ocasionales] sync proveedores financieros', err)
+    }
+  }
+
+  let completos: ResultadoCompletos | null = null
+  if (!simular && importacionId) {
+    try {
+      completos = await reconstruirCompletos(importacionId)
+      console.log(`[finanzas/cheques-ocasionales] completos: ${completos.total} docs (${completos.reales} reales, ${completos.sinteticos} sintéticos)`)
+    } catch (err) {
+      console.error('[finanzas/cheques-ocasionales] completos', err)
+    }
+  }
+
   if (importacionId) {
     await cerrarImportacion(importacionId, {
       tipo: 'cheques_ocasionales',
@@ -246,17 +304,35 @@ export async function importarChequesOcasionales(opts: {
       conteo,
       seguimiento,
       seguimientoError,
+      proveedoresNuevos,
+      completos,
     })
+  }
+
+  const partes = [
+    `${docs.length} cheques ocasionales procesados (${resumen.conRenovacion} con renovación, ${resumen.conUsd} con USD)`,
+  ]
+  if (proveedoresNuevos.length > 0) {
+    partes.push(`${proveedoresNuevos.length} proveedores financieros nuevos: ${proveedoresNuevos.join(', ')}`)
+  }
+  if (seguimientoError) {
+    partes.push(`ATENCIÓN: no se pudo recalcular el seguimiento (${seguimientoError})`)
+  }
+
+  if (completos) {
+    partes.push(`completos: ${completos.total} docs`)
   }
 
   return {
     ok: true,
     importacionId,
-    mensaje: `${docs.length} cheques ocasionales procesados (${resumen.conRenovacion} con renovación, ${resumen.conUsd} con USD)${seguimientoError ? ` — ATENCIÓN: no se pudo recalcular el seguimiento (${seguimientoError})` : ''}`,
+    mensaje: partes.join(' — '),
     simulado: simular,
     conteo,
     resumen,
     seguimiento,
     seguimientoError,
+    proveedoresNuevos,
+    completos,
   }
 }

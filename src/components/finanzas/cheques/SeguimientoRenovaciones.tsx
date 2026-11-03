@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Clock, Link2 } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, ArrowLeft, ChevronDown, ChevronUp, Clock, Link2, RefreshCw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useAuth } from '../../../context'
 import {
   fetchSeguimientoRenovaciones,
+  recalcularSeguimiento,
   type BeneficiarioSeguimientoItem,
   type ChequeConEstadoItem,
   type EstadoChequeRenov,
@@ -60,9 +61,17 @@ function etiquetaOp(op: OperacionSeguimientoItem): string {
 
 export function SeguimientoRenovaciones() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const [estado, setEstado] = useState<SeguimientoEstadoFiltro>('abiertas')
   /** Pila de navegación del drill-down: la última es la operación que se está viendo. */
   const [pila, setPila] = useState<string[]>([])
+
+  const recalcularMut = useMutation({
+    mutationFn: recalcularSeguimiento,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques-ocasionales', 'seguimiento'] })
+    },
+  })
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['finanzas', 'cheques-ocasionales', 'seguimiento', estado],
@@ -112,6 +121,26 @@ export function SeguimientoRenovaciones() {
             </button>
           ))}
         </div>
+
+        <button
+          type="button"
+          disabled={recalcularMut.isPending}
+          onClick={() => recalcularMut.mutate()}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${recalcularMut.isPending ? 'animate-spin' : ''}`} />
+          {recalcularMut.isPending ? 'Recalculando…' : 'Recalcular'}
+        </button>
+
+        {recalcularMut.isError ? (
+          <span className="text-xs text-red-600 dark:text-red-400">
+            {recalcularMut.error instanceof Error ? recalcularMut.error.message : 'Error al recalcular'}
+          </span>
+        ) : recalcularMut.isSuccess ? (
+          <span className="text-xs text-green-600 dark:text-green-400">
+            Listo — {recalcularMut.data.operaciones} operaciones
+          </span>
+        ) : null}
 
         {totales ? (
           <div className="flex flex-wrap gap-3 text-sm">

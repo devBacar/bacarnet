@@ -4,6 +4,7 @@ import { armarPendientes, COLUMNAS_COMPROBANTES, indiceComprobantes } from './co
 import { ARCHIVOS_REQUERIDOS, leerControl, verificarArchivo, type ControlCorrida, type ResultadoControl } from './control.js'
 import { CsvError, exigirColumnas, leerCsv, type TablaCsv } from './csv.js'
 import { armarDesglosesPago, type DesglosePago } from './desglose-pago.js'
+import { facturasPorOp } from './facturas-por-op.js'
 import { calcularPlazos, type PlazosHistoricos } from './plazos.js'
 import { COLUMNAS_PERSONAS, indicePersonas, mapearPersona } from './personas.js'
 import type { VientriChequeDoc, VientriPendienteDoc, VientriPersonaDoc } from './tipos.js'
@@ -90,7 +91,8 @@ export function procesarCarpeta(textos: Map<string, string>): ResultadoProcesami
   }
 
   const comprobantes = indiceComprobantes(t('comprobantes.csv').filas)
-  const { cheques, resumen } = armarCheques(t('cheques.csv').filas, t('cheques_propios.csv').filas, { personas: indice, bancos, comprobantes })
+  const mapaFacturas = facturasPorOp(t('aplicaciones.csv').filas, t('comprobantes.csv').filas, indice)
+  const { cheques, resumen } = armarCheques(t('cheques.csv').filas, t('cheques_propios.csv').filas, { personas: indice, bancos, comprobantes, facturasPorOp: mapaFacturas })
   const pendientes = armarPendientes(t('comprobantes.csv').filas, indice, monedas)
   const plazos = calcularPlazos(t('comprobantes.csv').filas, t('aplicaciones.csv').filas, control.fechaDatos)
   const desglosesPago = armarDesglosesPago(

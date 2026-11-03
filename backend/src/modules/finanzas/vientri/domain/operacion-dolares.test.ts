@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { calcularDetalle, calcularOperacion, validarOperacionInput } from './operacion-dolares.js'
+import { calcularDetalleUsd, calcularDetalle, calcularOperacion, validarOperacionInput } from './operacion-dolares.js'
 import type { OperacionDolaresInput } from './operacion-dolares.types.js'
+
+const CAMPOS_USD_DEFAULT = {
+  tipo: 'usd' as const,
+  capitalRenovadoCentavos: 0,
+  cantidadChequesViejos: 0,
+  interesPorcentaje: 0,
+}
 
 describe('calcularDetalle', () => {
   // Datos reales del Excel sist.xlsx — operación MANA 09-set-2026
@@ -48,6 +55,7 @@ describe('calcularDetalle', () => {
 describe('calcularOperacion', () => {
   it('operación completa con datos del Excel sist.xlsx', () => {
     const input: OperacionDolaresInput = {
+      ...CAMPOS_USD_DEFAULT,
       fecha: '2026-09-09',
       inversor: 'MANA',
       cotizacion: 1555,
@@ -112,6 +120,7 @@ describe('calcularOperacion', () => {
 
 describe('validarOperacionInput', () => {
   const inputValido: OperacionDolaresInput = {
+    ...CAMPOS_USD_DEFAULT,
     fecha: '2026-09-09',
     inversor: 'MANA',
     cotizacion: 1555,

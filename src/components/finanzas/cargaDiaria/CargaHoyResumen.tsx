@@ -27,6 +27,7 @@ export function CargaHoyResumen() {
             ? `${hoy.cantidad} pagos · falta pagar ${formatMoneyCentavos(hoy.pendienteCentavos, 'ARS')}`
             : 'Hoy no es día hábil'}
         </p>
+        {hoy.esDiaDeSueldos ? <p className="text-xs font-semibold">Hoy se pagan sueldos</p> : null}
       </div>
 
       <p className="text-body-muted mb-1.5 text-xs font-semibold">Los próximos días</p>
@@ -37,7 +38,13 @@ export function CargaHoyResumen() {
               {diaSemana(dia.fecha)} {fechaCorta(dia.fecha)}
             </span>
             <span className="block tabular-nums">{dia.tipo === 'habil' ? montoCorto(dia.totalCentavos) : '—'}</span>
-            <span className="block text-[11px]">{dia.tipo === 'habil' ? NIVEL_TEXTO[dia.nivel] : 'No hábil'}</span>
+            <span className="block text-[11px]">
+              {dia.tipo === 'habil'
+                ? dia.esDiaDeSueldos
+                  ? `${NIVEL_TEXTO[dia.nivel]} · Sueldos`
+                  : NIVEL_TEXTO[dia.nivel]
+                : 'No hábil'}
+            </span>
           </div>
         ))}
       </div>

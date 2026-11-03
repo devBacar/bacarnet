@@ -109,4 +109,16 @@ describe('armarCargaDiaria', () => {
     const carga = armarCargaDiaria({ ...base, desde: '2026-11-27', dias: 7, hoy: '2026-11-27', compromisos: [] })
     expect(carga.meses.map((m) => m.mes)).toEqual(['2026-11', '2026-12'])
   })
+
+  it('el 4to día hábil del mes (sueldos) sale "pesado" aunque no tenga pagos cargados', () => {
+    // Noviembre 2026: 1=dom, 2=lun(1), 3=mar(2), 4=mié(3), 5=jue(4) → sueldos el jueves 5.
+    const carga = armarCargaDiaria({ ...base, compromisos: [] })
+    const sueldos = carga.dias.find((d) => d.fecha === '2026-11-05')!
+    expect(sueldos.esDiaDeSueldos).toBe(true)
+    expect(sueldos.nivel).toBe('pesado')
+    expect(carga.dias.find((d) => d.fecha === '2026-11-04')!.esDiaDeSueldos).toBe(false)
+    // No debe sugerirse como el mejor día para reprogramar un pago, aunque no tenga monto cargado.
+    expect(carga.diasMasLivianos[0]).not.toBe('2026-11-05')
+    expect(carga.diasMasLivianos.at(-1)).toBe('2026-11-05')
+  })
 })

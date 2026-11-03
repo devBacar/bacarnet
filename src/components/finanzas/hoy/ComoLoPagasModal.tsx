@@ -116,7 +116,9 @@ export function ComoLoPagasModal({
     transferencia: PrecargaTransferenciaHoy | null
   }) => void
 }) {
-  const puedeTransferir = usePermisosFinanzas().transferencias
+  // Un compromiso que ya es un cheque (emitido por Vientri o cargado a mano) no se paga por
+  // transferencia: ese cheque lo debita el banco o hay que renovarlo, no mandar plata aparte.
+  const puedeTransferir = usePermisosFinanzas().transferencias && pago.medioPago !== 'cheque'
   const moneda = pago.moneda ?? 'ARS'
   const falta = pago.montoCentavos
   const [paso, setPaso] = useState<'elegir' | 'armar'>('elegir')

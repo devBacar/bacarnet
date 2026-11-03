@@ -31,6 +31,8 @@ finanzasMovimientosRouter.get('/', async (req, res) => {
       tipo: one(req.query.tipo),
       categoriaId: one(req.query.categoriaId),
       q: one(req.query.q),
+      montoMin: one(req.query.montoMin),
+      montoMax: one(req.query.montoMax),
       page: one(req.query.page),
       limit: one(req.query.limit),
     })

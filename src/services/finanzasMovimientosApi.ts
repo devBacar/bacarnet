@@ -37,12 +37,14 @@ export interface MovimientoListItem {
 }
 
 export interface MovimientosListResponse {
-  cuentaId: string
+  cuentaId: string | null
   desde: string
   hasta: string
   tipo: MovimientoTipo | null
   categoriaId: string | null
   q: string | null
+  montoMinCentavos: number | null
+  montoMaxCentavos: number | null
   page: number
   limit: number
   total: number
@@ -55,12 +57,16 @@ export interface MovimientosListResponse {
 }
 
 export interface MovimientosListFilters {
+  /** Vacío = buscar en todos los bancos a la vez. */
   cuentaId: string
   desde: string
   hasta: string
   tipo?: '' | MovimientoTipo
   categoriaId?: string
   q?: string
+  /** En pesos (con decimales si hace falta), igual que lo escribe el usuario. */
+  montoMin?: string
+  montoMax?: string
   page?: number
   limit?: number
 }
@@ -171,13 +177,15 @@ export async function confirmarLoteCheques(movimientoId: string, chequeIds: stri
 
 export async function fetchMovimientos(filters: MovimientosListFilters): Promise<MovimientosListResponse> {
   const params = new URLSearchParams({
-    cuentaId: filters.cuentaId,
     desde: filters.desde,
     hasta: filters.hasta,
   })
+  if (filters.cuentaId) params.set('cuentaId', filters.cuentaId)
   if (filters.tipo) params.set('tipo', filters.tipo)
   if (filters.categoriaId) params.set('categoriaId', filters.categoriaId)
   if (filters.q?.trim()) params.set('q', filters.q.trim())
+  if (filters.montoMin?.trim()) params.set('montoMin', filters.montoMin.trim())
+  if (filters.montoMax?.trim()) params.set('montoMax', filters.montoMax.trim())
   if (filters.page) params.set('page', String(filters.page))
   if (filters.limit) params.set('limit', String(filters.limit))
 

@@ -36,6 +36,8 @@ import {
 } from './CategoriaMovimientoCampo'
 
 const PAGE_SIZE = 50
+/** Valor del select "Cuenta" que significa buscar en todos los bancos a la vez. */
+const TODAS_CUENTAS = 'todas'
 
 function isoArgentina(date: Date): string {
   return date.toLocaleDateString('en-CA', { timeZone: 'America/Argentina/Buenos_Aires' })
@@ -82,6 +84,10 @@ export function FinanzasMovimientosPage() {
   const [categoriaId, setCategoriaId] = useState('')
   const [q, setQ] = useState(inicial.q)
   const [qAplicada, setQAplicada] = useState(inicial.q)
+  const [montoMin, setMontoMin] = useState('')
+  const [montoMax, setMontoMax] = useState('')
+  const [montoMinAplicado, setMontoMinAplicado] = useState('')
+  const [montoMaxAplicado, setMontoMaxAplicado] = useState('')
   const [page, setPage] = useState(1)
   const [editando, setEditando] = useState<MovimientoListItem | null>(null)
   const [guardando, setGuardando] = useState(false)
@@ -115,15 +121,29 @@ export function FinanzasMovimientosPage() {
   })
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ['finanzas', 'movimientos', cuentaId, desde, hasta, tipo, categoriaId, qAplicada, page],
+    queryKey: [
+      'finanzas',
+      'movimientos',
+      cuentaId,
+      desde,
+      hasta,
+      tipo,
+      categoriaId,
+      qAplicada,
+      montoMinAplicado,
+      montoMaxAplicado,
+      page,
+    ],
     queryFn: () =>
       fetchMovimientos({
-        cuentaId,
+        cuentaId: cuentaId === TODAS_CUENTAS ? '' : cuentaId,
         desde,
         hasta,
         tipo,
         categoriaId,
         q: qAplicada,
+        montoMin: montoMinAplicado,
+        montoMax: montoMaxAplicado,
         page,
         limit: PAGE_SIZE,
       }),
@@ -266,7 +286,7 @@ export function FinanzasMovimientosPage() {
         ) : null}
       </header>
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-8">
         <label className="text-sm">
           <span className="text-body-muted mb-1 block">Cuenta</span>
           <select
@@ -274,6 +294,7 @@ export function FinanzasMovimientosPage() {
             value={cuentaId}
             onChange={(e) => cambiarFiltro(() => setCuentaId(e.target.value))}
           >
+            <option value={TODAS_CUENTAS}>Todos los bancos</option>
             {cuentas.map((cuenta) => (
               <option key={cuenta.id} value={cuenta.id}>
                 {cuenta.bancoNombre} {cuenta.tipo}
@@ -345,6 +366,44 @@ export function FinanzasMovimientosPage() {
             onChange={(e) => setQ(e.target.value)}
           />
         </form>
+        <form
+          className="text-sm"
+          onSubmit={(e) => {
+            e.preventDefault()
+            cambiarFiltro(() => setMontoMinAplicado(montoMin.trim()))
+          }}
+        >
+          <span className="text-body-muted mb-1 block">Monto desde</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            className={finanzasInputClass}
+            value={montoMin}
+            placeholder="$ y Enter"
+            onChange={(e) => setMontoMin(e.target.value)}
+          />
+        </form>
+        <form
+          className="text-sm"
+          onSubmit={(e) => {
+            e.preventDefault()
+            cambiarFiltro(() => setMontoMaxAplicado(montoMax.trim()))
+          }}
+        >
+          <span className="text-body-muted mb-1 block">Monto hasta</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            className={finanzasInputClass}
+            value={montoMax}
+            placeholder="$ y Enter"
+            onChange={(e) => setMontoMax(e.target.value)}
+          />
+        </form>
       </div>
 
       {totales ? (
@@ -388,6 +447,7 @@ export function FinanzasMovimientosPage() {
             <thead className="border-b border-[var(--color-primary-muted)] bg-brand-primary-light text-left text-xs font-medium text-brand-primary">
               <tr>
                 <th className="px-3 py-2">Fecha</th>
+                {cuentaId === TODAS_CUENTAS ? <th className="px-3 py-2">Banco</th> : null}
                 <th className="px-3 py-2">Descripción</th>
                 <th className="px-3 py-2">De / Para</th>
                 <th className="px-3 py-2">Tipo</th>
@@ -402,6 +462,9 @@ export function FinanzasMovimientosPage() {
                 return (
                   <tr key={row.id} className="border-t border-neutral-100 dark:border-zinc-800">
                     <td className="whitespace-nowrap px-3 py-2">{formatFecha(row.fechaProceso)}</td>
+                    {cuentaId === TODAS_CUENTAS ? (
+                      <td className="whitespace-nowrap px-3 py-2">{row.bancoNombre}</td>
+                    ) : null}
                     <td className="px-3 py-2">{row.descripcion}</td>
                     <td className="px-3 py-2">
                       <CeldaContraparte

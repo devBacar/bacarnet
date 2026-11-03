@@ -1,6 +1,7 @@
+import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
 import { presentarEstadoInterbanking } from '../../transferencias/domain/estado-interbanking.js'
 import { armarChequesADebitar, chequesParaLaSemana, chequesQueVencenHoy } from './cheques-hoy.js'
-import { arsConvertido, clasificarDia, sumarDiasCalendario } from './compromisos-mes.js'
+import { arsConvertido, clasificarDia, esDiaDeSueldos, sumarDiasCalendario } from './compromisos-mes.js'
 import {
   diasEntre,
   etiquetaDia,
@@ -171,7 +172,17 @@ function rankUrgencia(urgencia: UrgenciaHoy): number {
   return 3
 }
 
-function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[], feriados: ReadonlySet<string>): PagoFilaHoy {
+function esProveedorFinanciero(nombre: string, proveedoresFinancieros: ReadonlySet<string>): boolean {
+  return proveedoresFinancieros.size > 0 && proveedoresFinancieros.has(normalizarNombre(nombre))
+}
+
+function filaPago(
+  row: CompromisoHoy,
+  hoy: string,
+  movimientos: MovimientoHoy[],
+  feriados: ReadonlySet<string>,
+  proveedoresFinancieros: ReadonlySet<string>,
+): PagoFilaHoy {
   const fechaEfectiva = diaHabilEfectivo(row.fechaVencimiento, feriados)
   const dias = fechaEfectiva < hoy && !row.sinFecha ? diasEntre(fechaEfectiva, hoy) : 0
   const chequeEmitido = row.medioPago === 'cheque' && row.chequeId != null
@@ -192,6 +203,14 @@ function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[],
     chequeEmitido,
     aviso: chequeEmitido ? 'Ya tiene cheque emitido, solo falta debitarlo' : null,
     origen: row.origen,
+    ...(row.origen === 'vientri-cheque' && row.vientriChequeNumero
+      ? {
+          esProveedorFinanciero: esProveedorFinanciero(row.proveedorONombre, proveedoresFinancieros),
+          // Mismo esquema de id que chequeDocId('emitido', numero) en cheques.repository.ts: así
+          // "Renovar" puede ubicar el documento real del cheque en la colección de cheques.
+          chequeId: `emitido_${row.vientriChequeNumero}`,
+        }
+      : {}),
     ...(row.estimada ? { estimada: true } : {}),
   }
 }
@@ -200,7 +219,7 @@ function filaPago(row: CompromisoHoy, hoy: string, movimientos: MovimientoHoy[],
  * Un cheque emitido en el módulo de Cheques que vence hoy y todavía no tiene compromiso en la
  * Agenda (si lo tuviera, ya está en `pagos` vía `filaPago` y no hay que repetirlo acá).
  */
-function filaPagoDeCheque(cheque: ChequeEnHoy): PagoFilaHoy {
+function filaPagoDeCheque(cheque: ChequeEnHoy, proveedoresFinancieros: ReadonlySet<string>): PagoFilaHoy {
   const aQuien = cheque.destinatario?.trim() || cheque.emisor
   return {
     id: `cheque-${cheque.id}`,
@@ -219,6 +238,8 @@ function filaPagoDeCheque(cheque: ChequeEnHoy): PagoFilaHoy {
     chequeEmitido: true,
     aviso: null,
     origen: 'vientri-cheque',
+    esProveedorFinanciero: esProveedorFinanciero(aQuien, proveedoresFinancieros),
+    chequeId: cheque.id,
   }
 }
 
@@ -237,6 +258,7 @@ export function seleccionarPagos(
   hoy: string,
   movimientos: MovimientoHoy[],
   feriados: ReadonlySet<string>,
+  proveedoresFinancieros: ReadonlySet<string> = new Set(),
 ): PagoFilaHoy[] {
   return compromisos
     .filter(
@@ -247,7 +269,7 @@ export function seleccionarPagos(
         row.montoCentavos > 0,
     )
     .sort(porUrgenciaYNombre)
-    .map((row) => filaPago(row, hoy, movimientos, feriados))
+    .map((row) => filaPago(row, hoy, movimientos, feriados, proveedoresFinancieros))
 }
 
 /**
@@ -266,6 +288,7 @@ export function seleccionarPagosAtrasados(
   hoy: string,
   movimientos: MovimientoHoy[],
   feriados: ReadonlySet<string>,
+  proveedoresFinancieros: ReadonlySet<string> = new Set(),
 ): PagoFilaHoy[] {
   return compromisos
     .filter((row) => {
@@ -274,7 +297,7 @@ export function seleccionarPagosAtrasados(
       return fechaEfectiva < hoy && diasEntre(fechaEfectiva, hoy) <= DIAS_MAXIMOS_ATRASADO
     })
     .sort((a, b) => b.fechaVencimiento.localeCompare(a.fechaVencimiento) || porUrgenciaYNombre(a, b))
-    .map((row) => filaPago(row, hoy, movimientos, feriados))
+    .map((row) => filaPago(row, hoy, movimientos, feriados, proveedoresFinancieros))
 }
 
 /** Facturas sin vencimiento en Vientri: esperan que Finanzas les ponga el día de pago. */
@@ -283,19 +306,29 @@ export function seleccionarPagosSinFecha(
   hoy: string,
   movimientos: MovimientoHoy[],
   feriados: ReadonlySet<string>,
+  proveedoresFinancieros: ReadonlySet<string> = new Set(),
 ): PagoFilaHoy[] {
   return compromisos
     .filter((row) => compromisoAbierto(row.estado) && row.sinFecha === true && row.montoCentavos > 0)
     .sort((a, b) => b.montoCentavos - a.montoCentavos)
-    .map((row) => filaPago(row, hoy, movimientos, feriados))
+    .map((row) => filaPago(row, hoy, movimientos, feriados, proveedoresFinancieros))
 }
 
 function medioDesdeDesglose(medio: 'cheque_fisico' | 'echeq' | 'otro_medio'): MedioResueltoHoy {
   return medio === 'otro_medio' ? 'otro' : medio
 }
 
-function medioDesdeCompromiso(medioPago: CompromisoHoy['medioPago']): MedioResueltoHoy {
-  return medioPago === 'cheque' ? 'cheque_fisico' : medioPago === 'efectivo' ? 'efectivo' : 'transferencia'
+/**
+ * Si el compromiso es un cheque, hay que saber si es físico o electrónico para no mostrarlo mal
+ * agrupado en "Salió del banco hoy". Cuando se conoce el cheque real (por su número), se usa su
+ * tipo real; si no se encuentra, se asume físico (comportamiento de siempre) en vez de romper.
+ */
+function medioDesdeCompromiso(
+  medioPago: CompromisoHoy['medioPago'],
+  tipoChequeReal: 'echeq' | 'fisico' | undefined,
+): MedioResueltoHoy {
+  if (medioPago === 'cheque') return tipoChequeReal === 'echeq' ? 'echeq' : 'cheque_fisico'
+  return medioPago === 'efectivo' ? 'efectivo' : 'transferencia'
 }
 
 /**
@@ -303,7 +336,12 @@ function medioDesdeCompromiso(medioPago: CompromisoHoy['medioPago']): MedioResue
  * (un cheque vence el día del cheque, no el día en que se firmó la orden). Si no hay desglose real
  * (cargado a mano, o pagado antes de tener este dato), se usa la fecha y el medio del compromiso.
  */
-export function seleccionarPagadosHoy(compromisos: CompromisoHoy[], hoy: string): { totalCentavos: number; filas: MovimientoDelDiaHoy[] } {
+export function seleccionarPagadosHoy(
+  compromisos: CompromisoHoy[],
+  hoy: string,
+  cheques: readonly ChequeEnHoy[] = [],
+): { totalCentavos: number; filas: MovimientoDelDiaHoy[] } {
+  const tipoPorNumero = new Map(cheques.filter((c) => c.tipo).map((c) => [c.numero, c.tipo as 'echeq' | 'fisico']))
   const filas: MovimientoDelDiaHoy[] = []
   for (const row of compromisos) {
     if (row.estado !== 'pagado') continue
@@ -322,12 +360,13 @@ export function seleccionarPagadosHoy(compromisos: CompromisoHoy[], hoy: string)
         })
       })
     } else if (row.fechaPago === hoy) {
+      const tipoChequeReal = row.vientriChequeNumero ? tipoPorNumero.get(row.vientriChequeNumero) : undefined
       filas.push({
         id: row.id,
         aQuienODeQuien: row.proveedorONombre,
         concepto: row.concepto,
         montoCentavos: row.montoTotalCentavos,
-        medio: medioDesdeCompromiso(row.medioPago),
+        medio: medioDesdeCompromiso(row.medioPago, tipoChequeReal),
         chequeNumero: row.vientriChequeNumero ?? null,
         debitadoPorBanco: null,
         origen: row.origen,
@@ -493,6 +532,7 @@ export function armarSemana(input: {
   cobrosYaLlegados: Set<string>
   cheques: ChequeEnHoy[]
   tipoCambioUsdArs: number | null
+  feriados: ReadonlySet<string>
 }): { filas: SemanaFilaHoy[] | null; diaMasPesado: string | null } {
   const dias = proximosDiasHabiles(input.hoy, 7)
   const pagar = new Map(dias.map((dia) => [dia, 0]))
@@ -537,6 +577,7 @@ export function armarSemana(input: {
       aCobrarCentavos,
       quedaCentavos: queda,
       esElMasPesado: false,
+      esDiaDeSueldos: esDiaDeSueldos(fecha, input.feriados),
     }
   })
 
@@ -616,10 +657,18 @@ export function transferenciasSinFirmar(transferencias: ArmarHoyInput['transfere
 
 export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const hoy = fechaHoyArgentina(input.now)
-  const { feriados, tipoCambioUsdArs } = input
-  const pagos = seleccionarPagos(input.compromisos, hoy, input.movimientos, feriados)
-  const pagosAtrasados = seleccionarPagosAtrasados(input.compromisos, hoy, input.movimientos, feriados)
-  const pagosSinFecha = seleccionarPagosSinFecha(input.compromisos, hoy, input.movimientos, feriados)
+  const { feriados, tipoCambioUsdArs, proveedoresFinancieros } = input
+  // Un cheque "pendiente de renovar" (o ya renovado a mano) no se paga: está en gestión, o ya se
+  // resolvió, en Cheques > Ocasionales > Renovaciones. No debe aparecer como compromiso a pagar.
+  const numerosResueltosOEnGestion = new Set(
+    input.cheques.filter((c) => c.pendienteRenovacion === true || c.renovadoManualmente === true).map((c) => c.numero),
+  )
+  const compromisos = input.compromisos.filter(
+    (c) => !(c.origen === 'vientri-cheque' && c.vientriChequeNumero && numerosResueltosOEnGestion.has(c.vientriChequeNumero)),
+  )
+  const pagos = seleccionarPagos(compromisos, hoy, input.movimientos, feriados, proveedoresFinancieros)
+  const pagosAtrasados = seleccionarPagosAtrasados(compromisos, hoy, input.movimientos, feriados, proveedoresFinancieros)
+  const pagosSinFecha = seleccionarPagosSinFecha(compromisos, hoy, input.movimientos, feriados, proveedoresFinancieros)
   const cobrosSinFecha = input.cobros.filter((row) => row.estado === 'esperado' && row.sinFecha)
   /** Suma convirtiendo USD a pesos: así el total coincide siempre con lo que se ve en cada fila. */
   const suma = (filas: Array<{ montoCentavos: number; moneda: 'ARS' | 'USD' }>) =>
@@ -631,7 +680,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   // Un cheque "vientri-cheque" ya está contado en pagosDeCompromisos (es la misma plata real, vista
   // como compromiso de la Agenda): sin este filtro se sumaba dos veces en "Hoy pagás".
   const numerosConCompromisoHoy = new Set(
-    input.compromisos
+    compromisos
       .filter(
         (c) =>
           c.origen === 'vientri-cheque' &&
@@ -643,7 +692,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   )
   const filasChequesDelDia = chequesQueVencenHoy(input.cheques, hoy)
     .filter((cheque) => !numerosConCompromisoHoy.has(cheque.numero))
-    .map(filaPagoDeCheque)
+    .map((cheque) => filaPagoDeCheque(cheque, proveedoresFinancieros))
   const chequesDelDia = filasChequesDelDia.reduce((total, fila) => total + fila.montoCentavos, 0)
   const pagosCentavos = pagosDeCompromisos + chequesDelDia
   const cobrosCentavos = suma(ingresos.filas.filter((fila) => !fila.llego))
@@ -651,16 +700,17 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
   const semana = armarSemana({
     hoy,
     saldoInicialCentavos,
-    compromisos: input.compromisos,
+    compromisos,
     cobros: input.cobros,
     cobrosYaLlegados: ingresos.llegados,
     cheques: input.cheques,
     tipoCambioUsdArs,
+    feriados,
   })
   const cobrosAtrasados = listarCobrosAtrasados(input.cobros, hoy, ingresos.llegados, feriados)
   const firmas = transferenciasSinFirmar(input.transferencias, input.now)
   const chequesADebitar = armarChequesADebitar({ cheques: input.cheques, hoy, bancos })
-  const pagadosHoy = seleccionarPagadosHoy(input.compromisos, hoy)
+  const pagadosHoy = seleccionarPagadosHoy(input.compromisos, hoy, input.cheques)
   const cobradosHoy = seleccionarCobradosHoy(input.cobros, hoy)
   const vacio =
     pagos.length === 0 &&

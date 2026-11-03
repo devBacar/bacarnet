@@ -90,6 +90,12 @@ export interface CompromisoParaPlanilla {
   cuentaId?: string | null
   transferenciaConfeccionadaId?: string | null
   pagosResumen?: LineaPagoPlanilla[]
+  /**
+   * Solo para origen 'vientri-cheque': número del cheque de Vientri. Sirve para no sumar dos
+   * veces el mismo cheque si además aparece suelto en el módulo de Cheques (mismo criterio que
+   * "Hoy pagás", ver numerosConCompromisoHoy en hoy.vista.ts).
+   */
+  vientriChequeNumero?: string | null
 }
 
 export interface ChequeAsignado {
@@ -124,6 +130,8 @@ export interface FilaPlanilla {
   deMesAnterior: boolean
   /** Lo que sigue sin pagar de ese vencimiento anterior, en la moneda de la fila. Cero si es de este mes. */
   arrastreCentavos: number
+  /** Para distinguir en la UI un cheque a un proveedor financiero (MANA, LIONEL, etc.) del resto. */
+  esProveedorFinanciero?: boolean
   pagosResumen: LineaPagoPlanilla[]
 }
 
@@ -180,6 +188,25 @@ export function clasificarDia(iso: string, feriados: ReadonlySet<string>): TipoC
   if (dow === 0 || dow === 6) return 'finde'
   if (feriados.has(iso)) return 'feriado'
   return 'habil'
+}
+
+/**
+ * Los sueldos se pagan el 4to día hábil de cada mes. Todavía no tenemos el monto real conectado
+ * (hay una sincronización cruda de la base de Salario, pero no una forma confiable de sacar de ahí
+ * "el neto a pagar" de este mes), así que por ahora solo marcamos el día para que no pase desapercibido.
+ */
+export function esDiaDeSueldos(fecha: string, feriados: ReadonlySet<string>): boolean {
+  const [anio, mes] = fecha.split('-').map((parte) => Number(parte))
+  let cursor = `${String(anio).padStart(4, '0')}-${String(mes).padStart(2, '0')}-01`
+  let habiles = 0
+  for (let i = 0; i < 31; i += 1) {
+    if (clasificarDia(cursor, feriados) === 'habil') {
+      habiles += 1
+      if (habiles === 4) return cursor === fecha
+    }
+    cursor = sumarDiasCalendario(cursor, 1)
+  }
+  return false
 }
 
 export function armarColumnasMes(mes: string, hoy: string, feriados: ReadonlySet<string>): ColumnaDia[] {
@@ -321,6 +348,83 @@ function filaDe(
   }
 }
 
+/** Lo mínimo de un cheque emitido que hace falta para armarle una fila suelta en la planilla. */
+export interface ChequeSueltoParaPlanilla {
+  id: string
+  numero: string
+  montoCentavos: number
+  fechaPago: string
+  destinatario: string | null
+  emisor: string
+  /** Está en la cola de "Pendientes de renovar": no se muestra como a pagar en ningún lado. */
+  pendienteRenovacion?: boolean
+  /** Ya se renovó a mano: no se muestra como a pagar, pase lo que pase con el próximo sync de Vientri. */
+  renovadoManualmente?: boolean
+}
+
+/**
+ * Un cheque emitido directo en el módulo de Cheques, sin compromiso vinculado en la Agenda, no
+ * aparecía en "Compromisos de esta semana" (sí aparece en "Hoy", ver filaPagoDeCheque en
+ * hoy.vista.ts). Arma una fila de planilla sintética para ese cheque suelto.
+ */
+export function filaPlanillaDeCheque(cheque: ChequeSueltoParaPlanilla): CompromisoParaPlanilla {
+  const aQuien = cheque.destinatario?.trim() || cheque.emisor
+  return {
+    id: `cheque-${cheque.id}`,
+    concepto: `Cheque Nº ${cheque.numero}`,
+    proveedorONombre: aQuien,
+    montoCentavos: cheque.montoCentavos,
+    fechaVencimiento: cheque.fechaPago,
+    fechaPago: null,
+    estado: 'pendiente',
+    medioPago: 'cheque',
+    grupo: 'Proveedores',
+    moneda: 'ARS',
+    origen: 'vientri-cheque',
+    deudaTotalCentavos: null,
+    cuotaNumero: null,
+    cuotaTotal: null,
+    observacion: null,
+    pagos: [],
+    chequeId: cheque.id,
+    cuentaId: null,
+    transferenciaConfeccionadaId: null,
+  }
+}
+
+/**
+ * Agrega a `compromisos` los cheques sueltos (sin compromiso vinculado) que todavía no estén
+ * representados por un compromiso "vientri-cheque" abierto del mismo día — mismo criterio de
+ * no-duplicado que usa "Hoy pagás" (ver numerosConCompromisoHoy en hoy.vista.ts).
+ */
+export function agregarChequesSueltos(
+  compromisos: readonly CompromisoParaPlanilla[],
+  cheques: readonly ChequeSueltoParaPlanilla[],
+): CompromisoParaPlanilla[] {
+  // Un cheque "pendiente de renovar" (o ya renovado a mano) no se paga: está en gestión, o ya se
+  // resolvió, en Cheques > Ocasionales > Renovaciones. No debe aparecer como compromiso a pagar.
+  const numerosResueltosOEnGestion = new Set(
+    cheques.filter((c) => c.pendienteRenovacion === true || c.renovadoManualmente === true).map((c) => c.numero),
+  )
+  const compromisosVisibles = compromisos.filter(
+    (row) =>
+      !(row.origen === 'vientri-cheque' && row.vientriChequeNumero && numerosResueltosOEnGestion.has(row.vientriChequeNumero)),
+  )
+  const numerosConCompromisoPorDia = new Map<string, Set<string>>()
+  for (const row of compromisosVisibles) {
+    if (row.origen !== 'vientri-cheque' || !row.vientriChequeNumero) continue
+    if (row.estado !== 'pendiente' && row.estado !== 'vencido') continue
+    const set = numerosConCompromisoPorDia.get(row.fechaVencimiento) ?? new Set<string>()
+    set.add(row.vientriChequeNumero)
+    numerosConCompromisoPorDia.set(row.fechaVencimiento, set)
+  }
+  const sueltos = cheques
+    .filter((cheque) => cheque.pendienteRenovacion !== true && cheque.renovadoManualmente !== true)
+    .filter((cheque) => !numerosConCompromisoPorDia.get(cheque.fechaPago)?.has(cheque.numero))
+    .map(filaPlanillaDeCheque)
+  return [...compromisosVisibles, ...sueltos]
+}
+
 function entraEnMes(row: CompromisoParaPlanilla, mes: string): boolean {
   if (row.fechaVencimiento.startsWith(mes)) return true
   if (row.pagos.some((pago) => pago.fecha.startsWith(mes))) return true
@@ -361,7 +465,10 @@ export function armarPlanillaMes(input: {
     .filter((row) => visibleEnMes(row, input.mes))
     .map((row) => ({
       grupo: grupoVistaPlanilla(row.grupo, row.proveedorONombre, financieros),
-      fila: filaDe(row, columnas, input.feriados, input.mes),
+      fila: {
+        ...filaDe(row, columnas, input.feriados, input.mes),
+        esProveedorFinanciero: financieros.size > 0 && financieros.has(normalizarNombre(row.proveedorONombre)),
+      },
     }))
     .sort((a, b) => {
       const porFecha = a.fila.fechaVencimiento.localeCompare(b.fila.fechaVencimiento)

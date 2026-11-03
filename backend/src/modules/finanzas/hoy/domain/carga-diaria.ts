@@ -1,6 +1,7 @@
 import {
   arsConvertido,
   clasificarDia,
+  esDiaDeSueldos,
   sumarDiasCalendario,
   ubicarPlanificado,
   armarColumnasMes,
@@ -34,6 +35,8 @@ export interface DiaCarga {
   nivel: NivelCarga
   /** Cuánto del promedio del mes representa este día (1 = igual al promedio). */
   vsPromedio: number | null
+  /** 4to día hábil del mes: se pagan los sueldos. Fuerza el día a "pesado" aunque no tengamos el monto cargado. */
+  esDiaDeSueldos: boolean
 }
 
 export interface CargaMes {
@@ -151,6 +154,7 @@ export function armarCargaDiaria(input: {
     const dato = totales.get(fecha)
     const promedio = promedioPorMes.get(mesDe(fecha)) ?? 0
     const total = tipo === 'habil' ? (dato?.total ?? 0) : 0
+    const sueldos = tipo === 'habil' && esDiaDeSueldos(fecha, input.feriados)
     return {
       fecha,
       tipo,
@@ -158,14 +162,20 @@ export function armarCargaDiaria(input: {
       totalCentavos: total,
       pendienteCentavos: tipo === 'habil' ? (dato?.pendiente ?? 0) : 0,
       cantidad: tipo === 'habil' ? (dato?.cantidad ?? 0) : 0,
-      nivel: tipo === 'habil' ? nivelDeCarga(total, promedio) : 'sin_pagos',
+      nivel: tipo === 'habil' ? (sueldos ? 'pesado' : nivelDeCarga(total, promedio)) : 'sin_pagos',
       vsPromedio: tipo === 'habil' && promedio > 0 ? Math.round((total / promedio) * 100) / 100 : null,
+      esDiaDeSueldos: sueldos,
     }
   })
 
   const diasMasLivianos = dias
     .filter((dia) => dia.tipo === 'habil' && dia.fecha >= input.hoy)
-    .sort((a, b) => a.totalCentavos - b.totalCentavos || a.fecha.localeCompare(b.fecha))
+    .sort(
+      (a, b) =>
+        Number(a.esDiaDeSueldos) - Number(b.esDiaDeSueldos) ||
+        a.totalCentavos - b.totalCentavos ||
+        a.fecha.localeCompare(b.fecha),
+    )
     .map((dia) => dia.fecha)
 
   return {

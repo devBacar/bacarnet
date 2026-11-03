@@ -3,7 +3,6 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { AccountsDetailModal } from '../../components/finanzas/AccountsDetailModal'
 import { DescubiertoModal } from '../../components/finanzas/DescubiertoModal'
-import { CargaHoyResumen } from '../../components/finanzas/cargaDiaria/CargaHoyResumen'
 import { CompromisosSemana, type PagoDesdePlanilla } from '../../components/finanzas/hoy/CompromisosSemana'
 import { GuiaHoy } from '../../components/finanzas/hoy/GuiaHoy'
 import {
@@ -20,18 +19,19 @@ import {
   PagosAtrasados,
   PagosHoy,
 } from '../../components/finanzas/hoy/PagosCobrosHoy'
-import { ResueltoHoy } from '../../components/finanzas/hoy/ResueltoHoy'
 import {
   CuatroNumeros,
   EncabezadoHoy,
   FranjaDemo,
   TarjetaBancos,
   TarjetaSemanaGrafico,
+  useTarjetaPar,
 } from '../../components/finanzas/hoy/TarjetasHoy'
 import { NuevaTransferenciaModal, type PrecargaTransferenciaHoy } from '../../components/finanzas/NuevaTransferenciaModal'
 import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
 import { fetchFinanzasCuentas, patchFinanzasDescubierto, type FinanzasCuenta } from '../../services/finanzasApi'
+import { marcarPendienteDeRenovarCheque } from '../../services/finanzasChequesApi'
 import {
   borrarDatosDemoHoy,
   cobrarHoyEnEfectivo,
@@ -75,8 +75,14 @@ export function FinanzasHoyPage() {
   const [descubiertoCuenta, setDescubiertoCuenta] = useState<FinanzasCuenta | null>(null)
   const [savingDescubierto, setSavingDescubierto] = useState(false)
   const [guardando, setGuardando] = useState(false)
+  const [renovando, setRenovando] = useState(false)
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
   const [borrandoDemo, setBorrandoDemo] = useState(false)
+  // Cada fila de dos tarjetas (una al lado de la otra) comparte su propio interruptor: tocar
+  // cualquiera de las dos despliega o colapsa a las dos juntas, sin afectar a las otras filas.
+  const [abiertaPagosCobrosHoy, cambiarAbiertaPagosCobrosHoy] = useTarjetaPar('pagos-cobros-hoy')
+  const [abiertaAtrasados, cambiarAbiertaAtrasados] = useTarjetaPar('atrasados', false)
+  const [abiertaBancosSemana, cambiarAbiertaBancosSemana] = useTarjetaPar('bancos-semana')
 
   async function recargar(mensaje: string) {
     toast.success(mensaje)
@@ -113,6 +119,9 @@ export function FinanzasHoyPage() {
             : origen.id.startsWith('vientri-')
               ? 'vientri'
               : 'planilla'),
+      // Solo se conoce si el cheque vence hoy (viene de data.pagos.filas); para otro día de la
+      // semana todavía no tenemos el id del cheque acá y no se puede ofrecer "Renovar".
+      chequeId: pago?.chequeId ?? null,
     })
   }
 
@@ -207,6 +216,9 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
+              resuelto={data.resueltoHoy?.pagos}
+              abiertaControlada={abiertaPagosCobrosHoy}
+              onCambiarAbierta={cambiarAbiertaPagosCobrosHoy}
             />
             <CobrosHoy
               ingresos={data.ingresos.filas.filter((ingreso) => !ingreso.atrasado)}
@@ -217,9 +229,11 @@ export function FinanzasHoyPage() {
               onReprogramar={setReprogramarIngreso}
               onReclamar={setReclamo}
               puedeOperar={permisos.agenda}
+              resuelto={data.resueltoHoy?.cobros}
+              abiertaControlada={abiertaPagosCobrosHoy}
+              onCambiarAbierta={cambiarAbiertaPagosCobrosHoy}
             />
           </div>
-          <ResueltoHoy resueltoHoy={data.resueltoHoy} />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosAtrasados
               pagos={fusionarPorId(
@@ -230,6 +244,8 @@ export function FinanzasHoyPage() {
               onYaPague={setYaPague}
               onReprogramar={setReprogramarPago}
               puedeOperar={permisos.agenda}
+              abiertaControlada={abiertaAtrasados}
+              onCambiarAbierta={cambiarAbiertaAtrasados}
             />
             <CobrosAtrasados
               atrasados={data.prevision.cobrosAtrasados}
@@ -241,6 +257,8 @@ export function FinanzasHoyPage() {
               onReclamar={setReclamo}
               onConfirmar={confirmarIngreso}
               puedeOperar={permisos.agenda}
+              abiertaControlada={abiertaAtrasados}
+              onCambiarAbierta={cambiarAbiertaAtrasados}
             />
           </div>
           {data.pagosSinFecha && data.pagosSinFecha.filas.length > 0 ? (
@@ -257,11 +275,15 @@ export function FinanzasHoyPage() {
               puedeOperar={permisos.agenda}
             />
           ) : null}
-          <CargaHoyResumen />
           <CompromisosSemana onPagar={pagarDesdePlanilla} />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
-            <TarjetaBancos dia={data.dia} onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined} />
-            <TarjetaSemanaGrafico prevision={data.prevision} />
+            <TarjetaBancos
+              dia={data.dia}
+              onAbrirBanco={cuentas.length > 0 ? setDetalleBanco : undefined}
+              abiertaControlada={abiertaBancosSemana}
+              onCambiarAbierta={cambiarAbiertaBancosSemana}
+            />
+            <TarjetaSemanaGrafico prevision={data.prevision} abiertaControlada={abiertaBancosSemana} onCambiarAbierta={cambiarAbiertaBancosSemana} />
           </div>
         </>
       ) : null}
@@ -302,6 +324,19 @@ export function FinanzasHoyPage() {
                 toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
               })
               .finally(() => setGuardando(false))
+          }}
+          renovando={renovando}
+          onRenovar={(chequeId) => {
+            setRenovando(true)
+            void marcarPendienteDeRenovarCheque(chequeId)
+              .then(async () => {
+                setPagoModo(null)
+                await recargar('El cheque pasó a Cheques > Ocasionales > Renovaciones.')
+              })
+              .catch((err: unknown) => {
+                toast.error(err instanceof Error ? err.message : 'No se pudo marcar el cheque para renovar')
+              })
+              .finally(() => setRenovando(false))
           }}
         />
       ) : null}

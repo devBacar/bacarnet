@@ -96,6 +96,7 @@ function base(overrides: Partial<ArmarHoyInput> = {}): ArmarHoyInput {
     cheques: [],
     tipoCambioUsdArs: null,
     feriados: new Set(),
+    proveedoresFinancieros: new Set(),
     ...overrides,
   }
 }
@@ -488,6 +489,29 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(resultado.filas[0]).toMatchObject({ chequeNumero: '50095064', medio: 'cheque_fisico' })
   })
 
+  it('seleccionarPagadosHoy: sin desglose, si el cheque real es un e-cheque no lo muestra como "cheque físico"', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-2',
+        fechaVencimiento: HOY,
+        montoCentavos: 0,
+        montoTotalCentavos: 624_067_06,
+        estado: 'pagado',
+        fechaPago: HOY,
+        proveedorONombre: 'Bacar Transportadora',
+        medioPago: 'cheque',
+        origen: 'vientri-cheque',
+        vientriChequeNumero: '50096771',
+      }),
+    ]
+    // Antes del fix: como no hay desglosePago, se asumía siempre "cheque_fisico" sin mirar el cheque
+    // real, aunque el cheque 50096771 sea un e-cheque de verdad.
+    const resultado = seleccionarPagadosHoy(compromisos, HOY, [
+      chequeEnHoy({ id: 'chq-2', numero: '50096771', montoCentavos: 624_067_06, tipo: 'echeq' }),
+    ])
+    expect(resultado.filas[0]).toMatchObject({ chequeNumero: '50096771', medio: 'echeq' })
+  })
+
   it('seleccionarCobradosHoy: toma lo cobrado hoy sin importar la fecha esperada', () => {
     const cobros = [
       cobro({ id: 'cobrado-hoy', fechaEsperada: '2026-08-01', montoCentavos: 3_000, estado: 'confirmado', fechaConfirmado: HOY, clienteONombre: 'Cliente X' }),
@@ -633,6 +657,60 @@ describe('mismo criterio en todo Hoy: día hábil y conversión de USD', () => {
     expect(vista.pagos.totalCentavos).toBe(400_000)
     expect(vista.pagos.filas).toHaveLength(2)
     expect(vista.pagos.filas.map((f) => f.id)).toContain('cheque-chq-3')
+  })
+
+  it('un cheque suelto "pendiente de renovar" no se suma ni aparece: está en gestión, no se paga', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [compromiso({ id: 'factura-1', fechaVencimiento: HOY, montoCentavos: 100_000 })],
+        cheques: [chequeEnHoy({ id: 'chq-3', numero: '999', montoCentavos: 300_000, pendienteRenovacion: true })],
+      }),
+    )
+    expect(vista.dia.pagosCentavos).toBe(100_000)
+    expect(vista.pagos.totalCentavos).toBe(100_000)
+    expect(vista.pagos.filas.map((f) => f.id)).not.toContain('cheque-chq-3')
+  })
+
+  it('un compromiso "vientri-cheque" cuyo cheque está pendiente de renovar tampoco se suma ni aparece', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [
+          compromiso({
+            id: 'vientri-cheque-chq-1',
+            fechaVencimiento: HOY,
+            montoCentavos: 500_000,
+            origen: 'vientri-cheque',
+            medioPago: 'cheque',
+            vientriChequeNumero: '50095064',
+          }),
+        ],
+        cheques: [chequeEnHoy({ id: 'chq-1', numero: '50095064', montoCentavos: 500_000, pendienteRenovacion: true })],
+      }),
+    )
+    expect(vista.dia.pagosCentavos).toBe(0)
+    expect(vista.pagos.filas).toHaveLength(0)
+  })
+
+  it('un cheque a un proveedor financiero queda marcado para distinguirlo de un cheque común', () => {
+    const vista = armarVistaHoy(
+      base({
+        cheques: [chequeEnHoy({ id: 'chq-mana', numero: '1', montoCentavos: 100_000, destinatario: 'MANA' })],
+        proveedoresFinancieros: new Set(['mana']),
+      }),
+    )
+    const fila = vista.pagos.filas.find((f) => f.id === 'cheque-chq-mana')
+    expect(fila?.esProveedorFinanciero).toBe(true)
+  })
+
+  it('un cheque a un proveedor común no queda marcado como financiero', () => {
+    const vista = armarVistaHoy(
+      base({
+        cheques: [chequeEnHoy({ id: 'chq-comun', numero: '2', montoCentavos: 100_000, destinatario: 'Ferretería X' })],
+        proveedoresFinancieros: new Set(['mana']),
+      }),
+    )
+    const fila = vista.pagos.filas.find((f) => f.id === 'cheque-chq-comun')
+    expect(fila?.esProveedorFinanciero).toBe(false)
   })
 
   it('sin cotización cargada, no convierte (usa el monto tal cual para no inventar un valor)', () => {

@@ -34,6 +34,10 @@ export interface PagoHoy {
   /** La fecha se estimó según la historia del proveedor. */
   estimada?: boolean
   origen: OrigenCompromisoHoy
+  /** Solo para origen 'vientri-cheque': el cheque es del circuito de proveedores financieros (refinanciación). */
+  esProveedorFinanciero?: boolean
+  /** Solo para medioPago 'cheque': id en la colección de cheques, para poder "Renovar" desde Hoy. */
+  chequeId?: string | null
 }
 
 export interface IngresoHoy {

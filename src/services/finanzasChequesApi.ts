@@ -635,3 +635,54 @@ export async function updateChequeEstado(id: string, estado: ChequeEstado): Prom
     throw new Error(body?.error ?? 'No se pudo actualizar el estado')
   }
 }
+
+/** Un cheque no se paga: se renueva. Lo saca de Hoy y lo manda a "Pendientes de renovar". */
+export async function marcarPendienteDeRenovarCheque(id: string): Promise<void> {
+  const res = await chequesFetch(`/${id}/marcar-pendiente-renovar`, { method: 'POST' })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new Error(body?.error ?? 'No se pudo marcar el cheque para renovar')
+  }
+}
+
+export interface ChequePendienteDeRenovar {
+  id: string
+  numero: string
+  montoCentavos: number
+  destinatario: string | null
+  emisor: string
+  fechaPago: string
+}
+
+export async function fetchPendientesDeRenovar(): Promise<ChequePendienteDeRenovar[]> {
+  const res = await chequesFetch('/pendientes-de-renovar')
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new Error(body?.error ?? 'No se pudo traer la lista de pendientes de renovar')
+  }
+  const body = (await res.json()) as { pendientes: ChequePendienteDeRenovar[] }
+  return body.pendientes
+}
+
+export interface DatosChequeNuevo {
+  numero: string
+  bancoEmisor: string | null
+  fechaPago: string
+  montoCentavos: number
+  destinatario: string | null
+}
+
+export async function confirmarRenovacionCheques(
+  chequeViejoIds: string[],
+  chequeNuevo: DatosChequeNuevo,
+): Promise<void> {
+  const res = await chequesFetch('/confirmar-renovacion', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chequeViejoIds, chequeNuevo }),
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new Error(body?.error ?? 'No se pudo confirmar la renovación')
+  }
+}

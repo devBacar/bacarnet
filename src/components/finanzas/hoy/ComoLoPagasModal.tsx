@@ -106,6 +106,8 @@ export function ComoLoPagasModal({
   guardando,
   onClose,
   onConfirmar,
+  onRenovar,
+  renovando,
 }: {
   pago: PagoHoy
   guardando: boolean
@@ -115,8 +117,17 @@ export function ComoLoPagasModal({
     comprobantes: Array<{ indice: number; archivo: File }>
     transferencia: PrecargaTransferenciaHoy | null
   }) => void
+  /** Solo para un cheque de Vientri (origen 'vientri-cheque'): mandarlo a la cola de renovación. */
+  onRenovar?: (chequeId: string) => void
+  renovando?: boolean
 }) {
-  const puedeTransferir = usePermisosFinanzas().transferencias
+  // Un compromiso que ya es un cheque (emitido por Vientri o cargado a mano) no se paga por
+  // transferencia: ese cheque lo debita el banco o hay que renovarlo, no mandar plata aparte.
+  const puedeTransferir = usePermisosFinanzas().transferencias && pago.medioPago !== 'cheque'
+  // Un cheque de Vientri no se "paga": se renueva (se reemplaza por uno nuevo). No tiene sentido
+  // ofrecer transferencia/efectivo/endoso para esto.
+  const esChequeDeVientri = pago.origen === 'vientri-cheque' && Boolean(pago.chequeId)
+  const [confirmandoRenovar, setConfirmandoRenovar] = useState(false)
   const moneda = pago.moneda ?? 'ARS'
   const falta = pago.montoCentavos
   const [paso, setPaso] = useState<'elegir' | 'armar'>('elegir')
@@ -277,7 +288,42 @@ export function ComoLoPagasModal({
             ¿Cómo lo pagás?
           </h2>
           <div className="mt-3">{encabezado}</div>
-          {paso === 'elegir' ? (
+          {esChequeDeVientri ? (
+            <div className="mt-4 grid gap-3" data-tour="hoy-pagar-opciones">
+              <p className="text-body-muted text-[14px]">
+                Este cheque no se paga: se renueva (se reemplaza por uno nuevo). Lo vamos a mandar a
+                Cheques &gt; Ocasionales &gt; Renovaciones para que lo reemplacen por uno nuevo.
+              </p>
+              {confirmandoRenovar ? (
+                <div className="grid gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/30">
+                  <p className="text-[14px] font-medium text-amber-900 dark:text-amber-200">
+                    ¿Confirmás que renovás este cheque? Va a dejar de pedirse como pago hoy.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" className={botonTexto} onClick={() => setConfirmandoRenovar(false)}>
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      className={botonPrimario}
+                      disabled={renovando}
+                      onClick={() => pago.chequeId && onRenovar?.(pago.chequeId)}
+                    >
+                      {renovando ? 'Renovando…' : 'Sí, renovar'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <Opcion
+                  icono={FileText}
+                  titulo="Renovar este cheque"
+                  explicacion="Lo manda a la cola de pendientes de renovar."
+                  onClick={() => setConfirmandoRenovar(true)}
+                  tour="hoy-pagar-opcion-renovar"
+                />
+              )}
+            </div>
+          ) : paso === 'elegir' ? (
             <div className="mt-4 grid gap-2" data-tour="hoy-pagar-opciones">
               {puedeTransferir ? (
                 <Opcion icono={Landmark} titulo="Por transferencia" explicacion="Se arma y queda esperando la firma." onClick={() => elegir('transferencia')} tour="hoy-pagar-opcion-transferencia" />

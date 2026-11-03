@@ -2,7 +2,19 @@ import { Router } from 'express'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { listChequesApi, getResumenDiario, importChequesExcel, ingresarChequesPegados } from '../services/cheques.service.js'
-import { getChequeById, buscarPendientesPorVientriId, updateChequeEstado, desvincularChequesFueraDeVentana, corregirPagoProveedorDebitado } from '../services/cheques.repository.js'
+import {
+  getChequeById,
+  buscarPendientesPorVientriId,
+  updateChequeEstado,
+  desvincularChequesFueraDeVentana,
+  corregirPagoProveedorDebitado,
+  marcarPendienteDeRenovar,
+  listarPendientesDeRenovar,
+  confirmarRenovacionManual,
+  ChequeNoEncontradoError,
+  ChequeYaRenovadoError,
+  ChequeNuevoYaExisteError,
+} from '../services/cheques.repository.js'
 import { reconciliarChequesConMovimientos } from '../services/reconciliar-cheques-movimientos.js'
 import { sincronizarChequesDesdeVientri } from '../services/sincronizar-desde-vientri.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
@@ -234,6 +246,16 @@ finanzasChequesRouter.get('/:id/detalle', async (req, res) => {
   }
 })
 
+finanzasChequesRouter.get('/pendientes-de-renovar', async (_req, res) => {
+  try {
+    const pendientes = await listarPendientesDeRenovar()
+    res.json({ pendientes })
+  } catch (err) {
+    console.error('[finanzas/cheques] listar pendientes de renovar', err)
+    res.status(500).json({ error: 'No se pudo traer la lista de pendientes de renovar' })
+  }
+})
+
 finanzasChequesRouter.get('/:id', async (req, res) => {
   try {
     const id = req.params.id
@@ -264,5 +286,61 @@ finanzasChequesRouter.patch('/:id/estado', requireFinanzasPermiso('finanzas_cheq
     console.error('[finanzas/cheques] update estado', err)
     const message = err instanceof Error ? err.message : 'No se pudo actualizar el estado'
     res.status(400).json({ error: message })
+  }
+})
+
+finanzasChequesRouter.post('/:id/marcar-pendiente-renovar', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const actorUid = req.authedUser?.uid
+    if (!actorUid) { res.status(401).json({ error: 'No autenticado' }); return }
+    await marcarPendienteDeRenovar({ id: req.params.id, actorUid })
+    res.json({ ok: true })
+  } catch (err) {
+    if (err instanceof ChequeNoEncontradoError) { res.status(404).json({ error: err.message }); return }
+    if (err instanceof ChequeYaRenovadoError) { res.status(409).json({ error: err.message }); return }
+    console.error('[finanzas/cheques] marcar pendiente de renovar', err)
+    res.status(400).json({ error: err instanceof Error ? err.message : 'No se pudo marcar el cheque' })
+  }
+})
+
+finanzasChequesRouter.post('/confirmar-renovacion', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const actorUid = req.authedUser?.uid
+    if (!actorUid) { res.status(401).json({ error: 'No autenticado' }); return }
+    const body = req.body as {
+      chequeViejoIds?: unknown
+      chequeNuevo?: { numero?: unknown; bancoEmisor?: unknown; fechaPago?: unknown; montoCentavos?: unknown; destinatario?: unknown }
+    }
+    if (!Array.isArray(body.chequeViejoIds) || body.chequeViejoIds.some((x) => typeof x !== 'string') || body.chequeViejoIds.length === 0) {
+      res.status(400).json({ error: 'Elegí al menos un cheque para renovar' })
+      return
+    }
+    const cn = body.chequeNuevo ?? {}
+    if (
+      typeof cn.numero !== 'string' || !cn.numero.trim() ||
+      typeof cn.fechaPago !== 'string' || !cn.fechaPago.trim() ||
+      typeof cn.montoCentavos !== 'number' || cn.montoCentavos <= 0
+    ) {
+      res.status(400).json({ error: 'Faltan los datos del cheque nuevo (número, fecha de pago y monto)' })
+      return
+    }
+    const resultado = await confirmarRenovacionManual({
+      chequeViejoIds: body.chequeViejoIds as string[],
+      chequeNuevo: {
+        numero: cn.numero.trim(),
+        bancoEmisor: typeof cn.bancoEmisor === 'string' ? cn.bancoEmisor.trim() || null : null,
+        fechaPago: cn.fechaPago.trim(),
+        montoCentavos: cn.montoCentavos,
+        destinatario: typeof cn.destinatario === 'string' ? cn.destinatario.trim() || null : null,
+      },
+      actorUid,
+    })
+    res.json({ mensaje: 'Renovación confirmada', ...resultado })
+  } catch (err) {
+    if (err instanceof ChequeNoEncontradoError) { res.status(404).json({ error: err.message }); return }
+    if (err instanceof ChequeYaRenovadoError) { res.status(409).json({ error: err.message }); return }
+    if (err instanceof ChequeNuevoYaExisteError) { res.status(409).json({ error: err.message }); return }
+    console.error('[finanzas/cheques] confirmar renovación', err)
+    res.status(400).json({ error: err instanceof Error ? err.message : 'No se pudo confirmar la renovación' })
   }
 })

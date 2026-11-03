@@ -24,6 +24,7 @@ import {
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
 import { OperacionesRenovacion } from './OperacionesRenovacion'
+import { PendientesDeRenovar } from './PendientesDeRenovar'
 import { SeguimientoRenovaciones } from './SeguimientoRenovaciones'
 import { BotonNuevaOperacionUsd, OperacionesDolares } from './OperacionesDolares'
 
@@ -172,6 +173,7 @@ export function PestanaOcasionales() {
     return (
       <>
         {subTabs}
+        <PendientesDeRenovar />
         <OperacionesRenovacion
           beneficiarioFiltro={beneficiarioRenov}
           onLimpiarFiltro={() => setBeneficiarioRenov('')}

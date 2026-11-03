@@ -12,11 +12,48 @@ import {
   patchCompromisoAgenda,
 } from '../../agenda/services/compromisos.service.js'
 import { nombresNormalizadosProveedoresFinancieros } from '../../agenda/services/proveedores-financieros.repository.js'
-import { armarPlanillaMes, parseMes, type CompromisoParaPlanilla, type PlanillaMes } from '../domain/compromisos-mes.js'
+import {
+  countChequesFiltrados,
+  pageCheques,
+  type ChequesFiltro,
+  type ChequeListadoItem,
+} from '../../cheques/services/cheques.repository.js'
+import {
+  agregarChequesSueltos,
+  armarPlanillaMes,
+  diasDelMes,
+  parseMes,
+  type CompromisoParaPlanilla,
+  type PlanillaMes,
+} from '../domain/compromisos-mes.js'
+import { chequeEmitidoVigente } from '../domain/cheques-hoy.js'
 import { feriadosNacionales2026 } from '../domain/feriados-nacionales-2026.js'
 import { fechaHoyArgentina } from '../domain/hoy.fechas.js'
 import type { OrigenCompromisoHoy } from '../domain/hoy.tipos.js'
 import { getTipoCambioMes, putTipoCambioMes, type TipoCambioMes } from './tipo-cambio-mes.repository.js'
+
+const FILTRO_CHEQUE_EMITIDO_VACIO: Omit<ChequesFiltro, 'direccion' | 'desde' | 'hasta'> = {
+  origen: null,
+  estado: null,
+  tipo: null,
+  vinculacion: null,
+  comprobante: null,
+  q: null,
+}
+
+async function listarChequesEmitidosDelMes(desde: string, hasta: string): Promise<ChequeListadoItem[]> {
+  const filtro: ChequesFiltro = { ...FILTRO_CHEQUE_EMITIDO_VACIO, direccion: 'emitido', desde, hasta }
+  const total = await countChequesFiltrados(filtro)
+  const filas: ChequeListadoItem[] = []
+  const limit = 300
+  for (let offset = 0; offset < total; offset += limit) {
+    const page = await pageCheques({ filtro, offset, limit })
+    filas.push(...page)
+    if (page.length === 0) break
+  }
+  return filas
+}
+
 
 export class CompromisoMesError extends Error {
   constructor(
@@ -67,6 +104,7 @@ function aPlanilla(id: string, data: CompromisoPagoDocument): CompromisoParaPlan
     chequeId: data.chequeId ?? null,
     cuentaId: data.cuentaId ?? null,
     transferenciaConfeccionadaId: data.transferenciaConfeccionadaId ?? null,
+    vientriChequeNumero: data.vientriCheque?.numero ?? null,
   }
 }
 
@@ -92,17 +130,25 @@ function fuenteDe(row: CompromisoParaPlanilla): FuentePago {
 
 export async function getPlanillaCompromisosMes(mes: string, now = new Date()): Promise<PlanillaMes> {
   if (!parseMes(mes)) throw new CompromisoMesError('Indicá el mes con formato AAAA-MM', 400)
-  const [rows, tipo, proveedoresFinancieros] = await Promise.all([
+  const dias = diasDelMes(mes)
+  const desdeMes = dias[0]
+  const hastaMes = dias.at(-1) ?? desdeMes
+  const [rows, tipo, proveedoresFinancieros, chequesDelMes] = await Promise.all([
     listAllCompromisos(),
     getTipoCambioMes(mes),
     nombresNormalizadosProveedoresFinancieros(),
+    desdeMes && hastaMes ? listarChequesEmitidosDelMes(desdeMes, hastaMes) : Promise.resolve([]),
   ])
   const bases = rows.flatMap((row) => {
     const mapped = aPlanilla(row.id, row.data)
     return mapped ? [mapped] : []
   })
-  const catalogo = await cargarCatalogo(bases.map(fuenteDe))
-  const compromisos = bases.map((row) => ({
+  const basesConCheques = agregarChequesSueltos(
+    bases,
+    chequesDelMes.filter((cheque) => chequeEmitidoVigente(cheque)),
+  )
+  const catalogo = await cargarCatalogo(basesConCheques.map(fuenteDe))
+  const compromisos = basesConCheques.map((row) => ({
     ...row,
     pagosResumen: lineasPagosPlanilla(fuenteDe(row), catalogo),
   }))

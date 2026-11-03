@@ -64,6 +64,9 @@ export interface ChequeListadoItem {
   renovadoPor: string[] | null
   esInteresEncubierto: boolean
   beneficiarioRealFinanciero: string | null
+  pendienteRenovacion: boolean
+  pendienteRenovacionDesde: Timestamp | null
+  renovadoManualmente: boolean
 }
 
 function leerPagoDe(data: DocumentData): ChequePagoDe | null {
@@ -128,6 +131,9 @@ function toListadoItem(id: string, data: DocumentData): ChequeListadoItem {
     renovadoPor: Array.isArray(data.renovadoPor) ? data.renovadoPor : null,
     esInteresEncubierto: data.esInteresEncubierto === true,
     beneficiarioRealFinanciero: typeof data.beneficiarioRealFinanciero === 'string' ? data.beneficiarioRealFinanciero : null,
+    pendienteRenovacion: data.pendienteRenovacion === true,
+    pendienteRenovacionDesde: data.pendienteRenovacionDesde instanceof Timestamp ? data.pendienteRenovacionDesde : null,
+    renovadoManualmente: data.renovadoManualmente === true,
   }
 }
 
@@ -409,6 +415,175 @@ export async function updateChequeEstado(input: {
       tx.set(ref.collection(HISTORIAL_ESTADOS_SUB).doc(), entry)
     }
   })
+}
+
+export class ChequeNoEncontradoError extends Error {
+  constructor() {
+    super('No encontramos ese cheque')
+  }
+}
+
+export class ChequeYaRenovadoError extends Error {
+  constructor() {
+    super('Ese cheque ya quedó renovado')
+  }
+}
+
+/**
+ * Un cheque no se "paga", se renueva. Esto lo saca de "Hoy" y lo manda a la cola de
+ * "Pendientes de renovar" en Cheques > Ocasionales > Renovaciones.
+ */
+export async function marcarPendienteDeRenovar(input: { id: string; actorUid: string }): Promise<void> {
+  const ref = collection().doc(input.id)
+  const snap = await ref.get()
+  if (!snap.exists) throw new ChequeNoEncontradoError()
+  const data = snap.data() ?? {}
+  if (data.estado === 'renovado' || data.renovadoManualmente === true) throw new ChequeYaRenovadoError()
+  await ref.update({
+    pendienteRenovacion: true,
+    pendienteRenovacionDesde: FieldValue.serverTimestamp(),
+    pendienteRenovacionPorUid: input.actorUid,
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+}
+
+export interface ChequePendienteDeRenovar {
+  id: string
+  numero: string
+  montoCentavos: number
+  destinatario: string | null
+  emisor: string
+  fechaPago: string
+  pendienteRenovacionDesde: Timestamp | null
+}
+
+/** Cheques marcados "pendiente de renovar" que todavía no se resolvieron (ni a mano ni por Vientri). */
+export async function listarPendientesDeRenovar(): Promise<ChequePendienteDeRenovar[]> {
+  const snap = await collection().where('pendienteRenovacion', '==', true).get()
+  return snap.docs
+    .filter((d) => d.data().estado !== 'renovado' && d.data().renovadoManualmente !== true)
+    .map((d) => {
+      const data = d.data()
+      return {
+        id: d.id,
+        numero: String(data.numero ?? ''),
+        montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
+        destinatario: typeof data.destinatario === 'string' ? data.destinatario : null,
+        emisor: String(data.emisor ?? ''),
+        fechaPago: String(data.fechaPago ?? ''),
+        pendienteRenovacionDesde:
+          data.pendienteRenovacionDesde instanceof Timestamp ? data.pendienteRenovacionDesde : null,
+      }
+    })
+    .sort((a, b) => a.fechaPago.localeCompare(b.fechaPago))
+}
+
+export class ChequeNuevoYaExisteError extends Error {
+  constructor(numero: string) {
+    super(`Ya existe un cheque emitido con el número ${numero}`)
+  }
+}
+
+/**
+ * Confirma la renovación: uno o varios cheques viejos quedan "Renovado" (a mano, sin esperar a que
+ * Vientri lo detecte solo) y vinculados al cheque nuevo que los reemplaza. Si más adelante Vientri
+ * trae la misma renovación por su cuenta, no pasa nada: `renovadoManualmente` no lo toca el sync
+ * diario, así que esto nunca se puede "deshacer" solo.
+ */
+export async function confirmarRenovacionManual(input: {
+  chequeViejoIds: string[]
+  chequeNuevo: {
+    numero: string
+    bancoEmisor: string | null
+    fechaPago: string
+    montoCentavos: number
+    destinatario: string | null
+  }
+  actorUid: string
+}): Promise<{ chequeNuevoId: string }> {
+  if (input.chequeViejoIds.length === 0) throw new Error('Elegí al menos un cheque para renovar')
+  const nuevoId = chequeDocId('emitido', input.chequeNuevo.numero)
+  const nuevoRef = collection().doc(nuevoId)
+
+  await adminDb().runTransaction(async (tx) => {
+    const viejosRefs = input.chequeViejoIds.map((id) => collection().doc(id))
+    const [viejosSnaps, nuevoSnap] = await Promise.all([
+      Promise.all(viejosRefs.map((r) => tx.get(r))),
+      tx.get(nuevoRef),
+    ])
+    const viejosNumeros: string[] = []
+    for (const [i, snap] of viejosSnaps.entries()) {
+      if (!snap.exists) throw new ChequeNoEncontradoError()
+      const data = snap.data() ?? {}
+      if (data.estado === 'renovado' || data.renovadoManualmente === true) throw new ChequeYaRenovadoError()
+      viejosNumeros.push(String(data.numero ?? viejosRefs[i]!.id))
+    }
+
+    const now = Timestamp.now()
+    if (nuevoSnap.exists) {
+      if (nuevoSnap.data()?.renovadoManualmente !== true && nuevoSnap.data()?.vientriSync !== true) {
+        throw new ChequeNuevoYaExisteError(input.chequeNuevo.numero)
+      }
+      tx.update(nuevoRef, {
+        renovacionDe: FieldValue.arrayUnion(...viejosNumeros),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+    } else {
+      const nuevoDoc: Omit<ChequeDocument, 'createdAt' | 'updatedAt'> & {
+        createdAt: FirebaseFirestore.FieldValue
+        updatedAt: FirebaseFirestore.FieldValue
+      } = {
+        numero: input.chequeNuevo.numero,
+        tipo: 'fisico',
+        direccion: 'emitido',
+        origen: 'propio',
+        montoCentavos: input.chequeNuevo.montoCentavos,
+        fechaEmision: input.chequeNuevo.fechaPago,
+        fechaPago: input.chequeNuevo.fechaPago,
+        fechaRecibido: null,
+        fechaEntregado: null,
+        emisor: 'Bacarnet',
+        emisorCuit: '',
+        bancoEmisor: input.chequeNuevo.bancoEmisor,
+        bancoEmisorCodigo: null,
+        cliente: null,
+        endosante: null,
+        destinatario: input.chequeNuevo.destinatario,
+        estado: 'en_cartera',
+        estadoBancario: null,
+        utilizado: null,
+        cmc7: null,
+        observaciones: `Renovación manual de: ${viejosNumeros.join(', ')}`,
+        renovacionDe: viejosNumeros,
+        renovadoManualmente: true,
+        createdBy: input.actorUid,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      }
+      tx.set(nuevoRef, nuevoDoc)
+    }
+
+    for (const ref of viejosRefs) {
+      tx.update(ref, {
+        estado: 'renovado',
+        renovadoManualmente: true,
+        pendienteRenovacion: false,
+        renovadoPor: FieldValue.arrayUnion(input.chequeNuevo.numero),
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+      const entry: ChequeHistorialEstadoDocument = {
+        estadoAnterior: null,
+        estadoNuevo: 'renovado',
+        origen: 'manual',
+        usuario: input.actorUid,
+        nota: `Renovado a mano por cheque Nº ${input.chequeNuevo.numero}`,
+        fecha: now,
+      }
+      tx.set(ref.collection(HISTORIAL_ESTADOS_SUB).doc(), entry)
+    }
+  })
+
+  return { chequeNuevoId: nuevoId }
 }
 
 /**

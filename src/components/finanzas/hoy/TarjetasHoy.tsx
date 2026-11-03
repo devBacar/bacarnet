@@ -75,6 +75,32 @@ function leerAbierta(clave: string): boolean {
 }
 
 /**
+ * Para un par de tarjetas que están una al lado de la otra (misma fila): comparten un solo
+ * abierto/cerrado, así que tocar cualquiera de las dos despliega o colapsa a las dos juntas.
+ * Cada fila usa su propia `clave`, independiente de las demás filas de la pantalla.
+ */
+export function useTarjetaPar(clave: string, abiertaPorDefecto = true): [boolean, (valor: boolean) => void] {
+  const claveCompleta = `bacarnet.tarjeta.fila.${clave}`
+  const [abierta, setAbierta] = useState(() => {
+    try {
+      const guardado = window.localStorage.getItem(claveCompleta)
+      return guardado === null ? abiertaPorDefecto : guardado === '1'
+    } catch {
+      return abiertaPorDefecto
+    }
+  })
+  function cambiar(valor: boolean) {
+    setAbierta(valor)
+    try {
+      window.localStorage.setItem(claveCompleta, valor ? '1' : '0')
+    } catch {
+      /* si el navegador no deja guardar, no pasa nada: solo no se recuerda la próxima vez */
+    }
+  }
+  return [abierta, cambiar]
+}
+
+/**
  * Tarjeta compacta: título chico, algo a la derecha (total, botones), contenido y ayuda al pie.
  * Se puede desplegar/colapsar haciendo clic en el título; el total de "derecha" se ve siempre,
  * aunque esté colapsada. El navegador recuerda cómo la dejaste la próxima vez.
@@ -89,6 +115,8 @@ export function Tarjeta({
   claseAyuda,
   tour,
   colapsable = true,
+  abiertaControlada,
+  onCambiarAbierta,
   children,
 }: {
   titulo: ReactNode
@@ -101,16 +129,30 @@ export function Tarjeta({
   tour?: string
   /** Si se puede desplegar/colapsar. Por defecto sí. */
   colapsable?: boolean
+  /**
+   * Si viene presente, esta tarjeta no maneja su propio abierto/cerrado (ni localStorage):
+   * lo decide quien la usa. Sirve para que dos tarjetas (ej. "Pagos de hoy" y "Cobros de hoy")
+   * se abran y cierren siempre juntas con un solo interruptor.
+   */
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
   children: ReactNode
 }) {
   const clave = typeof titulo === 'string' ? titulo : tour ?? ''
-  const [abierta, setAbierta] = useState(true)
+  const esControlada = abiertaControlada !== undefined
+  const [abiertaPropia, setAbiertaPropia] = useState(true)
   useEffect(() => {
-    if (colapsable && clave) setAbierta(leerAbierta(clave))
-  }, [colapsable, clave])
+    if (!esControlada && colapsable && clave) setAbiertaPropia(leerAbierta(clave))
+  }, [esControlada, colapsable, clave])
+
+  const abierta = esControlada ? abiertaControlada : abiertaPropia
 
   function cambiar(valor: boolean) {
-    setAbierta(valor)
+    if (esControlada) {
+      onCambiarAbierta?.(valor)
+      return
+    }
+    setAbiertaPropia(valor)
     try {
       if (clave) window.localStorage.setItem(`bacarnet.tarjeta.${clave}`, valor ? '1' : '0')
     } catch {
@@ -337,14 +379,23 @@ export function CuatroNumeros({ data }: { data: HoyResponse }) {
 export function TarjetaBancos({
   dia,
   onAbrirBanco,
+  abiertaControlada,
+  onCambiarAbierta,
 }: {
   dia: HoyResponse['dia']
   /** Tocar el nombre del banco abre el detalle de cuentas (para cargar el descubierto). */
   onAbrirBanco?: (bancoNombre: string) => void
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
 }) {
   const sugerencia = sugerenciaDesdeDondePagar(dia)
   return (
-    <Tarjeta titulo="Cómo queda cada banco" ayuda="Saldo de cada banco si pagás todo lo de hoy desde ahí.">
+    <Tarjeta
+      titulo="Cómo queda cada banco"
+      ayuda="Saldo de cada banco si pagás todo lo de hoy desde ahí."
+      abiertaControlada={abiertaControlada}
+      onCambiarAbierta={onCambiarAbierta}
+    >
       {dia.bancos.length === 0 ? (
         <Vacio texto="Todavía no hay cuentas en pesos. Traelas desde Saldos." />
       ) : (
@@ -382,7 +433,15 @@ export function TarjetaBancos({
   )
 }
 
-export function TarjetaSemanaGrafico({ prevision }: { prevision: HoyResponse['prevision'] }) {
+export function TarjetaSemanaGrafico({
+  prevision,
+  abiertaControlada,
+  onCambiarAbierta,
+}: {
+  prevision: HoyResponse['prevision']
+  abiertaControlada?: boolean
+  onCambiarAbierta?: (valor: boolean) => void
+}) {
   const dias = (prevision.semana ?? []).slice(0, 5)
   const maximo = Math.max(1, ...dias.flatMap((fila) => [fila.aPagarCentavos, fila.aCobrarCentavos]))
   const pesado = dias.find((fila) => fila.esElMasPesado)
@@ -392,6 +451,8 @@ export function TarjetaSemanaGrafico({ prevision }: { prevision: HoyResponse['pr
       titulo="Esta semana"
       subtitulo="Rojo: a pagar · Verde: a cobrar"
       ayuda="Los próximos cinco días hábiles. Cuanto más alta la barra, más plata se mueve ese día. No incluye lo atrasado (eso está aparte, en Pagos/Cobros atrasados); sí incluye cheques que vencen ese día; un cobro deja de contar acá en cuanto ya llegó al banco."
+      abiertaControlada={abiertaControlada}
+      onCambiarAbierta={onCambiarAbierta}
     >
       {dias.length === 0 ? (
         <Vacio texto="Esta semana no hay nada anotado todavía." />

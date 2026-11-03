@@ -129,6 +129,10 @@ export interface PagoFilaHoy {
   aviso: string | null
   estimada?: boolean
   origen: OrigenCompromisoHoy
+  /** Solo para origen 'vientri-cheque': el cheque es del circuito de proveedores financieros (refinanciación). */
+  esProveedorFinanciero?: boolean
+  /** Solo para medioPago 'cheque': id en la colección de cheques, para poder "Renovar" desde Hoy. */
+  chequeId?: string | null
 }
 
 export interface IngresoFilaHoy {
@@ -163,6 +167,8 @@ export interface SemanaFilaHoy {
   aCobrarCentavos: number
   quedaCentavos: number
   esElMasPesado: boolean
+  /** 4to día hábil del mes: se pagan los sueldos. Se marca aunque no tengamos el monto cargado. */
+  esDiaDeSueldos: boolean
 }
 
 export interface CobroAtrasadoHoy {
@@ -213,6 +219,12 @@ export interface ChequeEnHoy {
   destinatario: string | null
   emisor: string
   cliente: string | null
+  /** Está en la cola de "Pendientes de renovar": no hay que pagarlo hoy, está en gestión. */
+  pendienteRenovacion?: boolean
+  /** Ya se renovó a mano. Queda afuera de Hoy pase lo que pase con el próximo sync de Vientri. */
+  renovadoManualmente?: boolean
+  /** Físico o electrónico. Si no se sabe, no se asume nada (puede venir sin este dato). */
+  tipo?: 'echeq' | 'fisico'
 }
 
 export interface ChequeADebitarFila {
@@ -284,4 +296,6 @@ export interface ArmarHoyInput {
   tipoCambioUsdArs: number | null
   /** Para saber si un vencimiento cae en fin de semana/feriado y correrlo al día hábil, igual que "Compromisos de la semana". */
   feriados: ReadonlySet<string>
+  /** Nombres normalizados (ver normalizarNombre) de proveedores del circuito financiero (refinanciación). */
+  proveedoresFinancieros: ReadonlySet<string>
 }

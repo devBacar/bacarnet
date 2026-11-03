@@ -4,12 +4,41 @@ import { normalizarGrupo, normalizarMoneda } from '../../agenda/domain/compromis
 import { listarPagos } from '../../agenda/domain/pago-compromiso.js'
 import { dateKeyInArgentina } from '../../agenda/domain/vencimiento.alert.js'
 import { listAllCompromisos } from '../../agenda/services/agenda.repository.js'
+import {
+  countChequesFiltrados,
+  pageCheques,
+  type ChequesFiltro,
+  type ChequeListadoItem,
+} from '../../cheques/services/cheques.repository.js'
 import { armarCargaDiaria, type CargaDiaria } from '../domain/carga-diaria.js'
-import type { CompromisoParaPlanilla } from '../domain/compromisos-mes.js'
+import { chequeEmitidoVigente } from '../domain/cheques-hoy.js'
+import { agregarChequesSueltos, sumarDiasCalendario, type CompromisoParaPlanilla } from '../domain/compromisos-mes.js'
 import { feriadosNacionales2026 } from '../domain/feriados-nacionales-2026.js'
 import { fechaHoyArgentina } from '../domain/hoy.fechas.js'
 import type { OrigenCompromisoHoy } from '../domain/hoy.tipos.js'
 import { getTipoCambioMes } from './tipo-cambio-mes.repository.js'
+
+const FILTRO_CHEQUE_EMITIDO_VACIO: Omit<ChequesFiltro, 'direccion' | 'desde' | 'hasta'> = {
+  origen: null,
+  estado: null,
+  tipo: null,
+  vinculacion: null,
+  comprobante: null,
+  q: null,
+}
+
+async function listarChequesEmitidosDelTramo(desde: string, hasta: string): Promise<ChequeListadoItem[]> {
+  const filtro: ChequesFiltro = { ...FILTRO_CHEQUE_EMITIDO_VACIO, direccion: 'emitido', desde, hasta }
+  const total = await countChequesFiltrados(filtro)
+  const filas: ChequeListadoItem[] = []
+  const limit = 300
+  for (let offset = 0; offset < total; offset += limit) {
+    const page = await pageCheques({ filtro, offset, limit })
+    filas.push(...page)
+    if (page.length === 0) break
+  }
+  return filas
+}
 
 function origenDe(value: string | undefined): OrigenCompromisoHoy {
   return value === 'vientri' || value === 'vientri-cheque' || value === 'inversiones' || value === 'planilla' ? value : 'manual'
@@ -57,6 +86,7 @@ function aCompromiso(id: string, data: CompromisoPagoDocument): CompromisoParaPl
     cuotaTotal: null,
     observacion: null,
     pagos: listarPagos(data.pagos),
+    vientriChequeNumero: data.vientriCheque?.numero ?? null,
   }
 }
 
@@ -70,11 +100,20 @@ export async function getCargaDiaria(input: { desde?: string; dias?: number; now
   if (!Number.isInteger(dias) || dias < 1 || dias > DIAS_CARGA_MAXIMO) {
     throw new CargaDiariaError(`Pedí entre 1 y ${DIAS_CARGA_MAXIMO} días`, 400)
   }
-  const [rows, tipo] = await Promise.all([listAllCompromisos(), getTipoCambioMes(desde.slice(0, 7))])
-  const compromisos = rows.flatMap((row) => {
+  const hasta = sumarDiasCalendario(desde, Math.max(1, dias) - 1)
+  const [rows, tipo, chequesDelTramo] = await Promise.all([
+    listAllCompromisos(),
+    getTipoCambioMes(desde.slice(0, 7)),
+    listarChequesEmitidosDelTramo(desde, hasta),
+  ])
+  const bases = rows.flatMap((row) => {
     const mapeado = aCompromiso(row.id, row.data)
     return mapeado ? [mapeado] : []
   })
+  const compromisos = agregarChequesSueltos(
+    bases,
+    chequesDelTramo.filter((cheque) => chequeEmitidoVigente(cheque)),
+  )
   return armarCargaDiaria({
     desde,
     dias,

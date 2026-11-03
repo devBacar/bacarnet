@@ -205,20 +205,45 @@ export async function getCobroDocument(id: string): Promise<CobroEsperadoDocumen
   return snap.data() as CobroEsperadoDocument
 }
 
+/**
+ * "Hoy" y "Compromisos del mes" piden esto varias veces en paralelo en una misma carga de
+ * página: en vez de repetir el scan completo de Firestore para cada request simultáneo,
+ * comparten la misma lectura en vuelo. No es una caché con TTL: apenas termina la lectura,
+ * el próximo llamado vuelve a pegarle a Firestore (sin riesgo de datos desactualizados).
+ */
+let compromisosEnVuelo: Promise<Array<{ id: string; data: CompromisoPagoDocument }>> | null = null
+let cobrosEnVuelo: Promise<Array<{ id: string; data: CobroEsperadoDocument }>> | null = null
+
 /** Sin los anulados (baja lógica): no aparecen en la Agenda, Hoy ni el tablero. */
 export async function listAllCompromisos(): Promise<Array<{ id: string; data: CompromisoPagoDocument }>> {
-  const snap = await adminDb().collection(COMPROMISOS_COLLECTION).get()
-  return snap.docs
-    .map((d) => ({ id: d.id, data: d.data() as CompromisoPagoDocument }))
-    .filter(({ data }) => data.anulado !== true)
+  if (compromisosEnVuelo) return compromisosEnVuelo
+  compromisosEnVuelo = (async () => {
+    const snap = await adminDb().collection(COMPROMISOS_COLLECTION).get()
+    return snap.docs
+      .map((d) => ({ id: d.id, data: d.data() as CompromisoPagoDocument }))
+      .filter(({ data }) => data.anulado !== true)
+  })()
+  try {
+    return await compromisosEnVuelo
+  } finally {
+    compromisosEnVuelo = null
+  }
 }
 
 /** Sin los anulados (baja lógica). */
 export async function listAllCobros(): Promise<Array<{ id: string; data: CobroEsperadoDocument }>> {
-  const snap = await adminDb().collection(COBROS_COLLECTION).get()
-  return snap.docs
-    .map((d) => ({ id: d.id, data: d.data() as CobroEsperadoDocument }))
-    .filter(({ data }) => data.anulado !== true)
+  if (cobrosEnVuelo) return cobrosEnVuelo
+  cobrosEnVuelo = (async () => {
+    const snap = await adminDb().collection(COBROS_COLLECTION).get()
+    return snap.docs
+      .map((d) => ({ id: d.id, data: d.data() as CobroEsperadoDocument }))
+      .filter(({ data }) => data.anulado !== true)
+  })()
+  try {
+    return await cobrosEnVuelo
+  } finally {
+    cobrosEnVuelo = null
+  }
 }
 
 export async function listCompromisoHistorial(compromisoId: string) {

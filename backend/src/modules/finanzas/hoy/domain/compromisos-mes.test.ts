@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
 import type { CompromisoParaPlanilla } from './compromisos-mes.js'
 import {
+  agregarChequesSueltos,
   armarColumnasMes,
   armarPlanillaMes,
   arsConvertido,
   clasificarDia,
+  esDiaDeSueldos,
+  type ChequeSueltoParaPlanilla,
   GRUPO_VISTA_GASTOS_FINANCIEROS,
   ubicarPlanificado,
 } from './compromisos-mes.js'
@@ -33,6 +36,103 @@ function compromiso(parcial: Partial<CompromisoParaPlanilla> & Pick<CompromisoPa
     ...parcial,
   }
 }
+
+describe('día de pago de sueldos (4to día hábil del mes)', () => {
+  it('septiembre 2026: 1=mar, 2=mié, 3=jue, 4=vie → el 4to hábil es el viernes 4', () => {
+    expect(esDiaDeSueldos('2026-09-04', feriados)).toBe(true)
+    expect(esDiaDeSueldos('2026-09-03', feriados)).toBe(false)
+    expect(esDiaDeSueldos('2026-09-07', feriados)).toBe(false)
+  })
+
+  it('octubre 2026: 1=jue, 2=vie, (findes), 5=lun, 6=mar → el 4to hábil es el martes 6', () => {
+    expect(esDiaDeSueldos('2026-10-06', feriados)).toBe(true)
+    expect(esDiaDeSueldos('2026-10-05', feriados)).toBe(false)
+  })
+})
+
+function chequeSuelto(parcial: Partial<ChequeSueltoParaPlanilla> & Pick<ChequeSueltoParaPlanilla, 'id' | 'numero'>): ChequeSueltoParaPlanilla {
+  return {
+    montoCentavos: parcial.montoCentavos ?? 10_000,
+    fechaPago: parcial.fechaPago ?? '2026-09-10',
+    destinatario: parcial.destinatario ?? null,
+    emisor: parcial.emisor ?? 'Alguien',
+    ...parcial,
+  }
+}
+
+describe('cheques sueltos en "Compromisos de esta semana" (mismo criterio que "Hoy pagás")', () => {
+  it('agrega un cheque sin compromiso en la Agenda', () => {
+    const resultado = agregarChequesSueltos([], [chequeSuelto({ id: 'chq-1', numero: '999', montoCentavos: 300_000 })])
+    expect(resultado).toHaveLength(1)
+    expect(resultado[0]).toMatchObject({
+      id: 'cheque-chq-1',
+      montoCentavos: 300_000,
+      origen: 'vientri-cheque',
+      medioPago: 'cheque',
+      chequeId: 'chq-1',
+    })
+  })
+
+  it('no duplica un cheque que ya está contado como compromiso "vientri-cheque" del mismo día', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-1',
+        fechaVencimiento: '2026-09-10',
+        montoCentavos: 500_000,
+        origen: 'vientri-cheque',
+        medioPago: 'cheque',
+        vientriChequeNumero: '50095064',
+      }),
+    ]
+    const resultado = agregarChequesSueltos(compromisos, [
+      chequeSuelto({ id: 'chq-1', numero: '50095064', fechaPago: '2026-09-10', montoCentavos: 500_000 }),
+    ])
+    expect(resultado).toHaveLength(1)
+    expect(resultado[0]?.id).toBe('vientri-cheque-chq-1')
+  })
+
+  it('si el compromiso ya no está abierto (pagado), el cheque suelto sí se agrega', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-1',
+        fechaVencimiento: '2026-09-10',
+        estado: 'pagado',
+        origen: 'vientri-cheque',
+        medioPago: 'cheque',
+        vientriChequeNumero: '50095064',
+      }),
+    ]
+    const resultado = agregarChequesSueltos(compromisos, [
+      chequeSuelto({ id: 'chq-1', numero: '50095064', fechaPago: '2026-09-10' }),
+    ])
+    expect(resultado).toHaveLength(2)
+  })
+
+  it('un cheque suelto "pendiente de renovar" no se agrega: está en gestión, no se paga', () => {
+    const resultado = agregarChequesSueltos(
+      [],
+      [chequeSuelto({ id: 'chq-1', numero: '999', montoCentavos: 300_000, pendienteRenovacion: true })],
+    )
+    expect(resultado).toHaveLength(0)
+  })
+
+  it('un compromiso "vientri-cheque" cuyo cheque está pendiente de renovar no aparece', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-1',
+        fechaVencimiento: '2026-09-10',
+        montoCentavos: 500_000,
+        origen: 'vientri-cheque',
+        medioPago: 'cheque',
+        vientriChequeNumero: '50095064',
+      }),
+    ]
+    const resultado = agregarChequesSueltos(compromisos, [
+      chequeSuelto({ id: 'chq-1', numero: '50095064', fechaPago: '2026-09-10', montoCentavos: 500_000, pendienteRenovacion: true }),
+    ])
+    expect(resultado).toHaveLength(0)
+  })
+})
 
 describe('columnas del mes', () => {
   it('junta cada finde en una sola columna y marca hoy', () => {
@@ -279,6 +379,8 @@ describe('planificado, acumulado y totales', () => {
     expect(gastos?.filas.map((fila) => fila.compromisoId)).toEqual(['comision-echeq'])
     expect(gastos?.subtotal.importe).toEqual({ ars: 50_000, usd: 0 })
     expect(planilla.grupos.map((grupo) => grupo.grupo)).toContain(GRUPO_VISTA_GASTOS_FINANCIEROS)
+    expect(gastos?.filas[0]?.esProveedorFinanciero).toBe(true)
+    expect(proveedores?.filas[0]?.esProveedorFinanciero).toBe(false)
   })
 })
 

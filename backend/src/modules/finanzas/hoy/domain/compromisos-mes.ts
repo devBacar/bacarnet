@@ -90,6 +90,12 @@ export interface CompromisoParaPlanilla {
   cuentaId?: string | null
   transferenciaConfeccionadaId?: string | null
   pagosResumen?: LineaPagoPlanilla[]
+  /**
+   * Solo para origen 'vientri-cheque': número del cheque de Vientri. Sirve para no sumar dos
+   * veces el mismo cheque si además aparece suelto en el módulo de Cheques (mismo criterio que
+   * "Hoy pagás", ver numerosConCompromisoHoy en hoy.vista.ts).
+   */
+  vientriChequeNumero?: string | null
 }
 
 export interface ChequeAsignado {
@@ -338,6 +344,69 @@ function filaDe(
     arrastreCentavos: deMesAnterior ? diferenciaCentavos : 0,
     pagosResumen: row.pagosResumen ?? [],
   }
+}
+
+/** Lo mínimo de un cheque emitido que hace falta para armarle una fila suelta en la planilla. */
+export interface ChequeSueltoParaPlanilla {
+  id: string
+  numero: string
+  montoCentavos: number
+  fechaPago: string
+  destinatario: string | null
+  emisor: string
+}
+
+/**
+ * Un cheque emitido directo en el módulo de Cheques, sin compromiso vinculado en la Agenda, no
+ * aparecía en "Compromisos de esta semana" (sí aparece en "Hoy", ver filaPagoDeCheque en
+ * hoy.vista.ts). Arma una fila de planilla sintética para ese cheque suelto.
+ */
+export function filaPlanillaDeCheque(cheque: ChequeSueltoParaPlanilla): CompromisoParaPlanilla {
+  const aQuien = cheque.destinatario?.trim() || cheque.emisor
+  return {
+    id: `cheque-${cheque.id}`,
+    concepto: `Cheque Nº ${cheque.numero}`,
+    proveedorONombre: aQuien,
+    montoCentavos: cheque.montoCentavos,
+    fechaVencimiento: cheque.fechaPago,
+    fechaPago: null,
+    estado: 'pendiente',
+    medioPago: 'cheque',
+    grupo: 'Proveedores',
+    moneda: 'ARS',
+    origen: 'vientri-cheque',
+    deudaTotalCentavos: null,
+    cuotaNumero: null,
+    cuotaTotal: null,
+    observacion: null,
+    pagos: [],
+    chequeId: cheque.id,
+    cuentaId: null,
+    transferenciaConfeccionadaId: null,
+  }
+}
+
+/**
+ * Agrega a `compromisos` los cheques sueltos (sin compromiso vinculado) que todavía no estén
+ * representados por un compromiso "vientri-cheque" abierto del mismo día — mismo criterio de
+ * no-duplicado que usa "Hoy pagás" (ver numerosConCompromisoHoy en hoy.vista.ts).
+ */
+export function agregarChequesSueltos(
+  compromisos: readonly CompromisoParaPlanilla[],
+  cheques: readonly ChequeSueltoParaPlanilla[],
+): CompromisoParaPlanilla[] {
+  const numerosConCompromisoPorDia = new Map<string, Set<string>>()
+  for (const row of compromisos) {
+    if (row.origen !== 'vientri-cheque' || !row.vientriChequeNumero) continue
+    if (row.estado !== 'pendiente' && row.estado !== 'vencido') continue
+    const set = numerosConCompromisoPorDia.get(row.fechaVencimiento) ?? new Set<string>()
+    set.add(row.vientriChequeNumero)
+    numerosConCompromisoPorDia.set(row.fechaVencimiento, set)
+  }
+  const sueltos = cheques
+    .filter((cheque) => !numerosConCompromisoPorDia.get(cheque.fechaPago)?.has(cheque.numero))
+    .map(filaPlanillaDeCheque)
+  return [...compromisos, ...sueltos]
 }
 
 function entraEnMes(row: CompromisoParaPlanilla, mes: string): boolean {

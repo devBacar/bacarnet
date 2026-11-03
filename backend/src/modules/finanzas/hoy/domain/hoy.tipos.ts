@@ -163,6 +163,8 @@ export interface SemanaFilaHoy {
   aCobrarCentavos: number
   quedaCentavos: number
   esElMasPesado: boolean
+  /** 4to día hábil del mes: se pagan los sueldos. Se marca aunque no tengamos el monto cargado. */
+  esDiaDeSueldos: boolean
 }
 
 export interface CobroAtrasadoHoy {

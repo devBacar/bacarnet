@@ -1,6 +1,6 @@
 import { presentarEstadoInterbanking } from '../../transferencias/domain/estado-interbanking.js'
 import { armarChequesADebitar, chequesParaLaSemana, chequesQueVencenHoy } from './cheques-hoy.js'
-import { arsConvertido, clasificarDia, sumarDiasCalendario } from './compromisos-mes.js'
+import { arsConvertido, clasificarDia, esDiaDeSueldos, sumarDiasCalendario } from './compromisos-mes.js'
 import {
   diasEntre,
   etiquetaDia,
@@ -493,6 +493,7 @@ export function armarSemana(input: {
   cobrosYaLlegados: Set<string>
   cheques: ChequeEnHoy[]
   tipoCambioUsdArs: number | null
+  feriados: ReadonlySet<string>
 }): { filas: SemanaFilaHoy[] | null; diaMasPesado: string | null } {
   const dias = proximosDiasHabiles(input.hoy, 7)
   const pagar = new Map(dias.map((dia) => [dia, 0]))
@@ -537,6 +538,7 @@ export function armarSemana(input: {
       aCobrarCentavos,
       quedaCentavos: queda,
       esElMasPesado: false,
+      esDiaDeSueldos: esDiaDeSueldos(fecha, input.feriados),
     }
   })
 
@@ -656,6 +658,7 @@ export function armarVistaHoy(input: ArmarHoyInput): HoyVista {
     cobrosYaLlegados: ingresos.llegados,
     cheques: input.cheques,
     tipoCambioUsdArs,
+    feriados,
   })
   const cobrosAtrasados = listarCobrosAtrasados(input.cobros, hoy, ingresos.llegados, feriados)
   const firmas = transferenciasSinFirmar(input.transferencias, input.now)

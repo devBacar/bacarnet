@@ -6,6 +6,7 @@ import {
   armarPlanillaMes,
   arsConvertido,
   clasificarDia,
+  esDiaDeSueldos,
   GRUPO_VISTA_GASTOS_FINANCIEROS,
   ubicarPlanificado,
 } from './compromisos-mes.js'
@@ -33,6 +34,19 @@ function compromiso(parcial: Partial<CompromisoParaPlanilla> & Pick<CompromisoPa
     ...parcial,
   }
 }
+
+describe('día de pago de sueldos (4to día hábil del mes)', () => {
+  it('septiembre 2026: 1=mar, 2=mié, 3=jue, 4=vie → el 4to hábil es el viernes 4', () => {
+    expect(esDiaDeSueldos('2026-09-04', feriados)).toBe(true)
+    expect(esDiaDeSueldos('2026-09-03', feriados)).toBe(false)
+    expect(esDiaDeSueldos('2026-09-07', feriados)).toBe(false)
+  })
+
+  it('octubre 2026: 1=jue, 2=vie, (findes), 5=lun, 6=mar → el 4to hábil es el martes 6', () => {
+    expect(esDiaDeSueldos('2026-10-06', feriados)).toBe(true)
+    expect(esDiaDeSueldos('2026-10-05', feriados)).toBe(false)
+  })
+})
 
 describe('columnas del mes', () => {
   it('junta cada finde en una sola columna y marca hoy', () => {

@@ -12,6 +12,7 @@ export interface DiaCarga {
   cantidad: number
   nivel: NivelCarga
   vsPromedio: number | null
+  esDiaDeSueldos: boolean
 }
 
 export interface CargaMes {

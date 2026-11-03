@@ -182,6 +182,25 @@ export function clasificarDia(iso: string, feriados: ReadonlySet<string>): TipoC
   return 'habil'
 }
 
+/**
+ * Los sueldos se pagan el 4to día hábil de cada mes. Todavía no tenemos el monto real conectado
+ * (hay una sincronización cruda de la base de Salario, pero no una forma confiable de sacar de ahí
+ * "el neto a pagar" de este mes), así que por ahora solo marcamos el día para que no pase desapercibido.
+ */
+export function esDiaDeSueldos(fecha: string, feriados: ReadonlySet<string>): boolean {
+  const [anio, mes] = fecha.split('-').map((parte) => Number(parte))
+  let cursor = `${String(anio).padStart(4, '0')}-${String(mes).padStart(2, '0')}-01`
+  let habiles = 0
+  for (let i = 0; i < 31; i += 1) {
+    if (clasificarDia(cursor, feriados) === 'habil') {
+      habiles += 1
+      if (habiles === 4) return cursor === fecha
+    }
+    cursor = sumarDiasCalendario(cursor, 1)
+  }
+  return false
+}
+
 export function armarColumnasMes(mes: string, hoy: string, feriados: ReadonlySet<string>): ColumnaDia[] {
   const columnas: ColumnaDia[] = []
   for (const fecha of diasDelMes(mes)) {

@@ -3,7 +3,7 @@
  * Funciones puras: sin React, sin fetch. Todo en centavos de pesos.
  */
 
-export type TonoEstado = 'verde' | 'ambar' | 'rojo' | 'gris'
+export type TonoEstado = 'verde' | 'ambar' | 'rojo' | 'gris' | 'azul' | 'violeta'
 
 export type ClaveEstadoDescubierto =
   | 'a_favor'
@@ -67,4 +67,6 @@ export const ETIQUETA_ESTADO_CLASES: Record<TonoEstado, string> = {
   ambar: 'bg-amber-100 text-amber-900 dark:bg-amber-900/40 dark:text-amber-200',
   rojo: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200',
   gris: 'bg-neutral-100 text-neutral-600 dark:bg-zinc-800 dark:text-gray-300',
+  azul: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+  violeta: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200',
 }

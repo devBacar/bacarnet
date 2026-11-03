@@ -47,6 +47,8 @@ function vista(cheques: ChequeEnHoy[], cuentas: CuentaHoy[] = []) {
     cuentas,
     transferencias: [],
     cheques,
+    tipoCambioUsdArs: null,
+    feriados: new Set(),
   }
   return armarVistaHoy(input)
 }

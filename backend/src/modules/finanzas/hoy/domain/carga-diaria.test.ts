@@ -13,6 +13,7 @@ function comp(parcial: Partial<CompromisoParaPlanilla>): CompromisoParaPlanilla 
     estado: 'pendiente',
     medioPago: 'cheque',
     grupo: 'Proveedores',
+    origen: 'manual',
     moneda: 'ARS',
     deudaTotalCentavos: null,
     cuotaNumero: null,

@@ -15,6 +15,7 @@ import {
 import type { MedioPago, MonedaCompromiso } from '../../agenda/domain/agenda.types.js'
 import { GRUPOS_COMPROMISO } from '../../agenda/domain/grupos-compromiso.js'
 import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
+import type { OrigenCompromisoHoy } from './hoy.tipos.js'
 
 /** Solo vista de planilla: no se guarda en el compromiso. */
 export const GRUPO_VISTA_GASTOS_FINANCIEROS = 'Gastos financieros'
@@ -77,6 +78,7 @@ export interface CompromisoParaPlanilla {
   medioPago: MedioPago
   grupo: string
   moneda: MonedaCompromiso
+  origen: OrigenCompromisoHoy
   deudaTotalCentavos: number | null
   cuotaNumero: number | null
   cuotaTotal: number | null
@@ -100,6 +102,7 @@ export interface FilaPlanilla {
   compromisoId: string
   concepto: string
   proveedorONombre: string
+  origen: OrigenCompromisoHoy
   moneda: MonedaCompromiso
   deudaTotalCentavos: number | null
   importeCentavos: number
@@ -293,6 +296,7 @@ function filaDe(
     compromisoId: row.id,
     concepto: row.concepto,
     proveedorONombre: row.proveedorONombre,
+    origen: row.origen,
     moneda: normalizarMoneda(row.moneda),
     deudaTotalCentavos: normalizarCentavosOpcional(row.deudaTotalCentavos),
     importeCentavos: row.montoCentavos,

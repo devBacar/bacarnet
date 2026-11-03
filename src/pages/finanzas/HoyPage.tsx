@@ -104,6 +104,15 @@ export function FinanzasHoyPage() {
       proveedorONombre: origen.proveedorONombre,
       sugerenciasBanco: pago?.sugerenciasBanco ?? [],
       moneda: origen.moneda,
+      origen:
+        pago?.origen ??
+        (origen.id.startsWith('inv-')
+          ? 'inversiones'
+          : origen.id.startsWith('vientri-cheque-')
+            ? 'vientri-cheque'
+            : origen.id.startsWith('vientri-')
+              ? 'vientri'
+              : 'planilla'),
     })
   }
 
@@ -185,14 +194,14 @@ export function FinanzasHoyPage() {
           {data.vacio ? (
             <p className="text-[13px] text-emerald-800 dark:text-emerald-200">Hoy no hay nada pendiente.</p>
           ) : null}
-          <ResueltoHoy resueltoHoy={data.resueltoHoy} />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosHoy
               pagos={{
                 filas: data.pagos.filas.filter((pago) => !pago.vencido),
-                totalCentavos: data.pagos.filas
-                  .filter((pago) => !pago.vencido)
-                  .reduce((s, f) => s + f.montoCentavos, 0),
+                // Usa el total que ya manda el backend (convierte USD a pesos): sumar de nuevo acá,
+                // fila por fila, sin esa conversión, es lo que hacía que este número y el de arriba
+                // ("Hoy pagás") no coincidieran cuando había pagos en dólares.
+                totalCentavos: data.pagos.totalCentavos,
               }}
               onPagar={setPagoModo}
               onYaPague={setYaPague}
@@ -210,6 +219,7 @@ export function FinanzasHoyPage() {
               puedeOperar={permisos.agenda}
             />
           </div>
+          <ResueltoHoy resueltoHoy={data.resueltoHoy} />
           <div className="grid min-w-0 items-stretch gap-4 lg:grid-cols-2">
             <PagosAtrasados
               pagos={fusionarPorId(

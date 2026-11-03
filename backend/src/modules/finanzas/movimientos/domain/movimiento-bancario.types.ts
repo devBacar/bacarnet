@@ -55,6 +55,8 @@ export interface MovimientoBancarioDocument {
   reservadoPorTransferenciaId?: string | null
   /** Cheque que ya usó este movimiento (traza). Se re-vincula tras cada sync. */
   reservadoPorChequeId?: string | null
+  /** Varios cheques juntos (lote), cuando el banco los compensó en una sola línea. Confirmado a mano. */
+  reservadoPorChequeIds?: string[] | null
   /** Categoría libre. Se reaplica si un sync reemplaza el día y la fila reaparece. */
   categoriaId?: string | null
   /** Texto libre del usuario. También se reaplica junto con la categoría. */

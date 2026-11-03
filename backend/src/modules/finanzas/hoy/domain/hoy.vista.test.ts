@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { formatoPesos, formatoPesosCorto } from './hoy.fechas.js'
-import type { ArmarHoyInput, CobroHoy, CompromisoHoy, CuentaHoy, MovimientoHoy, TransferenciaHoy } from './hoy.tipos.js'
+import type { ArmarHoyInput, ChequeEnHoy, CobroHoy, CompromisoHoy, CuentaHoy, MovimientoHoy, TransferenciaHoy } from './hoy.tipos.js'
 import {
   armarVistaHoy,
   avisoDescubierto,
@@ -8,6 +8,8 @@ import {
   listarCobrosAtrasados,
   seleccionarCobradosHoy,
   seleccionarPagadosHoy,
+  seleccionarPagos,
+  seleccionarPagosAtrasados,
   transferenciasSinFirmar,
 } from './hoy.vista.js'
 
@@ -24,6 +26,7 @@ function compromiso(partial: Partial<CompromisoHoy> & Pick<CompromisoHoy, 'id' |
     cuentaId: null,
     chequeId: null,
     montoTotalCentavos: partial.montoCentavos,
+    moneda: 'ARS',
     fechaPago: null,
     origen: 'manual',
     ...partial,
@@ -34,6 +37,7 @@ function cobro(partial: Partial<CobroHoy> & Pick<CobroHoy, 'id' | 'fechaEsperada
   return {
     clienteONombre: 'Cliente',
     concepto: null,
+    moneda: 'ARS',
     estado: 'esperado',
     cuit: null,
     email: null,
@@ -58,6 +62,20 @@ function credito(partial: Partial<MovimientoHoy> & Pick<MovimientoHoy, 'id' | 'm
   }
 }
 
+function chequeEnHoy(partial: Partial<ChequeEnHoy> & Pick<ChequeEnHoy, 'id' | 'numero' | 'montoCentavos'>): ChequeEnHoy {
+  return {
+    direccion: 'emitido',
+    estado: 'pendiente_debito',
+    utilizado: null,
+    fechaPago: HOY,
+    bancoEmisor: null,
+    destinatario: null,
+    emisor: 'Bacar',
+    cliente: null,
+    ...partial,
+  }
+}
+
 function cuenta(partial: Partial<CuentaHoy> & Pick<CuentaHoy, 'id' | 'bancoNombre' | 'saldoActualCentavos'>): CuentaHoy {
   return {
     tipo: 'CC',
@@ -76,6 +94,8 @@ function base(overrides: Partial<ArmarHoyInput> = {}): ArmarHoyInput {
     cuentas: [],
     transferencias: [],
     cheques: [],
+    tipoCambioUsdArs: null,
+    feriados: new Set(),
     ...overrides,
   }
 }
@@ -129,7 +149,7 @@ describe('hoy: pagos de hoy y vencidos', () => {
     expect(vista.pagosAtrasados.filas.map((fila) => fila.id)).toEqual(['viejo'])
     expect(vista.pagosAtrasados.filas[0]).toMatchObject({
       vencido: true,
-      vencidoTexto: 'Venció hace 3 días',
+      vencidoTexto: 'Venció hace 5 días',
       comoPagar: 'Por banco',
     })
     expect(vista.pagosAtrasados.totalCentavos).toBe(3_000)
@@ -356,6 +376,47 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(viernes?.quedaCentavos).toBe(10_000_000 - 1_000_000 - 8_000_000 + 2_000_000)
   })
 
+  it('en "Compromisos de esta semana" tampoco se duplica un cheque ya contado como compromiso, y convierte USD', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [
+          compromiso({
+            id: 'vientri-cheque-chq-1',
+            fechaVencimiento: HOY,
+            montoCentavos: 500_000,
+            origen: 'vientri-cheque',
+            medioPago: 'cheque',
+            vientriChequeNumero: '50095064',
+          }),
+          compromiso({ id: 'usd-jueves', fechaVencimiento: '2026-10-01', montoCentavos: 100_00, moneda: 'USD' }),
+        ],
+        cheques: [chequeEnHoy({ id: 'chq-1', numero: '50095064', montoCentavos: 500_000 })],
+        tipoCambioUsdArs: 1500,
+      }),
+    )
+    const hoyFila = vista.prevision.semana?.find((fila) => fila.fecha === HOY)
+    // Antes del fix: 500_000 (compromiso) + 500_000 (cheque) = 1_000_000.
+    expect(hoyFila?.aPagarCentavos).toBe(500_000)
+    const jueves = vista.prevision.semana?.find((fila) => fila.fecha === '2026-10-01')
+    expect(jueves?.aPagarCentavos).toBe(15_000_000)
+  })
+
+  it('no muestra atrasados de más de 30 días (quedan archivados, no se borran de la Agenda)', () => {
+    const pagos = [
+      compromiso({ id: 'reciente', fechaVencimiento: '2026-09-15', montoCentavos: 100_00 }),
+      compromiso({ id: 'muy-viejo', fechaVencimiento: '2026-01-01', montoCentavos: 999_00 }),
+    ]
+    const lista = seleccionarPagosAtrasados(pagos, HOY, [], new Set())
+    expect(lista.map((p) => p.id)).toEqual(['reciente'])
+
+    const cobros = [
+      cobro({ id: 'reciente-c', fechaEsperada: '2026-09-15', montoCentavos: 100_00 }),
+      cobro({ id: 'muy-viejo-c', fechaEsperada: '2026-01-01', montoCentavos: 999_00 }),
+    ]
+    const listaCobros = listarCobrosAtrasados(cobros, HOY, new Set(), new Set())
+    expect(listaCobros.map((c) => c.id)).toEqual(['reciente-c'])
+  })
+
   it('lista todos los cobros atrasados, del mayor al menor', () => {
     const cobros = [
       cobro({ id: 'chico', fechaEsperada: '2026-09-20', montoCentavos: 100, clienteONombre: 'Chico' }),
@@ -363,7 +424,7 @@ describe('hoy: semana, atrasos y firmas', () => {
       cobro({ id: 'recien', fechaEsperada: '2026-09-28', montoCentavos: 50_000 }),
       cobro({ id: 'cobrado', fechaEsperada: '2026-09-01', montoCentavos: 80_000, estado: 'confirmado' }),
     ]
-    const lista = listarCobrosAtrasados(cobros, HOY, new Set())
+    const lista = listarCobrosAtrasados(cobros, HOY, new Set(), new Set())
     expect(lista.map((row) => row.id)).toEqual(['recien', 'grande', 'chico'])
     expect(lista[1]).toMatchObject({ haceDias: 20, haceTexto: 'Hace 20 días', email: 'a@b.com' })
     expect(lista[1]?.textoReclamo).toContain('Grande')
@@ -405,6 +466,26 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(resultado.totalCentavos).toBe(350_000)
     expect(resultado.filas.find((f) => f.chequeNumero === 'E-CHEQ 2')).toMatchObject({ medio: 'echeq', montoCentavos: 300_000 })
     expect(resultado.filas.find((f) => f.medio === 'otro')).toMatchObject({ montoCentavos: 50_000, chequeNumero: null })
+  })
+
+  it('seleccionarPagadosHoy: sin desglose (origen vientri-cheque), usa el número de cheque de la Agenda', () => {
+    const compromisos = [
+      compromiso({
+        id: 'vientri-cheque-chq-1',
+        fechaVencimiento: HOY,
+        montoCentavos: 0,
+        montoTotalCentavos: 500_000,
+        estado: 'pagado',
+        fechaPago: HOY,
+        proveedorONombre: 'Bacar Transportadora',
+        medioPago: 'cheque',
+        origen: 'vientri-cheque',
+        vientriChequeNumero: '50095064',
+      }),
+    ]
+    const resultado = seleccionarPagadosHoy(compromisos, HOY)
+    expect(resultado.filas).toHaveLength(1)
+    expect(resultado.filas[0]).toMatchObject({ chequeNumero: '50095064', medio: 'cheque_fisico' })
   })
 
   it('seleccionarCobradosHoy: toma lo cobrado hoy sin importar la fecha esperada', () => {
@@ -453,5 +534,114 @@ describe('hoy: semana, atrasos y firmas', () => {
     expect(vista.prevision.semana).toBeNull()
     expect(vista.prevision.firmas).toBeNull()
     expect(vista.prevision.cobrosAtrasados).toEqual([])
+  })
+})
+
+describe('origen real en las filas (para distinguir Vientri/Inversores/manual en la pantalla)', () => {
+  it('seleccionarPagos y seleccionarPagosAtrasados llevan el origen real del compromiso', () => {
+    const compromisos = [
+      compromiso({ id: 'inv-1-c1', fechaVencimiento: HOY, montoCentavos: 100_00, origen: 'inversiones' }),
+      compromiso({ id: 'vientri-2', fechaVencimiento: '2026-09-01', montoCentavos: 200_00, origen: 'vientri' }),
+    ]
+    const [hoy] = seleccionarPagos(compromisos, HOY, [], new Set())
+    expect(hoy?.origen).toBe('inversiones')
+    const [atrasado] = seleccionarPagosAtrasados(compromisos, HOY, [], new Set())
+    expect(atrasado?.origen).toBe('vientri')
+  })
+
+  it('listarCobrosAtrasados lleva el origen real del cobro', () => {
+    const cobros = [cobro({ id: 'inv-1-ingreso', fechaEsperada: '2026-09-01', montoCentavos: 500_00, origen: 'inversiones' })]
+    const [fila] = listarCobrosAtrasados(cobros, HOY, new Set(), new Set())
+    expect(fila?.origen).toBe('inversiones')
+  })
+})
+
+describe('mismo criterio en todo Hoy: día hábil y conversión de USD', () => {
+  it('un vencimiento de sábado cuenta el viernes, para que coincida con "Compromisos de la semana"', () => {
+    // 2026-10-03 es sábado; el día hábil anterior es 2026-10-02 (viernes).
+    const compromisos = [compromiso({ id: 'sabado', fechaVencimiento: '2026-10-03', montoCentavos: 500_00 })]
+    const [fila] = seleccionarPagos(compromisos, '2026-10-02', [], new Set())
+    expect(fila?.id).toBe('sabado')
+  })
+
+  it('un vencimiento de domingo también cuenta el viernes anterior', () => {
+    // 2026-10-04 es domingo; igual que el sábado, el día hábil anterior es el viernes 2026-10-02.
+    const compromisos = [compromiso({ id: 'domingo', fechaVencimiento: '2026-10-04', montoCentavos: 500_00 })]
+    const [fila] = seleccionarPagos(compromisos, '2026-10-02', [], new Set())
+    expect(fila?.id).toBe('domingo')
+  })
+
+  it('un feriado corre el vencimiento al día hábil anterior, no solo los fines de semana', () => {
+    const feriados = new Set(['2026-10-01']) // jueves feriado inventado
+    const compromisos = [compromiso({ id: 'feriado', fechaVencimiento: '2026-10-01', montoCentavos: 500_00 })]
+    const [fila] = seleccionarPagos(compromisos, '2026-09-30', [], feriados)
+    expect(fila?.id).toBe('feriado')
+  })
+
+  it('"Hoy pagás" convierte los compromisos en USD a pesos con la cotización del día', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [
+          compromiso({ id: 'ars', fechaVencimiento: HOY, montoCentavos: 100_000, moneda: 'ARS' }),
+          compromiso({ id: 'usd', fechaVencimiento: HOY, montoCentavos: 100_00, moneda: 'USD' }),
+        ],
+        tipoCambioUsdArs: 1_500,
+      }),
+    )
+    // 100_000 (ARS) + 100_00 centavos de USD * 1500 = 100_000 + 15_000_000
+    expect(vista.pagos.totalCentavos).toBe(100_000 + 15_000_000)
+    expect(vista.dia.pagosCentavos).toBe(100_000 + 15_000_000)
+  })
+
+  it('un cheque de "vientri-cheque" no se suma dos veces (una como compromiso y otra como cheque)', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [
+          compromiso({
+            id: 'vientri-cheque-chq-1',
+            fechaVencimiento: HOY,
+            montoCentavos: 500_000,
+            origen: 'vientri-cheque',
+            medioPago: 'cheque',
+            vientriChequeNumero: '50095064',
+          }),
+        ],
+        cheques: [chequeEnHoy({ id: 'chq-1', numero: '50095064', montoCentavos: 500_000 })],
+      }),
+    )
+    // Antes del fix esto daba 1_000_000 (contado dos veces): como compromiso Y como cheque del día.
+    expect(vista.dia.pagosCentavos).toBe(500_000)
+  })
+
+  it('un cheque sin compromiso en la Agenda sí se suma (no hay con qué cruzarlo)', () => {
+    const vista = armarVistaHoy(
+      base({
+        cheques: [chequeEnHoy({ id: 'chq-2', numero: '999', montoCentavos: 300_000 })],
+      }),
+    )
+    expect(vista.dia.pagosCentavos).toBe(300_000)
+  })
+
+  it('la tarjeta "Pagos de hoy" incluye ese cheque suelto, para que el total de arriba y el de la tarjeta no difieran', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [compromiso({ id: 'factura-1', fechaVencimiento: HOY, montoCentavos: 100_000 })],
+        cheques: [chequeEnHoy({ id: 'chq-3', numero: '999', montoCentavos: 300_000 })],
+      }),
+    )
+    expect(vista.dia.pagosCentavos).toBe(400_000)
+    expect(vista.pagos.totalCentavos).toBe(400_000)
+    expect(vista.pagos.filas).toHaveLength(2)
+    expect(vista.pagos.filas.map((f) => f.id)).toContain('cheque-chq-3')
+  })
+
+  it('sin cotización cargada, no convierte (usa el monto tal cual para no inventar un valor)', () => {
+    const vista = armarVistaHoy(
+      base({
+        compromisos: [compromiso({ id: 'usd', fechaVencimiento: HOY, montoCentavos: 100_00, moneda: 'USD' })],
+        tipoCambioUsdArs: null,
+      }),
+    )
+    expect(vista.pagos.totalCentavos).toBe(100_00)
   })
 })

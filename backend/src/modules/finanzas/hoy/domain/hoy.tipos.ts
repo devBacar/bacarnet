@@ -10,6 +10,8 @@ export interface CompromisoHoy {
   montoCentavos: number
   /** Monto total del compromiso (sin descontar lo ya pagado). Para mostrar lo pagado hoy. */
   montoTotalCentavos: number
+  /** ARS o USD. Para sumar los totales del día hay que convertir los USD, no sumarlos tal cual. */
+  moneda: 'ARS' | 'USD'
   /** YYYY-MM-DD en Argentina. */
   fechaVencimiento: string
   urgencia: UrgenciaHoy
@@ -24,9 +26,11 @@ export interface CompromisoHoy {
   estimada?: boolean
   /** YYYY-MM-DD en Argentina. Solo si estado === 'pagado'. */
   fechaPago: string | null
-  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  origen: OrigenCompromisoHoy
   /** Con qué se pagó de verdad (cheques con su vencimiento real, etc.). Solo en origen 'vientri'. */
   desglosePago?: DesglosePagoHoy[] | null
+  /** Número del cheque, solo en origen 'vientri-cheque' (ese circuito no arma desglosePago). */
+  vientriChequeNumero?: string | null
 }
 
 export interface DesglosePagoHoy {
@@ -42,6 +46,8 @@ export interface CobroHoy {
   /** Si la agenda no tiene concepto, se usa el nombre del cliente. */
   concepto: string | null
   montoCentavos: number
+  /** ARS o USD. Para sumar los totales del día hay que convertir los USD, no sumarlos tal cual. */
+  moneda: 'ARS' | 'USD'
   fechaEsperada: string
   estado: EstadoCobroHoy
   cuit: string | null
@@ -53,7 +59,7 @@ export interface CobroHoy {
   estimada?: boolean
   /** YYYY-MM-DD en Argentina. Solo si estado === 'confirmado'. */
   fechaConfirmado: string | null
-  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  origen: OrigenCompromisoHoy
   /** Con qué se cobró de verdad (cheques con su vencimiento real, etc.). Solo en origen 'vientri'. */
   desglosePago?: DesglosePagoHoy[] | null
 }
@@ -100,6 +106,8 @@ export interface SugerenciaBanco {
   cuentaId: string
 }
 
+export type OrigenCompromisoHoy = 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+
 export interface PagoFilaHoy {
   id: string
   urgencia: string
@@ -110,6 +118,7 @@ export interface PagoFilaHoy {
   aQuien: string
   concepto: string
   montoCentavos: number
+  moneda: 'ARS' | 'USD'
   comoPagar: string
   medioPago: MedioPagoHoy
   proveedorONombre: string
@@ -119,6 +128,7 @@ export interface PagoFilaHoy {
   /** Aviso visible cuando el cheque ya se emitió y solo falta debitarlo. */
   aviso: string | null
   estimada?: boolean
+  origen: OrigenCompromisoHoy
 }
 
 export interface IngresoFilaHoy {
@@ -126,6 +136,7 @@ export interface IngresoFilaHoy {
   cliente: string
   concepto: string
   montoCentavos: number
+  moneda: 'ARS' | 'USD'
   atrasado: boolean
   atrasadoTexto: string | null
   email: string | null
@@ -135,6 +146,7 @@ export interface IngresoFilaHoy {
   cuentaId: string | null
   textoReclamo: string
   estimada?: boolean
+  origen: OrigenCompromisoHoy
 }
 
 export interface BancoFilaHoy {
@@ -163,6 +175,7 @@ export interface CobroAtrasadoHoy {
   email: string | null
   textoReclamo: string
   estimada?: boolean
+  origen: OrigenCompromisoHoy
 }
 
 /** Agrupación por medio real para "resuelto hoy": qué plata sale/entra hoy y por qué vía. */
@@ -176,7 +189,7 @@ export interface MovimientoDelDiaHoy {
   montoCentavos: number
   medio: MedioResueltoHoy
   chequeNumero: string | null
-  origen: 'manual' | 'vientri' | 'vientri-cheque' | 'inversiones' | 'planilla'
+  origen: OrigenCompromisoHoy
   /** Solo para cheque_fisico/echeq: si el banco ya lo debitó/acreditó. null si no se pudo chequear. */
   debitadoPorBanco: boolean | null
 }
@@ -267,4 +280,8 @@ export interface ArmarHoyInput {
   cuentas: CuentaHoy[]
   transferencias: TransferenciaHoy[]
   cheques: ChequeEnHoy[]
+  /** Para convertir compromisos/cobros en USD a pesos en los totales del día. null si no hay cotización cargada (no se convierte). */
+  tipoCambioUsdArs: number | null
+  /** Para saber si un vencimiento cae en fin de semana/feriado y correrlo al día hábil, igual que "Compromisos de la semana". */
+  feriados: ReadonlySet<string>
 }

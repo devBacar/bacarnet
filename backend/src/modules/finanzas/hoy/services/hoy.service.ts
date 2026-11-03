@@ -12,7 +12,9 @@ import { presentarEstadoInterbanking } from '../../transferencias/domain/estado-
 import { listTransferenciasConfeccionadas } from '../../transferencias/services/transferencias.repository.js'
 import { marcarCompromisoPagadoPorTransferenciaHecha } from '../../agenda/services/compromisos.service.js'
 import { esChequeEnCartera, ordenarCartera } from '../domain/cheques-hoy.js'
+import { feriadosNacionales2026 } from '../domain/feriados-nacionales-2026.js'
 import { fechaHoyArgentina, proximosDiasHabiles, sumarDias } from '../domain/hoy.fechas.js'
+import { getTipoCambioMes } from './tipo-cambio-mes.repository.js'
 import type {
   ChequeCarteraHoy,
   ChequeEnHoy,
@@ -75,6 +77,7 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
       transferenciasEnFirma: listarTransferenciasEnFirma(data.transferenciasEnFirma),
     }),
     montoTotalCentavos: data.montoCentavos,
+    moneda: data.moneda === 'USD' ? 'USD' : 'ARS',
     fechaVencimiento,
     urgencia: parsePrioridadUrgencia(data.urgenciaManual),
     medioPago: medioDe(data.medioPago),
@@ -87,6 +90,7 @@ function mapCompromiso(id: string, data: CompromisoPagoDocument): CompromisoHoy 
     fechaPago: diaDe(data.fechaPago),
     origen: origenDe(data.origen),
     desglosePago: data.vientri?.desglosePago ?? null,
+    vientriChequeNumero: data.vientriCheque?.numero ?? null,
   }
 }
 
@@ -101,6 +105,7 @@ function mapCobro(id: string, data: CobroEsperadoDocument): CobroHoy | null {
     clienteONombre: data.clienteONombre,
     concepto: textoOpcional(data, 'concepto'),
     montoCentavos: data.montoCentavos,
+    moneda: data.moneda === 'USD' ? 'USD' : 'ARS',
     fechaEsperada,
     estado: data.estado,
     cuit: textoOpcional(data, 'cuit'),
@@ -216,7 +221,7 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
   await cerrarCompromisosConTransferenciaHecha(input.actorUid, now)
   const hoy = fechaHoyArgentina(now)
   const hastaSemana = proximosDiasHabiles(hoy, 7).at(-1) ?? hoy
-  const [compromisos, cobros, cuentas, transferencias, movimientos, chequesEmitidos, datosDemo] = await Promise.all([
+  const [compromisos, cobros, cuentas, transferencias, movimientos, chequesEmitidos, datosDemo, tipoCambio] = await Promise.all([
     listAllCompromisos(),
     listAllCobros(),
     listCuentaDocuments(),
@@ -233,6 +238,10 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
     hayDatosDemo().catch((err: unknown) => {
       console.error('[finanzas/hoy] hayDatosDemo', err)
       return false
+    }),
+    getTipoCambioMes(hoy.slice(0, 7)).catch((err: unknown) => {
+      console.error('[finanzas/hoy] tipo de cambio', err)
+      return null
     }),
   ])
 
@@ -271,6 +280,8 @@ export async function armarHoy(input: { actorUid: string; now?: Date }): Promise
     cuentas: cuentasHoy,
     transferencias: transferenciasHoy,
     cheques: chequesEmitidos.map(mapCheque),
+    tipoCambioUsdArs: tipoCambio?.usdArs ?? null,
+    feriados: feriadosNacionales2026(),
   })
   const resueltoHoy = {
     pagos: envolverResuelto(await marcarDebitadoPorBanco(vista.resueltoHoy.pagos.filas, 'emitido')),

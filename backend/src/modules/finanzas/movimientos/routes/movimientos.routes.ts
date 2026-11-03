@@ -3,6 +3,12 @@ import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } fro
 import { enriquecerContrapartes } from '../../contraparte/services/enriquecer-contrapartes.js'
 import { getMovimientoById } from '../services/movimientos.repository.js'
 import {
+  conciliarLoteConMovimiento,
+  MovimientoNoEncontradoError,
+  MovimientoYaConciliadoError,
+  sugerirCombinacionParaMovimiento,
+} from '../../cheques/services/conciliar-lote-cheques.js'
+import {
   MovimientoAnotacionError,
   MovimientosSyncEnCursoError,
   actualizarAnotacionMovimiento,
@@ -149,6 +155,42 @@ finanzasMovimientosRouter.patch('/:id', requireFinanzasPermiso('finanzas_categor
       return
     }
     const message = err instanceof Error ? err.message : 'No se pudo actualizar el movimiento'
+    res.status(400).json({ error: message })
+  }
+})
+
+/** Sugiere qué cheques podrían sumar exacto este movimiento (lote). No concilia nada todavía. */
+finanzasMovimientosRouter.post('/:id/sugerir-cheques', requireFinanzasPermiso('finanzas_categorias'), async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) { res.status(400).json({ error: 'Id inválido' }); return }
+    const sugerencia = await sugerirCombinacionParaMovimiento(id)
+    res.json(sugerencia)
+  } catch (err) {
+    if (err instanceof MovimientoNoEncontradoError) { res.status(404).json({ error: err.message }); return }
+    if (err instanceof MovimientoYaConciliadoError) { res.status(409).json({ error: err.message }); return }
+    console.error('[finanzas/movimientos] sugerir-cheques', err)
+    res.status(500).json({ error: 'No se pudo armar la sugerencia' })
+  }
+})
+
+/** Concilia el movimiento contra los cheques que una persona ya confirmó a mano. */
+finanzasMovimientosRouter.post('/:id/conciliar-lote', requireFinanzasPermiso('finanzas_categorias'), async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id || Array.isArray(id)) { res.status(400).json({ error: 'Id inválido' }); return }
+    const body = (req.body ?? {}) as { chequeIds?: unknown }
+    if (!Array.isArray(body.chequeIds) || body.chequeIds.some((x) => typeof x !== 'string') || body.chequeIds.length === 0) {
+      res.status(400).json({ error: 'Falta la lista de cheques a conciliar' })
+      return
+    }
+    await conciliarLoteConMovimiento({ movimientoId: id, chequeIds: body.chequeIds as string[] })
+    res.json({ mensaje: 'Conciliado' })
+  } catch (err) {
+    if (err instanceof MovimientoNoEncontradoError) { res.status(404).json({ error: err.message }); return }
+    if (err instanceof MovimientoYaConciliadoError) { res.status(409).json({ error: err.message }); return }
+    console.error('[finanzas/movimientos] conciliar-lote', err)
+    const message = err instanceof Error ? err.message : 'No se pudo conciliar'
     res.status(400).json({ error: message })
   }
 })

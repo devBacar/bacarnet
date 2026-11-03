@@ -38,6 +38,7 @@ export function etiquetaOrigenCompromiso(origen: OrigenCompromisoHoy, esProveedo
 }
 
 /** Color de la etiqueta, distinto por origen, para que no se confundan en una lista larga. */
-export function tonoOrigenCompromiso(origen: OrigenCompromisoHoy): TonoEstado {
+export function tonoOrigenCompromiso(origen: OrigenCompromisoHoy, esProveedorFinanciero?: boolean): TonoEstado {
+  if (origen === 'vientri-cheque' && esProveedorFinanciero) return 'cyan'
   return TONO_ORIGEN[origen]
 }

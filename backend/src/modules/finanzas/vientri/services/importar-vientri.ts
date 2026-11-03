@@ -4,7 +4,7 @@
  * Bacarnet nunca escribe en Vientri ni se conecta a su servidor: solo lee los CSV.
  */
 import { sincronizarChequesDesdeVientri } from '../../cheques/services/sincronizar-desde-vientri.js'
-import { CarpetaInvalidaError, procesarCarpeta } from '../domain/procesar.js'
+import { ARCHIVOS_VENTAS_OPCIONALES, CarpetaInvalidaError, procesarCarpeta } from '../domain/procesar.js'
 import { ARCHIVOS_REQUERIDOS } from '../domain/control.js'
 import { aplicarVentana, MESES_VENTANA, restarMeses } from '../domain/ventana.js'
 import { marcarRenovadosPorCadena } from '../domain/cheques-renovados.js'
@@ -19,9 +19,13 @@ import {
   guardarLimpieza,
   leerEstado,
   sincronizarColeccion,
+  VIENTRI_ART,
   VIENTRI_CHEQUES,
+  VIENTRI_COMPROBANTES,
+  VIENTRI_ITEMS_COMPROBANTE,
   VIENTRI_PENDIENTES,
   VIENTRI_PERSONAS,
+  VIENTRI_UNEGOCIO,
   type ConteoEscritura,
 } from './vientri.repository.js'
 
@@ -52,7 +56,7 @@ export async function importarVientri(opts: {
 }): Promise<ResultadoImportacion> {
   const simular = opts.simular === true
   const textos = new Map<string, string>()
-  for (const nombre of ['_control.csv', 'tipos_comprobante.csv', ...ARCHIVOS_REQUERIDOS]) {
+  for (const nombre of ['_control.csv', 'tipos_comprobante.csv', ...ARCHIVOS_REQUERIDOS, ...ARCHIVOS_VENTAS_OPCIONALES]) {
     const t = await opts.leer(nombre)
     if (t !== null) textos.set(nombre, t)
   }
@@ -165,6 +169,37 @@ export async function importarVientri(opts: {
     coleccion: VIENTRI_PENDIENTES,
     docs: pendientes.map((p) => ({ id: p.clave, data: { ...p, conRevisar: p.revisar.length > 0 } })),
   })
+
+  // Ventas (tablero "Ventas"): aditivo, no toca nada de lo anterior. Si items/unegocio/art no vinieron
+  // en esta exportación, igual se sincronizan los comprobantes (con idUnegocio null).
+  try {
+    conteos.ventasComprobantes = await sincronizarColeccion({
+      ...comunes,
+      coleccion: VIENTRI_COMPROBANTES,
+      docs: proc.ventas.comprobantes.map((c) => ({ id: `cmp-${c.id}`, data: c })),
+    })
+    if (proc.ventas.items.length > 0) {
+      conteos.ventasItems = await sincronizarColeccion({
+        ...comunes,
+        coleccion: VIENTRI_ITEMS_COMPROBANTE,
+        docs: proc.ventas.items.map((i) => ({ id: i.id, data: i })),
+      })
+    }
+    conteos.ventasUnegocio = await sincronizarColeccion({
+      ...comunes,
+      coleccion: VIENTRI_UNEGOCIO,
+      docs: proc.ventas.unegocio.map((u) => ({ id: `un-${u.id}`, data: u })),
+    })
+    if (proc.ventas.art.length > 0) {
+      conteos.ventasArt = await sincronizarColeccion({
+        ...comunes,
+        coleccion: VIENTRI_ART,
+        docs: proc.ventas.art.map((a) => ({ id: `art-${a.id}`, data: a })),
+      })
+    }
+  } catch (err) {
+    console.error('[importar-vientri] sync de ventas falló (la importación de cheques/pendientes se completó)', err)
+  }
 
   // Agenda: se calcula siempre; se escribe solo si está activada (vientriEstado/config.agenda) y no es simulación.
   const agendaActiva = await agendaVientriActivada()

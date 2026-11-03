@@ -9,11 +9,12 @@ export function isDesarrolloProyectosBoard(boardId: string): boolean {
 }
 
 /** Los tableros de RRHH, Finanzas, Negocio y COSP los marca el backend: no hace falta configurar su ID en el frontend. */
-export function boardListHref(boardId: string, tipo?: 'rrhh' | 'finanzas' | 'negocio' | 'cops'): string {
+export function boardListHref(boardId: string, tipo?: 'rrhh' | 'finanzas' | 'negocio' | 'cops' | 'ventas'): string {
   if (tipo === 'rrhh') return '/tableros/rrhh'
   if (tipo === 'finanzas') return '/tableros/finanzas'
   if (tipo === 'negocio') return '/tableros/negocio'
   if (tipo === 'cops') return '/tableros/cops'
+  if (tipo === 'ventas') return '/tableros/ventas'
   if (isDesarrolloProyectosBoard(boardId)) return '/tableros/desarrollo-proyectos'
   return `/tableros/${boardId}`
 }

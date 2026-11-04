@@ -16,6 +16,7 @@ import { finanzasExtractosRouter } from '../extractos/routes/extractos.routes.js
 import { finanzasChequesRouter } from '../cheques/routes/cheques.routes.js'
 import { finanzasTableroRouter } from '../tablero/routes/tablero.routes.js'
 import { finanzasVentasTableroRouter } from '../ventas-tablero/routes/ventas-tablero.routes.js'
+import { finanzasCombustibleTableroRouter } from '../combustible-tablero/routes/combustible-tablero.routes.js'
 import { finanzasVientriRouter } from '../vientri/routes/vientri.routes.js'
 import { finanzasInversionesRouter } from '../inversiones/routes/inversiones.routes.js'
 import { finanzasChequesOcasionalesRouter } from '../vientri/routes/cheques-ocasionales.routes.js'
@@ -40,6 +41,7 @@ finanzasRouter.use('/extractos', finanzasExtractosRouter)
 finanzasRouter.use('/cheques', finanzasChequesRouter)
 finanzasRouter.use('/tablero', finanzasTableroRouter)
 finanzasRouter.use('/ventas-tablero', finanzasVentasTableroRouter)
+finanzasRouter.use('/combustible-tablero', finanzasCombustibleTableroRouter)
 finanzasRouter.use('/vientri', finanzasVientriRouter)
 finanzasRouter.use('/inversiones', finanzasInversionesRouter)
 finanzasRouter.use('/cheques-ocasionales', finanzasChequesOcasionalesRouter)

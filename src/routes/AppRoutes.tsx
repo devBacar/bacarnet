@@ -123,6 +123,11 @@ const TableroVentasPage = lazy(() =>
     default: m.TableroVentasPage,
   })),
 )
+const TableroCombustiblePage = lazy(() =>
+  import('../pages/tablero-combustible/TableroCombustiblePage').then((m) => ({
+    default: m.TableroCombustiblePage,
+  })),
+)
 const NegocioBoard = lazy(() =>
   import('../pages/tableros/NegocioBoard').then((m) => ({ default: m.NegocioBoard })),
 )
@@ -201,6 +206,7 @@ export function AppRoutes() {
               {/* Tablero React de Finanzas: el acceso lo controla la API (mismo esquema que los demás tableros). */}
               <Route path="tableros/finanzas" element={<TableroFinanzasPage />} />
               <Route path="tableros/ventas" element={<TableroVentasPage />} />
+              <Route path="tableros/combustible" element={<TableroCombustiblePage />} />
               {/* Tablero React de Finanzas – Negocio: datos.json de la carpeta de Drive; acceso por la API. */}
               <Route path="tableros/negocio" element={<NegocioBoard />} />
               {/* Tablero COPS: snapshot vía proxy /api/cops; requiere usuario de workspace. */}

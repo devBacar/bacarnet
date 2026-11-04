@@ -1,5 +1,6 @@
 /** Procesa una carpeta de exportación de Vientri ya leída (nombre → texto). Sin Firestore: se puede testear. */
 import { armarCheques, COLUMNAS_CHEQUES, COLUMNAS_CHEQUES_PROPIOS, type ResultadoCheques } from './cheques.js'
+import { armarComprasCombustible, type VientriCompraCombustibleDoc } from './combustible.js'
 import { armarPendientes, COLUMNAS_COMPROBANTES, indiceComprobantes } from './comprobantes.js'
 import { ARCHIVOS_REQUERIDOS, leerControl, verificarArchivo, type ControlCorrida, type ResultadoControl } from './control.js'
 import { CsvError, exigirColumnas, leerCsv, type TablaCsv } from './csv.js'
@@ -23,6 +24,9 @@ import {
 /** Archivos opcionales para el tablero de Ventas: todavía no los genera el export de Vientri. */
 export const ARCHIVOS_VENTAS_OPCIONALES = ['items.csv', 'unegocio.csv', 'art.csv', 'divisa.csv'] as const
 
+/** Archivo opcional para el tablero de Combustible (ver domain/combustible.ts). */
+export const ARCHIVOS_COMBUSTIBLE_OPCIONALES = ['compras_combustible.csv'] as const
+
 export interface ResultadoProcesamiento {
   control: ControlCorrida
   verificacion: ResultadoControl[]
@@ -41,6 +45,10 @@ export interface ResultadoProcesamiento {
     items: VientriItemComprobanteDoc[]
     unegocio: VientriUnegocioDoc[]
     art: VientriArtDoc[]
+  }
+  /** Para el tablero de Combustible. Vacío si compras_combustible.csv todavía no vino en la exportación. */
+  combustible: {
+    compras: VientriCompraCombustibleDoc[]
   }
 }
 
@@ -143,5 +151,9 @@ export function procesarCarpeta(textos: Map<string, string>): ResultadoProcesami
   const art = artTexto ? armarArt(leerCsv(artTexto).filas) : []
   const ventas = { comprobantes: comprobantesVenta, items, unegocio, art }
 
-  return { control, verificacion, personas, cheques, pendientes, resumenCheques: resumen, tiposComprobante, plazos, desglosesPago, ventas }
+  const combustibleTexto = textos.get('compras_combustible.csv')
+  const compras = combustibleTexto ? armarComprasCombustible(leerCsv(combustibleTexto).filas, monedas) : []
+  const combustible = { compras }
+
+  return { control, verificacion, personas, cheques, pendientes, resumenCheques: resumen, tiposComprobante, plazos, desglosesPago, ventas, combustible }
 }

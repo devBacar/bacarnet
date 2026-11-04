@@ -37,6 +37,7 @@ export interface ClientePerdidoTablero {
   vientriId: number
   nombre: string
   centavosMesAnterior: number
+  porUnegocio: Array<{ idUnegocio: number | null; nombre: string; centavosMesAnterior: number }>
 }
 
 export interface MesTendenciaTablero {

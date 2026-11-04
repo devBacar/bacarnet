@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('../../../../lib/firebase/admin.js', () => ({ adminDb: vi.fn() }))
 
 vi.mock('../../agenda/services/proveedores-financieros.repository.js', () => ({
-  nombresNormalizadosProveedoresFinancieros: vi.fn(async () => new Set(['presta plata', 'cambia dolares'])),
-  crearProveedorFinancieroDoc: vi.fn(async () => 'provfin-test'),
+  mapaProveedoresFinancieros: vi.fn(async () => new Map([
+    ['presta plata', { id: 'provfin-presta plata', nombre: 'Presta Plata' }],
+    ['cambia dolares', { id: 'provfin-cambia dolares', nombre: 'Cambia Dolares' }],
+  ])),
 }))
 
 vi.mock('./vientri.repository.js', () => ({
@@ -21,12 +23,20 @@ vi.mock('./completos-ocasionales.js', () => ({
   reconstruirCompletos: vi.fn(async () => ({ total: 3, reales: 3, sinteticos: 0, conteo: { nuevos: 3, cambiados: 0, iguales: 0, borrados: 0 } })),
 }))
 
-import { importarChequesOcasionales } from './importar-cheques-ocasionales.js'
+import {
+  importarChequesOcasionales,
+  REVISAR_PROVEEDOR_NO_CARGADO,
+  REVISAR_SIN_DATOS_FINANCIEROS,
+} from './importar-cheques-ocasionales.js'
 import { sincronizarColeccion } from './vientri.repository.js'
-import { crearProveedorFinancieroDoc } from '../../agenda/services/proveedores-financieros.repository.js'
+import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
 
 const mockSync = vi.mocked(sincronizarColeccion)
-const mockCrearProv = vi.mocked(crearProveedorFinancieroDoc)
+
+function docGuardado(id: string): ChequeOcasionalDoc {
+  const input = mockSync.mock.calls.at(-1)![0]
+  return input.docs.find((d) => d.id === id)!.data as unknown as ChequeOcasionalDoc
+}
 
 const CSV_HEADER = 'vientri_id;numero;numero_completo;id_banco;importe;pagado;fecha_vto;fecha_emision;id_estado;baja;destinatario;obs;id_cheque;fecha_conciliado;id_persona_recibe'
 
@@ -47,7 +57,7 @@ function fila(overrides: Record<string, string> = {}): string {
 }
 
 describe('importarChequesOcasionales', () => {
-  it('parsea CSV con renovación y USD y clasifica proveedores financieros', async () => {
+  it('parsea CSV con renovación y USD; todos son financieros y el que no tiene datos queda a revisar', async () => {
     const csv = [
       CSV_HEADER,
       fila({ vientri_id: '1', numero: '44001111', destinatario: 'Presta Plata', obs: 'Renovacion cheques n° 44000999, 44000998' }),
@@ -62,7 +72,12 @@ describe('importarChequesOcasionales', () => {
     expect(r.resumen.parseados).toBe(3)
     expect(r.resumen.conRenovacion).toBe(1)
     expect(r.resumen.conUsd).toBe(1)
-    expect(r.resumen.proveedoresFinancieros).toBe(2)
+    // Solo "Proveedor Real" (no cargado y con OBS sin datos financieros) queda a revisar.
+    expect(r.resumen.aRevisar).toBe(1)
+    for (const id of ['oca-1', 'oca-2', 'oca-3']) {
+      expect(docGuardado(id).esProveedorFinanciero).toBe(true)
+      expect(docGuardado(id).tipoProveedor).toBe('financiero')
+    }
   })
 
   it('resuelve renovadoPor como link inverso', async () => {
@@ -109,36 +124,103 @@ describe('importarChequesOcasionales', () => {
     expect(sinData.pagado).toBe(false)
   })
 
-  it('crea proveedoresFinancieros nuevos cuando no es simulación', async () => {
-    mockCrearProv.mockClear()
+  it('un proveedor cargado se vincula por su id real y no queda a revisar si el OBS tiene datos', async () => {
     const csv = [
       CSV_HEADER,
-      // "Nuevo Financiero" no está en el set de proveedores, pero OBS tiene renovación → esProveedorFinanciero
-      fila({ vientri_id: '30', destinatario: 'Nuevo Financiero', obs: 'Renovacion cheque n° 44009999' }),
-      // "Presta Plata" ya existe en el set → no se crea
-      fila({ vientri_id: '31', destinatario: 'Presta Plata', obs: '' }),
-      // "Proveedor Real" no es financiero → no se crea
-      fila({ vientri_id: '32', destinatario: 'Proveedor Real', obs: '' }),
+      fila({ vientri_id: '30', destinatario: 'PRESTA  plata', obs: 'Renovacion cheque n° 44009999' }),
     ].join('\n')
 
-    const r = await importarChequesOcasionales({ csv, origen: 'script', actor: 'uid-test', simular: false })
+    await importarChequesOcasionales({ csv, origen: 'script', actor: 'test', simular: true })
 
-    expect(r.proveedoresNuevos).toEqual(['Nuevo Financiero'])
-    expect(mockCrearProv).toHaveBeenCalledOnce()
-    expect(mockCrearProv).toHaveBeenCalledWith('Nuevo Financiero', 'uid-test')
+    const d = docGuardado('oca-30')
+    expect(d.proveedorFinancieroId).toBe('provfin-presta plata')
+    expect(d.revisar).toEqual([])
   })
 
-  it('no crea proveedoresFinancieros en simulación', async () => {
-    mockCrearProv.mockClear()
+  it('un cheque viejo renovado por otro no queda a revisar aunque su OBS esté vacío', async () => {
+    const csv = [
+      CSV_HEADER,
+      fila({ vientri_id: '70', numero: '44000999', numero_completo: '020-111-2222-44000999', destinatario: 'Presta Plata', obs: '' }),
+      fila({ vientri_id: '71', numero: '44001111', numero_completo: '020-111-2222-44001111', destinatario: 'Presta Plata', obs: 'Renovacion cheque n° 44000999' }),
+    ].join('\n')
+
+    await importarChequesOcasionales({ csv, origen: 'script', actor: 'test', simular: true })
+
+    expect(docGuardado('oca-70').revisar).toEqual([])
+    expect(docGuardado('oca-71').revisar).toEqual([])
+  })
+
+  it('un proveedor cargado con OBS sin datos financieros queda a revisar', async () => {
+    const csv = [
+      CSV_HEADER,
+      fila({ vientri_id: '31', destinatario: 'Presta Plata', obs: '' }),
+    ].join('\n')
+
+    await importarChequesOcasionales({ csv, origen: 'script', actor: 'test', simular: true })
+
+    const d = docGuardado('oca-31')
+    expect(d.esProveedorFinanciero).toBe(true)
+    expect(d.revisar).toEqual([REVISAR_SIN_DATOS_FINANCIEROS])
+  })
+
+  it('"Renovación contrato alquiler" a un beneficiario no cargado es financiero pero queda a revisar por proveedor', async () => {
+    const csv = [
+      CSV_HEADER,
+      fila({ vientri_id: '32', destinatario: 'Inmobiliaria X', obs: 'Renovación contrato alquiler' }),
+    ].join('\n')
+
+    await importarChequesOcasionales({ csv, origen: 'script', actor: 'test', simular: true })
+
+    const d = docGuardado('oca-32')
+    expect(d.esProveedorFinanciero).toBe(true)
+    expect(d.proveedorFinancieroId).toBeNull()
+    expect(d.revisar).toEqual([REVISAR_PROVEEDOR_NO_CARGADO])
+  })
+
+  it('lista los proveedores sin cargar sin repetir variantes de mayúsculas y espacios, también en simulación', async () => {
     const csv = [
       CSV_HEADER,
       fila({ vientri_id: '40', destinatario: 'Otro Financiero', obs: 'u$10.000 TC1500' }),
+      fila({ vientri_id: '41', destinatario: 'OTRO  financiero', obs: 'u$10.000 TC1500' }),
+      fila({ vientri_id: '42', destinatario: 'Presta Plata', obs: 'int' }),
     ].join('\n')
 
-    const r = await importarChequesOcasionales({ csv, origen: 'script', actor: 'uid-test', simular: true })
+    const r = await importarChequesOcasionales({ csv, origen: 'script', actor: 'test', simular: true })
 
-    expect(r.proveedoresNuevos).toEqual([])
-    expect(mockCrearProv).not.toHaveBeenCalled()
+    expect(r.proveedoresSinCargar).toEqual(['Otro Financiero'])
+  })
+
+  it('los textos de revisar de la importación no contienen "imposible" (esa palabra oculta el cheque)', () => {
+    expect(REVISAR_PROVEEDOR_NO_CARGADO.toLowerCase()).not.toContain('imposible')
+    expect(REVISAR_SIN_DATOS_FINANCIEROS.toLowerCase()).not.toContain('imposible')
+  })
+
+  it('nunca borra lo que no viene en el CSV y solo actualiza los campos vivos de lo que ya estaba', async () => {
+    mockSync.mockClear()
+    const csv = [
+      CSV_HEADER,
+      fila({ vientri_id: '50', destinatario: 'Presta Plata', obs: 'int' }),
+    ].join('\n')
+
+    await importarChequesOcasionales({ csv, origen: 'manual', actor: 'test', simular: true })
+
+    const input = mockSync.mock.calls[0]![0]
+    expect(input.borrarFaltantes).toBe(false)
+    expect(input.camposVivos).toEqual(['pagado', 'estado', 'estadoCodigo', 'fechaConciliado', 'baja'])
+  })
+
+  it('solo importa los que vencen desde la ventana cuando se pasa desde', async () => {
+    mockSync.mockClear()
+    const csv = [
+      CSV_HEADER,
+      fila({ vientri_id: '60', fecha_vto: '2024-01-10', pagado: '1', destinatario: 'Presta Plata', obs: 'int' }),
+      fila({ vientri_id: '61', fecha_vto: '2026-11-10', destinatario: 'Presta Plata', obs: 'int' }),
+    ].join('\n')
+
+    await importarChequesOcasionales({ csv, origen: 'manual', actor: 'test', simular: true, desde: '2025-11-04' })
+
+    const ids = mockSync.mock.calls[0]![0].docs.map((d) => d.id)
+    expect(ids).toEqual(['oca-61'])
   })
 
   it('marca fechas imposibles para revisar', async () => {

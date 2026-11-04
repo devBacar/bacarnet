@@ -9,6 +9,7 @@ import { analizarInteresVsRenovaciones } from '../domain/analisis-interes-renova
 import { reconstruirCadenas, clasificarCheques, resumirCostoFinanciero } from '../domain/cadena-renovacion.js'
 import { agruparOperacionesRenovacion } from '../domain/operacion-renovacion.js'
 import { armarSeguimiento } from '../domain/seguimiento.js'
+import { MESES_VENTANA, restarMeses } from '../domain/ventana.js'
 import type { FiltroSeguimiento, OperacionPersistida } from '../domain/seguimiento.types.js'
 import { recalcularSeguimiento, VIENTRI_OPERACIONES_RENOVACION } from '../services/recalcular-seguimiento.js'
 import { leerCompletos, reconstruirCompletos } from '../services/completos-ocasionales.js'
@@ -34,23 +35,14 @@ finanzasChequesOcasionalesRouter.get('/', async (req, res) => {
     const todos = await leerTodos()
 
     const filtro = (typeof req.query.filtro === 'string' ? req.query.filtro : '') as
-      | '' | 'financiero' | 'gasto_real' | 'con_renovacion' | 'con_usd'
+      | '' | 'revisar' | 'con_renovacion' | 'con_usd'
     const q = typeof req.query.q === 'string' ? normalizar(req.query.q.trim()) : ''
     const page = Math.max(1, Number(req.query.page) || 1)
 
     let filtrados = todos.filter(
       (d) => !d.baja && !d.revisar.some((r) => r.toLowerCase().includes('imposible')),
     )
-    const esGastoRealValido = (d: ChequeOcasionalDoc) =>
-      !d.esProveedorFinanciero
-      && !d.esRenovacion
-      && d.renovadoPor.length === 0
-      && d.operacionUsd === null
-      && d.beneficiario.trim() !== ''
-      && !d.revisar.some((r) => r.toLowerCase().includes('imposible'))
-
-    if (filtro === 'financiero') filtrados = filtrados.filter((d) => d.esProveedorFinanciero)
-    else if (filtro === 'gasto_real') filtrados = filtrados.filter(esGastoRealValido)
+    if (filtro === 'revisar') filtrados = filtrados.filter((d) => d.revisar.length > 0)
     else if (filtro === 'con_renovacion') filtrados = filtrados.filter((d) => d.renovacionDe.length > 0 || d.renovadoPor.length > 0)
     else if (filtro === 'con_usd') filtrados = filtrados.filter((d) => d.operacionUsd !== null)
 
@@ -109,15 +101,7 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
       (d) => !d.revisar.some((r) => r.toLowerCase().includes('imposible')),
     )
     const pendientes = validos.filter((d) => !d.pagado && d.estadoCodigo !== 5)
-    const finItems = validos.filter((d) => d.esProveedorFinanciero)
-    const gastoRealItems = validos.filter(
-      (d) =>
-        !d.esProveedorFinanciero
-        && !d.esRenovacion
-        && d.renovadoPor.length === 0
-        && d.operacionUsd === null
-        && d.beneficiario.trim() !== '',
-    )
+    const revisarItems = validos.filter((d) => d.revisar.length > 0)
     const renovItems = validos.filter((d) => d.renovacionDe.length > 0 || d.renovadoPor.length > 0)
     const usdItems = validos.filter((d) => d.operacionUsd !== null)
 
@@ -192,10 +176,8 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
       pendientesCantidad: pendientes.length,
       pendientesMontoCentavos: sumMonto(pendientes),
       fechasImposiblesCantidad: 0,
-      financieros: finItems.length,
-      financierosMontoCentavos: sumMonto(finItems),
-      gastoRealCantidad: gastoRealItems.length,
-      gastoRealMontoCentavos: sumMonto(gastoRealItems),
+      revisarCantidad: revisarItems.length,
+      revisarMontoCentavos: sumMonto(revisarItems),
       conRenovacion: renovItems.length,
       conUsd: usdItems.length,
       operacionesUsdUnicas: operacionesUsdAgrupadas.length,
@@ -229,13 +211,17 @@ finanzasChequesOcasionalesRouter.post('/importar', requireFinanzasPermiso('finan
       return
     }
     const csv = parsed.file.buffer.toString('utf-8')
+    // Misma ventana que la importación completa de Vientri: no se traen cheques de más de 12 meses atrás.
+    const desdeQuery = typeof req.query.desde === 'string' ? req.query.desde : ''
+    const desde = /^\d{4}-\d{2}-\d{2}$/.test(desdeQuery) ? desdeQuery : restarMeses(hoyArgentina(), MESES_VENTANA)
     const resultado = await importarChequesOcasionales({
       csv,
       origen: 'manual',
       actor: actorUid,
       simular: false,
+      desde,
     })
-    res.json(resultado)
+    res.status(resultado.ok ? 200 : 500).json(resultado.ok ? resultado : { error: resultado.mensaje })
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] importar', err)
     const message = err instanceof Error ? err.message : 'No se pudo importar el CSV'

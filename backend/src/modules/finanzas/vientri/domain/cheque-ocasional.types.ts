@@ -20,8 +20,6 @@ export interface ObsParseada {
   obsOriginal: string
 }
 
-export type ClasificacionCheque = 'gasto_real' | 'operacion_financiera'
-
 export type RolEnOperacion = 'capital' | 'interes' | 'mixto' | null
 export type RolEnCadena = 'capital' | 'interes' | 'mixto' | null
 
@@ -56,7 +54,6 @@ export interface CadenaRenovacion {
 
 export interface ChequeClasificado {
   numeroCheque: string
-  clasificacion: ClasificacionCheque
   rolEnCadena: RolEnCadena
   cadenaId: string | null
 }

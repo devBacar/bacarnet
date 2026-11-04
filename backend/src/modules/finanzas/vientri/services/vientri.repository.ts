@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { adminDb } from '../../../../lib/firebase/admin.js'
+import { camposVivosCambiados } from '../domain/campos-vivos.js'
 
-export const VIENTRI_CHEQUES = 'vientriCheques'
+export const VIENTRI_CHEQUES ='vientriCheques'
 export const VIENTRI_PENDIENTES = 'vientriPendientes'
 export const VIENTRI_PERSONAS = 'vientriPersonas'
 export const VIENTRI_IMPORTACIONES = 'vientriImportaciones'
@@ -39,12 +40,19 @@ export async function sincronizarColeccion(input: {
   simular: boolean
   /** Campos que otros procesos escriben en el doc y la importación no debe borrar al reescribirlo. */
   conservarCampos?: string[]
+  /**
+   * Los docs que ya existen no se reescriben: solo se actualizan estos campos, y solo si cambiaron.
+   * Los docs nuevos se crean completos. Pensado para colecciones donde lo ya guardado no se pisa.
+   */
+  camposVivos?: string[]
 }): Promise<ConteoEscritura> {
   const col = adminDb().collection(input.coleccion)
   const conservar = input.conservarCampos ?? []
+  const vivos = input.camposVivos
   const existentes = new Map<string, string>()
   const conservados = new Map<string, Record<string, unknown>>()
-  const snap = await col.select('huella', ...conservar).get()
+  const valoresVivos = new Map<string, Record<string, unknown>>()
+  const snap = await col.select('huella', ...conservar, ...(vivos ?? [])).get()
   for (const d of snap.docs) {
     existentes.set(d.id, String(d.get('huella') ?? ''))
     const guardados: Record<string, unknown> = {}
@@ -53,14 +61,32 @@ export async function sincronizarColeccion(input: {
       if (valor !== undefined) guardados[campo] = valor
     }
     if (Object.keys(guardados).length > 0) conservados.set(d.id, guardados)
+    if (vivos) {
+      const actuales: Record<string, unknown> = {}
+      for (const campo of vivos) {
+        const valor = d.get(campo)
+        if (valor !== undefined) actuales[campo] = valor
+      }
+      valoresVivos.set(d.id, actuales)
+    }
   }
 
   const conteo: ConteoEscritura = { nuevos: 0, cambiados: 0, iguales: 0, borrados: 0 }
-  const escrituras: Array<{ id: string; data: object | null }> = []
+  const escrituras: Array<{ id: string; data: object | null; merge?: boolean }> = []
   const vistos = new Set<string>()
   for (const d of input.docs) {
     vistos.add(d.id)
     const h = huella(d.data)
+    if (vivos && existentes.has(d.id)) {
+      const cambios = camposVivosCambiados(valoresVivos.get(d.id) ?? {}, d.data as Record<string, unknown>, vivos)
+      if (!cambios) {
+        conteo.iguales++
+      } else {
+        conteo.cambiados++
+        escrituras.push({ id: d.id, data: { ...cambios, importacionId: input.importacionId }, merge: true })
+      }
+      continue
+    }
     const previa = existentes.get(d.id)
     if (previa === h) {
       conteo.iguales++
@@ -85,6 +111,7 @@ export async function sincronizarColeccion(input: {
     for (const e of escrituras.slice(i, i + LOTE)) {
       const ref = col.doc(e.id)
       if (e.data === null) batch.delete(ref)
+      else if (e.merge) batch.set(ref, { ...e.data, actualizadoAt: FieldValue.serverTimestamp() }, { merge: true })
       else batch.set(ref, { ...e.data, actualizadoAt: FieldValue.serverTimestamp() })
     }
     await batch.commit()

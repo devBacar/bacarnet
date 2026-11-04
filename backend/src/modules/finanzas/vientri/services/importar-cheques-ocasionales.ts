@@ -5,16 +5,26 @@
  * Colección destino: `vientriChequesOcasionales` (ID = vientri_id).
  * Segunda pasada: resuelve `renovadoPor` (link inverso).
  */
+import { FieldValue } from 'firebase-admin/firestore'
+import { adminDb } from '../../../../lib/firebase/admin.js'
 import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
 import {
-  crearProveedorFinancieroDoc,
-  nombresNormalizadosProveedoresFinancieros,
+  mapaProveedoresFinancieros,
+  type ProveedorFinancieroResuelto,
 } from '../../agenda/services/proveedores-financieros.repository.js'
 import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
 import { leerCsv, leerCsvSinHeader, exigirColumnas, type FilaCsv } from '../domain/csv.js'
 import { NOMBRE_ESTADO_CHQ, esBajaChqoca } from '../domain/cheques.js'
 import { parsearObs } from '../domain/parsear-obs.js'
 import type { ProveedorOcasional } from '../domain/prooca.js'
+import {
+  REVISAR_PROVEEDOR_NO_CARGADO,
+  REVISAR_SIN_DATOS_FINANCIEROS,
+  clasificarOcasional,
+  reclasificarDoc,
+} from '../domain/clasificar-ocasional.js'
+import { normalizarDocOcasional } from '../domain/normalizar-doc-ocasional.js'
+import { calcularRenovadoPor } from '../domain/renovado-por.js'
 import { filtrarVentanaConCadenas } from '../domain/ventana-ocasionales.js'
 import { aBool, aCentavos, aEntero, aFecha, aTexto, fechaImposible } from '../domain/valores.js'
 import {
@@ -38,20 +48,11 @@ const COLUMNAS_SIN_HEADER = [
   'obs', 'id_cheque', 'id_persona_recibe',
 ] as const
 
-function esObsFinanciero(obsTexto: string, proveedoresFinancieros: Set<string>): boolean {
-  const norm = normalizarNombre(obsTexto.replace(/[().+,/-]/g, ' '))
-  if (!norm) return false
-  // Patrones explícitos de capital / interés en OBS (ej. "cap + int", "Anderson (Int)", "Int parcial y Cap")
-  if (/\b(intereses|interes|int)\b/.test(norm)) return true
-  for (const pf of proveedoresFinancieros) {
-    if (pf.length >= 4 && norm.includes(pf)) return true
-  }
-  return false
-}
+export { REVISAR_PROVEEDOR_NO_CARGADO, REVISAR_SIN_DATOS_FINANCIEROS }
 
 function filaADoc(
   f: FilaCsv,
-  proveedoresFinancieros: Set<string>,
+  proveedores: Map<string, ProveedorFinancieroResuelto>,
   proocaIndex: Map<number, ProveedorOcasional>,
 ): ChequeOcasionalDoc | null {
   const vientriId = aEntero(f.vientri_id) ?? aEntero(f.numero)
@@ -67,12 +68,17 @@ function filaADoc(
   const beneficiarioFormal = prooca?.nombre ?? null
   const beneficiarioCuit = prooca?.cuit ?? null
 
-  const esProveedorFinanciero =
-    (beneficiarioNorm !== '' && proveedoresFinancieros.has(beneficiarioNorm))
-    || obs.renovacion !== null
-    || obs.operacionUsd !== null
-    || obs.tasaExplicita !== null
-    || (beneficiarioNorm === '' && esObsFinanciero(obs.obsOriginal, proveedoresFinancieros))
+  const clasificacion = clasificarOcasional(
+    beneficiarioNorm,
+    {
+      esRenovacion: obs.renovacion !== null,
+      esRenovadoPorOtro: false,
+      tieneUsd: obs.operacionUsd !== null,
+      tieneTasaExplicita: obs.tasaExplicita !== null,
+      tieneRol: obs.rol !== null,
+    },
+    proveedores,
+  )
 
   const estadoCodigo = aEntero(f.id_estado)
   const estado = estadoCodigo !== null
@@ -84,6 +90,7 @@ function filaADoc(
   if (fechaImposible(fechaVencimiento)) revisar.push(`Fecha imposible (${fechaVencimiento})`)
   if (montoCentavos <= 0) revisar.push('Importe cero o negativo')
   if (beneficiarioNorm === '') revisar.push('Sin destinatario')
+  revisar.push(...clasificacion.revisarAgregados)
 
   return {
     numeroCheque: (f.numero_completo || f.numero || '').trim(),
@@ -97,8 +104,8 @@ function filaADoc(
     estadoCodigo,
     estado,
     pagado: aBool(f.pagado) || aFecha(f.fecha_conciliado) !== null,
-    esProveedorFinanciero,
-    tipoProveedor: esProveedorFinanciero ? 'financiero' : null,
+    esProveedorFinanciero: clasificacion.esProveedorFinanciero,
+    tipoProveedor: clasificacion.tipoProveedor,
     esRenovacion: obs.renovacion !== null,
     renovacionDe: obs.renovacion?.chequeIds ?? [],
     renovadoPor: [],
@@ -107,9 +114,7 @@ function filaADoc(
     rolEnOperacion: obs.rol,
     obsOriginal: obs.obsOriginal,
     revisar,
-    proveedorFinancieroId: esProveedorFinanciero && beneficiarioNorm !== ''
-      ? `provfin-${beneficiarioNorm.replace(/\//g, '-')}`
-      : null,
+    proveedorFinancieroId: clasificacion.proveedorFinancieroId,
     fechaConciliado: aFecha(f.fecha_conciliado),
     vientriId,
     vientriChqId: aEntero(f.id_cheque),
@@ -118,48 +123,80 @@ function filaADoc(
 }
 
 function resolverRenovadoPor(docs: ChequeOcasionalDoc[]): void {
-  const porNumero = new Map<string, ChequeOcasionalDoc>()
-  for (const d of docs) {
-    if (d.numeroCheque) {
-      porNumero.set(d.numeroCheque, d)
-      const corto = d.numeroCheque.split('-').pop()
-      if (corto && corto !== d.numeroCheque) porNumero.set(corto, d)
-    }
-  }
-
-  for (const nuevo of docs) {
-    for (const numViejo of nuevo.renovacionDe) {
-      const viejo = porNumero.get(numViejo)
-      if (viejo && !viejo.renovadoPor.includes(nuevo.numeroCheque)) {
-        viejo.renovadoPor.push(nuevo.numeroCheque)
-      }
-    }
-  }
+  const renovadoPor = calcularRenovadoPor(docs)
+  docs.forEach((d, i) => { d.renovadoPor = renovadoPor[i]! })
 }
 
-export interface ResultadoSyncProveedores {
-  nuevos: string[]
-  yaExistentes: number
+async function leerBase(): Promise<ChequeOcasionalDoc[]> {
+  const snap = await adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).get()
+  return snap.docs.map((s) => normalizarDocOcasional(s.data() as ChequeOcasionalDoc))
 }
 
-async function sincronizarProveedoresFinancierosDesdeCheques(
-  docs: ChequeOcasionalDoc[],
-  actor: string,
-): Promise<ResultadoSyncProveedores> {
-  const existentes = await nombresNormalizadosProveedoresFinancieros()
+const CAMPOS_DERIVADOS = ['renovadoPor', 'esProveedorFinanciero', 'tipoProveedor', 'proveedorFinancieroId', 'revisar'] as const
+
+/**
+ * Hay campos que no vienen del CSV sino de otros cheques o de la lista de proveedores: `renovadoPor`
+ * (un cheque ya guardado se entera de que lo renovaron recién cuando llega el nuevo) y la clasificación
+ * como proveedor financiero con sus avisos de `revisar` (cambian si se carga un proveedor nuevo o si el
+ * cheque pasa a estar renovado). Se recalculan sobre toda la base y se escriben solo los que difieren.
+ */
+async function sincronizarDerivadosEnBase(): Promise<number> {
+  const [snap, proveedores] = await Promise.all([
+    adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).get(),
+    mapaProveedoresFinancieros(),
+  ])
+  const docs = snap.docs.map((s) => normalizarDocOcasional(s.data() as ChequeOcasionalDoc))
+  const renovadoPor = calcularRenovadoPor(docs)
+
+  const cambios: Array<{ id: string; datos: Pick<ChequeOcasionalDoc, (typeof CAMPOS_DERIVADOS)[number]> }> = []
+  snap.docs.forEach((s, i) => {
+    const actual = { ...docs[i]!, renovadoPor: [...docs[i]!.renovadoPor].sort() }
+    const esperado = reclasificarDoc({ ...actual, renovadoPor: renovadoPor[i]! }, proveedores)
+    const distinto = CAMPOS_DERIVADOS.some((c) => JSON.stringify(actual[c]) !== JSON.stringify(esperado[c]))
+    if (!distinto) return
+    cambios.push({
+      id: s.id,
+      datos: {
+        renovadoPor: esperado.renovadoPor,
+        esProveedorFinanciero: esperado.esProveedorFinanciero,
+        tipoProveedor: esperado.tipoProveedor,
+        proveedorFinancieroId: esperado.proveedorFinancieroId,
+        revisar: esperado.revisar,
+      },
+    })
+  })
+
+  for (let i = 0; i < cambios.length; i += 400) {
+    const batch = adminDb().batch()
+    for (const c of cambios.slice(i, i + 400)) {
+      batch.set(
+        adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).doc(c.id),
+        { ...c.datos, actualizadoAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      )
+    }
+    await batch.commit()
+  }
+  return cambios.length
+}
+
+/** Campos que Vientri cambia con el tiempo: son los únicos que se actualizan en un cheque que ya estaba guardado. */
+export const CAMPOS_VIVOS_OCASIONALES = ['pagado', 'estado', 'estadoCodigo', 'fechaConciliado', 'baja'] as const
+
+/**
+ * Nombres de beneficiarios que no están en `proveedoresFinancieros`, sin repetir. La importación no
+ * los da de alta sola: se listan para que Finanzas los cargue (así no se duplican variantes del nombre).
+ */
+export function proveedoresSinCargar(docs: ChequeOcasionalDoc[]): string[] {
   const vistos = new Set<string>()
-  const nuevos: string[] = []
-
+  const nombres: string[] = []
   for (const d of docs) {
-    if (!d.esProveedorFinanciero || d.beneficiarioNormalizado === '') continue
-    if (existentes.has(d.beneficiarioNormalizado)) continue
+    if (d.baja || !d.revisar.includes(REVISAR_PROVEEDOR_NO_CARGADO)) continue
     if (vistos.has(d.beneficiarioNormalizado)) continue
     vistos.add(d.beneficiarioNormalizado)
-    await crearProveedorFinancieroDoc(d.beneficiario, actor)
-    nuevos.push(d.beneficiario)
+    nombres.push(d.beneficiario)
   }
-
-  return { nuevos, yaExistentes: existentes.size }
+  return nombres
 }
 
 export interface ResultadoImportacionOcasionales {
@@ -173,13 +210,15 @@ export interface ResultadoImportacionOcasionales {
     parseados: number
     conRenovacion: number
     conUsd: number
-    proveedoresFinancieros: number
+    aRevisar: number
     fechasImposibles: number
   }
   seguimiento: ResultadoSeguimiento | null
   seguimientoError: string | null
-  proveedoresNuevos: string[]
+  /** Beneficiarios que no están cargados en Proveedores financieros (no se crean solos). */
+  proveedoresSinCargar: string[]
   completos: ResultadoCompletos | null
+  completosError: string | null
 }
 
 export interface ResumenChequesOcasionales {
@@ -187,7 +226,7 @@ export interface ResumenChequesOcasionales {
   parseados: number
   conRenovacion: number
   conUsd: number
-  proveedoresFinancieros: number
+  aRevisar: number
   fechasImposibles: number
 }
 
@@ -209,24 +248,26 @@ export async function armarChequesOcasionales(opts: {
     : leerCsvSinHeader(opts.csv, [...COLUMNAS_SIN_HEADER])
   if (tieneHeader) exigirColumnas(tabla, 'cheques_ocasionales.csv', COLUMNAS_CON_HEADER)
 
-  const proveedoresFinancieros = await nombresNormalizadosProveedoresFinancieros()
+  const proveedores = await mapaProveedoresFinancieros()
   const proocaIndex = opts.proocaIndex ?? new Map<number, ProveedorOcasional>()
 
   const todos: ChequeOcasionalDoc[] = []
   for (const f of tabla.filas) {
-    const doc = filaADoc(f, proveedoresFinancieros, proocaIndex)
+    const doc = filaADoc(f, proveedores, proocaIndex)
     if (doc) todos.push(doc)
   }
 
   const docs = opts.desde ? filtrarVentanaConCadenas(todos, opts.desde) : todos
   resolverRenovadoPor(docs)
+  // Con las renovaciones ya resueltas, los avisos de revisar se recalculan (un cheque renovado por otro no queda sin datos).
+  for (const d of docs) d.revisar = reclasificarDoc(d, proveedores).revisar
 
   const resumen: ResumenChequesOcasionales = {
     filas: tabla.filas.length,
     parseados: docs.length,
     conRenovacion: docs.filter((d) => d.esRenovacion).length,
     conUsd: docs.filter((d) => d.operacionUsd !== null).length,
-    proveedoresFinancieros: docs.filter((d) => d.esProveedorFinanciero).length,
+    aRevisar: docs.filter((d) => d.revisar.length > 0).length,
     fechasImposibles: docs.filter((d) => d.revisar.some((r) => r.includes('imposible'))).length,
   }
 
@@ -251,48 +292,64 @@ export async function importarChequesOcasionales(opts: {
 
   const docsParaSync = docs.map((d) => ({ id: `oca-${d.vientriId}`, data: d as unknown as object }))
 
-  const conteo = await sincronizarColeccion({
-    coleccion: VIENTRI_CHEQUES_OCASIONALES,
-    docs: docsParaSync,
-    importacionId: importacionId ?? 'simulacion',
-    borrarFaltantes: true,
-    simular,
-    conservarCampos: ['movimientoBancarioId', 'movimientoCuentaId', 'movimientoFecha'],
-  })
+  // Nunca se borra: lo que ya está guardado y no viene en el CSV se deja. Los cheques nuevos se
+  // agregan completos; los que ya estaban solo actualizan sus campos vivos (pagado, estado, baja...).
+  let conteo: ConteoEscritura
+  try {
+    conteo = await sincronizarColeccion({
+      coleccion: VIENTRI_CHEQUES_OCASIONALES,
+      docs: docsParaSync,
+      importacionId: importacionId ?? 'simulacion',
+      borrarFaltantes: false,
+      simular,
+      camposVivos: [...CAMPOS_VIVOS_OCASIONALES],
+    })
+    if (!simular) await sincronizarDerivadosEnBase()
+  } catch (err) {
+    const detalle = err instanceof Error ? err.message : 'error desconocido'
+    console.error('[finanzas/cheques-ocasionales] guardar', err)
+    if (importacionId) {
+      await cerrarImportacion(importacionId, { tipo: 'cheques_ocasionales', ok: false, error: detalle, resumen })
+    }
+    return {
+      ok: false,
+      importacionId,
+      mensaje: `No se pudieron guardar los cheques ocasionales: ${detalle}`,
+      simulado: simular,
+      conteo: null,
+      resumen,
+      seguimiento: null,
+      seguimientoError: null,
+      proveedoresSinCargar: [],
+      completos: null,
+      completosError: null,
+    }
+  }
 
-  // Seguimiento de renovaciones: derivado de los docs recién sincronizados. Si falla no tumba la
-  // importación (los cheques ya están guardados); el error queda en el resultado y en el log.
+  // Seguimiento de renovaciones: derivado de TODOS los cheques guardados (no solo los del CSV, porque
+  // lo anterior se conserva). Si falla no tumba la importación (los cheques ya están guardados); el
+  // error queda en el resultado y en el log.
   let seguimiento: ResultadoSeguimiento | null = null
   let seguimientoError: string | null = null
   if (!simular && importacionId) {
     try {
-      seguimiento = await recalcularSeguimiento({ docs, importacionId })
+      seguimiento = await recalcularSeguimiento({ docs: await leerBase(), importacionId })
     } catch (err) {
       seguimientoError = err instanceof Error ? err.message : 'No se pudo recalcular el seguimiento'
       console.error('[finanzas/cheques-ocasionales] seguimiento', err)
     }
   }
 
-  // Sync proveedores financieros: crea docs para beneficiarios nuevos detectados por OBS.
-  let proveedoresNuevos: string[] = []
-  if (!simular) {
-    try {
-      const syncResult = await sincronizarProveedoresFinancierosDesdeCheques(docs, opts.actor)
-      proveedoresNuevos = syncResult.nuevos
-      if (proveedoresNuevos.length > 0) {
-        console.log(`[finanzas/cheques-ocasionales] ${proveedoresNuevos.length} proveedores financieros nuevos: ${proveedoresNuevos.join(', ')}`)
-      }
-    } catch (err) {
-      console.error('[finanzas/cheques-ocasionales] sync proveedores financieros', err)
-    }
-  }
+  const sinCargar = proveedoresSinCargar(docs)
 
   let completos: ResultadoCompletos | null = null
+  let completosError: string | null = null
   if (!simular && importacionId) {
     try {
       completos = await reconstruirCompletos(importacionId)
       console.log(`[finanzas/cheques-ocasionales] completos: ${completos.total} docs (${completos.reales} reales, ${completos.sinteticos} sintéticos)`)
     } catch (err) {
+      completosError = err instanceof Error ? err.message : 'No se pudieron reconstruir los cheques completos'
       console.error('[finanzas/cheques-ocasionales] completos', err)
     }
   }
@@ -300,24 +357,31 @@ export async function importarChequesOcasionales(opts: {
   if (importacionId) {
     await cerrarImportacion(importacionId, {
       tipo: 'cheques_ocasionales',
-      ok: true,
+      ok: seguimientoError === null && completosError === null,
       resumen,
       conteo,
       seguimiento,
       seguimientoError,
-      proveedoresNuevos,
+      proveedoresSinCargar: sinCargar,
       completos,
+      completosError,
     })
   }
 
   const partes = [
-    `${docs.length} cheques ocasionales procesados (${resumen.conRenovacion} con renovación, ${resumen.conUsd} con USD)`,
+    `${docs.length} cheques ocasionales procesados (${resumen.conRenovacion} con renovación, ${resumen.conUsd} con USD, ${resumen.aRevisar} a revisar)`,
   ]
-  if (proveedoresNuevos.length > 0) {
-    partes.push(`${proveedoresNuevos.length} proveedores financieros nuevos: ${proveedoresNuevos.join(', ')}`)
+  if (sinCargar.length > 0) {
+    const muestra = sinCargar.slice(0, 10).join(', ')
+    const resto = sinCargar.length > 10 ? ` y ${sinCargar.length - 10} más` : ''
+    partes.push(`${sinCargar.length} proveedores sin cargar en Proveedores financieros: ${muestra}${resto}`)
   }
   if (seguimientoError) {
     partes.push(`ATENCIÓN: no se pudo recalcular el seguimiento (${seguimientoError})`)
+  }
+
+  if (completosError) {
+    partes.push(`ATENCIÓN: no se pudieron reconstruir los cheques completos (${completosError})`)
   }
 
   if (completos) {
@@ -333,7 +397,8 @@ export async function importarChequesOcasionales(opts: {
     resumen,
     seguimiento,
     seguimientoError,
-    proveedoresNuevos,
+    proveedoresSinCargar: sinCargar,
     completos,
+    completosError,
   }
 }

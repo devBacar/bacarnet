@@ -5,7 +5,6 @@ import {
   ChevronUp,
   DollarSign,
   Info,
-  Link2,
   RefreshCw,
   Search,
   Upload,
@@ -37,8 +36,7 @@ function formatFecha(iso: string | null): string {
 
 const FILTRO_TABS: [OcasionalesFiltro, string][] = [
   ['', 'Todos'],
-  ['financiero', 'Financieros'],
-  ['gasto_real', 'Gasto real'],
+  ['revisar', 'A revisar'],
   ['con_renovacion', 'Con renovación'],
   ['con_usd', 'Con USD'],
 ]
@@ -259,7 +257,7 @@ export function PestanaOcasionales() {
       {subTabs}
       {resumen ? (
         <>
-          <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="mb-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <ResumenCard
               icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
               label="Compromisos pendientes"
@@ -276,26 +274,15 @@ export function PestanaOcasionales() {
               }
             />
             <ResumenCard
-              icon={<Link2 className="h-4 w-4 text-violet-500" />}
-              label="Circuito financiero"
-              value={String(resumen.financieros)}
+              icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
+              label="A revisar"
+              value={String(resumen.revisarCantidad ?? 0)}
               subvalue={
-                resumen.financierosMontoCentavos != null
-                  ? formatMoneyCentavos(resumen.financierosMontoCentavos, 'ARS')
+                resumen.revisarMontoCentavos != null
+                  ? formatMoneyCentavos(resumen.revisarMontoCentavos, 'ARS')
                   : undefined
               }
-              hint="No son proveedores reales"
-            />
-            <ResumenCard
-              icon={<Link2 className="h-4 w-4 text-slate-500" />}
-              label="Gasto real proveedor"
-              value={String(resumen.gastoRealCantidad ?? Math.max(0, resumen.totalCheques - resumen.financieros))}
-              subvalue={
-                resumen.gastoRealMontoCentavos != null
-                  ? formatMoneyCentavos(resumen.gastoRealMontoCentavos, 'ARS')
-                  : undefined
-              }
-              hint="Fuera del circuito"
+              hint="Cheques para controlar uno por uno"
             />
             <ResumenCard
               icon={<RefreshCw className="h-4 w-4 text-blue-500" />}
@@ -600,11 +587,6 @@ function OcasionalRow({ ch, onAbrir, onVerRenov }: { ch: ChequeOcasionalItem; on
       </td>
       <td className="px-3 py-2">
         <div className="flex flex-wrap gap-1">
-          {ch.esProveedorFinanciero ? (
-            <span className="inline-block rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
-              Financiero
-            </span>
-          ) : null}
           {ch.esRenovacion || ch.renovadoPor.length > 0 ? (
             <button
               type="button"
@@ -620,14 +602,10 @@ function OcasionalRow({ ch, onAbrir, onVerRenov }: { ch: ChequeOcasionalItem; on
               USD
             </span>
           ) : null}
-          {!ch.esProveedorFinanciero && !ch.esRenovacion && ch.renovadoPor.length === 0 && !ch.operacionUsd ? (
-            ch.revisar.length > 0 || !ch.beneficiario.trim() ? (
-              <span className="inline-block rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
-                A revisar
-              </span>
-            ) : (
-              <span className="text-body-muted text-xs">Gasto real</span>
-            )
+          {ch.revisar.length > 0 ? (
+            <span className="inline-block rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+              A revisar
+            </span>
           ) : null}
         </div>
       </td>
@@ -715,15 +693,6 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
                   {ch.beneficiario || '—'} · {ch.estado || (ch.pagado ? 'Pagado' : 'Pendiente')}
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {ch.esProveedorFinanciero || clasif?.clasificacion === 'operacion_financiera' ? (
-                    <span className="inline-block rounded border border-violet-300 bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
-                      Circuito financiero (interés / divisa)
-                    </span>
-                  ) : (
-                    <span className="inline-block rounded border border-neutral-300 bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                      Gasto real de proveedor
-                    </span>
-                  )}
                   {rolLabel ? (
                     <span className="inline-block rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
                       {rolLabel}

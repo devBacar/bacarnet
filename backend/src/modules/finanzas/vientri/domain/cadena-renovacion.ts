@@ -152,8 +152,8 @@ export function reconstruirCadenas(docs: ChequeOcasionalDoc[]): CadenaRenovacion
 }
 
 /**
- * Clasifica cada cheque como gasto real u operación financiera,
- * y le asigna su rol dentro de la cadena si corresponde.
+ * Le asigna a cada cheque su rol dentro de la cadena de renovación, si está en una.
+ * Todos los ocasionales son del circuito financiero, así que no hay otra clasificación.
  */
 export function clasificarCheques(
   docs: ChequeOcasionalDoc[],
@@ -174,24 +174,13 @@ export function clasificarCheques(
       const esUltimo = info.posicion === info.total - 1
       return {
         numeroCheque: d.numeroCheque,
-        clasificacion: 'operacion_financiera' as const,
         rolEnCadena: esPrimero ? 'capital' as const : esUltimo ? 'interes' as const : 'mixto' as const,
         cadenaId: info.cadenaId,
       }
     }
 
-    if (d.esProveedorFinanciero) {
-      return {
-        numeroCheque: d.numeroCheque,
-        clasificacion: 'operacion_financiera' as const,
-        rolEnCadena: null,
-        cadenaId: null,
-      }
-    }
-
     return {
       numeroCheque: d.numeroCheque,
-      clasificacion: 'gasto_real' as const,
       rolEnCadena: null,
       cadenaId: null,
     }

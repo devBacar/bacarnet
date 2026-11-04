@@ -30,6 +30,22 @@ export async function nombresNormalizadosProveedoresFinancieros(): Promise<Set<s
   return new Set(rows.map((row) => row.data.nombreNormalizado).filter(Boolean))
 }
 
+export interface ProveedorFinancieroResuelto {
+  id: string
+  nombre: string
+}
+
+/** Nombre normalizado → proveedor cargado. Es la fuente única para saber a quién corresponde un nombre. */
+export async function mapaProveedoresFinancieros(): Promise<Map<string, ProveedorFinancieroResuelto>> {
+  const rows = await listProveedoresFinancierosDocs()
+  const mapa = new Map<string, ProveedorFinancieroResuelto>()
+  for (const row of rows) {
+    const clave = row.data.nombreNormalizado
+    if (clave) mapa.set(clave, { id: row.id, nombre: row.data.nombre })
+  }
+  return mapa
+}
+
 export async function findProveedorFinancieroPorNombreNormalizado(
   nombreNormalizado: string,
 ): Promise<{ id: string; data: ProveedorFinancieroDocument } | null> {

@@ -37,6 +37,11 @@ export interface MesTendenciaTablero {
   totalCentavos: number
 }
 
+export interface TendenciaUnegocioMes {
+  mes: string
+  porUnegocio: Array<{ idUnegocio: number | null; nombre: string; centavos: number }>
+}
+
 export interface ComparativoInteranual {
   mesAnioAnterior: string
   totalCentavos: number
@@ -63,6 +68,8 @@ export interface TableroVentas {
   concentracionTop5Porcentaje: number | null
   /** Últimos 6 meses (incluido el actual), para el gráfico de evolución. */
   tendencia: MesTendenciaTablero[]
+  /** Igual que `tendencia`, pero con el desglose por unidad de negocio de cada mes (mix mensual). */
+  tendenciaPorUnegocio: TendenciaUnegocioMes[]
   /** Mismo mes, un año atrás. */
   comparativoInteranual: ComparativoInteranual
   /** Solo si `mes` es el mes en curso: ventas acumuladas proyectadas a fin de mes por días hábiles. */

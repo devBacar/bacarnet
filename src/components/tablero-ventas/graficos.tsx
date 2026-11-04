@@ -74,6 +74,73 @@ export function BarraHorizontal({
   )
 }
 
+export function MixMensualPorUnegocio({
+  datos,
+}: {
+  datos: Array<{ mes: string; porUnegocio: Array<{ idUnegocio: number | null; nombre: string; centavos: number }> }>
+}) {
+  const totales = datos.map((d) => d.porUnegocio.reduce((acc, u) => acc + u.centavos, 0))
+  const maximo = Math.max(1, ...totales)
+
+  const nombresPorId = new Map<string, { idUnegocio: number | null; nombre: string; orden: number }>()
+  datos.forEach((d) => {
+    d.porUnegocio.forEach((u) => {
+      const clave = u.idUnegocio !== null ? String(u.idUnegocio) : 'sin-unegocio'
+      if (!nombresPorId.has(clave)) nombresPorId.set(clave, { idUnegocio: u.idUnegocio, nombre: u.nombre, orden: nombresPorId.size })
+    })
+  })
+  const unidades = [...nombresPorId.values()]
+
+  return (
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-end gap-2 sm:gap-3">
+        {datos.map((d, i) => {
+          const total = totales[i]
+          return (
+            <div key={d.mes} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+              <span className="text-[11px] tabular-nums text-neutral-600 dark:text-gray-400">{total > 0 ? plataCorta(total) : ''}</span>
+              <div className="flex h-24 w-full flex-col-reverse overflow-hidden rounded-t-[4px] sm:h-28">
+                {total > 0 ? (
+                  d.porUnegocio
+                    .slice()
+                    .sort((a, b) => {
+                      const ia = nombresPorId.get(a.idUnegocio !== null ? String(a.idUnegocio) : 'sin-unegocio')?.orden ?? 0
+                      const ib = nombresPorId.get(b.idUnegocio !== null ? String(b.idUnegocio) : 'sin-unegocio')?.orden ?? 0
+                      return ia - ib
+                    })
+                    .map((u) => {
+                      const info = nombresPorId.get(u.idUnegocio !== null ? String(u.idUnegocio) : 'sin-unegocio')
+                      const alturaPct = (u.centavos / maximo) * 100
+                      if (alturaPct <= 0) return null
+                      return (
+                        <div
+                          key={u.idUnegocio ?? 'sin-unegocio'}
+                          style={{ height: `${alturaPct}%`, backgroundColor: colorUnegocio(u.idUnegocio, info?.orden ?? 0) }}
+                          title={`${u.nombre}: ${plataCorta(u.centavos)}`}
+                        />
+                      )
+                    })
+                ) : (
+                  <div className="h-1 w-full rounded-t-[4px] bg-neutral-100 dark:bg-zinc-800" />
+                )}
+              </div>
+              <span className="text-[11px] text-neutral-500 dark:text-gray-500">{mesCorto(d.mes)}</span>
+            </div>
+          )
+        })}
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
+        {unidades.map((u) => (
+          <li key={u.idUnegocio ?? 'sin-unegocio'} className="flex items-center gap-1.5 text-[12px] text-neutral-700 dark:text-gray-300">
+            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: colorUnegocio(u.idUnegocio, u.orden) }} />
+            {u.nombre}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function EvolucionMensual({ datos, moneda }: { datos: Array<{ mes: string; totalCentavos: number }>; moneda: 'ARS' | 'USD' }) {
   const maximo = Math.max(1, ...datos.map((d) => d.totalCentavos))
   const mesActual = datos[datos.length - 1]?.mes

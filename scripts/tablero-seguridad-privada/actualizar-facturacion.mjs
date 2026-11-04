@@ -1,48 +1,70 @@
 #!/usr/bin/env node
 /**
  * Tablero "Seguridad Privada" (HTML estático en Drive, carpeta Tableros Gerencia > Financiero > Seguridad Privada):
- * recalcula con datos frescos de Vientri la facturación mensual (tot.fact) y los Ingresos Brutos (tot.iibb) de
- * Seguridad, y reemplaza SOLO esos dos arrays dentro del JSON embebido en el index.html, sin tocar nada más.
+ * recalcula con datos frescos de Vientri la facturación mensual (tot.fact), los Ingresos Brutos (tot.iibb) y las
+ * horas facturadas (tot.hf) de Seguridad, y reemplaza SOLO esos tres arrays dentro del JSON embebido en el
+ * index.html, sin tocar nada más (ni las tablas por cliente, ni ninguna otra sección del informe).
  *
- * Por qué solo estos dos números (de los que pide la Fase 1 acordada: horas, facturación y resultado):
- *   - Horas trabajadas/marcadas/pagadas y sueldos y cargas: dependen del sistema de Sueldos (Salario). Bacarnet
- *     SÍ tiene un pipeline real que ya calcula esto por centro de costo (backend/src/modules/rrhh/domain/evolucion.ts,
- *     alimentado por backend/src/modules/rrhh/services/ingestaRrhh.ts), y el centro de costo "SERVICIO DE SEGURIDAD
- *     PRIVADA" (distinto de "SEGURIDAD PLANTA", que no es Seguridad Privada) ya existe ahí. El bloqueo no es de
- *     datos: es que leerlo requiere Firestore de producción (colección rrhh_informe, con sueldos reales de
- *     personas), y ese acceso quedó pendiente de que alguien lo autorice explícitamente.
- *   - Horas facturadas (tot.hf): se probó reconstruir desde los renglones de factura de Vientri. Para los clientes
- *     facturados "por hora" cierra casi exacto, pero para los clientes de "abono fijo" el tablero viejo convierte
- *     su monto a horas-equivalente con la tarifa de ese cliente, una regla que no está documentada en ningún lado
- *     accesible; reconstruirla a ciegas dio hasta 60% de error contra los meses ya conocidos. Queda sin tocar.
- *   - Otros gastos del servicio (tot.otros): se probó reconstruir con la clasificación oficial de rubro/subrubro
- *     del plan de cuentas de Vientri (gastos_seguridad.sql), pero una parte de ese gasto (la flota propia de
- *     Seguridad) se contabiliza en centros de costo de vehículos individuales ("MOVIL 005", etc.), no en
- *     "SERVICIO DE SEGURIDAD PRIVADA", y depende de una lista externa de vehículos (de Sistemas) que no está en
- *     Vientri ni en Bacarnet. Sin esa lista el número queda sistemáticamente muy por debajo del real (entre 15%
- *     y 60% del valor conocido, probado con varias combinaciones de rubros). Queda sin tocar.
- *   - Resultado: depende de sueldos, otros gastos y gastos generales (que a su vez depende de sueldos de las
- *     áreas de apoyo), así que sigue sin poder recalcularse mientras esos dos puntos sigan bloqueados.
+ * Estado de la Fase 1 acordada (horas, facturación, sueldos/resultado), por pieza:
  *
- * Métodos usados, ambos validados contra los 24 meses que ya tenía el tablero:
+ *   - Facturación (tot.fact): HECHO. <2% de diferencia en 22 de 24 meses contra lo que ya tenía el tablero.
+ *   - Ingresos Brutos (tot.iibb): HECHO. <5% de diferencia en 21 de 23 meses con dato.
+ *   - Horas facturadas (tot.hf): HECHO. ~4% de diferencia en 22 de 23 meses con dato (ver método abajo).
+ *   - Sueldos y cargas (tot.mo) y horas pagadas (tot.hp): BLOQUEADO, pero no por falta de datos. Bacarnet ya
+ *     calcula esto por centro de costo en backend/src/modules/rrhh/domain/evolucion.ts y
+ *     backend/src/modules/rrhh/domain/costosNomina.ts (alimentados por backend/src/modules/rrhh/services/
+ *     ingestaRrhh.ts), y el centro de costo "SERVICIO DE SEGURIDAD PRIVADA" (distinto de "SEGURIDAD PLANTA", que
+ *     no es Seguridad Privada) ya existe ahí. Lo que falta es leer `rrhh_informe/agregado` de Firestore de
+ *     producción (autorizado por el usuario, pero el entorno de este agente lo sigue bloqueando por tratarse de
+ *     un acceso directo a producción con datos de sueldos). Alguien con el permiso correspondiente tiene que
+ *     correr esa lectura; el resto del cálculo (filtrar por cc, sumar por mes) es mecánico.
+ *   - Resultado = facturación − sueldos y cargas − otros gastos − IIBB − gastos generales: depende de sueldos
+ *     (bloqueado arriba) y de otros gastos (bloqueado abajo), así que sigue sin poder calcularse.
+ *   - Otros gastos del servicio (tot.otros): BLOQUEADO. La clasificación oficial de rubro/subrubro del plan de
+ *     cuentas (sql/gastos_seguridad.sql) da cualquier cosa entre 15% y 180% del valor conocido según qué rubros
+ *     se incluyan, nunca cierra. Se investigó por qué: una parte de ese gasto es la flota propia de Seguridad, y
+ *     esa flota NO se contabiliza únicamente en el centro de costo "SERVICIO DE SEGURIDAD PRIVADA": 5 vehículos sí
+ *     están asignados ahí directamente en Vientri (OBJETOSERVICIO.IDCCOSTO: un VW Gol, un VW Fox, un cuatriciclo
+ *     Zanella, una Renault Kangoo y un Renault Sandero), pero la lista real de "vehículos de Seguridad confirmados
+ *     por Sistemas" que ya usaba el tablero (ver dentro del propio JSON, `flotaSP.veh`) tiene 14 vehículos
+ *     (cuatriciclos, motos, autos/camionetas, UTVs) y varios están marcados ahí mismo como "no registrado en
+ *     Vientri". Mezclar el gasto directo de esos 5 vehículos con una estimación proporcional del resto (usando el
+ *     `frac` que ya trae el tablero) sobrestima el número y además hay un mes (jun-2025) con un asiento de ajuste
+ *     por inflación que distorsiona cualquier cálculo mensual de esa cuenta. No se encontró una forma de cerrar
+ *     esto sin inventar una regla nueva, así que queda sin tocar.
  *
- *   Facturación (<2% de diferencia en 22 de 24 meses) = suma de NETO de facturas (FAA, FAB, CFA) con
- *   id_unegocio = 1 ("SERVICIO DE SEGURIDAD") menos la suma de NETO de notas de crédito (NCA, NCB, CCA) del mismo
- *   id_unegocio, agrupado por mes de FEC_CMP (columna `fecha` de comprobantes.csv).
+ * Métodos usados (los tres validados contra los 24 meses que ya tenía el tablero):
  *
- *   Ingresos Brutos (<5% de diferencia en 21 de 23 meses con dato; las excepciones son un mes que ya era
- *   "provisional" en el tablero viejo -se completaba con un promedio porque la contabilidad no estaba cerrada- y
- *   otro con una diferencia puntual del 18% no explicada) = suma de (DEBE - HABER) de las cuentas del rubro
- *   "EGRESOS / CARGAS TRIBUTARIAS" (Impuesto a los Ingresos Brutos, Tasa de Comercio e Industria, multas e
- *   impuestos varios) del centro de costo "SERVICIO DE SEGURIDAD PRIVADA", agrupado por mes de la cabecera del
- *   asiento (columna `mes` de gastos_seguridad.sql). Si un mes da 0 (la contabilidad de ese mes todavía no cerró),
- *   se lo trata como "sin dato nuevo" y se deja el valor que ya tenía el tablero, igual que con facturación.
+ *   Facturación = suma de NETO de facturas (FAA, FAB, CFA) con id_unegocio = 1 ("SERVICIO DE SEGURIDAD") menos la
+ *   suma de NETO de notas de crédito (NCA, NCB, CCA) del mismo id_unegocio, agrupado por mes de FEC_CMP (columna
+ *   `fecha` de comprobantes.csv).
+ *
+ *   Ingresos Brutos = suma de (DEBE - HABER) de las cuentas del rubro "EGRESOS / CARGAS TRIBUTARIAS" (Impuesto a
+ *   los Ingresos Brutos, Tasa de Comercio e Industria, multas e impuestos varios) del centro de costo "SERVICIO DE
+ *   SEGURIDAD PRIVADA", agrupado por mes de la cabecera del asiento (columna `mes` de gastos_seguridad.csv). Un
+ *   mes en 0 se trata como "la contabilidad de ese mes todavía no cerró" y se deja el valor que ya tenía el
+ *   tablero.
+ *
+ *   Horas facturadas = para cada renglón "SERVICIO DE SEGURIDAD PRIVADA" de ventas_items.csv de los clientes de
+ *   Seguridad (la lista de clientes ya la tiene el propio tablero, en `datos.cli`), se suma la cantidad (horas)
+ *   con signo según el tipo de comprobante (+factura, -nota de crédito), agrupado por el MES DE FACTURACIÓN
+ *   (igual que hace el tablero viejo: las facturas del día 1 al 7 cuentan como del mes anterior). Eso da la
+ *   tarifa promedio $/hora de cada mes (importe facturado ÷ horas). A esas horas se les suma el monto "fijo"
+ *   (abono mensual) de CADA cliente de ese mismo mes, convertido a horas-equivalente con esa tarifa promedio:
+ *   la idea del usuario de que la tarifa real está en Vientri (en el precio unitario con el que ya facturan los
+ *   clientes "por hora") funciona. Da ~4% de diferencia en 22 de 23 meses con dato; el único mes raro (jul-2025)
+ *   ya tenía una anomalía puntual en los datos de ese mes (se puede ver comparando `q` contra `hs` de cualquier
+ *   cliente "por hora" en ese mes en el propio `datos.cli` del tablero) y no es un problema del método.
  *
  * Uso:
- *   node actualizar-facturacion.mjs --comprobantes <comprobantes.csv> --html <index.html> --out <salida.html> [--gastos <gastos_seguridad.csv>]
+ *   node actualizar-facturacion.mjs --comprobantes <comprobantes.csv> --html <index.html> --out <salida.html> \
+ *     [--gastos <gastos_seguridad.csv>] [--items <ventas_items.csv>]
  *
- *   --gastos es opcional: sin él, solo se actualiza facturación (igual que antes). Para generarlo, correr
- *   sql/gastos_seguridad.sql contra la base de Vientri (mismo mecanismo que scripts/vientri-export).
+ *   --gastos y --items son opcionales e independientes entre sí: sin --gastos no se toca tot.iibb, sin --items no
+ *   se toca tot.hf. --gastos se genera con sql/gastos_seguridad.sql (en esta misma carpeta); --items con la
+ *   consulta de producción D:\inventario_vientri\exportador\sql\11_ventas_items.sql (no se duplica acá: es una
+ *   consulta de otro tablero, ver el comentario de scripts/vientri-export/exportar_vientri.ps1 sobre el rango
+ *   11-19).
  *
  * No escribe en Drive ni en ningún otro lado: deja el HTML nuevo en --out para que alguien lo revise y lo suba.
  */
@@ -53,6 +75,7 @@ const TIPOS_FACTURA = new Set(['FAA', 'FAB', 'CFA'])
 const TIPOS_NOTA_CREDITO = new Set(['NCA', 'NCB', 'CCA'])
 const RUBRO_IIBB = 'EGRESOS'
 const SUBRUBRO_IIBB = 'CARGAS TRIBUTARIAS'
+const ARTICULO_HORA_SEGURIDAD = 'SERVICIO DE SEGURIDAD PRIVADA'
 
 function parseArgs(argv) {
   const out = {}
@@ -79,6 +102,21 @@ function parseCsv(texto) {
     filas.push(fila)
   }
   return filas
+}
+
+/** Mismo criterio que usa el tablero viejo: las facturas del 1 al 7 cuentan como del mes anterior. */
+function mesDeFacturacion(fecha) {
+  let anio = Number(fecha.slice(0, 4))
+  let mes = Number(fecha.slice(5, 7))
+  const dia = Number(fecha.slice(8, 10))
+  if (dia <= 7) {
+    mes -= 1
+    if (mes === 0) {
+      mes = 12
+      anio -= 1
+    }
+  }
+  return `${String(anio).padStart(4, '0')}-${String(mes).padStart(2, '0')}`
 }
 
 /** { 'YYYY-MM': centavosNeto } para la línea Seguridad, facturas menos notas de crédito. */
@@ -118,11 +156,53 @@ function calcularIibbMensual(filasGastos) {
   return porMes
 }
 
+/** { 'YYYY-MM': horas } de Seguridad: horas facturadas "por hora" más el monto "fijo" de cada cliente convertido
+ * a horas-equivalente con la tarifa promedio ($/hora) de ese mes. `clientesSeguridad` es `datos.cli`, `meses` es
+ * `datos.meses` (mismo orden e índice que los arrays `s.fijo` de cada cliente). */
+function calcularHorasFacturadasMensual(filasItems, mapaTipoComprobante, clientesSeguridad, meses) {
+  const idsClientes = new Set(clientesSeguridad.map((c) => String(c.id)))
+  const horasPorMes = new Map()
+  const importePorMes = new Map()
+
+  for (const fila of filasItems) {
+    if (!idsClientes.has(fila.id_persona)) continue
+    if (fila.articulo !== ARTICULO_HORA_SEGURIDAD) continue
+    const tipo = mapaTipoComprobante.get(fila.id_comprobante)
+    const esFactura = TIPOS_FACTURA.has(tipo)
+    const esNotaCredito = TIPOS_NOTA_CREDITO.has(tipo)
+    if (!esFactura && !esNotaCredito) continue
+    const fecha = fila.fecha || ''
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) continue
+    const mes = mesDeFacturacion(fecha)
+    const cantidad = Number(fila.cantidad)
+    const precio = Number(fila.precio_unitario_neto)
+    if (!Number.isFinite(cantidad) || !Number.isFinite(precio)) continue
+    const signo = esFactura ? 1 : -1
+    horasPorMes.set(mes, (horasPorMes.get(mes) ?? 0) + signo * cantidad)
+    importePorMes.set(mes, (importePorMes.get(mes) ?? 0) + signo * cantidad * precio)
+  }
+
+  // Monto "fijo" (abono) de cada cliente, convertido a horas-equivalente con la tarifa promedio del mismo mes.
+  for (const cliente of clientesSeguridad) {
+    const fijoPorMes = cliente.s?.fijo
+    if (!Array.isArray(fijoPorMes)) continue
+    cliente.s.fijo.forEach((fijo, i) => {
+      if (!fijo) return
+      const mes = meses[i]
+      const tarifa = horasPorMes.get(mes) ? importePorMes.get(mes) / horasPorMes.get(mes) : null
+      if (!tarifa) return
+      horasPorMes.set(mes, (horasPorMes.get(mes) ?? 0) + fijo / tarifa)
+    })
+  }
+
+  return horasPorMes
+}
+
 /** Reemplaza `datos.tot[campo][i]` por el valor de `porMes` para cada mes que tenga dato nuevo; deja el resto igual.
  * Si un mes nuevo da menos del 5% del promedio de los demás meses con dato, lo avisa: probablemente la
  * contabilidad de ese mes todavía no cerró del todo (como con el mes "provisional" que ya manejaba el tablero
  * viejo) y conviene revisarlo a mano antes de subir el HTML en vez de confiar en el número tal cual. */
-function aplicarValores(datos, campo, porMes, etiqueta) {
+function aplicarValores(datos, campo, porMes, etiqueta, { decimales = 0 } = {}) {
   let actualizados = 0
   const sinDatoNuevo = []
   const nuevos = [...porMes.values()]
@@ -131,7 +211,8 @@ function aplicarValores(datos, campo, porMes, etiqueta) {
   datos.meses.forEach((mes, i) => {
     if (porMes.has(mes)) {
       const anterior = datos.tot[campo][i]
-      const nuevo = Math.round(porMes.get(mes))
+      const factor = 10 ** decimales
+      const nuevo = Math.round(porMes.get(mes) * factor) / factor
       if (nuevo !== anterior) actualizados += 1
       if (promedio > 0 && Math.abs(nuevo) < promedio * 0.05) sospechosos.push(mes)
       datos.tot[campo][i] = nuevo
@@ -144,7 +225,7 @@ function aplicarValores(datos, campo, porMes, etiqueta) {
   }
   if (sospechosos.length > 0) {
     console.log(
-      `  ${etiqueta}: OJO, estos meses dieron un valor mucho más chico que el resto (revisar a mano antes de subir, puede ser contabilidad sin cerrar): ${sospechosos.join(', ')}`,
+      `  ${etiqueta}: OJO, estos meses dieron un valor mucho más chico que el resto (revisar a mano antes de subir): ${sospechosos.join(', ')}`,
     )
   }
   console.log(`  ${etiqueta}: ${actualizados} de ${datos.meses.length} meses con valor distinto al que tenía el tablero.`)
@@ -154,7 +235,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2))
   if (!args.comprobantes || !args.html || !args.out) {
     console.error(
-      'Uso: node actualizar-facturacion.mjs --comprobantes <csv> --html <index.html> --out <salida.html> [--gastos <gastos_seguridad.csv>]',
+      'Uso: node actualizar-facturacion.mjs --comprobantes <csv> --html <index.html> --out <salida.html> [--gastos <gastos_seguridad.csv>] [--items <ventas_items.csv>]',
     )
     process.exit(1)
   }
@@ -168,8 +249,15 @@ function main() {
   if (finJson < 0) throw new Error('No encontré el cierre </script> del bloque de datos')
 
   const datos = JSON.parse(html.slice(inicioJson, finJson))
-  if (!Array.isArray(datos.meses) || !datos.tot || !Array.isArray(datos.tot.fact) || !Array.isArray(datos.tot.iibb)) {
-    throw new Error('La forma del JSON embebido cambió (meses/tot.fact/tot.iibb): revisar antes de seguir')
+  if (
+    !Array.isArray(datos.meses) ||
+    !datos.tot ||
+    !Array.isArray(datos.tot.fact) ||
+    !Array.isArray(datos.tot.iibb) ||
+    !Array.isArray(datos.tot.hf) ||
+    !Array.isArray(datos.cli)
+  ) {
+    throw new Error('La forma del JSON embebido cambió (meses/tot.fact/tot.iibb/tot.hf/cli): revisar antes de seguir')
   }
 
   const filasComprobantes = parseCsv(readFileSync(args.comprobantes, 'utf8'))
@@ -182,6 +270,21 @@ function main() {
     aplicarValores(datos, 'iibb', calcularIibbMensual(filasGastos), 'Ingresos Brutos')
   } else {
     console.log('  Ingresos Brutos: no se pasó --gastos, queda sin tocar.')
+  }
+
+  if (args.items) {
+    const mapaTipoComprobante = new Map(filasComprobantes.map((f) => [f.vientri_id, f.nom_tipo]))
+    const filasItems = parseCsv(readFileSync(args.items, 'utf8'))
+    console.log(`Renglones de factura leídos: ${filasItems.length}.`)
+    aplicarValores(
+      datos,
+      'hf',
+      calcularHorasFacturadasMensual(filasItems, mapaTipoComprobante, datos.cli, datos.meses),
+      'Horas facturadas',
+      { decimales: 1 },
+    )
+  } else {
+    console.log('  Horas facturadas: no se pasó --items, queda sin tocar.')
   }
 
   const nuevoBloque = JSON.stringify(datos)

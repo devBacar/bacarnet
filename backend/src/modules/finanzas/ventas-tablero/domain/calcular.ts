@@ -2,7 +2,7 @@ import type {
   ComprobanteVentaRow,
   ItemComprobanteRow,
 } from '../services/ventas-tablero.repository.js'
-import type { ClienteVentaTablero, TableroVentas, UnegocioVentaTablero } from './tipos.js'
+import type { ClienteVentaTablero, ItemVentaTablero, MesTendenciaTablero, TableroVentas, UnegocioVentaTablero } from './tipos.js'
 
 export function armarTableroVentas(input: {
   mes: string
@@ -12,6 +12,7 @@ export function armarTableroVentas(input: {
   comprobantesMesAnteriorTotalCentavos: number
   unegocio: Map<number, string>
   art: Map<number, string>
+  tendencia: MesTendenciaTablero[]
   sinDatosDeItems: boolean
   generadoEn: string
 }): TableroVentas {
@@ -69,6 +70,23 @@ export function armarTableroVentas(input: {
   const variacionPorcentaje =
     input.comprobantesMesAnteriorTotalCentavos > 0 ? ((totalCentavos - input.comprobantesMesAnteriorTotalCentavos) / input.comprobantesMesAnteriorTotalCentavos) * 100 : null
 
+  const cantidadComprobantes = comprobantesMes.length
+  const cantidadClientes = porClienteMap.size
+  const ticketPromedioCentavos = cantidadComprobantes > 0 ? Math.round(totalCentavos / cantidadComprobantes) : 0
+
+  const top5Centavos = clientes.slice(0, 5).reduce((acc, c) => acc + c.centavos, 0)
+  const concentracionTop5Porcentaje = totalCentavos > 0 ? (top5Centavos / totalCentavos) * 100 : null
+
+  const topItemsMap = new Map<string, ItemVentaTablero>()
+  for (const it of itemsMes) {
+    const clave = it.idArt !== null ? String(it.idArt) : 'sin-art'
+    const nombre = it.idArt !== null ? art.get(it.idArt) ?? `Ítem #${it.idArt}` : 'Ítem sin identificar'
+    const existente = topItemsMap.get(clave)
+    if (existente) existente.centavos += it.importeCentavos
+    else topItemsMap.set(clave, { idArt: it.idArt, nombre, centavos: it.importeCentavos })
+  }
+  const topItems = [...topItemsMap.values()].sort((a, b) => b.centavos - a.centavos).slice(0, 8)
+
   return {
     mes: input.mes,
     moneda: input.moneda,
@@ -76,7 +94,13 @@ export function armarTableroVentas(input: {
     totalCentavos,
     totalMesAnteriorCentavos: input.comprobantesMesAnteriorTotalCentavos,
     variacionPorcentaje,
+    cantidadComprobantes,
+    cantidadClientes,
+    ticketPromedioCentavos,
+    concentracionTop5Porcentaje,
+    tendencia: input.tendencia,
     porUnegocio,
+    topItems,
     clientes,
     sinDatosDeItems: input.sinDatosDeItems,
   }

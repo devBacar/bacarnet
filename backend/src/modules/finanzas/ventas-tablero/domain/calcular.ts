@@ -3,6 +3,7 @@ import { inicioMes, mesDeFecha, ultimoDiaMes } from '../../tablero/domain/fechas
 import type {
   ComprobanteVentaRow,
   ItemComprobanteRow,
+  TendenciaMesDetallada,
 } from '../services/ventas-tablero.repository.js'
 import type {
   ClientePerdidoTablero,
@@ -11,6 +12,7 @@ import type {
   MesTendenciaTablero,
   ProyeccionVentas,
   TableroVentas,
+  TendenciaUnegocioMes,
   UnegocioVentaTablero,
 } from './tipos.js'
 
@@ -50,6 +52,7 @@ export function armarTableroVentas(input: {
   unegocio: Map<number, string>
   art: Map<number, string>
   tendencia: MesTendenciaTablero[]
+  tendenciaDetallada: TendenciaMesDetallada[]
   hoy: string
   sinDatosDeItems: boolean
   generadoEn: string
@@ -156,6 +159,17 @@ export function armarTableroVentas(input: {
   }
   const topItems = [...topItemsMap.values()].sort((a, b) => b.centavos - a.centavos).slice(0, 8)
 
+  const tendenciaPorUnegocio: TendenciaUnegocioMes[] = input.tendenciaDetallada.map((t) => ({
+    mes: t.mes,
+    porUnegocio: t.porUnegocio
+      .map((u) => ({
+        idUnegocio: u.idUnegocio,
+        nombre: u.idUnegocio !== null ? unegocio.get(u.idUnegocio) ?? `Unidad #${u.idUnegocio}` : 'Sin unidad de negocio',
+        centavos: u.centavos,
+      }))
+      .sort((a, b) => b.centavos - a.centavos),
+  }))
+
   const variacionInteranual =
     input.totalMismoMesAnioAnteriorCentavos > 0
       ? ((totalCentavos - input.totalMismoMesAnioAnteriorCentavos) / input.totalMismoMesAnioAnteriorCentavos) * 100
@@ -173,6 +187,7 @@ export function armarTableroVentas(input: {
     ticketPromedioCentavos,
     concentracionTop5Porcentaje,
     tendencia: input.tendencia,
+    tendenciaPorUnegocio,
     comparativoInteranual: {
       mesAnioAnterior: input.mesAnioAnterior,
       totalCentavos: input.totalMismoMesAnioAnteriorCentavos,

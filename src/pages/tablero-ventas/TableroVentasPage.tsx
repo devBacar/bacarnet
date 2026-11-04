@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Download, Search, TrendingUp, UserMinus, UserPlus, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { BarraHorizontal, EvolucionMensual, colorCalor, colorUnegocio, estadoVariacion } from '../../components/tablero-ventas/graficos'
+import { BarraHorizontal, EvolucionMensual, MixMensualPorUnegocio, colorCalor, colorUnegocio, estadoVariacion } from '../../components/tablero-ventas/graficos'
 import { TarjetaTablero } from '../../components/tablero-finanzas/TarjetaTablero'
 import { fechaHora, mesLargo, plata, plataCorta, textoPct } from '../../components/tablero-finanzas/formatoTablero'
 import {
@@ -159,6 +159,14 @@ function Evolucion({ datos }: { datos: TableroVentas }) {
   return (
     <TarjetaTablero titulo="Evolución mensual" subtitulo="Facturación total, últimos 6 meses.">
       <EvolucionMensual datos={datos.tendencia} moneda={datos.moneda} />
+    </TarjetaTablero>
+  )
+}
+
+function MixMensual({ datos }: { datos: TableroVentas }) {
+  return (
+    <TarjetaTablero titulo="Mix mensual por unidad de negocio" subtitulo="Composición de la facturación, últimos 6 meses.">
+      <MixMensualPorUnegocio datos={datos.tendenciaPorUnegocio} />
     </TarjetaTablero>
   )
 }
@@ -640,6 +648,7 @@ export function TableroVentasPage() {
           <Kpis datos={datos} />
           {datos.sinDatosDeItems ? <AvisoSinItems /> : null}
           <Evolucion datos={datos} />
+          <MixMensual datos={datos} />
           {mesComparar && tableroComparar.data ? <ComparacionMeses datosA={datos} datosB={tableroComparar.data} moneda={moneda} /> : null}
           <ClientesNuevosPerdidos datos={datos} />
           <div className="grid min-w-0 gap-5 lg:grid-cols-2">

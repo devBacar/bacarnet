@@ -123,4 +123,8 @@ export interface ChequeOcasionalDoc {
   fechaConciliado: string | null
   vientriChqId: number | null
   baja: boolean
+  /** Los escribe la conciliación con el banco; la importación los conserva. */
+  movimientoBancarioId?: string | null
+  movimientoCuentaId?: string | null
+  movimientoFecha?: string | null
 }

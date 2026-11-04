@@ -110,6 +110,9 @@ export interface ChequesListFilters {
   desde?: string
   hasta?: string
   q?: string
+  /** En pesos. */
+  montoDesde?: string
+  montoHasta?: string
   page?: number
   limit?: number
 }
@@ -213,6 +216,8 @@ export async function fetchCheques(filters: ChequesListFilters): Promise<Cheques
   if (filters.comprobante) params.set('comprobante', filters.comprobante)
   if (filters.interesEncubierto) params.set('interesEncubierto', filters.interesEncubierto)
   if (filters.q) params.set('q', filters.q)
+  if (filters.montoDesde) params.set('montoDesde', filters.montoDesde)
+  if (filters.montoHasta) params.set('montoHasta', filters.montoHasta)
   if (filters.desde) params.set('desde', filters.desde)
   if (filters.hasta) params.set('hasta', filters.hasta)
   if (filters.page) params.set('page', String(filters.page))
@@ -434,11 +439,15 @@ async function ocasionalesFetch(path: string, init?: RequestInit): Promise<Respo
 export async function fetchChequesOcasionales(params: {
   filtro?: OcasionalesFiltro
   q?: string
+  montoDesde?: string
+  montoHasta?: string
   page?: number
 }): Promise<OcasionalesListResponse> {
   const qs = new URLSearchParams()
   if (params.filtro) qs.set('filtro', params.filtro)
   if (params.q) qs.set('q', params.q)
+  if (params.montoDesde) qs.set('montoDesde', params.montoDesde)
+  if (params.montoHasta) qs.set('montoHasta', params.montoHasta)
   if (params.page) qs.set('page', String(params.page))
   const s = qs.toString()
   const res = await ocasionalesFetch(s ? `?${s}` : '/')

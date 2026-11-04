@@ -13,7 +13,7 @@ import type { FiltroSeguimiento, OperacionPersistida } from '../domain/seguimien
 import { recalcularSeguimiento, VIENTRI_OPERACIONES_RENOVACION } from '../services/recalcular-seguimiento.js'
 import { leerCompletos, reconstruirCompletos } from '../services/completos-ocasionales.js'
 import { VIENTRI_CHEQUES } from '../services/vientri.repository.js'
-import { matchMontoCentavos } from '../../cheques/services/cheques.repository.js'
+import { dentroDelRangoMonto, leerRangoMonto } from '../../cheques/domain/filtro-monto.js'
 
 export const finanzasChequesOcasionalesRouter = Router()
 finanzasChequesOcasionalesRouter.use(requireWorkspaceUser, requireViewFinanzas)
@@ -56,9 +56,15 @@ finanzasChequesOcasionalesRouter.get('/', async (req, res) => {
 
     if (q) {
       filtrados = filtrados.filter((d) =>
-        normalizar(`${d.beneficiario} ${d.numeroCheque} ${d.obsOriginal} ${d.estado}`).includes(q) || matchMontoCentavos(d.montoCentavos, q),
+        normalizar(`${d.beneficiario} ${d.numeroCheque} ${d.obsOriginal} ${d.estado}`).includes(q),
       )
     }
+
+    const rangoMonto = leerRangoMonto(
+      typeof req.query.montoDesde === 'string' ? req.query.montoDesde : undefined,
+      typeof req.query.montoHasta === 'string' ? req.query.montoHasta : undefined,
+    )
+    filtrados = filtrados.filter((d) => dentroDelRangoMonto(d.montoCentavos, rangoMonto))
 
     filtrados.sort((a, b) => {
       const fa = a.fechaVencimiento ?? ''

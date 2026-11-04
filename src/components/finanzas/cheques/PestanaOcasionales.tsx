@@ -51,6 +51,10 @@ export function PestanaOcasionales() {
   const [filtro, setFiltro] = useState<OcasionalesFiltro>('')
   const [busqueda, setBusqueda] = useState('')
   const [q, setQ] = useState('')
+  const [montoMin, setMontoMin] = useState('')
+  const [montoMinAplicado, setMontoMinAplicado] = useState('')
+  const [montoMax, setMontoMax] = useState('')
+  const [montoMaxAplicado, setMontoMaxAplicado] = useState('')
   const [page, setPage] = useState(1)
   const [subvista, setSubvista] = useState<'cheques' | 'renovaciones' | 'seguimiento' | 'usd' | 'operaciones'>('cheques')
   const [beneficiarioRenov, setBeneficiarioRenov] = useState('')
@@ -77,8 +81,15 @@ export function PestanaOcasionales() {
   }, [busqueda])
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ['finanzas', 'cheques-ocasionales', filtro, q, page],
-    queryFn: () => fetchChequesOcasionales({ filtro, q: q || undefined, page }),
+    queryKey: ['finanzas', 'cheques-ocasionales', filtro, q, montoMinAplicado, montoMaxAplicado, page],
+    queryFn: () =>
+      fetchChequesOcasionales({
+        filtro,
+        q: q || undefined,
+        montoDesde: montoMinAplicado || undefined,
+        montoHasta: montoMaxAplicado || undefined,
+        page,
+      }),
     enabled: Boolean(user),
     placeholderData: (prev) => prev,
   })
@@ -428,7 +439,7 @@ export function PestanaOcasionales() {
           <input
             type="text"
             className={`${finanzasInputClass} pl-9`}
-            placeholder="Buscar por beneficiario, número o importe…"
+            placeholder="Buscar por beneficiario o número…"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
@@ -442,6 +453,46 @@ export function PestanaOcasionales() {
             </button>
           ) : null}
         </div>
+        <form
+          className="w-full text-sm sm:w-40"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setMontoMinAplicado(montoMin.trim())
+            setPage(1)
+          }}
+        >
+          <span className="text-body-muted mb-1 block">Monto desde</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            className={finanzasInputClass}
+            value={montoMin}
+            placeholder="$ y Enter"
+            onChange={(e) => setMontoMin(e.target.value)}
+          />
+        </form>
+        <form
+          className="w-full text-sm sm:w-40"
+          onSubmit={(e) => {
+            e.preventDefault()
+            setMontoMaxAplicado(montoMax.trim())
+            setPage(1)
+          }}
+        >
+          <span className="text-body-muted mb-1 block">Monto hasta</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            className={finanzasInputClass}
+            value={montoMax}
+            placeholder="$ y Enter"
+            onChange={(e) => setMontoMax(e.target.value)}
+          />
+        </form>
         {data ? (
           <span className="text-body-muted text-sm whitespace-nowrap">
             {total.toLocaleString('es-AR')} cheques · {formatMoneyCentavos(data.totalCentavos, 'ARS')}

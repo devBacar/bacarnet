@@ -9,8 +9,16 @@ import {
 import {
   debitarChequesPendientesConMovimiento,
   listChequesSinVincular,
+  listChequesVinculados,
   vincularChequeConMovimiento,
 } from './cheques.repository.js'
+import { agruparGemelos, sonGemelos } from '../domain/gemelos-cheque.js'
+import {
+  esIdOcasional,
+  listOcasionalesSinVincular,
+  listOcasionalesVinculados,
+  vincularOcasionalConMovimiento,
+} from './ocasionales-vinculo.repository.js'
 
 export interface ReconciliacionChequesResultado {
   revisados: number
@@ -46,13 +54,42 @@ export async function reconciliarChequesConMovimientos(
 
   await debitarChequesPendientesConMovimiento()
 
-  const [recibidosSinVincular, emitidosSinVincular] = await Promise.all([
+  const [recibidosSinVincular, emitidosSinVincularCheques, ocasionalesSinVincular] = await Promise.all([
     listChequesSinVincular('recibido'),
     listChequesSinVincular('emitido'),
+    listOcasionalesSinVincular(),
   ])
+  const emitidosSinVincular = [...emitidosSinVincularCheques, ...ocasionalesSinVincular]
+
+  const [recibidosVinculados, emitidosVinculadosCheques, ocasionalesVinculados] = await Promise.all([
+    listChequesVinculados('recibido'),
+    listChequesVinculados('emitido'),
+    listOcasionalesVinculados(),
+  ])
+  const emitidosVinculados = [...emitidosVinculadosCheques, ...ocasionalesVinculados]
+
+  // Un físico y su eCheq son el mismo cheque: si uno ya tiene movimiento, el gemelo hereda el vínculo.
+  const heredados = new Set<string>()
+  for (const [direccion, sinVincular, vinculados] of [
+    ['recibido', recibidosSinVincular, recibidosVinculados],
+    ['emitido', emitidosSinVincular, emitidosVinculados],
+  ] as const) {
+    for (const cheque of sinVincular) {
+      const gemelo = vinculados.find((v) => sonGemelos(cheque, v))
+      if (!gemelo) continue
+      await vincularCualquiera(cheque.id, {
+        movimientoBancarioId: gemelo.movimientoBancarioId,
+        movimientoCuentaId: gemelo.movimientoCuentaId,
+        movimientoFecha: gemelo.movimientoFecha,
+        fechaAcreditacion: direccion === 'recibido' ? gemelo.movimientoFecha : null,
+      })
+      heredados.add(cheque.id)
+      resultado.vinculados += 1
+    }
+  }
 
   const cheques: ChequeParaContraparte[] = [
-    ...recibidosSinVincular.map((c) => ({
+    ...recibidosSinVincular.filter((c) => !heredados.has(c.id)).map((c) => ({
       id: c.id,
       numero: c.numero,
       direccion: 'recibido' as const,
@@ -64,7 +101,7 @@ export async function reconciliarChequesConMovimientos(
       destinatario: c.destinatario,
       estado: c.estado,
     })),
-    ...emitidosSinVincular.map((c) => ({
+    ...emitidosSinVincular.filter((c) => !heredados.has(c.id)).map((c) => ({
       id: c.id,
       numero: c.numero,
       direccion: 'emitido' as const,
@@ -103,6 +140,33 @@ export async function reconciliarChequesConMovimientos(
   const ocupados = new Set<string>()
   const movsVinculados = new Set<string>()
 
+  const grupos = agruparGemelos(cheques)
+  const grupoPorRepresentante = new Map(grupos.map((g) => [g[0].id, g]))
+  const representantes = grupos.map((g) => g[0])
+
+  async function vincularGrupo(
+    rep: ChequeParaContraparte,
+    mov: { id: string; data: MovimientoBancarioDocument },
+  ): Promise<void> {
+    const miembros = grupoPorRepresentante.get(rep.id) ?? [rep]
+    for (const cheque of miembros) {
+      await vincularCualquiera(cheque.id, {
+        movimientoBancarioId: mov.id,
+        movimientoCuentaId: mov.data.cuentaId,
+        movimientoFecha: mov.data.fechaProceso,
+        fechaAcreditacion: cheque.direccion === 'recibido' ? mov.data.fechaProceso : null,
+      })
+      ocupados.add(cheque.id)
+    }
+    // La reserva apunta a un cheque de `cheques` si el grupo tiene uno; solo apunta a un ocasional si no hay otro.
+    const idReserva = miembros.find((c) => !esIdOcasional(c.id))?.id ?? rep.id
+    await movimientosBancariosCollection().doc(mov.id).update({
+      reservadoPorChequeId: idReserva,
+    })
+    movsVinculados.add(mov.id)
+    resultado.vinculados += 1
+  }
+
   const movimientosCheque: {
     id: string
     data: MovimientoBancarioDocument
@@ -140,35 +204,18 @@ export async function reconciliarChequesConMovimientos(
 
   // Pasada 1: matchear primero por número (voucher / correlative) y descartar esos cheques
   for (const mov of movimientosCheque) {
-    const disponibles = cheques.filter((c) => !ocupados.has(c.id))
+    const disponibles = representantes.filter((c) => !ocupados.has(c.id))
     const candidatos = chequesCandidatos(mov.movParaMatch, disponibles, { soloNumero: true })
     if (candidatos.length !== 1) continue
 
-    const cheque = candidatos[0]
-    const fechaAcreditacion = cheque.direccion === 'recibido' ? mov.data.fechaProceso : null
-
-    await vincularChequeConMovimiento({
-      chequeId: cheque.id,
-      movimientoBancarioId: mov.id,
-      movimientoCuentaId: mov.data.cuentaId,
-      movimientoFecha: mov.data.fechaProceso,
-      fechaAcreditacion,
-    })
-
-    await movimientosBancariosCollection().doc(mov.id).update({
-      reservadoPorChequeId: cheque.id,
-    })
-
-    ocupados.add(cheque.id)
-    movsVinculados.add(mov.id)
-    resultado.vinculados += 1
+    await vincularGrupo(candidatos[0], mov)
   }
 
   // Pasada 2: con los movimientos y cheques que quedaron sin matchear, buscar en los disponibles
   for (const mov of movimientosCheque) {
     if (movsVinculados.has(mov.id)) continue
 
-    const disponibles = cheques.filter((c) => !ocupados.has(c.id))
+    const disponibles = representantes.filter((c) => !ocupados.has(c.id))
     const candidatos = chequesCandidatos(mov.movParaMatch, disponibles)
 
     if (candidatos.length === 0) {
@@ -207,24 +254,7 @@ export async function reconciliarChequesConMovimientos(
       continue
     }
 
-    const cheque = candidatos[0]
-    const fechaAcreditacion = cheque.direccion === 'recibido' ? mov.data.fechaProceso : null
-
-    await vincularChequeConMovimiento({
-      chequeId: cheque.id,
-      movimientoBancarioId: mov.id,
-      movimientoCuentaId: mov.data.cuentaId,
-      movimientoFecha: mov.data.fechaProceso,
-      fechaAcreditacion,
-    })
-
-    await movimientosBancariosCollection().doc(mov.id).update({
-      reservadoPorChequeId: cheque.id,
-    })
-
-    ocupados.add(cheque.id)
-    movsVinculados.add(mov.id)
-    resultado.vinculados += 1
+    await vincularGrupo(candidatos[0], mov)
   }
 
   if (detalle) {
@@ -232,6 +262,22 @@ export async function reconciliarChequesConMovimientos(
   }
 
   return resultado
+}
+
+async function vincularCualquiera(
+  id: string,
+  datos: {
+    movimientoBancarioId: string
+    movimientoCuentaId: string
+    movimientoFecha: string
+    fechaAcreditacion: string | null
+  },
+): Promise<void> {
+  if (esIdOcasional(id)) {
+    await vincularOcasionalConMovimiento({ id, ...datos })
+    return
+  }
+  await vincularChequeConMovimiento({ chequeId: id, ...datos })
 }
 
 function sumarDias(iso: string, dias: number): string {

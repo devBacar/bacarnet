@@ -10,6 +10,7 @@ import type {
   ChequePagoDe,
 } from '../domain/cheque.types.js'
 import type { OperacionUsdParseada } from '../../vientri/domain/cheque-ocasional.types.js'
+import { dentroDelRangoMonto } from '../domain/filtro-monto.js'
 
 export const CHEQUES_COLLECTION = 'cheques'
 const HISTORIAL_ESTADOS_SUB = 'historialEstados'
@@ -148,6 +149,8 @@ export interface ChequesFiltro {
   comprobante: 'con_comprobante' | 'sin_comprobante' | null
   interesEncubierto?: boolean | null
   q: string | null
+  montoMinCentavos?: number | null
+  montoMaxCentavos?: number | null
 }
 
 function applyFiltro(base: FirebaseFirestore.Query, filtro: ChequesFiltro): FirebaseFirestore.Query {
@@ -174,30 +177,14 @@ function matchInteresEncubierto(data: FirebaseFirestore.DocumentData, interesEnc
   return (data.esInteresEncubierto === true) === interesEncubierto
 }
 
-export function matchMontoCentavos(montoCentavos: unknown, q: string): boolean {
-  if (typeof montoCentavos !== 'number' || !Number.isFinite(montoCentavos)) return false
-  const limpio = q.replace(/[$\s]/g, '')
-  if (!/\d/.test(limpio)) return false
-  const pesos = montoCentavos / 100
-  const enteroStr = String(Math.trunc(pesos))
-  const decimalComa = pesos.toFixed(2).replace('.', ',')
-  const decimalPunto = pesos.toFixed(2)
-  const formateadoAr = pesos.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  const sinPuntos = limpio.replace(/\./g, '')
-  return (
-    enteroStr.includes(limpio) ||
-    decimalComa.includes(limpio) ||
-    decimalPunto.includes(limpio) ||
-    formateadoAr.includes(limpio) ||
-    (sinPuntos !== '' && (enteroStr.includes(sinPuntos) || decimalComa.includes(sinPuntos)))
-  )
-}
-
 export function matchBusqueda(data: FirebaseFirestore.DocumentData, q: string): boolean {
   const norm = q.toLowerCase()
   const fields = [data.numero, data.emisor, data.emisorCuit, data.cliente, data.destinatario]
-  if (fields.some((f) => typeof f === 'string' && f.toLowerCase().includes(norm))) return true
-  return matchMontoCentavos(data.montoCentavos, norm)
+  return fields.some((f) => typeof f === 'string' && f.toLowerCase().includes(norm))
+}
+
+function tieneRangoMonto(filtro: { montoMinCentavos?: number | null; montoMaxCentavos?: number | null }): boolean {
+  return filtro.montoMinCentavos != null || filtro.montoMaxCentavos != null
 }
 
 async function loadFiltradoInMemory(filtro: ChequesFiltro): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
@@ -209,12 +196,15 @@ async function loadFiltradoInMemory(filtro: ChequesFiltro): Promise<FirebaseFire
     if (filtro.comprobante && !matchComprobante(data, filtro.comprobante)) return false
     if (filtro.interesEncubierto != null && !matchInteresEncubierto(data, filtro.interesEncubierto)) return false
     if (filtro.q && !matchBusqueda(data, filtro.q)) return false
+    if (!dentroDelRangoMonto(data.montoCentavos, filtro)) return false
     return true
   })
 }
 
 function needsInMemory(filtro: ChequesFiltro): boolean {
-  return Boolean(filtro.vinculacion || filtro.comprobante || filtro.interesEncubierto != null || filtro.q)
+  return Boolean(
+    filtro.vinculacion || filtro.comprobante || filtro.interesEncubierto != null || filtro.q || tieneRangoMonto(filtro),
+  )
 }
 
 export async function countChequesFiltrados(filtro: ChequesFiltro): Promise<number> {
@@ -273,7 +263,7 @@ export async function sumChequesPorDireccion(filtro: Omit<ChequesFiltro, 'direcc
   emitidosCentavos: number
 }> {
   const excluirRenovados = filtro.estado !== 'renovado'
-  if (filtro.vinculacion || filtro.comprobante || filtro.q) {
+  if (filtro.vinculacion || filtro.comprobante || filtro.q || tieneRangoMonto(filtro)) {
     const [recDocs, emDocs] = await Promise.all([
       loadFiltradoInMemory({ ...filtro, direccion: 'recibido' }),
       loadFiltradoInMemory({ ...filtro, direccion: 'emitido' }),
@@ -666,6 +656,35 @@ export async function listChequesSinVincular(
         estado: typeof data.estado === 'string' ? data.estado : null,
       }
     })
+}
+
+export interface ChequeVinculadoItem {
+  id: string
+  numero: string
+  montoCentavos: number
+  fechaPago: string
+  movimientoBancarioId: string
+  movimientoCuentaId: string
+  movimientoFecha: string
+}
+
+export async function listChequesVinculados(direccion: ChequeDireccion): Promise<ChequeVinculadoItem[]> {
+  const snap = await collection().where('direccion', '==', direccion).get()
+  const items: ChequeVinculadoItem[] = []
+  for (const doc of snap.docs) {
+    const data = doc.data()
+    if (!data.movimientoBancarioId || typeof data.movimientoFecha !== 'string') continue
+    items.push({
+      id: doc.id,
+      numero: String(data.numero ?? ''),
+      montoCentavos: typeof data.montoCentavos === 'number' ? data.montoCentavos : 0,
+      fechaPago: String(data.fechaPago ?? ''),
+      movimientoBancarioId: String(data.movimientoBancarioId),
+      movimientoCuentaId: String(data.movimientoCuentaId ?? ''),
+      movimientoFecha: data.movimientoFecha,
+    })
+  }
+  return items
 }
 
 export async function vincularChequeConMovimiento(input: {

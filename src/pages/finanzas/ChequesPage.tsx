@@ -99,7 +99,10 @@ export function FinanzasChequesPage() {
   const [tipo, setTipo] = useState<ChequeTipo | ''>('')
   const [vinculacion, setVinculacion] = useState<'' | 'vinculado' | 'sin_vincular'>('')
   const [comprobante, setComprobante] = useState<'' | 'con_comprobante' | 'sin_comprobante'>('')
-  const [interesEncubierto, setInteresEncubierto] = useState<'' | 'true' | 'false'>('')
+  const [montoMin, setMontoMin] = useState('')
+  const [montoMinAplicado, setMontoMinAplicado] = useState('')
+  const [montoMax, setMontoMax] = useState('')
+  const [montoMaxAplicado, setMontoMaxAplicado] = useState('')
   const { desde: mesDesde, hasta: mesHasta } = mesActual()
   const [desde, setDesde] = useState(() => {
     try { return sessionStorage.getItem('cheques_desde') ?? mesDesde } catch { return mesDesde }
@@ -121,7 +124,7 @@ export function FinanzasChequesPage() {
   }, [busqueda])
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ['finanzas', 'cheques', direccion, origen, estado, tipo, vinculacion, comprobante, interesEncubierto, desde, hasta, q, page],
+    queryKey: ['finanzas', 'cheques', direccion, origen, estado, tipo, vinculacion, comprobante, montoMinAplicado, montoMaxAplicado, desde, hasta, q, page],
     queryFn: () =>
       fetchCheques({
         direccion,
@@ -130,7 +133,8 @@ export function FinanzasChequesPage() {
         tipo,
         vinculacion,
         comprobante,
-        interesEncubierto,
+        montoDesde: montoMinAplicado || undefined,
+        montoHasta: montoMaxAplicado || undefined,
         desde: desde || undefined,
         hasta: hasta || undefined,
         q: q || undefined,
@@ -322,8 +326,9 @@ export function FinanzasChequesPage() {
         </div>
       ) : null}
 
-      {/* Nivel 2: Tabs tipo + buscador en la misma línea */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      {/* Nivel 2: tipo de cheque */}
+      <div className="mb-4 text-sm">
+        <span className="text-body-muted mb-1 block">Tipo</span>
         <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
           {TIPO_TABS.map(([val, label]) => (
             <button
@@ -340,98 +345,150 @@ export function FinanzasChequesPage() {
             </button>
           ))}
         </div>
-        <div className="relative w-full sm:max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-          <input
-            type="text"
-            className={`${finanzasInputClass} pl-9`}
-            placeholder="Buscar por número, contraparte, cliente o importe…"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
-          {busqueda ? (
-            <button
-              type="button"
-              className="text-body-muted hover:text-heading absolute right-2 top-1/2 -translate-y-1/2 px-1"
-              onClick={() => setBusqueda('')}
-            >
-              ×
-            </button>
-          ) : null}
+      </div>
+
+      {/* Nivel 3: buscador y fechas de vencimiento */}
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="w-full text-sm sm:max-w-xs">
+          <span className="text-body-muted mb-1 block">Número, contraparte o cliente</span>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+            <input
+              type="text"
+              className={`${finanzasInputClass} pl-9`}
+              placeholder="Buscar…"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+            {busqueda ? (
+              <button
+                type="button"
+                className="text-body-muted hover:text-heading absolute right-2 top-1/2 -translate-y-1/2 px-1"
+                onClick={() => setBusqueda('')}
+              >
+                ×
+              </button>
+            ) : null}
+          </div>
         </div>
+        <label className="w-full text-sm sm:w-44">
+          <span className="text-body-muted mb-1 block">Vencimiento desde</span>
+          <input
+            type="date"
+            className={finanzasInputClass}
+            value={desde}
+            data-tour="cheques-filtro-desde"
+            onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); try { sessionStorage.setItem('cheques_desde', e.target.value) } catch {} })}
+          />
+        </label>
+        <label className="w-full text-sm sm:w-44">
+          <span className="text-body-muted mb-1 block">Vencimiento hasta</span>
+          <input
+            type="date"
+            className={finanzasInputClass}
+            value={hasta}
+            data-tour="cheques-filtro-hasta"
+            onChange={(e) => cambiarFiltro(() => { setHasta(e.target.value); try { sessionStorage.setItem('cheques_hasta', e.target.value) } catch {} })}
+          />
+        </label>
         {data ? (
-          <span className="text-body-muted text-sm whitespace-nowrap">
+          <span className="text-body-muted ml-auto pb-2 text-sm whitespace-nowrap">
             {total.toLocaleString('es-AR')} cheques · {formatMoneyCentavos(data.totalCentavos, 'ARS')}
           </span>
         ) : null}
       </div>
 
-      {/* Nivel 3: Selects de filtro */}
+      {/* Nivel 4: filtros con texto arriba, igual que en Movimientos */}
       <div className="mb-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <select
-          className={finanzasInputClass}
-          value={estado}
-          data-tour="cheques-filtro-estado"
-          onChange={(e) => cambiarFiltro(() => setEstado(e.target.value as ChequeEstado | ''))}
+        <label className="text-sm">
+          <span className="text-body-muted mb-1 block">Estado</span>
+          <select
+            className={finanzasInputClass}
+            value={estado}
+            data-tour="cheques-filtro-estado"
+            onChange={(e) => cambiarFiltro(() => setEstado(e.target.value as ChequeEstado | ''))}
+          >
+            <option value="">Todos</option>
+            {estadosVisibles.map((val) => (
+              <option key={val} value={val}>{CHEQUE_ESTADO_LABELS[val]}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="text-body-muted mb-1 block">Origen</span>
+          <select
+            className={finanzasInputClass}
+            value={origen}
+            onChange={(e) => cambiarFiltro(() => setOrigen(e.target.value as ChequeOrigen | ''))}
+          >
+            <option value="">Todos</option>
+            {Object.entries(CHEQUE_ORIGEN_LABELS).map(([val, label]) => (
+              <option key={val} value={val}>{label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="text-body-muted mb-1 block">Movimiento</span>
+          <select
+            className={finanzasInputClass}
+            value={vinculacion}
+            onChange={(e) => cambiarFiltro(() => setVinculacion(e.target.value as '' | 'vinculado' | 'sin_vincular'))}
+          >
+            <option value="">Todos</option>
+            <option value="vinculado">Con movimiento</option>
+            <option value="sin_vincular">Sin movimiento</option>
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="text-body-muted mb-1 block">Comprobante</span>
+          <select
+            className={finanzasInputClass}
+            value={comprobante}
+            onChange={(e) => cambiarFiltro(() => setComprobante(e.target.value as '' | 'con_comprobante' | 'sin_comprobante'))}
+          >
+            <option value="">Todos</option>
+            <option value="con_comprobante">Con comprobante</option>
+            <option value="sin_comprobante">Sin comprobante</option>
+          </select>
+        </label>
+        <form
+          className="text-sm"
+          onSubmit={(e) => {
+            e.preventDefault()
+            cambiarFiltro(() => setMontoMinAplicado(montoMin.trim()))
+          }}
         >
-          <option value="">Estado: Todos</option>
-          {estadosVisibles.map((val) => (
-            <option key={val} value={val}>{CHEQUE_ESTADO_LABELS[val]}</option>
-          ))}
-        </select>
-        <select
-          className={finanzasInputClass}
-          value={origen}
-          onChange={(e) => cambiarFiltro(() => setOrigen(e.target.value as ChequeOrigen | ''))}
+          <span className="text-body-muted mb-1 block">Monto desde</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            className={finanzasInputClass}
+            value={montoMin}
+            placeholder="$ y Enter"
+            onChange={(e) => setMontoMin(e.target.value)}
+          />
+        </form>
+        <form
+          className="text-sm"
+          onSubmit={(e) => {
+            e.preventDefault()
+            cambiarFiltro(() => setMontoMaxAplicado(montoMax.trim()))
+          }}
         >
-          <option value="">Origen: Todos</option>
-          {Object.entries(CHEQUE_ORIGEN_LABELS).map(([val, label]) => (
-            <option key={val} value={val}>{label}</option>
-          ))}
-        </select>
-        <select
-          className={finanzasInputClass}
-          value={vinculacion}
-          onChange={(e) => cambiarFiltro(() => setVinculacion(e.target.value as '' | 'vinculado' | 'sin_vincular'))}
-        >
-          <option value="">Movimiento: Todos</option>
-          <option value="vinculado">Con movimiento</option>
-          <option value="sin_vincular">Sin movimiento</option>
-        </select>
-        <select
-          className={finanzasInputClass}
-          value={comprobante}
-          onChange={(e) => cambiarFiltro(() => setComprobante(e.target.value as '' | 'con_comprobante' | 'sin_comprobante'))}
-        >
-          <option value="">Comprobante: Todos</option>
-          <option value="con_comprobante">Con comprobante</option>
-          <option value="sin_comprobante">Sin comprobante</option>
-        </select>
-        <select
-          className={finanzasInputClass}
-          value={interesEncubierto}
-          onChange={(e) => cambiarFiltro(() => setInteresEncubierto(e.target.value as '' | 'true' | 'false'))}
-        >
-          <option value="">Interés encubierto: Todos</option>
-          <option value="true">Solo interés encubierto</option>
-          <option value="false">Sin interés encubierto</option>
-        </select>
-        <input
-          type="date"
-          className={finanzasInputClass}
-          value={desde}
-          title="Vencimiento desde"
-          data-tour="cheques-filtro-desde"
-          onChange={(e) => cambiarFiltro(() => { setDesde(e.target.value); try { sessionStorage.setItem('cheques_desde', e.target.value) } catch {} })}
-        />
-        <input
-          type="date"
-          className={finanzasInputClass}
-          value={hasta}
-          title="Vencimiento hasta"
-          data-tour="cheques-filtro-hasta"
-          onChange={(e) => cambiarFiltro(() => { setHasta(e.target.value); try { sessionStorage.setItem('cheques_hasta', e.target.value) } catch {} })}
-        />
+          <span className="text-body-muted mb-1 block">Monto hasta</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            className={finanzasInputClass}
+            value={montoMax}
+            placeholder="$ y Enter"
+            onChange={(e) => setMontoMax(e.target.value)}
+          />
+        </form>
       </div>
 
       {isError ? (

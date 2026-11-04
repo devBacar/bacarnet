@@ -1,4 +1,5 @@
 import { useId } from 'react'
+import { anclaDe, pathArea, pathBanda, pathLinea } from '../graficos/curvasSvg'
 import { mesCorto, plataCorta } from '../tablero-finanzas/formatoTablero'
 
 /**
@@ -73,46 +74,6 @@ export function BarraHorizontal({
       </button>
     </li>
   )
-}
-
-/** Tramo de curva suave (Bezier) entre cada par de puntos consecutivos: da el efecto "en S". No incluye el M inicial. */
-function segmentosCurva(puntos: Array<{ x: number; y: number }>): string {
-  let d = ''
-  for (let i = 0; i < puntos.length - 1; i++) {
-    const p0 = puntos[i]
-    const p1 = puntos[i + 1]
-    const mx = (p0.x + p1.x) / 2
-    d += ` C ${mx} ${p0.y}, ${mx} ${p1.y}, ${p1.x} ${p1.y}`
-  }
-  return d
-}
-
-function pathLinea(puntos: Array<{ x: number; y: number }>): string {
-  if (puntos.length === 0) return ''
-  return `M ${puntos[0].x} ${puntos[0].y}${segmentosCurva(puntos)}`
-}
-
-function pathArea(puntos: Array<{ x: number; y: number }>, baseY: number): string {
-  if (puntos.length === 0) return ''
-  const primero = puntos[0]
-  const ultimo = puntos[puntos.length - 1]
-  return `M ${primero.x} ${baseY} L ${primero.x} ${primero.y}${segmentosCurva(puntos)} L ${ultimo.x} ${baseY} Z`
-}
-
-/** Banda apilada: curva superior suave + curva inferior suave (el límite con la banda de abajo), cerrada. */
-function pathBanda(puntosArriba: Array<{ x: number; y: number }>, puntosAbajoInvertidos: Array<{ x: number; y: number }>): string {
-  if (puntosArriba.length === 0) return ''
-  const primero = puntosArriba[0]
-  const inicioAbajo = puntosAbajoInvertidos[0]
-  return `M ${primero.x} ${primero.y}${segmentosCurva(puntosArriba)} L ${inicioAbajo.x} ${inicioAbajo.y}${segmentosCurva(puntosAbajoInvertidos)} Z`
-}
-
-/** Texto alineado a la izquierda en el primer punto y a la derecha en el último, para que nunca se corte contra el borde del SVG. */
-function anclaDe(i: number, n: number): 'start' | 'middle' | 'end' {
-  if (n <= 1) return 'middle'
-  if (i === 0) return 'start'
-  if (i === n - 1) return 'end'
-  return 'middle'
 }
 
 /** Mix mensual por unidad de negocio: áreas apiladas con curvas suaves ("en S"), no barras. */

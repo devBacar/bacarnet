@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { GraficoBarras, Segmentado, type Serie } from './GraficoBarrasRrhh'
+import { GraficoCurvaRrhh, Segmentado, type Serie } from './GraficoBarrasRrhh'
 import type { ConvenioRrhh, EvolucionRrhh } from '../../services/rrhhApi'
 import { agrupar, agruparConvenios, claveDe, filasFiltradas, type Agrupacion, type Periodo } from './evolucionDatos'
 import { PersonasHorasRrhh, type PeriodoLista } from './PersonasHorasRrhh'
@@ -245,11 +245,11 @@ export function EvolucionRrhh({ evolucion, verPersonas = false }: { evolucion: E
         subtitulo={
           vista === 'personal'
             ? 'Promedio de personas por mes en cada período.'
-            : 'Pasá el mouse sobre una barra para ver el detalle. Los períodos incompletos indican cuántos meses tienen datos.'
+            : 'Pasá el mouse sobre el gráfico para ver el detalle. Los períodos incompletos indican cuántos meses tienen datos.'
         }
       >
         {periodos.length ? (
-          <GraficoBarras
+          <GraficoCurvaRrhh
             etiquetas={periodos.map((p) => p.etiquetaCorta)}
             subetiquetas={subetiquetas}
             estimados={periodos.map((p) => p.estimado)}
@@ -315,7 +315,7 @@ export function EvolucionRrhh({ evolucion, verPersonas = false }: { evolucion: E
         titulo="Horas trabajadas por convenio · toda la empresa"
         subtitulo="Horas normales más horas extra, sin vacaciones ni licencias. Solo meses cerrados. Cada mes es el período de su liquidación: SUVICO y Camioneros, del 26 del mes anterior al 25; el resto, del 1 a fin de mes. El convenio sale de cada persona, por eso no se filtra por área."
       >
-        <GraficoBarras
+        <GraficoCurvaRrhh
           etiquetas={periodosConvenio.map((p) => p.etiquetaCorta)}
           subetiquetas={periodosConvenio.map((p) => (p.meses < p.mesesTotales ? `${p.meses} de ${p.mesesTotales} meses` : ''))}
           estimados={periodosConvenio.map(() => false)}

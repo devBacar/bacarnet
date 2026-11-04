@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import type { ConvenioRrhh, IndicadoresRrhh as Datos, PersonaBajaRrhh, PersonaLicenciaLargaRrhh } from '../../services/rrhhApi'
 import { claveDe, type Agrupacion } from './evolucionDatos'
 import { aclaracionCorte, numero, rangoLiquidacion } from './formatoRrhh'
-import { GraficoBarras, Segmentado, type Serie } from './GraficoBarrasRrhh'
+import { GraficoCurvaRrhh, Segmentado, type Serie } from './GraficoBarrasRrhh'
 import {
   agruparIndicadores,
   bajasNoPrevistas,
@@ -500,11 +500,11 @@ export function IndicadoresRrhh({
       </TarjetaRrhh>
 
       <TituloDetalle>Evolución</TituloDetalle>
-      <TarjetaRrhh titulo={`Evolución · ${nombreSeleccion}`} subtitulo="Pasá el mouse sobre una barra para ver el detalle.">
+      <TarjetaRrhh titulo={`Evolución · ${nombreSeleccion}`} subtitulo="Pasá el mouse sobre el gráfico para ver el detalle.">
         <div className="mb-3">
           <Segmentado etiqueta="Qué mirar" opciones={VISTAS} valor={vista} onChange={setVista} />
         </div>
-        <GraficoBarras
+        <GraficoCurvaRrhh
           etiquetas={periodos.map((x) => x.etiquetaCorta)}
           subetiquetas={periodos.map((x) => (x.meses < x.mesesTotales ? `${x.meses} de ${x.mesesTotales} meses` : vista === 'ausentismo' && !conAusencias(x) ? 'sin datos' : ''))}
           estimados={periodos.map(() => false)}

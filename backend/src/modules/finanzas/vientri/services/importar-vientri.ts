@@ -4,7 +4,7 @@
  * Bacarnet nunca escribe en Vientri ni se conecta a su servidor: solo lee los CSV.
  */
 import { sincronizarChequesDesdeVientri } from '../../cheques/services/sincronizar-desde-vientri.js'
-import { ARCHIVOS_VENTAS_OPCIONALES, CarpetaInvalidaError, procesarCarpeta } from '../domain/procesar.js'
+import { ARCHIVOS_COMBUSTIBLE_OPCIONALES, ARCHIVOS_VENTAS_OPCIONALES, CarpetaInvalidaError, procesarCarpeta } from '../domain/procesar.js'
 import { ARCHIVOS_REQUERIDOS } from '../domain/control.js'
 import { aplicarVentana, MESES_VENTANA, restarMeses } from '../domain/ventana.js'
 import { marcarRenovadosPorCadena } from '../domain/cheques-renovados.js'
@@ -21,6 +21,7 @@ import {
   sincronizarColeccion,
   VIENTRI_ART,
   VIENTRI_CHEQUES,
+  VIENTRI_COMPRAS_COMBUSTIBLE,
   VIENTRI_COMPROBANTES,
   VIENTRI_ITEMS_COMPROBANTE,
   VIENTRI_PENDIENTES,
@@ -56,7 +57,7 @@ export async function importarVientri(opts: {
 }): Promise<ResultadoImportacion> {
   const simular = opts.simular === true
   const textos = new Map<string, string>()
-  for (const nombre of ['_control.csv', 'tipos_comprobante.csv', ...ARCHIVOS_REQUERIDOS, ...ARCHIVOS_VENTAS_OPCIONALES]) {
+  for (const nombre of ['_control.csv', 'tipos_comprobante.csv', ...ARCHIVOS_REQUERIDOS, ...ARCHIVOS_VENTAS_OPCIONALES, ...ARCHIVOS_COMBUSTIBLE_OPCIONALES]) {
     const t = await opts.leer(nombre)
     if (t !== null) textos.set(nombre, t)
   }
@@ -199,6 +200,20 @@ export async function importarVientri(opts: {
     }
   } catch (err) {
     console.error('[importar-vientri] sync de ventas falló (la importación de cheques/pendientes se completó)', err)
+  }
+
+  // Combustible (tablero "Combustible"): aditivo, no toca nada de lo anterior. Vacío si
+  // compras_combustible.csv todavía no vino en esta exportación.
+  try {
+    if (proc.combustible.compras.length > 0) {
+      conteos.combustibleCompras = await sincronizarColeccion({
+        ...comunes,
+        coleccion: VIENTRI_COMPRAS_COMBUSTIBLE,
+        docs: proc.combustible.compras.map((c) => ({ id: `cmp-${c.id}`, data: c })),
+      })
+    }
+  } catch (err) {
+    console.error('[importar-vientri] sync de combustible falló (la importación de cheques/pendientes se completó)', err)
   }
 
   // Agenda: se calcula siempre; se escribe solo si está activada (vientriEstado/config.agenda) y no es simulación.

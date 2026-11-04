@@ -14,6 +14,8 @@ export const VIENTRI_COMPROBANTES = 'vientriComprobantes'
 export const VIENTRI_ITEMS_COMPROBANTE = 'vientriItemsComprobante'
 export const VIENTRI_UNEGOCIO = 'vientriUnegocio'
 export const VIENTRI_ART = 'vientriArt'
+/** Para el tablero de Combustible (ver domain/combustible.ts). */
+export const VIENTRI_COMPRAS_COMBUSTIBLE = 'vientriComprasCombustible'
 
 const LOTE = 400
 

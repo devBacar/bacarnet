@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Download, TrendingUp, UserMinus, UserPlus } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { BarraHorizontal, EvolucionMensual, colorUnegocio } from '../../components/tablero-ventas/graficos'
+import { Download, Search, TrendingUp, UserMinus, UserPlus, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { BarraHorizontal, EvolucionMensual, colorCalor, colorUnegocio, estadoVariacion } from '../../components/tablero-ventas/graficos'
 import { TarjetaTablero } from '../../components/tablero-finanzas/TarjetaTablero'
 import { fechaHora, mesLargo, plata, plataCorta, textoPct } from '../../components/tablero-finanzas/formatoTablero'
 import {
+  fetchHistorialCliente,
   fetchTableroVentas,
   type ClienteVentaTablero,
   type ItemVentaTablero,
@@ -15,6 +16,8 @@ import {
 
 const CLASE_SELECT =
   'w-full min-w-0 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-[14px] font-normal text-neutral-900 sm:w-auto dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100'
+const CLASE_INPUT =
+  'w-full min-w-0 rounded-md border border-neutral-300 bg-white py-1.5 pl-8 pr-2.5 text-[14px] font-normal text-neutral-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100'
 
 const TODAS = 'todas'
 
@@ -193,6 +196,7 @@ function PorUnegocio({ datos, unegocioSel, onQuitarFiltro }: { datos: TableroVen
           const clave = claveUnegocio(un.idUnegocio)
           const abiertoEste = filtrando || abierto === clave
           const color = colorUnegocio(un.idUnegocio, i)
+          const estado = estadoVariacion(un.variacionPorcentaje)
           return (
             <li key={clave} className="min-w-0 border-b border-neutral-100 pb-3 last:border-0 last:pb-0 dark:border-zinc-800">
               <button
@@ -209,18 +213,11 @@ function PorUnegocio({ datos, unegocioSel, onQuitarFiltro }: { datos: TableroVen
                   texto={`${plata(un.centavos, datos.moneda)}${un.porcentaje != null ? ` · ${textoPct(un.porcentaje)}` : ''}`}
                 />
                 <div className="flex min-w-0 items-center gap-1.5 pl-0.5 text-[12px]">
-                  {un.caidaFuerte ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700 dark:bg-red-950/40 dark:text-red-400">
-                      <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                      cayó {textoPct(un.variacionPorcentaje)} vs. mes anterior
-                    </span>
-                  ) : un.variacionPorcentaje != null ? (
-                    <span className={un.variacionPorcentaje >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-neutral-500 dark:text-gray-500'}>
-                      {un.variacionPorcentaje >= 0 ? '↑' : '↓'} {textoPct(un.variacionPorcentaje)} vs. mes anterior
-                    </span>
-                  ) : (
-                    <span className="text-neutral-400 dark:text-gray-500">sin mes anterior para comparar</span>
-                  )}
+                  <span className="inline-flex h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: estado.color }} aria-hidden />
+                  <span className="text-neutral-600 dark:text-gray-400">
+                    {estado.etiqueta}
+                    {un.variacionPorcentaje != null ? ` ${textoPct(un.variacionPorcentaje)} vs. mes anterior` : ' · sin mes anterior para comparar'}
+                  </span>
                 </div>
               </button>
               {abiertoEste ? (
@@ -273,23 +270,140 @@ function TopItems({ items, sinDatosDeItems }: { items: ItemVentaTablero[]; sinDa
   )
 }
 
-function RankingClientes({ clientes }: { clientes: Array<{ vientriId: number; nombre: string; centavos: number }> }) {
-  if (clientes.length === 0) {
-    return (
-      <TarjetaTablero titulo="Clientes">
-        <p className="text-[14px] text-neutral-700 dark:text-gray-300">No hay facturación por cliente para este filtro.</p>
-      </TarjetaTablero>
-    )
-  }
-  const top = clientes.slice(0, 15)
-  const maximo = Math.max(...top.map((c) => c.centavos))
+function DetalleCliente({
+  cliente,
+  mes,
+  moneda,
+  onCerrar,
+}: {
+  cliente: { vientriId: number; nombre: string }
+  mes: string
+  moneda: MonedaTablero
+  onCerrar: () => void
+}) {
+  const historial = useQuery({
+    queryKey: ['finanzas-ventas-cliente-historial', cliente.vientriId, mes, moneda],
+    queryFn: () => fetchHistorialCliente({ vientriId: cliente.vientriId, mes, moneda }),
+    staleTime: 5 * 60_000,
+  })
   return (
-    <TarjetaTablero titulo="Ranking de clientes" subtitulo="Top 15 por facturación total del mes.">
-      <ul className="grid gap-3">
-        {top.map((cliente, i) => (
-          <BarraHorizontal key={cliente.vientriId} etiqueta={`${i + 1}. ${cliente.nombre}`} valor={cliente.centavos} maximo={maximo} color="#2a78d6" texto={plataCorta(cliente.centavos)} />
-        ))}
-      </ul>
+    <TarjetaTablero
+      titulo={
+        <span className="flex min-w-0 items-center justify-between gap-3">
+          <span className="min-w-0 truncate">{cliente.nombre}</span>
+          <button type="button" onClick={onCerrar} className="shrink-0 rounded-md p-1 hover:bg-black/5 dark:hover:bg-white/10" aria-label="Cerrar">
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </span>
+      }
+      subtitulo="Facturación mensual de este cliente, últimos 6 meses."
+    >
+      {historial.isPending ? (
+        <p className="text-[14px] text-neutral-600 dark:text-gray-400">Cargando…</p>
+      ) : historial.isError ? (
+        <p className="text-[14px] text-red-700 dark:text-red-400">No se pudo cargar el historial.</p>
+      ) : (
+        <EvolucionMensual datos={historial.data!.tendencia} moneda={moneda} />
+      )}
+    </TarjetaTablero>
+  )
+}
+
+function RankingClientes({
+  clientes,
+  busqueda,
+  onBusquedaChange,
+  onSeleccionar,
+}: {
+  clientes: Array<{ vientriId: number; nombre: string; centavos: number }>
+  busqueda: string
+  onBusquedaChange: (v: string) => void
+  onSeleccionar: (c: { vientriId: number; nombre: string }) => void
+}) {
+  const filtrados = useMemo(() => {
+    const termino = busqueda.trim().toLowerCase()
+    if (!termino) return clientes
+    return clientes.filter((c) => c.nombre.toLowerCase().includes(termino))
+  }, [clientes, busqueda])
+  const top = filtrados.slice(0, busqueda.trim() ? 50 : 15)
+  const maximo = Math.max(1, ...top.map((c) => c.centavos))
+  return (
+    <TarjetaTablero titulo="Ranking de clientes" subtitulo={busqueda.trim() ? `${filtrados.length} resultado(s). Tocá uno para ver su historial.` : 'Top 15 por facturación total del mes. Tocá uno para ver su historial.'}>
+      <div className="relative mb-3">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" aria-hidden />
+        <input
+          type="search"
+          value={busqueda}
+          onChange={(e) => onBusquedaChange(e.target.value)}
+          placeholder="Buscar cliente…"
+          className={CLASE_INPUT}
+        />
+      </div>
+      {top.length === 0 ? (
+        <p className="text-[14px] text-neutral-700 dark:text-gray-300">
+          {busqueda.trim() ? 'Ningún cliente coincide con la búsqueda.' : 'No hay facturación por cliente para este filtro.'}
+        </p>
+      ) : (
+        <ul className="grid gap-3">
+          {top.map((cliente, i) => (
+            <BarraHorizontal
+              key={cliente.vientriId}
+              etiqueta={busqueda.trim() ? cliente.nombre : `${i + 1}. ${cliente.nombre}`}
+              valor={cliente.centavos}
+              maximo={maximo}
+              color="#2a78d6"
+              texto={plataCorta(cliente.centavos)}
+              onClick={() => onSeleccionar({ vientriId: cliente.vientriId, nombre: cliente.nombre })}
+            />
+          ))}
+        </ul>
+      )}
+    </TarjetaTablero>
+  )
+}
+
+function MapaCalorClientes({ datos }: { datos: TableroVentas }) {
+  const columnas = datos.porUnegocio
+  const filas = datos.clientes.slice(0, 10)
+  if (columnas.length === 0 || filas.length === 0) return null
+  const maximo = Math.max(1, ...filas.flatMap((c) => c.porUnegocio.map((pu) => pu.centavos)))
+  return (
+    <TarjetaTablero titulo="Cliente × unidad de negocio" subtitulo="Top 10 clientes del mes, qué le compran a cada unidad.">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] border-collapse text-[12px]">
+          <thead>
+            <tr>
+              <th className="sticky left-0 bg-white px-2 py-1.5 text-left font-semibold text-neutral-600 dark:bg-zinc-900 dark:text-gray-400">Cliente</th>
+              {columnas.map((col) => (
+                <th key={claveUnegocio(col.idUnegocio)} className="px-2 py-1.5 text-right font-semibold text-neutral-600 dark:text-gray-400">
+                  {col.nombre}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filas.map((cliente) => (
+              <tr key={cliente.vientriId} className="border-t border-neutral-100 dark:border-zinc-800">
+                <td className="sticky left-0 max-w-[180px] truncate bg-white px-2 py-1.5 text-neutral-800 dark:bg-zinc-900 dark:text-gray-200" title={cliente.nombre}>
+                  {cliente.nombre}
+                </td>
+                {columnas.map((col) => {
+                  const valor = cliente.porUnegocio.find((pu) => claveUnegocio(pu.idUnegocio) === claveUnegocio(col.idUnegocio))?.centavos ?? 0
+                  return (
+                    <td
+                      key={claveUnegocio(col.idUnegocio)}
+                      className="px-2 py-1.5 text-right tabular-nums text-neutral-900 dark:text-gray-100"
+                      style={{ backgroundColor: valor > 0 ? colorCalor(valor, maximo) : undefined }}
+                    >
+                      {valor > 0 ? plataCorta(valor) : '—'}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </TarjetaTablero>
   )
 }
@@ -338,10 +452,74 @@ function ClientesNuevosPerdidos({ datos }: { datos: TableroVentas }) {
   )
 }
 
+function FilaComparacion({ etiqueta, a, b, moneda }: { etiqueta: string; a: number; b: number; moneda: MonedaTablero }) {
+  const variacion = b > 0 ? ((a - b) / b) * 100 : null
+  return (
+    <tr className="border-t border-neutral-100 dark:border-zinc-800">
+      <td className="py-1.5 pr-3 text-neutral-600 dark:text-gray-400">{etiqueta}</td>
+      <td className="py-1.5 pr-3 text-right tabular-nums text-neutral-900 dark:text-gray-100">{plata(b, moneda)}</td>
+      <td className="py-1.5 pr-3 text-right tabular-nums text-neutral-900 dark:text-gray-100">{plata(a, moneda)}</td>
+      <td className={`py-1.5 text-right tabular-nums ${variacion == null ? 'text-neutral-400 dark:text-gray-500' : variacion >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+        {variacion == null ? '—' : `${variacion >= 0 ? '+' : ''}${textoPct(variacion)}`}
+      </td>
+    </tr>
+  )
+}
+
+function ComparacionMeses({ datosA, datosB, moneda }: { datosA: TableroVentas; datosB: TableroVentas; moneda: MonedaTablero }) {
+  const unidadesIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const u of datosA.porUnegocio) ids.add(claveUnegocio(u.idUnegocio))
+    for (const u of datosB.porUnegocio) ids.add(claveUnegocio(u.idUnegocio))
+    return [...ids]
+  }, [datosA, datosB])
+  const nombrePor = (clave: string): string =>
+    datosB.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === clave)?.nombre ?? datosA.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === clave)?.nombre ?? clave
+  const centavosPor = (lista: TableroVentas, clave: string): number => lista.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === clave)?.centavos ?? 0
+  return (
+    <TarjetaTablero titulo="Comparar meses" subtitulo={`${mesLargo(datosB.mes)} vs. ${mesLargo(datosA.mes)}`}>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[480px] border-collapse text-[13px]">
+          <thead>
+            <tr className="text-neutral-600 dark:text-gray-400">
+              <th className="py-1.5 pr-3 text-left font-semibold"> </th>
+              <th className="py-1.5 pr-3 text-right font-semibold">{mesLargo(datosB.mes)}</th>
+              <th className="py-1.5 pr-3 text-right font-semibold">{mesLargo(datosA.mes)}</th>
+              <th className="py-1.5 text-right font-semibold">Variación</th>
+            </tr>
+          </thead>
+          <tbody>
+            <FilaComparacion etiqueta="Ventas totales" a={datosA.totalCentavos} b={datosB.totalCentavos} moneda={moneda} />
+            <FilaComparacion etiqueta="Ticket promedio" a={datosA.ticketPromedioCentavos} b={datosB.ticketPromedioCentavos} moneda={moneda} />
+            {unidadesIds.map((clave) => (
+              <FilaComparacion key={clave} etiqueta={nombrePor(clave)} a={centavosPor(datosA, clave)} b={centavosPor(datosB, clave)} moneda={moneda} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </TarjetaTablero>
+  )
+}
+
 export function TableroVentasPage() {
-  const [mes, setMes] = useState<string | null>(null)
-  const [moneda, setMoneda] = useState<MonedaTablero>('ARS')
-  const [unegocioSel, setUnegocioSel] = useState<string>(TODAS)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [mes, setMes] = useState<string | null>(searchParams.get('mes'))
+  const [moneda, setMoneda] = useState<MonedaTablero>(searchParams.get('moneda') === 'USD' ? 'USD' : 'ARS')
+  const [unegocioSel, setUnegocioSel] = useState<string>(searchParams.get('unidad') ?? TODAS)
+  const [mesComparar, setMesComparar] = useState<string | null>(searchParams.get('comparar'))
+  const [busquedaCliente, setBusquedaCliente] = useState('')
+  const [clienteSel, setClienteSel] = useState<{ vientriId: number; nombre: string } | null>(null)
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (mes) params.set('mes', mes)
+    if (moneda !== 'ARS') params.set('moneda', moneda)
+    if (unegocioSel !== TODAS) params.set('unidad', unegocioSel)
+    if (mesComparar) params.set('comparar', mesComparar)
+    setSearchParams(params, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mes, moneda, unegocioSel, mesComparar])
+
   const tablero = useQuery({
     queryKey: ['finanzas-ventas-tablero', mes, moneda],
     queryFn: () => fetchTableroVentas({ mes, moneda }),
@@ -350,6 +528,13 @@ export function TableroVentasPage() {
   const datos = tablero.data
   const mesVisible = mes ?? datos?.mes ?? ''
   const opcionesMes = mesesRecientes(mesVisible || new Date().toISOString().slice(0, 7), 13)
+
+  const tableroComparar = useQuery({
+    queryKey: ['finanzas-ventas-tablero', mesComparar, moneda],
+    queryFn: () => fetchTableroVentas({ mes: mesComparar, moneda }),
+    enabled: Boolean(mesComparar),
+    staleTime: 5 * 60_000,
+  })
 
   const unidadFiltrada = useMemo(() => {
     if (!datos || unegocioSel === TODAS) return null
@@ -428,6 +613,19 @@ export function TableroVentasPage() {
             </select>
           </label>
         ) : null}
+        <label className="grid min-w-0 gap-1 text-[13px] font-semibold text-neutral-600 dark:text-gray-400">
+          Comparar con
+          <select value={mesComparar ?? ''} onChange={(e) => setMesComparar(e.target.value || null)} className={CLASE_SELECT}>
+            <option value="">(ninguno)</option>
+            {opcionesMes
+              .filter((m) => m !== mesVisible)
+              .map((opcion) => (
+                <option key={opcion} value={opcion}>
+                  {mesLargo(opcion)}
+                </option>
+              ))}
+          </select>
+        </label>
       </div>
 
       {tablero.isPending && <p className="text-body-muted text-[14px]">Cargando el tablero…</p>}
@@ -442,12 +640,15 @@ export function TableroVentasPage() {
           <Kpis datos={datos} />
           {datos.sinDatosDeItems ? <AvisoSinItems /> : null}
           <Evolucion datos={datos} />
+          {mesComparar && tableroComparar.data ? <ComparacionMeses datosA={datos} datosB={tableroComparar.data} moneda={moneda} /> : null}
           <ClientesNuevosPerdidos datos={datos} />
           <div className="grid min-w-0 gap-5 lg:grid-cols-2">
             <PorUnegocio datos={datos} unegocioSel={unegocioSel} onQuitarFiltro={() => setUnegocioSel(TODAS)} />
             <TopItems items={itemsVisibles} sinDatosDeItems={datos.sinDatosDeItems} />
           </div>
-          <RankingClientes clientes={clientesVisibles} />
+          <MapaCalorClientes datos={datos} />
+          <RankingClientes clientes={clientesVisibles} busqueda={busquedaCliente} onBusquedaChange={setBusquedaCliente} onSeleccionar={setClienteSel} />
+          {clienteSel ? <DetalleCliente cliente={clienteSel} mes={datos.mes} moneda={datos.moneda} onCerrar={() => setClienteSel(null)} /> : null}
         </div>
       ) : null}
     </div>

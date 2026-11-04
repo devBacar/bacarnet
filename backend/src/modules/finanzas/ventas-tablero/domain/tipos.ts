@@ -37,6 +37,8 @@ export interface ClientePerdidoTablero {
   vientriId: number
   nombre: string
   centavosMesAnterior: number
+  /** Desglose por unidad de negocio de lo que facturaba el mes anterior, para filtrar por unidad. */
+  porUnegocio: Array<{ idUnegocio: number | null; nombre: string; centavosMesAnterior: number }>
 }
 
 export interface MesTendenciaTablero {

@@ -19,6 +19,14 @@ import type {
 /** % de caída vs. el mes anterior a partir del cual se marca `caidaFuerte` en una unidad de negocio. */
 const UMBRAL_CAIDA_FUERTE = 20
 
+/**
+ * Unidades de negocio que no se muestran en el desglose del tablero (pedido explícito: no tienen
+ * actividad relevante hoy). Su facturación sigue sumando en los totales de la empresa, solo se
+ * ocultan como fila/columna/serie propia en "Por unidad", el mix mensual y el mapa de calor.
+ * id 5 = ALQUILER DE MÁQUINAS DE RECUENTO.
+ */
+const UNIDADES_OCULTAS = new Set<number>([5])
+
 function proyectarMes(mes: string, hoy: string, totalCentavos: number): ProyeccionVentas | null {
   if (mesDeFecha(hoy) !== mes) return null
   const ultimo = ultimoDiaMes(mes)
@@ -128,14 +136,19 @@ export function armarTableroVentas(input: {
 
   // --- Mes anterior: totales por unidad y por cliente, para variación y altas/bajas. ---
   const porUnegocioAnteriorMap = new Map<string, number>()
-  const porClienteAnteriorMap = new Map<number, { nombre: string; centavos: number }>()
+  const porClienteAnteriorMap = new Map<number, { nombre: string; centavos: number; porUnegocio: Map<string, { nombre: string; centavos: number }> }>()
   for (const c of input.comprobantesMesAnterior) {
-    const claveUn = c.idUnegocio !== null ? String(c.idUnegocio) : 'sin-unegocio'
+    const idUn = c.idUnegocio
+    const claveUn = idUn !== null ? String(idUn) : 'sin-unegocio'
+    const nombreUn = idUn !== null ? unegocio.get(idUn) ?? `Unidad #${idUn}` : 'Sin unidad de negocio'
     porUnegocioAnteriorMap.set(claveUn, (porUnegocioAnteriorMap.get(claveUn) ?? 0) + c.totalCentavos)
     if (c.persona) {
       const previo = porClienteAnteriorMap.get(c.persona.vientriId)
       const nombre = c.persona.nombre ?? `Cliente #${c.persona.vientriId}`
-      porClienteAnteriorMap.set(c.persona.vientriId, { nombre, centavos: (previo?.centavos ?? 0) + c.totalCentavos })
+      const porUnegocioCli = previo?.porUnegocio ?? new Map<string, { nombre: string; centavos: number }>()
+      const previoUn = porUnegocioCli.get(claveUn)
+      porUnegocioCli.set(claveUn, { nombre: nombreUn, centavos: (previoUn?.centavos ?? 0) + c.totalCentavos })
+      porClienteAnteriorMap.set(c.persona.vientriId, { nombre, centavos: (previo?.centavos ?? 0) + c.totalCentavos, porUnegocio: porUnegocioCli })
     }
   }
 
@@ -171,6 +184,7 @@ export function armarTableroVentas(input: {
         variacionInteranualPorcentaje,
       }
     })
+    .filter((u) => u.idUnegocio === null || !UNIDADES_OCULTAS.has(u.idUnegocio))
     .sort((a, b) => b.centavos - a.centavos)
 
   const clientes = [...porClienteMap.values()].sort((a, b) => b.centavos - a.centavos)
@@ -178,7 +192,16 @@ export function armarTableroVentas(input: {
   const clientesNuevos = clientes.filter((c) => !porClienteAnteriorMap.has(c.vientriId)).slice(0, 10)
   const clientesPerdidos: ClientePerdidoTablero[] = [...porClienteAnteriorMap.entries()]
     .filter(([vientriId]) => !porClienteMap.has(vientriId))
-    .map(([vientriId, v]) => ({ vientriId, nombre: v.nombre, centavosMesAnterior: v.centavos }))
+    .map(([vientriId, v]) => ({
+      vientriId,
+      nombre: v.nombre,
+      centavosMesAnterior: v.centavos,
+      porUnegocio: [...v.porUnegocio.entries()].map(([clave, pu]) => ({
+        idUnegocio: clave === 'sin-unegocio' ? null : Number(clave),
+        nombre: pu.nombre,
+        centavosMesAnterior: pu.centavos,
+      })),
+    }))
     .sort((a, b) => b.centavosMesAnterior - a.centavosMesAnterior)
     .slice(0, 10)
 
@@ -205,6 +228,7 @@ export function armarTableroVentas(input: {
   const tendenciaPorUnegocio: TendenciaUnegocioMes[] = input.tendenciaDetallada.map((t) => ({
     mes: t.mes,
     porUnegocio: t.porUnegocio
+      .filter((u) => u.idUnegocio === null || !UNIDADES_OCULTAS.has(u.idUnegocio))
       .map((u) => ({
         idUnegocio: u.idUnegocio,
         nombre: u.idUnegocio !== null ? unegocio.get(u.idUnegocio) ?? `Unidad #${u.idUnegocio}` : 'Sin unidad de negocio',

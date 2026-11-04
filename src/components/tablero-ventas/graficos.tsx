@@ -107,6 +107,14 @@ function pathBanda(puntosArriba: Array<{ x: number; y: number }>, puntosAbajoInv
   return `M ${primero.x} ${primero.y}${segmentosCurva(puntosArriba)} L ${inicioAbajo.x} ${inicioAbajo.y}${segmentosCurva(puntosAbajoInvertidos)} Z`
 }
 
+/** Texto alineado a la izquierda en el primer punto y a la derecha en el último, para que nunca se corte contra el borde del SVG. */
+function anclaDe(i: number, n: number): 'start' | 'middle' | 'end' {
+  if (n <= 1) return 'middle'
+  if (i === 0) return 'start'
+  if (i === n - 1) return 'end'
+  return 'middle'
+}
+
 /** Mix mensual por unidad de negocio: áreas apiladas con curvas suaves ("en S"), no barras. */
 export function MixMensualPorUnegocio({
   datos,
@@ -115,8 +123,8 @@ export function MixMensualPorUnegocio({
 }) {
   const ancho = 720
   const alto = 240
-  const izq = 4
-  const der = 4
+  const izq = 30
+  const der = 30
   const arriba = 20
   const abajo = 26
   const anchoUtil = ancho - izq - der
@@ -162,13 +170,19 @@ export function MixMensualPorUnegocio({
           const total = totales[i]
           if (total <= 0) return null
           return (
-            <text key={`total-${d.mes}`} x={xDe(i)} y={Math.max(12, yDe(total) - 6)} textAnchor="middle" className="fill-neutral-700 text-[10px] font-medium dark:fill-gray-300">
+            <text
+              key={`total-${d.mes}`}
+              x={xDe(i)}
+              y={Math.max(12, yDe(total) - 6)}
+              textAnchor={anclaDe(i, n)}
+              className="fill-neutral-700 text-[10px] font-medium dark:fill-gray-300"
+            >
               {plataCorta(total)}
             </text>
           )
         })}
         {datos.map((d, i) => (
-          <text key={`mes-${d.mes}`} x={xDe(i)} y={alto - 8} textAnchor="middle" className="fill-neutral-500 text-[11px] dark:fill-gray-500">
+          <text key={`mes-${d.mes}`} x={xDe(i)} y={alto - 8} textAnchor={anclaDe(i, n)} className="fill-neutral-500 text-[11px] dark:fill-gray-500">
             {mesCorto(d.mes)}
           </text>
         ))}
@@ -190,8 +204,8 @@ export function EvolucionMensual({ datos, moneda }: { datos: Array<{ mes: string
   const idBase = useId().replace(/[^a-zA-Z0-9]/g, '')
   const ancho = 720
   const alto = 200
-  const izq = 4
-  const der = 4
+  const izq = 30
+  const der = 30
   const arriba = 26
   const abajo = 26
   const anchoUtil = ancho - izq - der
@@ -219,20 +233,29 @@ export function EvolucionMensual({ datos, moneda }: { datos: Array<{ mes: string
         {datos.map((d, i) => {
           const esActual = d.mes === mesActual
           const p = puntos[i]
+          const ancla = anclaDe(i, n)
           return (
             <g key={d.mes}>
-              <circle cx={p.x} cy={p.y} r={esActual ? 4.5 : 3} fill={esActual ? AZUL_SECUENCIAL : 'white'} stroke={AZUL_SECUENCIAL} strokeWidth={esActual ? 0 : 2} />
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r={esActual ? 4.5 : 3}
+                className={esActual ? '' : 'fill-white dark:fill-zinc-900'}
+                fill={esActual ? AZUL_SECUENCIAL : undefined}
+                stroke={AZUL_SECUENCIAL}
+                strokeWidth={esActual ? 0 : 2}
+              />
               {d.totalCentavos > 0 ? (
                 <text
                   x={p.x}
                   y={Math.max(10, p.y - 10)}
-                  textAnchor="middle"
+                  textAnchor={ancla}
                   className={`text-[10.5px] ${esActual ? 'fill-neutral-900 font-semibold dark:fill-gray-100' : 'fill-neutral-600 dark:fill-gray-400'}`}
                 >
                   {plataCorta(d.totalCentavos)}
                 </text>
               ) : null}
-              <text x={p.x} y={alto - 8} textAnchor="middle" className={`text-[11px] ${esActual ? 'fill-neutral-900 font-semibold dark:fill-gray-100' : 'fill-neutral-500 dark:fill-gray-500'}`}>
+              <text x={p.x} y={alto - 8} textAnchor={ancla} className={`text-[11px] ${esActual ? 'fill-neutral-900 font-semibold dark:fill-gray-100' : 'fill-neutral-500 dark:fill-gray-500'}`}>
                 {mesCorto(d.mes)}
               </text>
             </g>

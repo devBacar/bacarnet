@@ -231,20 +231,32 @@ function convertirRrhh(rrhh) {
 }
 
 /** Reemplaza `datos.tot[campo][i]` por el valor de `porMes` para cada mes que tenga dato nuevo; deja el resto igual.
- * Si un mes nuevo da menos del 5% del promedio de los demás meses con dato, lo avisa: probablemente la
- * contabilidad de ese mes todavía no cerró del todo (como con el mes "provisional" que ya manejaba el tablero
- * viejo) y conviene revisarlo a mano antes de subir el HTML en vez de confiar en el número tal cual. */
+ * Si el ÚLTIMO mes de la serie da menos del 20% del promedio de los demás meses con dato, se trata como "sin dato
+ * nuevo" (se deja el valor que ya tenía) en vez de aplicarlo: casi siempre es que la contabilidad de ese mes
+ * todavía no cerró del todo (visto en vivo con Ingresos Brutos de 2026-09: dio ~$5.700 contra ~$100-120M de los
+ * meses anteriores). Esto corre automático sin revisión manual, así que no alcanza con avisar "revisar a mano": si
+ * no se frena acá, el tablero mostraría un número engañoso hasta que alguien lo note. Para un mes que NO es el
+ * último de la serie, en cambio, solo se avisa (ahí un valor bajo puede ser real, no un cierre pendiente). */
 function aplicarValores(datos, campo, porMes, etiqueta, { decimales = 0 } = {}) {
   let actualizados = 0
   const sinDatoNuevo = []
   const nuevos = [...porMes.values()]
   const promedio = nuevos.length > 0 ? nuevos.reduce((a, b) => a + b, 0) / nuevos.length : 0
   const sospechosos = []
+  const frenados = []
+  const ultimoMes = datos.meses[datos.meses.length - 1]
   datos.meses.forEach((mes, i) => {
     if (porMes.has(mes)) {
+      const nuevoCrudo = porMes.get(mes)
+      const esUltimoMes = mes === ultimoMes
+      const esMuyChico = promedio > 0 && Math.abs(nuevoCrudo) < promedio * 0.2
+      if (esUltimoMes && esMuyChico) {
+        frenados.push(mes)
+        return
+      }
       const anterior = datos.tot[campo][i]
       const factor = 10 ** decimales
-      const nuevo = Math.round(porMes.get(mes) * factor) / factor
+      const nuevo = Math.round(nuevoCrudo * factor) / factor
       if (nuevo !== anterior) actualizados += 1
       if (promedio > 0 && Math.abs(nuevo) < promedio * 0.05) sospechosos.push(mes)
       datos.tot[campo][i] = nuevo
@@ -255,9 +267,14 @@ function aplicarValores(datos, campo, porMes, etiqueta, { decimales = 0 } = {}) 
   if (sinDatoNuevo.length > 0) {
     console.log(`  ${etiqueta}: sin dato nuevo en ${sinDatoNuevo.length} meses (quedan con el valor que ya tenían): ${sinDatoNuevo.join(', ')}`)
   }
+  if (frenados.length > 0) {
+    console.log(
+      `  ${etiqueta}: FRENADO el último mes por valor demasiado chico (probable contabilidad sin cerrar, se deja el valor anterior): ${frenados.join(', ')}`,
+    )
+  }
   if (sospechosos.length > 0) {
     console.log(
-      `  ${etiqueta}: OJO, estos meses dieron un valor mucho más chico que el resto (revisar a mano antes de subir): ${sospechosos.join(', ')}`,
+      `  ${etiqueta}: OJO, estos meses (no el último) dieron un valor mucho más chico que el resto (revisar a mano): ${sospechosos.join(', ')}`,
     )
   }
   console.log(`  ${etiqueta}: ${actualizados} de ${datos.meses.length} meses con valor distinto al que tenía el tablero.`)

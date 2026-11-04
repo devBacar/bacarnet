@@ -24,6 +24,11 @@ export interface ClienteVentaTablero {
   porUnegocio: Array<{ idUnegocio: number | null; nombre: string; centavos: number }>
 }
 
+export interface MesTendenciaTablero {
+  mes: string
+  totalCentavos: number
+}
+
 export interface TableroVentas {
   mes: string
   moneda: MonedaTablero
@@ -31,7 +36,13 @@ export interface TableroVentas {
   totalCentavos: number
   totalMesAnteriorCentavos: number
   variacionPorcentaje: number | null
+  cantidadComprobantes: number
+  cantidadClientes: number
+  ticketPromedioCentavos: number
+  concentracionTop5Porcentaje: number | null
+  tendencia: MesTendenciaTablero[]
   porUnegocio: UnegocioVentaTablero[]
+  topItems: ItemVentaTablero[]
   clientes: ClienteVentaTablero[]
   sinDatosDeItems: boolean
 }

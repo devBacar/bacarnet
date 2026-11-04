@@ -2,8 +2,9 @@ import { useQuery } from '@tanstack/react-query'
 import { TrendingUp } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { BarraHorizontal, EvolucionMensual, colorUnegocio } from '../../components/tablero-ventas/graficos'
 import { TarjetaTablero } from '../../components/tablero-finanzas/TarjetaTablero'
-import { fechaHora, mesLargo, plata, textoPct } from '../../components/tablero-finanzas/formatoTablero'
+import { fechaHora, mesLargo, plata, plataCorta, textoPct } from '../../components/tablero-finanzas/formatoTablero'
 import { fetchTableroVentas, type MonedaTablero, type TableroVentas } from '../../services/finanzasVentasTableroApi'
 
 const CLASE_SELECT =
@@ -25,30 +26,63 @@ function mesesRecientes(hastaMes: string, cantidad: number): string[] {
   return salida
 }
 
-function Resumen({ datos }: { datos: TableroVentas }) {
+function Kpi({ etiqueta, valor, nota, notaColor }: { etiqueta: string; valor: string; nota?: string; notaColor?: 'good' | 'bad' | 'neutral' }) {
+  const colorNota =
+    notaColor === 'good'
+      ? 'text-emerald-700 dark:text-emerald-400'
+      : notaColor === 'bad'
+        ? 'text-red-700 dark:text-red-400'
+        : 'text-neutral-600 dark:text-gray-400'
+  return (
+    <article className="min-w-0 rounded-xl border border-neutral-300 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+      <h2 className="text-[13px] font-medium text-neutral-600 dark:text-gray-400">{etiqueta}</h2>
+      <p className="mt-1 break-words text-[22px] font-bold leading-tight tabular-nums text-neutral-900 dark:text-gray-100">{valor}</p>
+      {nota ? <p className={`mt-1 text-[12px] leading-snug ${colorNota}`}>{nota}</p> : null}
+    </article>
+  )
+}
+
+function Kpis({ datos }: { datos: TableroVentas }) {
   const variacion = datos.variacionPorcentaje
-  const nota =
+  const notaVariacion =
     datos.totalMesAnteriorCentavos > 0
       ? variacion == null || variacion === 0
         ? 'igual que el mes anterior'
-        : `${variacion > 0 ? 'subió' : 'bajó'} ${textoPct(variacion)} vs. ${plata(datos.totalMesAnteriorCentavos, datos.moneda)} del mes anterior`
-      : 'no hay datos del mes anterior para comparar'
+        : `${variacion > 0 ? '↑' : '↓'} ${textoPct(variacion)} vs. mes anterior`
+      : 'sin mes anterior para comparar'
   return (
-    <section className="grid min-w-0 gap-3 sm:grid-cols-2">
-      <article className="min-w-0 rounded-xl border border-neutral-300 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-        <h2 className="text-brand-primary text-[14px] font-medium">Ventas totales del mes</h2>
-        <p className="mt-1 break-words text-[26px] font-bold leading-tight tabular-nums text-neutral-900 dark:text-gray-100">
-          {plata(datos.totalCentavos, datos.moneda)}
-        </p>
-        <p className="mt-1 text-[13px] leading-snug text-neutral-600 dark:text-gray-400">{nota}</p>
-      </article>
-      {datos.sinDatosDeItems ? (
-        <article className="min-w-0 rounded-xl border border-amber-300 bg-amber-50 p-4 text-[13px] leading-snug text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
-          Todavía no se importaron los ítems facturados (items.csv de Vientri). El desglose por unidad de negocio y por
-          ítem va a aparecer vacío hasta que se corra una importación con ese archivo.
-        </article>
-      ) : null}
+    <section className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4">
+      <Kpi
+        etiqueta="Ventas totales del mes"
+        valor={plata(datos.totalCentavos, datos.moneda)}
+        nota={notaVariacion}
+        notaColor={variacion == null ? 'neutral' : variacion > 0 ? 'good' : variacion < 0 ? 'bad' : 'neutral'}
+      />
+      <Kpi etiqueta="Comprobantes emitidos" valor={datos.cantidadComprobantes.toLocaleString('es-AR')} />
+      <Kpi etiqueta="Ticket promedio" valor={plata(datos.ticketPromedioCentavos, datos.moneda)} />
+      <Kpi
+        etiqueta="Clientes facturados"
+        valor={datos.cantidadClientes.toLocaleString('es-AR')}
+        nota={datos.concentracionTop5Porcentaje != null ? `top 5 = ${textoPct(datos.concentracionTop5Porcentaje)} del total` : undefined}
+      />
     </section>
+  )
+}
+
+function AvisoSinItems() {
+  return (
+    <article className="min-w-0 rounded-xl border border-amber-300 bg-amber-50 p-4 text-[13px] leading-snug text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+      Todavía no se importaron los ítems facturados (items.csv de Vientri). El desglose por unidad de negocio y por
+      ítem va a aparecer vacío hasta que se corra una importación con ese archivo.
+    </article>
+  )
+}
+
+function Evolucion({ datos }: { datos: TableroVentas }) {
+  return (
+    <TarjetaTablero titulo="Evolución mensual" subtitulo="Facturación total, últimos 6 meses.">
+      <EvolucionMensual datos={datos.tendencia} moneda={datos.moneda} />
+    </TarjetaTablero>
   )
 }
 
@@ -61,27 +95,29 @@ function PorUnegocio({ datos }: { datos: TableroVentas }) {
       </TarjetaTablero>
     )
   }
+  const maximo = Math.max(...datos.porUnegocio.map((u) => u.centavos))
   return (
     <TarjetaTablero titulo="Por unidad de negocio" subtitulo="Las 6 unidades de Vientri, separadas. Tocá una para ver sus ítems facturados.">
-      <ul className="grid gap-2">
-        {datos.porUnegocio.map((un) => {
+      <ul className="grid gap-3">
+        {datos.porUnegocio.map((un, i) => {
           const clave = String(un.idUnegocio ?? 'sin-unegocio')
           const abiertoEste = abierto === clave
+          const color = colorUnegocio(un.idUnegocio, i)
           return (
             <li key={clave} className="min-w-0 border-b border-neutral-100 pb-3 last:border-0 last:pb-0 dark:border-zinc-800">
               <button
                 type="button"
                 aria-expanded={abiertoEste}
                 onClick={() => setAbierto(abiertoEste ? null : clave)}
-                className="grid w-full min-w-0 gap-0.5 rounded-lg px-1 py-1.5 text-left hover:bg-neutral-50 dark:hover:bg-zinc-800"
+                className="grid w-full min-w-0 gap-1 rounded-lg px-1 py-1 text-left hover:bg-neutral-50 dark:hover:bg-zinc-800"
               >
-                <span className="flex min-w-0 items-baseline justify-between gap-3">
-                  <span className="min-w-0 truncate text-[15px] font-medium text-neutral-900 dark:text-gray-100">{un.nombre}</span>
-                  <span className="shrink-0 tabular-nums text-neutral-900 dark:text-gray-100">{plata(un.centavos, datos.moneda)}</span>
-                </span>
-                <span className="text-[13px] text-neutral-600 dark:text-gray-400">
-                  {un.porcentaje != null ? `${textoPct(un.porcentaje)} del total` : ''}
-                </span>
+                <BarraHorizontal
+                  etiqueta={un.nombre}
+                  valor={un.centavos}
+                  maximo={maximo}
+                  color={color}
+                  texto={`${plata(un.centavos, datos.moneda)}${un.porcentaje != null ? ` · ${textoPct(un.porcentaje)}` : ''}`}
+                />
               </button>
               {abiertoEste ? (
                 un.items.length === 0 ? (
@@ -89,7 +125,7 @@ function PorUnegocio({ datos }: { datos: TableroVentas }) {
                     Sin ítems facturados cargados para esta unidad.
                   </p>
                 ) : (
-                  <ul className="mt-1 grid gap-2 border-l-2 border-neutral-200 py-1 pl-3 dark:border-zinc-700">
+                  <ul className="mt-2 grid gap-2 border-l-2 border-neutral-200 py-1 pl-3 dark:border-zinc-700">
                     {un.items.map((item) => (
                       <li key={`${item.idArt}`} className="flex min-w-0 items-baseline justify-between gap-3 text-[14px]">
                         <span className="min-w-0 truncate text-neutral-800 dark:text-gray-200">{item.nombre}</span>
@@ -107,6 +143,35 @@ function PorUnegocio({ datos }: { datos: TableroVentas }) {
   )
 }
 
+function TopItems({ datos }: { datos: TableroVentas }) {
+  if (datos.topItems.length === 0) {
+    return (
+      <TarjetaTablero titulo="Ítems más facturados">
+        <p className="text-[14px] text-neutral-700 dark:text-gray-300">
+          {datos.sinDatosDeItems ? 'Sin datos de ítems todavía.' : 'Este mes no hay ítems facturados cargados.'}
+        </p>
+      </TarjetaTablero>
+    )
+  }
+  const maximo = Math.max(...datos.topItems.map((it) => it.centavos))
+  return (
+    <TarjetaTablero titulo="Ítems más facturados" subtitulo="Top 8 del mes, todas las unidades.">
+      <ul className="grid gap-3">
+        {datos.topItems.map((item) => (
+          <BarraHorizontal
+            key={`${item.idArt}`}
+            etiqueta={item.nombre}
+            valor={item.centavos}
+            maximo={maximo}
+            color="#2a78d6"
+            texto={plataCorta(item.centavos)}
+          />
+        ))}
+      </ul>
+    </TarjetaTablero>
+  )
+}
+
 function RankingClientes({ datos }: { datos: TableroVentas }) {
   if (datos.clientes.length === 0) {
     return (
@@ -115,17 +180,20 @@ function RankingClientes({ datos }: { datos: TableroVentas }) {
       </TarjetaTablero>
     )
   }
+  const top = datos.clientes.slice(0, 15)
+  const maximo = Math.max(...top.map((c) => c.centavos))
   return (
-    <TarjetaTablero titulo="Ranking de clientes" subtitulo="Por facturación total del mes.">
-      <ul className="grid gap-2">
-        {datos.clientes.slice(0, 25).map((cliente, i) => (
-          <li key={cliente.vientriId} className="flex min-w-0 items-baseline justify-between gap-3 border-b border-neutral-100 pb-2 text-[14px] last:border-0 dark:border-zinc-800">
-            <span className="min-w-0 truncate text-neutral-800 dark:text-gray-200">
-              <span className="mr-2 text-neutral-400">{i + 1}.</span>
-              {cliente.nombre}
-            </span>
-            <span className="shrink-0 tabular-nums text-neutral-900 dark:text-gray-100">{plata(cliente.centavos, datos.moneda)}</span>
-          </li>
+    <TarjetaTablero titulo="Ranking de clientes" subtitulo="Top 15 por facturación total del mes.">
+      <ul className="grid gap-3">
+        {top.map((cliente, i) => (
+          <BarraHorizontal
+            key={cliente.vientriId}
+            etiqueta={`${i + 1}. ${cliente.nombre}`}
+            valor={cliente.centavos}
+            maximo={maximo}
+            color="#2a78d6"
+            texto={plataCorta(cliente.centavos)}
+          />
         ))}
       </ul>
     </TarjetaTablero>
@@ -189,8 +257,13 @@ export function TableroVentasPage() {
 
       {datos ? (
         <div className="grid min-w-0 gap-5">
-          <Resumen datos={datos} />
-          <PorUnegocio datos={datos} />
+          <Kpis datos={datos} />
+          {datos.sinDatosDeItems ? <AvisoSinItems /> : null}
+          <Evolucion datos={datos} />
+          <div className="grid min-w-0 gap-5 lg:grid-cols-2">
+            <PorUnegocio datos={datos} />
+            <TopItems datos={datos} />
+          </div>
           <RankingClientes datos={datos} />
         </div>
       ) : null}

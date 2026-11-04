@@ -93,3 +93,18 @@ export async function hayItemsImportados(): Promise<boolean> {
   const snap = await adminDb().collection(VIENTRI_ITEMS_COMPROBANTE).limit(1).get()
   return !snap.empty
 }
+
+/** Solo el total facturado del mes (sin traer items ni catálogos): para el gráfico de evolución mensual. */
+export async function cargarTotalMes(mes: string): Promise<number> {
+  const desde = `${mes}-01`
+  const hasta = `${mes}-31`
+  const snap = await adminDb()
+    .collection(VIENTRI_COMPROBANTES)
+    .where('fecha', '>=', desde)
+    .where('fecha', '<=', hasta)
+    .select('totalCentavos')
+    .get()
+  let total = 0
+  for (const d of snap.docs) total += Number(d.data().totalCentavos) || 0
+  return total
+}

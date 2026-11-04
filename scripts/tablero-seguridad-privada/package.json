@@ -1,0 +1,9 @@
+{
+  "name": "tablero-seguridad-privada",
+  "private": true,
+  "type": "module",
+  "description": "Generador standalone del tablero HTML de Seguridad Privada (Drive). No es parte del build de Bacarnet: se corre a mano o con una tarea programada, con su propio node_modules.",
+  "dependencies": {
+    "firebase-admin": "^13.6.0"
+  }
+}

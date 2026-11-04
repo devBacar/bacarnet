@@ -7,6 +7,7 @@ import type {
   ChequeTipo,
 } from '../domain/cheque.types.js'
 import { resolverBanco } from '../domain/banco-bcra.js'
+import { leerRangoMonto } from '../domain/filtro-monto.js'
 import {
   countChequesFiltrados,
   findExistingNumeros,
@@ -39,6 +40,9 @@ export interface ChequesListadoQuery {
   desde?: string
   hasta?: string
   q?: string
+  /** En pesos, como los manda un input numérico. */
+  montoDesde?: string
+  montoHasta?: string
   page?: string
   limit?: string
 }
@@ -132,8 +136,15 @@ export async function listChequesApi(query: ChequesListadoQuery): Promise<Cheque
   const page = parsePositiveInt(query.page, 1, 10_000)
   const limit = parsePositiveInt(query.limit, PAGE_DEFAULT, PAGE_MAX)
   const offset = (page - 1) * limit
-  const filtro: ChequesFiltro = { direccion, origen, estado, tipo, vinculacion, comprobante, interesEncubierto, desde, hasta, q }
-  const baseFiltro = { origen, estado, tipo, vinculacion, comprobante, interesEncubierto, desde, hasta, q }
+  const { montoMinCentavos, montoMaxCentavos } = leerRangoMonto(query.montoDesde, query.montoHasta)
+  const filtro: ChequesFiltro = {
+    direccion, origen, estado, tipo, vinculacion, comprobante, interesEncubierto, desde, hasta, q,
+    montoMinCentavos, montoMaxCentavos,
+  }
+  const baseFiltro = {
+    origen, estado, tipo, vinculacion, comprobante, interesEncubierto, desde, hasta, q,
+    montoMinCentavos, montoMaxCentavos,
+  }
 
   const [total, totalCentavos, porDireccion, cheques] = await Promise.all([
     countChequesFiltrados(filtro),

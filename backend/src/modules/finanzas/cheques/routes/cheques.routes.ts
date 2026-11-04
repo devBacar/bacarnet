@@ -39,6 +39,8 @@ finanzasChequesRouter.get('/', async (req, res) => {
       desde: one(req.query.desde),
       hasta: one(req.query.hasta),
       q: one(req.query.q),
+      montoDesde: one(req.query.montoDesde),
+      montoHasta: one(req.query.montoHasta),
       page: one(req.query.page),
       limit: one(req.query.limit),
     })

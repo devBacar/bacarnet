@@ -37,11 +37,23 @@ export async function sincronizarColeccion(input: {
   importacionId: string
   borrarFaltantes: boolean
   simular: boolean
+  /** Campos que otros procesos escriben en el doc y la importación no debe borrar al reescribirlo. */
+  conservarCampos?: string[]
 }): Promise<ConteoEscritura> {
   const col = adminDb().collection(input.coleccion)
+  const conservar = input.conservarCampos ?? []
   const existentes = new Map<string, string>()
-  const snap = await col.select('huella').get()
-  for (const d of snap.docs) existentes.set(d.id, String(d.get('huella') ?? ''))
+  const conservados = new Map<string, Record<string, unknown>>()
+  const snap = await col.select('huella', ...conservar).get()
+  for (const d of snap.docs) {
+    existentes.set(d.id, String(d.get('huella') ?? ''))
+    const guardados: Record<string, unknown> = {}
+    for (const campo of conservar) {
+      const valor = d.get(campo)
+      if (valor !== undefined) guardados[campo] = valor
+    }
+    if (Object.keys(guardados).length > 0) conservados.set(d.id, guardados)
+  }
 
   const conteo: ConteoEscritura = { nuevos: 0, cambiados: 0, iguales: 0, borrados: 0 }
   const escrituras: Array<{ id: string; data: object | null }> = []
@@ -56,7 +68,7 @@ export async function sincronizarColeccion(input: {
     }
     if (previa === undefined) conteo.nuevos++
     else conteo.cambiados++
-    escrituras.push({ id: d.id, data: { ...d.data, huella: h, importacionId: input.importacionId } })
+    escrituras.push({ id: d.id, data: { ...conservados.get(d.id), ...d.data, huella: h, importacionId: input.importacionId } })
   }
   if (input.borrarFaltantes) {
     for (const id of existentes.keys()) {

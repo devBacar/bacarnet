@@ -257,6 +257,7 @@ export async function importarChequesOcasionales(opts: {
     importacionId: importacionId ?? 'simulacion',
     borrarFaltantes: true,
     simular,
+    conservarCampos: ['movimientoBancarioId', 'movimientoCuentaId', 'movimientoFecha'],
   })
 
   // Seguimiento de renovaciones: derivado de los docs recién sincronizados. Si falla no tumba la

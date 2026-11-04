@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { inferEstadoEmitidoVientri, parseEmitidosVientriSheet } from './cheques.service.js'
-import { matchBusqueda, matchMontoCentavos } from './cheques.repository.js'
+import { matchBusqueda } from './cheques.repository.js'
 
 describe('inferEstadoEmitidoVientri', () => {
   it('mapea Renovado a estado renovado (ya no lo descarta)', () => {
@@ -56,8 +56,8 @@ describe('parseEmitidosVientriSheet', () => {
   })
 })
 
-describe('matchBusqueda y matchMontoCentavos', () => {
-  it('encuentra por monto entero, con puntos de miles, con decimales o con signo $', () => {
+describe('matchBusqueda', () => {
+  it('busca en número, emisor, cuit, cliente y destinatario, pero no en el importe', () => {
     const doc = {
       numero: '00012345',
       emisor: 'Proveedor Sur SA',
@@ -66,13 +66,8 @@ describe('matchBusqueda y matchMontoCentavos', () => {
       destinatario: null,
       montoCentavos: 150_000_050,
     }
-    expect(matchBusqueda(doc, '1500000')).toBe(true)
-    expect(matchBusqueda(doc, '1.500.000')).toBe(true)
-    expect(matchBusqueda(doc, '1.500.000,50')).toBe(true)
-    expect(matchBusqueda(doc, '$ 1.500.000,50')).toBe(true)
-    expect(matchBusqueda(doc, '1500000,50')).toBe(true)
-    expect(matchBusqueda(doc, '1500000.50')).toBe(true)
-    expect(matchBusqueda(doc, '999999')).toBe(false)
-    expect(matchMontoCentavos(150_000_050, '.')).toBe(false)
+    expect(matchBusqueda(doc, 'proveedor')).toBe(true)
+    expect(matchBusqueda(doc, '12345')).toBe(true)
+    expect(matchBusqueda(doc, '1500000')).toBe(false)
   })
 })

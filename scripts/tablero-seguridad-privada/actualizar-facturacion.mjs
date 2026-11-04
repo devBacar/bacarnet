@@ -1,39 +1,50 @@
 #!/usr/bin/env node
 /**
  * Tablero "Seguridad Privada" (HTML estático en Drive, carpeta Tableros Gerencia > Financiero > Seguridad Privada):
- * recalcula con datos frescos de Vientri la facturación mensual (tot.fact), los Ingresos Brutos (tot.iibb) y las
- * horas facturadas (tot.hf) de Seguridad, y reemplaza SOLO esos tres arrays dentro del JSON embebido en el
- * index.html, sin tocar nada más (ni las tablas por cliente, ni ninguna otra sección del informe).
+ * recalcula con datos frescos de Vientri y RRHH la facturación (tot.fact), los Ingresos Brutos (tot.iibb), las
+ * horas facturadas (tot.hf), los sueldos y cargas (tot.mo) y las horas pagadas (tot.hp) de Seguridad, y reemplaza
+ * SOLO esos cinco arrays dentro del JSON embebido en el index.html, sin tocar nada más (ni las tablas por
+ * cliente, ni ninguna otra sección del informe).
+ *
+ * "Resultado" no es un campo guardado: la propia página lo calcula en el navegador a partir de
+ * tot.fact − tot.mo − tot.otros − tot.iibb − tot.est. Con este script, fact/iibb/hf/mo/hp quedan frescos pero
+ * tot.otros y tot.est (gastos generales, que también depende de sueldos de áreas de apoyo) siguen con el valor
+ * del 22/10/2026: el "resultado" que se ve en pantalla después de correr esto es una MEZCLA de componentes
+ * frescos y viejos, no un número 100% actualizado. Quien lo use tiene que saber eso.
  *
  * Estado de la Fase 1 acordada (horas, facturación, sueldos/resultado), por pieza:
  *
  *   - Facturación (tot.fact): HECHO. <2% de diferencia en 22 de 24 meses contra lo que ya tenía el tablero.
  *   - Ingresos Brutos (tot.iibb): HECHO. <5% de diferencia en 21 de 23 meses con dato.
- *   - Horas facturadas (tot.hf): HECHO. ~4% de diferencia en 22 de 23 meses con dato (ver método abajo).
- *   - Sueldos y cargas (tot.mo) y horas pagadas (tot.hp): BLOQUEADO, pero no por falta de datos. Bacarnet ya
- *     calcula esto por centro de costo en backend/src/modules/rrhh/domain/evolucion.ts y
- *     backend/src/modules/rrhh/domain/costosNomina.ts (alimentados por backend/src/modules/rrhh/services/
- *     ingestaRrhh.ts), y el centro de costo "SERVICIO DE SEGURIDAD PRIVADA" (distinto de "SEGURIDAD PLANTA", que
- *     no es Seguridad Privada) ya existe ahí. Lo que falta es leer `rrhh_informe/agregado` de Firestore de
- *     producción (autorizado por el usuario, pero el entorno de este agente lo sigue bloqueando por tratarse de
- *     un acceso directo a producción con datos de sueldos). Alguien con el permiso correspondiente tiene que
- *     correr esa lectura; el resto del cálculo (filtrar por cc, sumar por mes) es mecánico.
- *   - Resultado = facturación − sueldos y cargas − otros gastos − IIBB − gastos generales: depende de sueldos
- *     (bloqueado arriba) y de otros gastos (bloqueado abajo), así que sigue sin poder calcularse.
- *   - Otros gastos del servicio (tot.otros): BLOQUEADO. La clasificación oficial de rubro/subrubro del plan de
- *     cuentas (sql/gastos_seguridad.sql) da cualquier cosa entre 15% y 180% del valor conocido según qué rubros
- *     se incluyan, nunca cierra. Se investigó por qué: una parte de ese gasto es la flota propia de Seguridad, y
- *     esa flota NO se contabiliza únicamente en el centro de costo "SERVICIO DE SEGURIDAD PRIVADA": 5 vehículos sí
- *     están asignados ahí directamente en Vientri (OBJETOSERVICIO.IDCCOSTO: un VW Gol, un VW Fox, un cuatriciclo
- *     Zanella, una Renault Kangoo y un Renault Sandero), pero la lista real de "vehículos de Seguridad confirmados
- *     por Sistemas" que ya usaba el tablero (ver dentro del propio JSON, `flotaSP.veh`) tiene 14 vehículos
- *     (cuatriciclos, motos, autos/camionetas, UTVs) y varios están marcados ahí mismo como "no registrado en
- *     Vientri". Mezclar el gasto directo de esos 5 vehículos con una estimación proporcional del resto (usando el
- *     `frac` que ya trae el tablero) sobrestima el número y además hay un mes (jun-2025) con un asiento de ajuste
- *     por inflación que distorsiona cualquier cálculo mensual de esa cuenta. No se encontró una forma de cerrar
- *     esto sin inventar una regla nueva, así que queda sin tocar.
+ *   - Horas facturadas (tot.hf): HECHO. ~4% de diferencia en 22 de 23 meses con dato.
+ *   - Horas pagadas (tot.hp): HECHO. Sale de backend/src/modules/rrhh/domain/evolucion.ts (horasNormales + he50 +
+ *     he100 + fer + comp), filtrado a los centros de costo "Seguridad Privada" (excluye "Seguridad Planta", que
+ *     no es lo mismo). <7% de diferencia en todos los meses con dato.
+ *   - Sueldos y cargas (tot.mo): HECHO, con una salvedad conocida. Sale de
+ *     backend/src/modules/rrhh/domain/costosNomina.ts (`costoLaboral` + `prov`, sumados por centro de costo y
+ *     mes). `prov` son las provisiones de aguinaldo y despidos: sin sumarlas, el número queda sistemáticamente
+ *     ~5-6% por debajo de lo que ya tenía el tablero (validado con `costoLaboral` solo); con `prov` sumado
+ *     debería cerrar mejor, pero el archivo de datos usado para esta versión del script (ver --rrhh) todavía no
+ *     incluye `prov` por mes/cc (quedó pedido para una próxima lectura de rrhh_informe/agregado). Si volvés a
+ *     generar el archivo --rrhh, sumá `prov` igual que `costoLaboral`.
+ *   - Otros gastos del servicio (tot.otros) y gastos generales (tot.est): BLOQUEADOS. Se probó reconstruir
+ *     "otros gastos" con la clasificación oficial de rubro/subrubro del plan de cuentas de Vientri
+ *     (sql/gastos_seguridad.sql): da entre 15% y 180% del valor conocido según qué rubros se incluyan, nunca
+ *     cierra. La razón identificada: una parte de ese gasto es la flota propia de Seguridad, y esa flota NO se
+ *     contabiliza únicamente en el centro de costo "SERVICIO DE SEGURIDAD PRIVADA" — 5 vehículos sí están
+ *     asignados ahí directamente en Vientri (OBJETOSERVICIO.IDCCOSTO: un VW Gol, un VW Fox, un cuatriciclo
+ *     Zanella, una Renault Kangoo y un Renault Sandero), pero la lista real de "vehículos de Seguridad
+ *     confirmados por Sistemas" que ya usaba el tablero (dentro del propio JSON, `flotaSP.veh`) tiene 14
+ *     vehículos y varios están marcados ahí mismo como "no registrado en Vientri": no es algo que se pueda sacar
+ *     de Vientri ni de Bacarnet. Mezclar el gasto directo de esos 5 con una estimación proporcional del resto
+ *     (con el `frac` que ya trae el tablero) sobrestima el número, y además hay un mes (jun-2025) con un asiento
+ *     de ajuste por inflación que distorsiona cualquier cálculo mensual de esa cuenta. No se encontró una forma
+ *     de cerrar esto sin inventar una regla nueva: decisión del usuario, no de este script, si quiere conseguir
+ *     la lista completa de vehículos de quien se la pasó. "Gastos generales" tampoco se puede calcular porque
+ *     depende, además, de los sueldos de las áreas de apoyo (mismo tipo de dato que tot.mo, pero de otros
+ *     centros de costo).
  *
- * Métodos usados (los tres validados contra los 24 meses que ya tenía el tablero):
+ * Métodos usados (todos validados contra los meses que ya tenía el tablero):
  *
  *   Facturación = suma de NETO de facturas (FAA, FAB, CFA) con id_unegocio = 1 ("SERVICIO DE SEGURIDAD") menos la
  *   suma de NETO de notas de crédito (NCA, NCB, CCA) del mismo id_unegocio, agrupado por mes de FEC_CMP (columna
@@ -51,20 +62,27 @@
  *   (igual que hace el tablero viejo: las facturas del día 1 al 7 cuentan como del mes anterior). Eso da la
  *   tarifa promedio $/hora de cada mes (importe facturado ÷ horas). A esas horas se les suma el monto "fijo"
  *   (abono mensual) de CADA cliente de ese mismo mes, convertido a horas-equivalente con esa tarifa promedio:
- *   la idea del usuario de que la tarifa real está en Vientri (en el precio unitario con el que ya facturan los
- *   clientes "por hora") funciona. Da ~4% de diferencia en 22 de 23 meses con dato; el único mes raro (jul-2025)
- *   ya tenía una anomalía puntual en los datos de ese mes (se puede ver comparando `q` contra `hs` de cualquier
- *   cliente "por hora" en ese mes en el propio `datos.cli` del tablero) y no es un problema del método.
+ *   la idea de que la tarifa real está en Vientri (en el precio unitario con el que ya facturan los clientes "por
+ *   hora") funciona. Da ~4% de diferencia en 22 de 23 meses con dato; el único mes raro (jul-2025) ya tenía una
+ *   anomalía puntual en los datos de ese mes (se puede ver comparando `q` contra `hs` de cualquier cliente "por
+ *   hora" en ese mes en el propio `datos.cli` del tablero) y no es un problema del método.
+ *
+ *   Sueldos/cargas y horas pagadas = ver más arriba; se leen de un JSON ya agregado (--rrhh), generado aparte con
+ *   scripts/tablero-seguridad-privada/leer-rrhh.mjs (lee Firestore de producción, requiere permiso explícito:
+ *   tiene sueldos reales, aunque sea agregado por centro de costo y no por persona).
  *
  * Uso:
  *   node actualizar-facturacion.mjs --comprobantes <comprobantes.csv> --html <index.html> --out <salida.html> \
- *     [--gastos <gastos_seguridad.csv>] [--items <ventas_items.csv>]
+ *     [--gastos <gastos_seguridad.csv>] [--items <ventas_items.csv>] [--rrhh <rrhh_seguridad.json>]
  *
- *   --gastos y --items son opcionales e independientes entre sí: sin --gastos no se toca tot.iibb, sin --items no
- *   se toca tot.hf. --gastos se genera con sql/gastos_seguridad.sql (en esta misma carpeta); --items con la
- *   consulta de producción D:\inventario_vientri\exportador\sql\11_ventas_items.sql (no se duplica acá: es una
- *   consulta de otro tablero, ver el comentario de scripts/vientri-export/exportar_vientri.ps1 sobre el rango
- *   11-19).
+ *   Los tres flags opcionales son independientes entre sí: sin --gastos no se toca tot.iibb, sin --items no se
+ *   toca tot.hf, sin --rrhh no se tocan tot.mo ni tot.hp.
+ *   --gastos se genera con sql/gastos_seguridad.sql (en esta misma carpeta).
+ *   --items con la consulta de producción D:\inventario_vientri\exportador\sql\11_ventas_items.sql (no se duplica
+ *   acá: es una consulta de otro tablero, ver el comentario de scripts/vientri-export/exportar_vientri.ps1 sobre
+ *   el rango 11-19).
+ *   --rrhh con scripts/tablero-seguridad-privada/leer-rrhh.mjs (requiere la service account de RRHH y permiso
+ *   para leer Firestore de producción).
  *
  * No escribe en Drive ni en ningún otro lado: deja el HTML nuevo en --out para que alguien lo revise y lo suba.
  */
@@ -198,6 +216,20 @@ function calcularHorasFacturadasMensual(filasItems, mapaTipoComprobante, cliente
   return horasPorMes
 }
 
+/** Convierte el JSON de leer-rrhh.mjs ({ horasPorMes, costoPorMes } con claves "AAAAMM") a dos Map con claves
+ * "AAAA-MM" (el formato de `datos.meses`), listas para aplicarValores. */
+function convertirRrhh(rrhh) {
+  const aMapa = (obj) => {
+    const mapa = new Map()
+    for (const [clave, valor] of Object.entries(obj ?? {})) {
+      if (!/^\d{6}$/.test(clave)) continue
+      mapa.set(`${clave.slice(0, 4)}-${clave.slice(4, 6)}`, valor)
+    }
+    return mapa
+  }
+  return { horasPagadas: aMapa(rrhh.horasPorMes), sueldosYCargas: aMapa(rrhh.costoPorMes) }
+}
+
 /** Reemplaza `datos.tot[campo][i]` por el valor de `porMes` para cada mes que tenga dato nuevo; deja el resto igual.
  * Si un mes nuevo da menos del 5% del promedio de los demás meses con dato, lo avisa: probablemente la
  * contabilidad de ese mes todavía no cerró del todo (como con el mes "provisional" que ya manejaba el tablero
@@ -235,7 +267,7 @@ function main() {
   const args = parseArgs(process.argv.slice(2))
   if (!args.comprobantes || !args.html || !args.out) {
     console.error(
-      'Uso: node actualizar-facturacion.mjs --comprobantes <csv> --html <index.html> --out <salida.html> [--gastos <gastos_seguridad.csv>] [--items <ventas_items.csv>]',
+      'Uso: node actualizar-facturacion.mjs --comprobantes <csv> --html <index.html> --out <salida.html> [--gastos <gastos_seguridad.csv>] [--items <ventas_items.csv>] [--rrhh <rrhh_seguridad.json>]',
     )
     process.exit(1)
   }
@@ -255,9 +287,11 @@ function main() {
     !Array.isArray(datos.tot.fact) ||
     !Array.isArray(datos.tot.iibb) ||
     !Array.isArray(datos.tot.hf) ||
+    !Array.isArray(datos.tot.mo) ||
+    !Array.isArray(datos.tot.hp) ||
     !Array.isArray(datos.cli)
   ) {
-    throw new Error('La forma del JSON embebido cambió (meses/tot.fact/tot.iibb/tot.hf/cli): revisar antes de seguir')
+    throw new Error('La forma del JSON embebido cambió (meses/tot.fact/tot.iibb/tot.hf/tot.mo/tot.hp/cli): revisar antes de seguir')
   }
 
   const filasComprobantes = parseCsv(readFileSync(args.comprobantes, 'utf8'))
@@ -285,6 +319,19 @@ function main() {
     )
   } else {
     console.log('  Horas facturadas: no se pasó --items, queda sin tocar.')
+  }
+
+  if (args.rrhh) {
+    const rrhh = JSON.parse(readFileSync(args.rrhh, 'utf8'))
+    const { horasPagadas, sueldosYCargas } = convertirRrhh(rrhh)
+    console.log(`RRHH leído: ${rrhh.meses?.length ?? 0} meses, centros de costo ${JSON.stringify(rrhh.segCcs ?? [])}.`)
+    aplicarValores(datos, 'hp', horasPagadas, 'Horas pagadas', { decimales: 1 })
+    aplicarValores(datos, 'mo', sueldosYCargas, 'Sueldos y cargas')
+    console.log(
+      '  OJO: "sueldos y cargas" puede estar ~5% por debajo de lo real si el archivo --rrhh no sumó `prov` (provisión de aguinaldo/despidos) junto con `costoLaboral`.',
+    )
+  } else {
+    console.log('  Horas pagadas y sueldos y cargas: no se pasó --rrhh, quedan sin tocar.')
   }
 
   const nuevoBloque = JSON.stringify(datos)

@@ -349,7 +349,7 @@ export function RrhhHorasExtraPage() {
         <>
           <MenuSecciones activa={seccion} onChange={irA} />
 
-          {seccion === 'resumen' && <ResumenGeneralRrhh datos={datos} ultimoCerrado={ultimoCerrado} onIr={irA} />}
+          {seccion === 'resumen' && <ResumenGeneralRrhh datos={datos} ultimoCerrado={ultimoCerrado} onIr={irA} lineaTiempo={lineaTiempo} />}
 
           {seccion === 'horas' && (
             <>

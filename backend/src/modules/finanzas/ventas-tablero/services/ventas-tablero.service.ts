@@ -2,7 +2,7 @@ import { dateKeyInArgentina } from '../../agenda/domain/vencimiento.alert.js'
 import { sumarMeses } from '../../tablero/domain/fechas.js'
 import { armarTableroVentas } from '../domain/calcular.js'
 import type { TableroVentas } from '../domain/tipos.js'
-import { cargarDatosVentasMes, cargarTotalMes, hayItemsImportados } from './ventas-tablero.repository.js'
+import { cargarDatosVentasMes, cargarTendenciaRango, cargarTotalMes, hayItemsImportados } from './ventas-tablero.repository.js'
 
 const MESES_TENDENCIA = 6
 
@@ -19,15 +19,15 @@ export async function obtenerTableroVentas(input: { mes: string; moneda: string 
   for (let i = MESES_TENDENCIA - 1; i >= 0; i--) mesesTendencia.push(sumarMeses(input.mes, -i))
   const mesAnioAnterior = sumarMeses(input.mes, -12)
 
-  const [datosMes, datosMesAnterior, sinItems, totalesTendencia, totalMismoMesAnioAnteriorCentavos] = await Promise.all([
+  const [datosMes, datosMesAnterior, sinItems, tendenciaDetallada, totalMismoMesAnioAnteriorCentavos] = await Promise.all([
     cargarDatosVentasMes(input.mes, input.moneda),
     cargarDatosVentasMes(sumarMeses(input.mes, -1), input.moneda),
     hayItemsImportados().then((hay) => !hay),
-    Promise.all(mesesTendencia.map((mes) => cargarTotalMes(mes, input.moneda))),
+    cargarTendenciaRango(mesesTendencia, input.moneda),
     cargarTotalMes(mesAnioAnterior, input.moneda),
   ])
 
-  const tendencia = mesesTendencia.map((mes, i) => ({ mes, totalCentavos: totalesTendencia[i] }))
+  const tendencia = tendenciaDetallada.map((t) => ({ mes: t.mes, totalCentavos: t.totalCentavos }))
 
   const payload = armarTableroVentas({
     mes: input.mes,
@@ -40,6 +40,7 @@ export async function obtenerTableroVentas(input: { mes: string; moneda: string 
     unegocio: datosMes.unegocio,
     art: datosMes.art,
     tendencia,
+    tendenciaDetallada,
     hoy: dateKeyInArgentina(new Date()),
     sinDatosDeItems: sinItems,
     generadoEn: new Date().toISOString(),

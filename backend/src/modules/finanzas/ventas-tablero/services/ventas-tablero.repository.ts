@@ -138,6 +138,54 @@ export async function cargarTotalMes(mes: string, moneda: string): Promise<numbe
   return total
 }
 
+export interface TendenciaMesDetallada {
+  mes: string
+  totalCentavos: number
+  /** Desglose del total por unidad de negocio, ese mes (sin resolver nombre todavía). */
+  porUnegocio: Array<{ idUnegocio: number | null; centavos: number }>
+}
+
+/**
+ * Totales mensuales + desglose por unidad de negocio para el rango de `meses`, en UNA sola query
+ * (antes era una query por mes solo para el total). Para el gráfico de evolución y el de mix mensual.
+ */
+export async function cargarTendenciaRango(meses: string[], moneda: string): Promise<TendenciaMesDetallada[]> {
+  const idDivisa = idDivisaDe(moneda)
+  const desde = `${meses[0]}-01`
+  const hasta = `${meses[meses.length - 1]}-31`
+  const snap = await adminDb()
+    .collection(VIENTRI_COMPROBANTES)
+    .where('fecha', '>=', desde)
+    .where('fecha', '<=', hasta)
+    .select('fecha', 'totalCentavos', 'idDivisa', 'idUnegocio')
+    .get()
+  const porMes = new Map<string, { total: number; porUn: Map<string, number> }>(meses.map((m) => [m, { total: 0, porUn: new Map() }]))
+  for (const d of snap.docs) {
+    const data = d.data()
+    const idDivisaReal = typeof data.idDivisa === 'number' ? data.idDivisa : 1
+    if (idDivisaReal !== idDivisa) continue
+    const mes = typeof data.fecha === 'string' ? data.fecha.slice(0, 7) : null
+    const entrada = mes ? porMes.get(mes) : undefined
+    if (!entrada) continue
+    const total = Number(data.totalCentavos) || 0
+    entrada.total += total
+    const idUn = typeof data.idUnegocio === 'number' ? data.idUnegocio : null
+    const clave = idUn !== null ? String(idUn) : 'sin-unegocio'
+    entrada.porUn.set(clave, (entrada.porUn.get(clave) ?? 0) + total)
+  }
+  return meses.map((mes) => {
+    const entrada = porMes.get(mes)!
+    return {
+      mes,
+      totalCentavos: entrada.total,
+      porUnegocio: [...entrada.porUn.entries()].map(([clave, centavos]) => ({
+        idUnegocio: clave === 'sin-unegocio' ? null : Number(clave),
+        centavos,
+      })),
+    }
+  })
+}
+
 export interface HistorialClienteMes {
   mes: string
   totalCentavos: number

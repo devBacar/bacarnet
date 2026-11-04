@@ -38,6 +38,11 @@ export interface MesTendenciaTablero {
   totalCentavos: number
 }
 
+export interface TendenciaUnegocioMes {
+  mes: string
+  porUnegocio: Array<{ idUnegocio: number | null; nombre: string; centavos: number }>
+}
+
 export interface ComparativoInteranual {
   mesAnioAnterior: string
   totalCentavos: number
@@ -62,6 +67,7 @@ export interface TableroVentas {
   ticketPromedioCentavos: number
   concentracionTop5Porcentaje: number | null
   tendencia: MesTendenciaTablero[]
+  tendenciaPorUnegocio: TendenciaUnegocioMes[]
   comparativoInteranual: ComparativoInteranual
   proyeccion: ProyeccionVentas | null
   porUnegocio: UnegocioVentaTablero[]

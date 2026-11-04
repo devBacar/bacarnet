@@ -20,13 +20,13 @@
  *   - Horas pagadas (tot.hp): HECHO. Sale de backend/src/modules/rrhh/domain/evolucion.ts (horasNormales + he50 +
  *     he100 + fer + comp), filtrado a los centros de costo "Seguridad Privada" (excluye "Seguridad Planta", que
  *     no es lo mismo). <7% de diferencia en todos los meses con dato.
- *   - Sueldos y cargas (tot.mo): HECHO, con una salvedad conocida. Sale de
- *     backend/src/modules/rrhh/domain/costosNomina.ts (`costoLaboral` + `prov`, sumados por centro de costo y
- *     mes). `prov` son las provisiones de aguinaldo y despidos: sin sumarlas, el número queda sistemáticamente
- *     ~5-6% por debajo de lo que ya tenía el tablero (validado con `costoLaboral` solo); con `prov` sumado
- *     debería cerrar mejor, pero el archivo de datos usado para esta versión del script (ver --rrhh) todavía no
- *     incluye `prov` por mes/cc (quedó pedido para una próxima lectura de rrhh_informe/agregado). Si volvés a
- *     generar el archivo --rrhh, sumá `prov` igual que `costoLaboral`.
+ *   - Sueldos y cargas (tot.mo): HECHO. Sale de backend/src/modules/rrhh/domain/costosNomina.ts (`costoLaboral` +
+ *     `prov`, sumados por centro de costo y mes). `prov` son las provisiones de aguinaldo y despidos: sin
+ *     sumarlas, el número queda sistemáticamente ~5-6% por debajo de lo que ya tenía el tablero (se probó
+ *     primero con `costoLaboral` solo); sumando `prov` (lo que hace leer-rrhh.mjs) el error medio baja a ~1,2%,
+ *     y queda por debajo del 1% en 19 de 23 meses. Los primeros 5 meses con dato (nov-2024 a mar-2025) quedan
+ *     entre 1% y 5% por ARRIBA del valor conocido, sin una causa puntual identificada (no se investigó más
+ *     porque ya es una diferencia chica); el resto, desde abr-2025, es prácticamente exacto.
  *   - Otros gastos del servicio (tot.otros) y gastos generales (tot.est): BLOQUEADOS. Se probó reconstruir
  *     "otros gastos" con la clasificación oficial de rubro/subrubro del plan de cuentas de Vientri
  *     (sql/gastos_seguridad.sql): da entre 15% y 180% del valor conocido según qué rubros se incluyan, nunca
@@ -327,9 +327,6 @@ function main() {
     console.log(`RRHH leído: ${rrhh.meses?.length ?? 0} meses, centros de costo ${JSON.stringify(rrhh.segCcs ?? [])}.`)
     aplicarValores(datos, 'hp', horasPagadas, 'Horas pagadas', { decimales: 1 })
     aplicarValores(datos, 'mo', sueldosYCargas, 'Sueldos y cargas')
-    console.log(
-      '  OJO: "sueldos y cargas" puede estar ~5% por debajo de lo real si el archivo --rrhh no sumó `prov` (provisión de aguinaldo/despidos) junto con `costoLaboral`.',
-    )
   } else {
     console.log('  Horas pagadas y sueldos y cargas: no se pasó --rrhh, quedan sin tocar.')
   }

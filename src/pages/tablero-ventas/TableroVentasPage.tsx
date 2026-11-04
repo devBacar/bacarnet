@@ -160,8 +160,10 @@ function Evolucion({ datos }: { datos: TableroVentas }) {
   )
 }
 
-function PorUnegocio({ datos }: { datos: TableroVentas }) {
+function PorUnegocio({ datos, unegocioSel, onQuitarFiltro }: { datos: TableroVentas; unegocioSel: string; onQuitarFiltro: () => void }) {
   const [abierto, setAbierto] = useState<string | null>(null)
+  const filtrando = unegocioSel !== TODAS
+  const lista = filtrando ? datos.porUnegocio.filter((u) => claveUnegocio(u.idUnegocio) === unegocioSel) : datos.porUnegocio
   if (datos.porUnegocio.length === 0) {
     return (
       <TarjetaTablero titulo="Por unidad de negocio">
@@ -171,11 +173,25 @@ function PorUnegocio({ datos }: { datos: TableroVentas }) {
   }
   const maximo = Math.max(...datos.porUnegocio.map((u) => u.centavos))
   return (
-    <TarjetaTablero titulo="Por unidad de negocio" subtitulo="Las 6 unidades de Vientri, separadas. Tocá una para ver sus ítems facturados.">
+    <TarjetaTablero
+      titulo="Por unidad de negocio"
+      subtitulo={
+        filtrando ? (
+          <span className="inline-flex items-center gap-2">
+            Mostrando solo esta unidad.
+            <button type="button" onClick={onQuitarFiltro} className="underline hover:no-underline">
+              Ver las 6
+            </button>
+          </span>
+        ) : (
+          'Las 6 unidades de Vientri, separadas. Tocá una para ver sus ítems facturados.'
+        )
+      }
+    >
       <ul className="grid gap-3">
-        {datos.porUnegocio.map((un, i) => {
+        {lista.map((un, i) => {
           const clave = claveUnegocio(un.idUnegocio)
-          const abiertoEste = abierto === clave
+          const abiertoEste = filtrando || abierto === clave
           const color = colorUnegocio(un.idUnegocio, i)
           return (
             <li key={clave} className="min-w-0 border-b border-neutral-100 pb-3 last:border-0 last:pb-0 dark:border-zinc-800">
@@ -428,7 +444,7 @@ export function TableroVentasPage() {
           <Evolucion datos={datos} />
           <ClientesNuevosPerdidos datos={datos} />
           <div className="grid min-w-0 gap-5 lg:grid-cols-2">
-            <PorUnegocio datos={datos} />
+            <PorUnegocio datos={datos} unegocioSel={unegocioSel} onQuitarFiltro={() => setUnegocioSel(TODAS)} />
             <TopItems items={itemsVisibles} sinDatosDeItems={datos.sinDatosDeItems} />
           </div>
           <RankingClientes clientes={clientesVisibles} />

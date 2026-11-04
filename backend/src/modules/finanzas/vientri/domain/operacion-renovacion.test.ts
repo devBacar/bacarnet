@@ -427,4 +427,41 @@ describe('agruparOperacionesRenovacion', () => {
     expect(ops[0]!.vinculada).toBe(false)
     expect(ops[0]!.chequesViejos).toHaveLength(0)
   })
+
+  describe('explícitas antes que implícitas', () => {
+    // V1 lo nombra por número la operación A (banco 5000). La operación B (banco 5010, sin IDs)
+    // también "encaja" con V1 por beneficiario, banco equivalente y fechas: si B se procesara primero
+    // se quedaría con V1 y A lo usaría igual, duplicado.
+    const viejo = doc({ numeroCheque: '020-923-5000-10000', montoCentavos: 500000000, fechaEmision: '2026-03-01', fechaVencimiento: '2026-06-10', beneficiario: 'DAVALOS', beneficiarioNormalizado: 'davalos', pagado: true, fechaConciliado: '2026-06-10', obsOriginal: 'cap' })
+    const explicita = doc({ numeroCheque: '020-923-5000-20001', montoCentavos: 520000000, fechaEmision: '2026-06-10', fechaVencimiento: '2026-09-10', beneficiario: 'DAVALOS', beneficiarioNormalizado: 'davalos', esRenovacion: true, renovacionDe: ['10000'], rolEnOperacion: 'capital', obsOriginal: 'Renovacion 10000' })
+    const implicita = doc({ numeroCheque: '020-923-5010-30001', montoCentavos: 530000000, fechaEmision: '2026-06-10', fechaVencimiento: '2026-09-10', beneficiario: 'DAVALOS', beneficiarioNormalizado: 'davalos', esRenovacion: true, renovacionDe: [], rolEnOperacion: 'capital', obsOriginal: 'Renovacion' })
+
+    function resumen(docs: ChequeOcasionalDoc[]) {
+      return agruparOperacionesRenovacion(docs)
+        .map((o) => ({
+          nuevos: o.chequesNuevos.map((c) => c.numeroCheque).sort(),
+          viejos: o.chequesViejos.map((c) => c.numeroCheque).sort(),
+          tipoVinculo: o.tipoVinculo,
+        }))
+        .sort((a, b) => a.nuevos[0]!.localeCompare(b.nuevos[0]!))
+    }
+
+    it('la implícita no se lleva un viejo que una explícita ya nombró, aunque venga primero', () => {
+      const ops = agruparOperacionesRenovacion([viejo, implicita, explicita])
+      const opExplicita = ops.find((o) => o.chequesNuevos.some((c) => c.numeroCheque === explicita.numeroCheque))!
+      const opImplicita = ops.find((o) => o.chequesNuevos.some((c) => c.numeroCheque === implicita.numeroCheque))!
+
+      expect(opExplicita.chequesViejos.map((c) => c.numeroCheque)).toEqual([viejo.numeroCheque])
+      expect(opImplicita.chequesViejos).toHaveLength(0)
+      expect(opImplicita.vinculada).toBe(false)
+    })
+
+    it('el resultado no depende del orden en que llegan los docs', () => {
+      const adelante = resumen([viejo, explicita, implicita])
+      const atras = resumen([implicita, explicita, viejo])
+      const mezclado = resumen([explicita, viejo, implicita])
+      expect(atras).toEqual(adelante)
+      expect(mezclado).toEqual(adelante)
+    })
+  })
 })

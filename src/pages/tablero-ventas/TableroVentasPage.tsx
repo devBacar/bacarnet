@@ -82,6 +82,72 @@ function exportarTablero(datos: TableroVentas): void {
   descargarCsv(`ventas-${datos.mes}-${datos.moneda}.csv`, filas)
 }
 
+interface VistaKpis {
+  totalCentavos: number
+  totalMesAnteriorCentavos: number
+  variacionPorcentaje: number | null
+  cantidadComprobantes: number
+  cantidadClientes: number
+  ticketPromedioCentavos: number
+  concentracionTop5Porcentaje: number | null
+  interanualTotalCentavos: number
+  interanualVariacionPorcentaje: number | null
+  mesAnioAnterior: string
+  proyeccionCentavos: number | null
+}
+
+/** KPI de toda la empresa, o de una sola unidad de negocio si hay un filtro activo: nunca mezcla ambos. */
+function vistaKpis(datos: TableroVentas, unegocioSel: string): VistaKpis {
+  if (unegocioSel === TODAS) {
+    return {
+      totalCentavos: datos.totalCentavos,
+      totalMesAnteriorCentavos: datos.totalMesAnteriorCentavos,
+      variacionPorcentaje: datos.variacionPorcentaje,
+      cantidadComprobantes: datos.cantidadComprobantes,
+      cantidadClientes: datos.cantidadClientes,
+      ticketPromedioCentavos: datos.ticketPromedioCentavos,
+      concentracionTop5Porcentaje: datos.concentracionTop5Porcentaje,
+      interanualTotalCentavos: datos.comparativoInteranual.totalCentavos,
+      interanualVariacionPorcentaje: datos.comparativoInteranual.variacionPorcentaje,
+      mesAnioAnterior: datos.comparativoInteranual.mesAnioAnterior,
+      proyeccionCentavos: datos.proyeccion?.totalProyectadoCentavos ?? null,
+    }
+  }
+  const u = datos.porUnegocio.find((x) => claveUnegocio(x.idUnegocio) === unegocioSel)
+  if (!u) {
+    return {
+      totalCentavos: 0,
+      totalMesAnteriorCentavos: 0,
+      variacionPorcentaje: null,
+      cantidadComprobantes: 0,
+      cantidadClientes: 0,
+      ticketPromedioCentavos: 0,
+      concentracionTop5Porcentaje: null,
+      interanualTotalCentavos: 0,
+      interanualVariacionPorcentaje: null,
+      mesAnioAnterior: datos.comparativoInteranual.mesAnioAnterior,
+      proyeccionCentavos: null,
+    }
+  }
+  const proyeccionCentavos =
+    datos.proyeccion && datos.proyeccion.diasHabilesTranscurridos > 0
+      ? Math.round((u.centavos / datos.proyeccion.diasHabilesTranscurridos) * datos.proyeccion.diasHabilesTotales)
+      : null
+  return {
+    totalCentavos: u.centavos,
+    totalMesAnteriorCentavos: u.centavosMesAnterior,
+    variacionPorcentaje: u.variacionPorcentaje,
+    cantidadComprobantes: u.cantidadComprobantes,
+    cantidadClientes: u.cantidadClientes,
+    ticketPromedioCentavos: u.ticketPromedioCentavos,
+    concentracionTop5Porcentaje: u.concentracionTop5Porcentaje,
+    interanualTotalCentavos: u.centavosMismoMesAnioAnterior,
+    interanualVariacionPorcentaje: u.variacionInteranualPorcentaje,
+    mesAnioAnterior: datos.comparativoInteranual.mesAnioAnterior,
+    proyeccionCentavos,
+  }
+}
+
 function Kpi({ etiqueta, valor, nota, notaColor }: { etiqueta: string; valor: string; nota?: string; notaColor?: 'good' | 'bad' | 'neutral' }) {
   const colorNota =
     notaColor === 'good'
@@ -98,46 +164,46 @@ function Kpi({ etiqueta, valor, nota, notaColor }: { etiqueta: string; valor: st
   )
 }
 
-function Kpis({ datos }: { datos: TableroVentas }) {
-  const variacion = datos.variacionPorcentaje
+function Kpis({ datos, unegocioSel }: { datos: TableroVentas; unegocioSel: string }) {
+  const vista = vistaKpis(datos, unegocioSel)
+  const variacion = vista.variacionPorcentaje
   const notaVariacion =
-    datos.totalMesAnteriorCentavos > 0
+    vista.totalMesAnteriorCentavos > 0
       ? variacion == null || variacion === 0
         ? 'igual que el mes anterior'
         : `${variacion > 0 ? '↑' : '↓'} ${textoPct(variacion)} vs. mes anterior`
       : 'sin mes anterior para comparar'
-  const interanual = datos.comparativoInteranual
   const notaInteranual =
-    interanual.totalCentavos > 0
-      ? interanual.variacionPorcentaje == null || interanual.variacionPorcentaje === 0
-        ? `igual que ${mesLargo(interanual.mesAnioAnterior)}`
-        : `${interanual.variacionPorcentaje > 0 ? '↑' : '↓'} ${textoPct(interanual.variacionPorcentaje)} vs. ${mesLargo(interanual.mesAnioAnterior)}`
-      : `sin datos de ${mesLargo(interanual.mesAnioAnterior)}`
+    vista.interanualTotalCentavos > 0
+      ? vista.interanualVariacionPorcentaje == null || vista.interanualVariacionPorcentaje === 0
+        ? `igual que ${mesLargo(vista.mesAnioAnterior)}`
+        : `${vista.interanualVariacionPorcentaje > 0 ? '↑' : '↓'} ${textoPct(vista.interanualVariacionPorcentaje)} vs. ${mesLargo(vista.mesAnioAnterior)}`
+      : `sin datos de ${mesLargo(vista.mesAnioAnterior)}`
   return (
     <section className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4">
       <Kpi
         etiqueta="Ventas totales del mes"
-        valor={plata(datos.totalCentavos, datos.moneda)}
+        valor={plata(vista.totalCentavos, datos.moneda)}
         nota={notaVariacion}
         notaColor={variacion == null ? 'neutral' : variacion > 0 ? 'good' : variacion < 0 ? 'bad' : 'neutral'}
       />
       <Kpi
         etiqueta="Vs. mismo mes, año anterior"
-        valor={interanual.totalCentavos > 0 ? plata(interanual.totalCentavos, datos.moneda) : '—'}
+        valor={vista.interanualTotalCentavos > 0 ? plata(vista.interanualTotalCentavos, datos.moneda) : '—'}
         nota={notaInteranual}
-        notaColor={interanual.variacionPorcentaje == null ? 'neutral' : interanual.variacionPorcentaje > 0 ? 'good' : 'bad'}
+        notaColor={vista.interanualVariacionPorcentaje == null ? 'neutral' : vista.interanualVariacionPorcentaje > 0 ? 'good' : 'bad'}
       />
-      <Kpi etiqueta="Comprobantes emitidos" valor={datos.cantidadComprobantes.toLocaleString('es-AR')} />
-      <Kpi etiqueta="Ticket promedio" valor={plata(datos.ticketPromedioCentavos, datos.moneda)} />
+      <Kpi etiqueta="Comprobantes emitidos" valor={vista.cantidadComprobantes.toLocaleString('es-AR')} />
+      <Kpi etiqueta="Ticket promedio" valor={plata(vista.ticketPromedioCentavos, datos.moneda)} />
       <Kpi
         etiqueta="Clientes facturados"
-        valor={datos.cantidadClientes.toLocaleString('es-AR')}
-        nota={datos.concentracionTop5Porcentaje != null ? `top 5 = ${textoPct(datos.concentracionTop5Porcentaje)} del total` : undefined}
+        valor={vista.cantidadClientes.toLocaleString('es-AR')}
+        nota={vista.concentracionTop5Porcentaje != null ? `top 5 = ${textoPct(vista.concentracionTop5Porcentaje)} del total` : undefined}
       />
-      {datos.proyeccion ? (
+      {vista.proyeccionCentavos != null && datos.proyeccion ? (
         <Kpi
           etiqueta="Proyección a fin de mes"
-          valor={plata(datos.proyeccion.totalProyectadoCentavos, datos.moneda)}
+          valor={plata(vista.proyeccionCentavos, datos.moneda)}
           nota={`con ${datos.proyeccion.diasHabilesTranscurridos} de ${datos.proyeccion.diasHabilesTotales} días hábiles`}
           notaColor="neutral"
         />
@@ -460,13 +526,27 @@ function ClientesNuevosPerdidos({ datos }: { datos: TableroVentas }) {
   )
 }
 
-function FilaComparacion({ etiqueta, a, b, moneda }: { etiqueta: string; a: number; b: number; moneda: MonedaTablero }) {
+function FilaComparacion({
+  etiqueta,
+  a,
+  b,
+  moneda,
+  formato,
+}: {
+  etiqueta: string
+  a: number
+  b: number
+  moneda: MonedaTablero
+  /** Por defecto formatea como plata; para cantidades (comprobantes, clientes) pasar un formato numérico. */
+  formato?: (v: number) => string
+}) {
   const variacion = b > 0 ? ((a - b) / b) * 100 : null
+  const f = formato ?? ((v: number) => plata(v, moneda))
   return (
     <tr className="border-t border-neutral-100 dark:border-zinc-800">
       <td className="py-1.5 pr-3 text-neutral-600 dark:text-gray-400">{etiqueta}</td>
-      <td className="py-1.5 pr-3 text-right tabular-nums text-neutral-900 dark:text-gray-100">{plata(b, moneda)}</td>
-      <td className="py-1.5 pr-3 text-right tabular-nums text-neutral-900 dark:text-gray-100">{plata(a, moneda)}</td>
+      <td className="py-1.5 pr-3 text-right tabular-nums text-neutral-900 dark:text-gray-100">{f(b)}</td>
+      <td className="py-1.5 pr-3 text-right tabular-nums text-neutral-900 dark:text-gray-100">{f(a)}</td>
       <td className={`py-1.5 text-right tabular-nums ${variacion == null ? 'text-neutral-400 dark:text-gray-500' : variacion >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
         {variacion == null ? '—' : `${variacion >= 0 ? '+' : ''}${textoPct(variacion)}`}
       </td>
@@ -474,7 +554,27 @@ function FilaComparacion({ etiqueta, a, b, moneda }: { etiqueta: string; a: numb
   )
 }
 
-function ComparacionMeses({ datosA, datosB, moneda }: { datosA: TableroVentas; datosB: TableroVentas; moneda: MonedaTablero }) {
+function ComparacionMeses({
+  datosA,
+  datosB,
+  moneda,
+  unegocioSel,
+}: {
+  datosA: TableroVentas
+  datosB: TableroVentas
+  moneda: MonedaTablero
+  /** Si hay una unidad elegida, la comparación es SOLO de esa unidad (no mezcla con el total de la empresa). */
+  unegocioSel: string
+}) {
+  const filtrando = unegocioSel !== TODAS
+  const vistaA = vistaKpis(datosA, unegocioSel)
+  const vistaB = vistaKpis(datosB, unegocioSel)
+  const nombreUnidad = filtrando
+    ? (datosA.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === unegocioSel)?.nombre ??
+      datosB.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === unegocioSel)?.nombre ??
+      'esta unidad')
+    : null
+
   const unidadesIds = useMemo(() => {
     const ids = new Set<string>()
     for (const u of datosA.porUnegocio) ids.add(claveUnegocio(u.idUnegocio))
@@ -484,8 +584,12 @@ function ComparacionMeses({ datosA, datosB, moneda }: { datosA: TableroVentas; d
   const nombrePor = (clave: string): string =>
     datosB.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === clave)?.nombre ?? datosA.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === clave)?.nombre ?? clave
   const centavosPor = (lista: TableroVentas, clave: string): number => lista.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === clave)?.centavos ?? 0
+
   return (
-    <TarjetaTablero titulo="Comparar meses" subtitulo={`${mesLargo(datosB.mes)} vs. ${mesLargo(datosA.mes)}`}>
+    <TarjetaTablero
+      titulo="Comparar meses"
+      subtitulo={filtrando ? `${mesLargo(datosB.mes)} vs. ${mesLargo(datosA.mes)} · solo ${nombreUnidad}` : `${mesLargo(datosB.mes)} vs. ${mesLargo(datosA.mes)}`}
+    >
       <div className="overflow-x-auto">
         <table className="w-full min-w-[480px] border-collapse text-[13px]">
           <thead>
@@ -497,11 +601,19 @@ function ComparacionMeses({ datosA, datosB, moneda }: { datosA: TableroVentas; d
             </tr>
           </thead>
           <tbody>
-            <FilaComparacion etiqueta="Ventas totales" a={datosA.totalCentavos} b={datosB.totalCentavos} moneda={moneda} />
-            <FilaComparacion etiqueta="Ticket promedio" a={datosA.ticketPromedioCentavos} b={datosB.ticketPromedioCentavos} moneda={moneda} />
-            {unidadesIds.map((clave) => (
-              <FilaComparacion key={clave} etiqueta={nombrePor(clave)} a={centavosPor(datosA, clave)} b={centavosPor(datosB, clave)} moneda={moneda} />
-            ))}
+            <FilaComparacion etiqueta={filtrando ? `Ventas totales · ${nombreUnidad}` : 'Ventas totales'} a={vistaA.totalCentavos} b={vistaB.totalCentavos} moneda={moneda} />
+            <FilaComparacion etiqueta="Ticket promedio" a={vistaA.ticketPromedioCentavos} b={vistaB.ticketPromedioCentavos} moneda={moneda} />
+            <FilaComparacion
+              etiqueta="Comprobantes emitidos"
+              a={vistaA.cantidadComprobantes}
+              b={vistaB.cantidadComprobantes}
+              moneda={moneda}
+              formato={(v) => v.toLocaleString('es-AR')}
+            />
+            {!filtrando &&
+              unidadesIds.map((clave) => (
+                <FilaComparacion key={clave} etiqueta={nombrePor(clave)} a={centavosPor(datosA, clave)} b={centavosPor(datosB, clave)} moneda={moneda} />
+              ))}
           </tbody>
         </table>
       </div>
@@ -645,11 +757,23 @@ export function TableroVentasPage() {
 
       {datos ? (
         <div className="grid min-w-0 gap-5">
-          <Kpis datos={datos} />
+          {unegocioSel !== TODAS ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 px-3 py-2 text-[13px] text-neutral-700 dark:text-gray-300">
+              <span>
+                Mostrando los KPI y la comparación de <strong>{datos.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === unegocioSel)?.nombre}</strong>, no de toda la empresa.
+              </span>
+              <button type="button" onClick={() => setUnegocioSel(TODAS)} className="font-medium text-[var(--color-primary)] underline underline-offset-2 hover:no-underline">
+                Ver toda la empresa
+              </button>
+            </div>
+          ) : null}
+          <Kpis datos={datos} unegocioSel={unegocioSel} />
           {datos.sinDatosDeItems ? <AvisoSinItems /> : null}
           <Evolucion datos={datos} />
           <MixMensual datos={datos} />
-          {mesComparar && tableroComparar.data ? <ComparacionMeses datosA={datos} datosB={tableroComparar.data} moneda={moneda} /> : null}
+          {mesComparar && tableroComparar.data ? (
+            <ComparacionMeses datosA={datos} datosB={tableroComparar.data} moneda={moneda} unegocioSel={unegocioSel} />
+          ) : null}
           <ClientesNuevosPerdidos datos={datos} />
           <div className="grid min-w-0 gap-5 lg:grid-cols-2">
             <PorUnegocio datos={datos} unegocioSel={unegocioSel} onQuitarFiltro={() => setUnegocioSel(TODAS)} />

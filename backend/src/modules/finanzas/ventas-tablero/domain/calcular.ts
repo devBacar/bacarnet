@@ -53,6 +53,8 @@ export function armarTableroVentas(input: {
   art: Map<number, string>
   tendencia: MesTendenciaTablero[]
   tendenciaDetallada: TendenciaMesDetallada[]
+  /** Desglose por unidad de negocio del mismo mes, un año atrás (para el interanual por unidad). */
+  mismoMesAnioAnteriorPorUnidad: Array<{ idUnegocio: number | null; centavos: number }>
   hoy: string
   sinDatosDeItems: boolean
   generadoEn: string
@@ -69,6 +71,8 @@ export function armarTableroVentas(input: {
 
   const porUnegocioMap = new Map<string, UnegocioVentaTablero>()
   const porClienteMap = new Map<number, ClienteVentaTablero>()
+  const cantidadComprobantesPorUnidad = new Map<string, number>()
+  const clientesCentavosPorUnidad = new Map<string, Map<number, number>>()
 
   for (const c of comprobantesMes) {
     const idUn = c.idUnegocio
@@ -76,10 +80,26 @@ export function armarTableroVentas(input: {
     const claveUn = idUn !== null ? String(idUn) : 'sin-unegocio'
     let un = porUnegocioMap.get(claveUn)
     if (!un) {
-      un = { idUnegocio: idUn, nombre: nombreUn, centavos: 0, porcentaje: null, items: [], centavosMesAnterior: 0, variacionPorcentaje: null, caidaFuerte: false }
+      un = {
+        idUnegocio: idUn,
+        nombre: nombreUn,
+        centavos: 0,
+        porcentaje: null,
+        items: [],
+        centavosMesAnterior: 0,
+        variacionPorcentaje: null,
+        caidaFuerte: false,
+        cantidadComprobantes: 0,
+        cantidadClientes: 0,
+        ticketPromedioCentavos: 0,
+        concentracionTop5Porcentaje: null,
+        centavosMismoMesAnioAnterior: 0,
+        variacionInteranualPorcentaje: null,
+      }
       porUnegocioMap.set(claveUn, un)
     }
     un.centavos += c.totalCentavos
+    cantidadComprobantesPorUnidad.set(claveUn, (cantidadComprobantesPorUnidad.get(claveUn) ?? 0) + 1)
 
     const itemsDelCmp = itemsPorCmp.get(c.id) ?? []
     for (const it of itemsDelCmp) {
@@ -99,6 +119,10 @@ export function armarTableroVentas(input: {
       const existenteUn = cli.porUnegocio.find((x) => x.idUnegocio === idUn)
       if (existenteUn) existenteUn.centavos += c.totalCentavos
       else cli.porUnegocio.push({ idUnegocio: idUn, nombre: nombreUn, centavos: c.totalCentavos })
+
+      const clientesUnidad = clientesCentavosPorUnidad.get(claveUn) ?? new Map<number, number>()
+      clientesUnidad.set(c.persona.vientriId, (clientesUnidad.get(c.persona.vientriId) ?? 0) + c.totalCentavos)
+      clientesCentavosPorUnidad.set(claveUn, clientesUnidad)
     }
   }
 
@@ -115,10 +139,23 @@ export function armarTableroVentas(input: {
     }
   }
 
+  const mismoMesAnioAnteriorPorUnidadMap = new Map<string, number>()
+  for (const u of input.mismoMesAnioAnteriorPorUnidad) {
+    const clave = u.idUnegocio !== null ? String(u.idUnegocio) : 'sin-unegocio'
+    mismoMesAnioAnteriorPorUnidadMap.set(clave, (mismoMesAnioAnteriorPorUnidadMap.get(clave) ?? 0) + u.centavos)
+  }
+
   const porUnegocio = [...porUnegocioMap.entries()]
     .map(([clave, u]) => {
       const centavosMesAnterior = porUnegocioAnteriorMap.get(clave) ?? 0
       const variacionPorcentaje = centavosMesAnterior > 0 ? ((u.centavos - centavosMesAnterior) / centavosMesAnterior) * 100 : null
+      const cantidadComprobantesUnidad = cantidadComprobantesPorUnidad.get(clave) ?? 0
+      const clientesUnidad = clientesCentavosPorUnidad.get(clave)
+      const cantidadClientesUnidad = clientesUnidad?.size ?? 0
+      const top5CentavosUnidad = clientesUnidad ? [...clientesUnidad.values()].sort((a, b) => b - a).slice(0, 5).reduce((s, v) => s + v, 0) : 0
+      const centavosMismoMesAnioAnterior = mismoMesAnioAnteriorPorUnidadMap.get(clave) ?? 0
+      const variacionInteranualPorcentaje =
+        centavosMismoMesAnioAnterior > 0 ? ((u.centavos - centavosMismoMesAnioAnterior) / centavosMismoMesAnioAnterior) * 100 : null
       return {
         ...u,
         porcentaje: totalCentavos > 0 ? (u.centavos / totalCentavos) * 100 : null,
@@ -126,6 +163,12 @@ export function armarTableroVentas(input: {
         centavosMesAnterior,
         variacionPorcentaje,
         caidaFuerte: variacionPorcentaje !== null && variacionPorcentaje <= -UMBRAL_CAIDA_FUERTE,
+        cantidadComprobantes: cantidadComprobantesUnidad,
+        cantidadClientes: cantidadClientesUnidad,
+        ticketPromedioCentavos: cantidadComprobantesUnidad > 0 ? Math.round(u.centavos / cantidadComprobantesUnidad) : 0,
+        concentracionTop5Porcentaje: u.centavos > 0 && clientesUnidad ? (top5CentavosUnidad / u.centavos) * 100 : null,
+        centavosMismoMesAnioAnterior,
+        variacionInteranualPorcentaje,
       }
     })
     .sort((a, b) => b.centavos - a.centavos)

@@ -18,6 +18,12 @@ export interface UnegocioVentaTablero {
   centavosMesAnterior: number
   variacionPorcentaje: number | null
   caidaFuerte: boolean
+  cantidadComprobantes: number
+  cantidadClientes: number
+  ticketPromedioCentavos: number
+  concentracionTop5Porcentaje: number | null
+  centavosMismoMesAnioAnterior: number
+  variacionInteranualPorcentaje: number | null
 }
 
 export interface ClienteVentaTablero {

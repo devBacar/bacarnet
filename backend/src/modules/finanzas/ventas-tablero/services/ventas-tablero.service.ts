@@ -18,10 +18,10 @@ export async function obtenerTableroVentas(input: { mes: string; moneda: string 
   for (let i = MESES_TENDENCIA - 1; i >= 0; i--) mesesTendencia.push(sumarMeses(input.mes, -i))
 
   const [datosMes, datosMesAnterior, sinItems, totalesTendencia] = await Promise.all([
-    cargarDatosVentasMes(input.mes),
-    cargarDatosVentasMes(sumarMeses(input.mes, -1)),
+    cargarDatosVentasMes(input.mes, input.moneda),
+    cargarDatosVentasMes(sumarMeses(input.mes, -1), input.moneda),
     hayItemsImportados().then((hay) => !hay),
-    Promise.all(mesesTendencia.map((mes) => cargarTotalMes(mes))),
+    Promise.all(mesesTendencia.map((mes) => cargarTotalMes(mes, input.moneda))),
   ])
 
   const totalMesAnteriorCentavos = datosMesAnterior.comprobantes.reduce((acc, c) => acc + c.totalCentavos, 0)

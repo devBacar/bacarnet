@@ -137,3 +137,34 @@ export async function cargarTotalMes(mes: string, moneda: string): Promise<numbe
   }
   return total
 }
+
+export interface HistorialClienteMes {
+  mes: string
+  totalCentavos: number
+}
+
+/**
+ * Facturación mensual de UN cliente en el rango de `meses` (para el detalle al hacer click en el
+ * ranking). Una sola query por rango de fechas, filtra por persona e idDivisa en memoria.
+ */
+export async function cargarHistorialCliente(vientriId: number, meses: string[], moneda: string): Promise<HistorialClienteMes[]> {
+  const idDivisa = idDivisaDe(moneda)
+  const desde = `${meses[0]}-01`
+  const hasta = `${meses[meses.length - 1]}-31`
+  const snap = await adminDb()
+    .collection(VIENTRI_COMPROBANTES)
+    .where('fecha', '>=', desde)
+    .where('fecha', '<=', hasta)
+    .select('fecha', 'totalCentavos', 'idDivisa', 'persona')
+    .get()
+  const porMes = new Map<string, number>(meses.map((m) => [m, 0]))
+  for (const d of snap.docs) {
+    const data = d.data()
+    const idDivisaReal = typeof data.idDivisa === 'number' ? data.idDivisa : 1
+    if (idDivisaReal !== idDivisa) continue
+    if (!data.persona || data.persona.vientriId !== vientriId) continue
+    const mes = typeof data.fecha === 'string' ? data.fecha.slice(0, 7) : null
+    if (mes && porMes.has(mes)) porMes.set(mes, (porMes.get(mes) ?? 0) + (Number(data.totalCentavos) || 0))
+  }
+  return meses.map((mes) => ({ mes, totalCentavos: porMes.get(mes) ?? 0 }))
+}

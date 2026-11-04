@@ -72,6 +72,16 @@ export interface TableroVentas {
   sinDatosDeItems: boolean
 }
 
+export interface HistorialClienteMes {
+  mes: string
+  totalCentavos: number
+}
+
+export interface HistorialCliente {
+  vientriId: number
+  tendencia: HistorialClienteMes[]
+}
+
 async function tableroFetch(path: string): Promise<Response> {
   const user = auth.currentUser
   if (!user) throw new Error('No autenticado')
@@ -97,4 +107,23 @@ export async function fetchTableroVentas(input: { mes: string | null; moneda: Mo
     throw new Error(mensaje)
   }
   return (await res.json()) as TableroVentas
+}
+
+export async function fetchHistorialCliente(input: { vientriId: number; mes: string; moneda: MonedaTablero }): Promise<HistorialCliente> {
+  const params = new URLSearchParams()
+  params.set('vientriId', String(input.vientriId))
+  params.set('mes', input.mes)
+  params.set('moneda', input.moneda)
+  const res = await tableroFetch(`/ventas-tablero/cliente-historial?${params.toString()}`)
+  if (!res.ok) {
+    let mensaje = 'No se pudo cargar el historial del cliente'
+    try {
+      const data = (await res.json()) as { error?: string }
+      if (data.error) mensaje = data.error
+    } catch {
+      /* el cuerpo no era JSON */
+    }
+    throw new Error(mensaje)
+  }
+  return (await res.json()) as HistorialCliente
 }

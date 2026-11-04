@@ -1,14 +1,22 @@
 import { useQuery } from '@tanstack/react-query'
-import { TrendingUp } from 'lucide-react'
-import { useState } from 'react'
+import { AlertTriangle, Download, TrendingUp, UserMinus, UserPlus } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BarraHorizontal, EvolucionMensual, colorUnegocio } from '../../components/tablero-ventas/graficos'
 import { TarjetaTablero } from '../../components/tablero-finanzas/TarjetaTablero'
 import { fechaHora, mesLargo, plata, plataCorta, textoPct } from '../../components/tablero-finanzas/formatoTablero'
-import { fetchTableroVentas, type MonedaTablero, type TableroVentas } from '../../services/finanzasVentasTableroApi'
+import {
+  fetchTableroVentas,
+  type ClienteVentaTablero,
+  type ItemVentaTablero,
+  type MonedaTablero,
+  type TableroVentas,
+} from '../../services/finanzasVentasTableroApi'
 
 const CLASE_SELECT =
   'w-full min-w-0 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-[14px] font-normal text-neutral-900 sm:w-auto dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100'
+
+const TODAS = 'todas'
 
 function mesesRecientes(hastaMes: string, cantidad: number): string[] {
   const [anioStr, mesStr] = hastaMes.split('-')
@@ -24,6 +32,51 @@ function mesesRecientes(hastaMes: string, cantidad: number): string[] {
     }
   }
   return salida
+}
+
+function claveUnegocio(idUnegocio: number | null): string {
+  return idUnegocio !== null ? String(idUnegocio) : 'sin-unegocio'
+}
+
+function csvEscapar(valor: string): string {
+  if (/[;"\n]/.test(valor)) return `"${valor.replace(/"/g, '""')}"`
+  return valor
+}
+
+function descargarCsv(nombreArchivo: string, filas: string[][]): void {
+  const contenido = filas.map((fila) => fila.map(csvEscapar).join(';')).join('\n')
+  const blob = new Blob([`﻿${contenido}`], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = nombreArchivo
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function exportarTablero(datos: TableroVentas): void {
+  const filas: string[][] = [['Tablero de Ventas', mesLargo(datos.mes), datos.moneda]]
+  filas.push([])
+  filas.push(['Por unidad de negocio'])
+  filas.push(['Unidad', 'Total', '% del total', 'Mes anterior', 'Variación %'])
+  for (const u of datos.porUnegocio) {
+    filas.push([
+      u.nombre,
+      plata(u.centavos, datos.moneda),
+      u.porcentaje != null ? textoPct(u.porcentaje) : '',
+      plata(u.centavosMesAnterior, datos.moneda),
+      u.variacionPorcentaje != null ? `${u.variacionPorcentaje > 0 ? '+' : ''}${textoPct(u.variacionPorcentaje)}` : '',
+    ])
+  }
+  filas.push([])
+  filas.push(['Ítems más facturados'])
+  filas.push(['Ítem', 'Total'])
+  for (const it of datos.topItems) filas.push([it.nombre, plata(it.centavos, datos.moneda)])
+  filas.push([])
+  filas.push(['Clientes'])
+  filas.push(['Cliente', 'Total'])
+  for (const c of datos.clientes) filas.push([c.nombre, plata(c.centavos, datos.moneda)])
+  descargarCsv(`ventas-${datos.mes}-${datos.moneda}.csv`, filas)
 }
 
 function Kpi({ etiqueta, valor, nota, notaColor }: { etiqueta: string; valor: string; nota?: string; notaColor?: 'good' | 'bad' | 'neutral' }) {
@@ -50,6 +103,13 @@ function Kpis({ datos }: { datos: TableroVentas }) {
         ? 'igual que el mes anterior'
         : `${variacion > 0 ? '↑' : '↓'} ${textoPct(variacion)} vs. mes anterior`
       : 'sin mes anterior para comparar'
+  const interanual = datos.comparativoInteranual
+  const notaInteranual =
+    interanual.totalCentavos > 0
+      ? interanual.variacionPorcentaje == null || interanual.variacionPorcentaje === 0
+        ? `igual que ${mesLargo(interanual.mesAnioAnterior)}`
+        : `${interanual.variacionPorcentaje > 0 ? '↑' : '↓'} ${textoPct(interanual.variacionPorcentaje)} vs. ${mesLargo(interanual.mesAnioAnterior)}`
+      : `sin datos de ${mesLargo(interanual.mesAnioAnterior)}`
   return (
     <section className="grid min-w-0 grid-cols-2 gap-3 lg:grid-cols-4">
       <Kpi
@@ -58,6 +118,12 @@ function Kpis({ datos }: { datos: TableroVentas }) {
         nota={notaVariacion}
         notaColor={variacion == null ? 'neutral' : variacion > 0 ? 'good' : variacion < 0 ? 'bad' : 'neutral'}
       />
+      <Kpi
+        etiqueta="Vs. mismo mes, año anterior"
+        valor={interanual.totalCentavos > 0 ? plata(interanual.totalCentavos, datos.moneda) : '—'}
+        nota={notaInteranual}
+        notaColor={interanual.variacionPorcentaje == null ? 'neutral' : interanual.variacionPorcentaje > 0 ? 'good' : 'bad'}
+      />
       <Kpi etiqueta="Comprobantes emitidos" valor={datos.cantidadComprobantes.toLocaleString('es-AR')} />
       <Kpi etiqueta="Ticket promedio" valor={plata(datos.ticketPromedioCentavos, datos.moneda)} />
       <Kpi
@@ -65,6 +131,14 @@ function Kpis({ datos }: { datos: TableroVentas }) {
         valor={datos.cantidadClientes.toLocaleString('es-AR')}
         nota={datos.concentracionTop5Porcentaje != null ? `top 5 = ${textoPct(datos.concentracionTop5Porcentaje)} del total` : undefined}
       />
+      {datos.proyeccion ? (
+        <Kpi
+          etiqueta="Proyección a fin de mes"
+          valor={plata(datos.proyeccion.totalProyectadoCentavos, datos.moneda)}
+          nota={`con ${datos.proyeccion.diasHabilesTranscurridos} de ${datos.proyeccion.diasHabilesTotales} días hábiles`}
+          notaColor="neutral"
+        />
+      ) : null}
     </section>
   )
 }
@@ -100,7 +174,7 @@ function PorUnegocio({ datos }: { datos: TableroVentas }) {
     <TarjetaTablero titulo="Por unidad de negocio" subtitulo="Las 6 unidades de Vientri, separadas. Tocá una para ver sus ítems facturados.">
       <ul className="grid gap-3">
         {datos.porUnegocio.map((un, i) => {
-          const clave = String(un.idUnegocio ?? 'sin-unegocio')
+          const clave = claveUnegocio(un.idUnegocio)
           const abiertoEste = abierto === clave
           const color = colorUnegocio(un.idUnegocio, i)
           return (
@@ -118,6 +192,20 @@ function PorUnegocio({ datos }: { datos: TableroVentas }) {
                   color={color}
                   texto={`${plata(un.centavos, datos.moneda)}${un.porcentaje != null ? ` · ${textoPct(un.porcentaje)}` : ''}`}
                 />
+                <div className="flex min-w-0 items-center gap-1.5 pl-0.5 text-[12px]">
+                  {un.caidaFuerte ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700 dark:bg-red-950/40 dark:text-red-400">
+                      <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                      cayó {textoPct(un.variacionPorcentaje)} vs. mes anterior
+                    </span>
+                  ) : un.variacionPorcentaje != null ? (
+                    <span className={un.variacionPorcentaje >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-neutral-500 dark:text-gray-500'}>
+                      {un.variacionPorcentaje >= 0 ? '↑' : '↓'} {textoPct(un.variacionPorcentaje)} vs. mes anterior
+                    </span>
+                  ) : (
+                    <span className="text-neutral-400 dark:text-gray-500">sin mes anterior para comparar</span>
+                  )}
+                </div>
               </button>
               {abiertoEste ? (
                 un.items.length === 0 ? (
@@ -126,11 +214,15 @@ function PorUnegocio({ datos }: { datos: TableroVentas }) {
                   </p>
                 ) : (
                   <ul className="mt-2 grid gap-2 border-l-2 border-neutral-200 py-1 pl-3 dark:border-zinc-700">
-                    {un.items.map((item) => (
-                      <li key={`${item.idArt}`} className="flex min-w-0 items-baseline justify-between gap-3 text-[14px]">
-                        <span className="min-w-0 truncate text-neutral-800 dark:text-gray-200">{item.nombre}</span>
-                        <span className="shrink-0 text-right tabular-nums text-neutral-700 dark:text-gray-300">{plata(item.centavos, datos.moneda)}</span>
-                      </li>
+                    {un.items.slice(0, 10).map((item) => (
+                      <BarraHorizontal
+                        key={`${item.idArt}`}
+                        etiqueta={item.nombre}
+                        valor={item.centavos}
+                        maximo={un.items[0]?.centavos ?? 1}
+                        color={color}
+                        texto={plataCorta(item.centavos)}
+                      />
                     ))}
                   </ul>
                 )
@@ -143,59 +235,89 @@ function PorUnegocio({ datos }: { datos: TableroVentas }) {
   )
 }
 
-function TopItems({ datos }: { datos: TableroVentas }) {
-  if (datos.topItems.length === 0) {
+function TopItems({ items, sinDatosDeItems }: { items: ItemVentaTablero[]; sinDatosDeItems: boolean }) {
+  if (items.length === 0) {
     return (
       <TarjetaTablero titulo="Ítems más facturados">
         <p className="text-[14px] text-neutral-700 dark:text-gray-300">
-          {datos.sinDatosDeItems ? 'Sin datos de ítems todavía.' : 'Este mes no hay ítems facturados cargados.'}
+          {sinDatosDeItems ? 'Sin datos de ítems todavía.' : 'No hay ítems facturados para este filtro.'}
         </p>
       </TarjetaTablero>
     )
   }
-  const maximo = Math.max(...datos.topItems.map((it) => it.centavos))
+  const maximo = Math.max(...items.map((it) => it.centavos))
   return (
-    <TarjetaTablero titulo="Ítems más facturados" subtitulo="Top 8 del mes, todas las unidades.">
+    <TarjetaTablero titulo="Ítems más facturados" subtitulo="Top 8 del mes.">
       <ul className="grid gap-3">
-        {datos.topItems.map((item) => (
-          <BarraHorizontal
-            key={`${item.idArt}`}
-            etiqueta={item.nombre}
-            valor={item.centavos}
-            maximo={maximo}
-            color="#2a78d6"
-            texto={plataCorta(item.centavos)}
-          />
+        {items.slice(0, 8).map((item) => (
+          <BarraHorizontal key={`${item.idArt}`} etiqueta={item.nombre} valor={item.centavos} maximo={maximo} color="#2a78d6" texto={plataCorta(item.centavos)} />
         ))}
       </ul>
     </TarjetaTablero>
   )
 }
 
-function RankingClientes({ datos }: { datos: TableroVentas }) {
-  if (datos.clientes.length === 0) {
+function RankingClientes({ clientes }: { clientes: Array<{ vientriId: number; nombre: string; centavos: number }> }) {
+  if (clientes.length === 0) {
     return (
       <TarjetaTablero titulo="Clientes">
-        <p className="text-[14px] text-neutral-700 dark:text-gray-300">Este mes no hay facturación por cliente.</p>
+        <p className="text-[14px] text-neutral-700 dark:text-gray-300">No hay facturación por cliente para este filtro.</p>
       </TarjetaTablero>
     )
   }
-  const top = datos.clientes.slice(0, 15)
+  const top = clientes.slice(0, 15)
   const maximo = Math.max(...top.map((c) => c.centavos))
   return (
     <TarjetaTablero titulo="Ranking de clientes" subtitulo="Top 15 por facturación total del mes.">
       <ul className="grid gap-3">
         {top.map((cliente, i) => (
-          <BarraHorizontal
-            key={cliente.vientriId}
-            etiqueta={`${i + 1}. ${cliente.nombre}`}
-            valor={cliente.centavos}
-            maximo={maximo}
-            color="#2a78d6"
-            texto={plataCorta(cliente.centavos)}
-          />
+          <BarraHorizontal key={cliente.vientriId} etiqueta={`${i + 1}. ${cliente.nombre}`} valor={cliente.centavos} maximo={maximo} color="#2a78d6" texto={plataCorta(cliente.centavos)} />
         ))}
       </ul>
+    </TarjetaTablero>
+  )
+}
+
+function ClientesNuevosPerdidos({ datos }: { datos: TableroVentas }) {
+  if (datos.clientesNuevos.length === 0 && datos.clientesPerdidos.length === 0) return null
+  return (
+    <TarjetaTablero titulo="Clientes nuevos y perdidos" subtitulo="Comparado contra el mes anterior.">
+      <div className="grid min-w-0 gap-5 sm:grid-cols-2">
+        <div className="min-w-0">
+          <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-emerald-700 dark:text-emerald-400">
+            <UserPlus className="h-4 w-4" aria-hidden /> Altas ({datos.clientesNuevos.length})
+          </h3>
+          {datos.clientesNuevos.length === 0 ? (
+            <p className="text-[13px] text-neutral-500 dark:text-gray-500">Sin clientes nuevos este mes.</p>
+          ) : (
+            <ul className="grid gap-1.5">
+              {datos.clientesNuevos.map((c) => (
+                <li key={c.vientriId} className="flex min-w-0 items-baseline justify-between gap-2 text-[13px]">
+                  <span className="min-w-0 truncate text-neutral-800 dark:text-gray-200">{c.nombre}</span>
+                  <span className="shrink-0 tabular-nums text-neutral-700 dark:text-gray-300">{plataCorta(c.centavos)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="min-w-0">
+          <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-red-700 dark:text-red-400">
+            <UserMinus className="h-4 w-4" aria-hidden /> Bajas ({datos.clientesPerdidos.length})
+          </h3>
+          {datos.clientesPerdidos.length === 0 ? (
+            <p className="text-[13px] text-neutral-500 dark:text-gray-500">Nadie dejó de facturar este mes.</p>
+          ) : (
+            <ul className="grid gap-1.5">
+              {datos.clientesPerdidos.map((c) => (
+                <li key={c.vientriId} className="flex min-w-0 items-baseline justify-between gap-2 text-[13px]">
+                  <span className="min-w-0 truncate text-neutral-800 dark:text-gray-200">{c.nombre}</span>
+                  <span className="shrink-0 tabular-nums text-neutral-500 dark:text-gray-500">facturaba {plataCorta(c.centavosMesAnterior)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </TarjetaTablero>
   )
 }
@@ -203,6 +325,7 @@ function RankingClientes({ datos }: { datos: TableroVentas }) {
 export function TableroVentasPage() {
   const [mes, setMes] = useState<string | null>(null)
   const [moneda, setMoneda] = useState<MonedaTablero>('ARS')
+  const [unegocioSel, setUnegocioSel] = useState<string>(TODAS)
   const tablero = useQuery({
     queryKey: ['finanzas-ventas-tablero', mes, moneda],
     queryFn: () => fetchTableroVentas({ mes, moneda }),
@@ -212,20 +335,50 @@ export function TableroVentasPage() {
   const mesVisible = mes ?? datos?.mes ?? ''
   const opcionesMes = mesesRecientes(mesVisible || new Date().toISOString().slice(0, 7), 13)
 
+  const unidadFiltrada = useMemo(() => {
+    if (!datos || unegocioSel === TODAS) return null
+    return datos.porUnegocio.find((u) => claveUnegocio(u.idUnegocio) === unegocioSel) ?? null
+  }, [datos, unegocioSel])
+
+  const itemsVisibles: ItemVentaTablero[] = unidadFiltrada ? unidadFiltrada.items : datos?.topItems ?? []
+
+  const clientesVisibles: ClienteVentaTablero[] = useMemo(() => {
+    if (!datos) return []
+    if (unegocioSel === TODAS) return datos.clientes
+    return datos.clientes
+      .map((c) => ({ ...c, centavos: c.porUnegocio.find((pu) => claveUnegocio(pu.idUnegocio) === unegocioSel)?.centavos ?? 0 }))
+      .filter((c) => c.centavos > 0)
+      .sort((a, b) => b.centavos - a.centavos)
+  }, [datos, unegocioSel])
+
   return (
     <div className="mx-auto grid w-full min-w-0 max-w-6xl gap-5 px-4 py-6 sm:px-6">
       <header className="min-w-0">
         <Link to="/tableros" className="mb-1 inline-flex items-center gap-1 text-[13px] font-medium text-neutral-600 hover:text-[var(--color-primary)] dark:text-gray-400">
           ← Tableros
         </Link>
-        <h1 className="flex items-center gap-2 text-xl font-semibold text-neutral-900 dark:text-gray-100">
-          <TrendingUp className="h-6 w-6 shrink-0 text-[var(--color-primary)]" aria-hidden />
-          Tablero de Ventas
-        </h1>
-        <p className="mt-1 text-[13px] text-neutral-600 dark:text-gray-400">
-          Facturación real (Vientri), por unidad de negocio, ítem y cliente.
-          {datos ? <span className="block">Actualizado el {fechaHora(datos.generadoEn)}.</span> : null}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h1 className="flex items-center gap-2 text-xl font-semibold text-neutral-900 dark:text-gray-100">
+              <TrendingUp className="h-6 w-6 shrink-0 text-[var(--color-primary)]" aria-hidden />
+              Tablero de Ventas
+            </h1>
+            <p className="mt-1 text-[13px] text-neutral-600 dark:text-gray-400">
+              Facturación real (Vientri), por unidad de negocio, ítem y cliente.
+              {datos ? <span className="block">Actualizado el {fechaHora(datos.generadoEn)}.</span> : null}
+            </p>
+          </div>
+          {datos ? (
+            <button
+              type="button"
+              onClick={() => exportarTablero(datos)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-200 dark:hover:bg-zinc-800"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              Exportar CSV
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <div className="grid gap-3 rounded-xl border border-neutral-200 bg-neutral-50 p-3 sm:flex sm:flex-wrap sm:items-end dark:border-zinc-700 dark:bg-zinc-900/60">
@@ -246,6 +399,19 @@ export function TableroVentasPage() {
             <option value="USD">Dólares</option>
           </select>
         </label>
+        {datos && datos.porUnegocio.length > 0 ? (
+          <label className="grid min-w-0 gap-1 text-[13px] font-semibold text-neutral-600 dark:text-gray-400">
+            Unidad de negocio
+            <select value={unegocioSel} onChange={(e) => setUnegocioSel(e.target.value)} className={CLASE_SELECT}>
+              <option value={TODAS}>Todas</option>
+              {datos.porUnegocio.map((u) => (
+                <option key={claveUnegocio(u.idUnegocio)} value={claveUnegocio(u.idUnegocio)}>
+                  {u.nombre}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       {tablero.isPending && <p className="text-body-muted text-[14px]">Cargando el tablero…</p>}
@@ -260,11 +426,12 @@ export function TableroVentasPage() {
           <Kpis datos={datos} />
           {datos.sinDatosDeItems ? <AvisoSinItems /> : null}
           <Evolucion datos={datos} />
+          <ClientesNuevosPerdidos datos={datos} />
           <div className="grid min-w-0 gap-5 lg:grid-cols-2">
             <PorUnegocio datos={datos} />
-            <TopItems datos={datos} />
+            <TopItems items={itemsVisibles} sinDatosDeItems={datos.sinDatosDeItems} />
           </div>
-          <RankingClientes datos={datos} />
+          <RankingClientes clientes={clientesVisibles} />
         </div>
       ) : null}
     </div>

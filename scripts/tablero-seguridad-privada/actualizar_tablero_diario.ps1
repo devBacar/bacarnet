@@ -119,8 +119,12 @@ $tieneItems = $false
 $tieneRrhh = $false
 
 try {
-    # 1a. Comprobantes (misma consulta que usa el export diario de Bacarnet).
-    Correr-Sql (Join-Path $Carpeta '..\vientri-export\sql\02_comprobantes.sql') (Join-Path $carpetaSalida 'comprobantes.csv') | Out-Null
+    # 1a. Comprobantes (misma consulta que usa el export diario de Bacarnet). En produccion (SIS5) la copia real
+    # del exportador vive en D:\inventario_vientri\exportador\, no en una carpeta hermana de este script; en el
+    # repo (para probar desde un worktree) se usa la ruta relativa a scripts\vientri-export\.
+    $comprobantesSql = 'D:\inventario_vientri\exportador\sql\02_comprobantes.sql'
+    if (-not (Test-Path $comprobantesSql)) { $comprobantesSql = Join-Path $Carpeta '..\vientri-export\sql\02_comprobantes.sql' }
+    Correr-Sql $comprobantesSql (Join-Path $carpetaSalida 'comprobantes.csv') | Out-Null
 } catch {
     Log "ERROR fatal trayendo comprobantes.csv: $_"
     Log "No se puede seguir sin comprobantes (hace falta para facturacion, IIBB se puede calcular igual pero horas facturadas no)."

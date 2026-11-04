@@ -91,9 +91,7 @@ Los puntos en montos son separador de miles (se quitan), no decimales.
 
 La colección `proveedoresFinancieros` en Firestore tiene nombres marcados como `'financiero'` o `'ficticio'`. Al importar, cada cheque se cruza contra esa lista usando `normalizarNombre()` (NFD, lowercase, colapsa espacios).
 
-Un cheque de un proveedor financiero **no es un gasto real** de la empresa — es una operación de préstamo. La clasificación permite separar:
-- `gasto_real` — proveedor normal, compra genuina
-- `operacion_financiera` — proveedor financiero o cheque en cadena de renovación
+Todos los cheques ocasionales son del circuito financiero (préstamo, divisa, renovación). No existe la categoría "gasto real" en este módulo: eso pertenece a los cheques emitidos comunes. Los ocasionales con datos dudosos quedan marcados en `revisar` y se ven con el filtro "A revisar".
 
 ## Arquitectura del código
 
@@ -306,12 +304,10 @@ La búsqueda indexa tanto por número completo (`020-111-2222-44001234`) como po
 
 ### Clasificación
 
-`clasificarCheques()` asigna a cada cheque:
-- **`gasto_real`** — proveedor normal sin renovaciones
-- **`operacion_financiera`** — con rol:
-  - `capital` — primera posición en la cadena (el préstamo original)
-  - `mixto` — posición intermedia (fue capital y se renovó)
-  - `interes` — última posición (el monto vigente con todo el interés acumulado)
+`clasificarCheques()` asigna a cada cheque que está en una cadena su rol (los demás quedan con `rolEnCadena: null`):
+- `capital` — primera posición en la cadena (el préstamo original)
+- `mixto` — posición intermedia (fue capital y se renovó)
+- `interes` — última posición (el monto vigente con todo el interés acumulado)
 
 ### Resumen por beneficiario
 
@@ -329,7 +325,7 @@ La búsqueda indexa tanto por número completo (`020-111-2222-44001234`) como po
 Lista paginada de cheques ocasionales.
 
 Query params:
-- `filtro`: `''` | `'financiero'` | `'gasto_real'` | `'con_renovacion'` | `'con_usd'`
+- `filtro`: `''` | `'revisar'` | `'con_renovacion'` | `'con_usd'`
 - `q`: búsqueda libre (beneficiario, número, OBS, estado)
 - `page`: número de página (default 1)
 

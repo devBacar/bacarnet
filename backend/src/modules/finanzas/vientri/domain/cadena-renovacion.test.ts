@@ -139,7 +139,7 @@ describe('reconstruirCadenas', () => {
 })
 
 describe('clasificarCheques', () => {
-  it('clasifica cheques en cadena como operacion_financiera con roles', () => {
+  it('asigna rol en la cadena a cada cheque y deja sin rol al que no está en una', () => {
     const docs = [
       cheque({ numeroCheque: 'CHQ-A', montoCentavos: 500000, renovadoPor: ['CHQ-B'], vientriId: 1 }),
       cheque({ numeroCheque: 'CHQ-B', montoCentavos: 580000, renovacionDe: ['CHQ-A'], renovadoPor: ['CHQ-C'], vientriId: 2 }),
@@ -151,29 +151,26 @@ describe('clasificarCheques', () => {
     const clasificados = clasificarCheques(docs, cadenas)
 
     const a = clasificados.find((c) => c.numeroCheque === 'CHQ-A')!
-    expect(a.clasificacion).toBe('operacion_financiera')
     expect(a.rolEnCadena).toBe('capital')
 
     const b = clasificados.find((c) => c.numeroCheque === 'CHQ-B')!
-    expect(b.clasificacion).toBe('operacion_financiera')
     expect(b.rolEnCadena).toBe('mixto')
 
     const c = clasificados.find((c) => c.numeroCheque === 'CHQ-C')!
-    expect(c.clasificacion).toBe('operacion_financiera')
     expect(c.rolEnCadena).toBe('interes')
 
-    const real = clasificados.find((c) => c.numeroCheque === 'CHQ-REAL')!
-    expect(real.clasificacion).toBe('gasto_real')
-    expect(real.rolEnCadena).toBeNull()
+    const sinCadena = clasificados.find((c) => c.numeroCheque === 'CHQ-REAL')!
+    expect(sinCadena.rolEnCadena).toBeNull()
+    expect(sinCadena.cadenaId).toBeNull()
   })
 
-  it('clasifica proveedor financiero sin cadena como operacion_financiera', () => {
+  it('un cheque sin cadena no tiene rol ni cadena', () => {
     const docs = [
       cheque({ numeroCheque: 'FIN-1', esProveedorFinanciero: true, vientriId: 1 }),
     ]
 
     const clasificados = clasificarCheques(docs, [])
-    expect(clasificados[0]!.clasificacion).toBe('operacion_financiera')
+    expect(clasificados[0]!.rolEnCadena).toBeNull()
     expect(clasificados[0]!.cadenaId).toBeNull()
   })
 })

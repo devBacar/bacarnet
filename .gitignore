@@ -90,3 +90,6 @@ docs/plan-*.md
 
 # Resguardos de datos reales hechos por scripts (no se versionan)
 backend/scripts/resguardos/
+
+# Guía personal de entornos (emulador / producción)
+docs/ENTORNOS_EMU_Y_PROD.md

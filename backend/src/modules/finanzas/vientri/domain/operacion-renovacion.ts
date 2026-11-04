@@ -49,7 +49,7 @@ function docAChequeEnOp(d: ChequeOcasionalDoc): ChequeEnOperacion {
     montoCentavos: d.montoCentavos,
     fechaVencimiento: d.fechaVencimiento,
     fechaEmision: d.fechaEmision,
-    rol: d.rolEnOperacion,
+    rol: d.rolEnOperacion ?? null,
     pagado: d.pagado,
   }
 }
@@ -304,7 +304,24 @@ export function agruparOperacionesRenovacion(
   const operaciones: OperacionRenovacion[] = []
   const viejosUsados = new Set<string>()
 
-  for (const chequesNuevosDocs of subgrupos) {
+  // Orden de proceso: primero las operaciones cuyo OBS indica qué cheques renuevan (dato escrito por
+  // una persona) y recién después las que se adivinan. Así las explícitas reservan sus viejos en
+  // `viejosUsados` antes de que el auto-vínculo pueda tomarlos. Dentro de cada grupo se ordena por
+  // fecha y número para que el resultado no dependa del orden en que llegan los docs.
+  const resuelveViejos = (sub: ChequeOcasionalDoc[]): boolean =>
+    sub.some((d) => d.renovacionDe.some((id) => porNumero.has(id)))
+  const menorNumero = (sub: ChequeOcasionalDoc[]): string =>
+    sub.reduce((m, d) => (m === '' || d.numeroCheque < m ? d.numeroCheque : m), '')
+  const subgruposOrdenados = [...subgrupos].sort((a, b) => {
+    const ra = resuelveViejos(a) ? 0 : 1
+    const rb = resuelveViejos(b) ? 0 : 1
+    if (ra !== rb) return ra - rb
+    const porFecha = (a[0]!.fechaEmision ?? '').localeCompare(b[0]!.fechaEmision ?? '')
+    if (porFecha !== 0) return porFecha
+    return menorNumero(a).localeCompare(menorNumero(b))
+  })
+
+  for (const chequesNuevosDocs of subgruposOrdenados) {
     const primero = chequesNuevosDocs[0]!
     const banco = extraerBanco(primero.numeroCheque)
 

@@ -308,7 +308,7 @@ export interface ChequeOcasionalItem {
   baja: boolean
 }
 
-export type OcasionalesFiltro = '' | 'financiero' | 'gasto_real' | 'con_renovacion' | 'con_usd'
+export type OcasionalesFiltro = '' | 'revisar' | 'con_renovacion' | 'con_usd'
 
 export interface OcasionalesListResponse {
   cheques: ChequeOcasionalItem[]
@@ -324,10 +324,8 @@ export interface OcasionalesResumenResponse {
   pendientesCantidad?: number
   pendientesMontoCentavos?: number
   fechasImposiblesCantidad?: number
-  financieros: number
-  financierosMontoCentavos?: number
-  gastoRealCantidad?: number
-  gastoRealMontoCentavos?: number
+  revisarCantidad?: number
+  revisarMontoCentavos?: number
   conRenovacion: number
   conUsd: number
   operacionesUsdUnicas?: number
@@ -416,7 +414,6 @@ export interface CadenaRenovacion {
 
 export interface ChequeClasificado {
   numeroCheque: string
-  clasificacion: 'gasto_real' | 'operacion_financiera'
   rolEnCadena: 'capital' | 'interes' | 'mixto' | null
   cadenaId: string | null
 }
@@ -614,9 +611,10 @@ export interface ImportarOcasionalesResponse {
     parseados: number
     conRenovacion: number
     conUsd: number
-    proveedoresFinancieros: number
+    aRevisar: number
     fechasImposibles: number
   }
+  proveedoresSinCargar?: string[]
 }
 
 export async function importarOcasionalesCsv(file: File): Promise<ImportarOcasionalesResponse> {

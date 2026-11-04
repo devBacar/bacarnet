@@ -21,7 +21,7 @@ import {
 } from './ventas.js'
 
 /** Archivos opcionales para el tablero de Ventas: todavía no los genera el export de Vientri. */
-export const ARCHIVOS_VENTAS_OPCIONALES = ['items.csv', 'unegocio.csv', 'art.csv'] as const
+export const ARCHIVOS_VENTAS_OPCIONALES = ['items.csv', 'unegocio.csv', 'art.csv', 'divisa.csv'] as const
 
 export interface ResultadoProcesamiento {
   control: ControlCorrida
@@ -108,6 +108,16 @@ export function procesarCarpeta(textos: Map<string, string>): ResultadoProcesami
     const id = aEntero(f.id_divisa)
     const simbolo = aTexto(f.simbolo)
     if (id !== null && simbolo) monedas.set(id, simbolo)
+  }
+  // divisa.csv (opcional, catálogo completo de DIVISA) pisa lo anterior: cotizaciones.csv es solo la
+  // cotización diaria del dólar y nunca trae Pesos, así que sin este archivo el id 1 queda sin símbolo.
+  const divisaTexto = textos.get('divisa.csv')
+  if (divisaTexto) {
+    for (const f of leerCsv(divisaTexto).filas) {
+      const id = aEntero(f.vientri_id)
+      const simbolo = aTexto(f.simbolo)
+      if (id !== null && simbolo) monedas.set(id, simbolo)
+    }
   }
 
   const comprobantes = indiceComprobantes(t('comprobantes.csv').filas)

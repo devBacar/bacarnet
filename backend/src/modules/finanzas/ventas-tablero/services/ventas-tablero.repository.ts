@@ -29,26 +29,49 @@ export interface DatosVentasMes {
   art: Map<number, string>
 }
 
-/** Lee comprobantes de venta del mes (fecha YYYY-MM) + catálogos. Join comprobante↔items se hace en memoria. */
-export async function cargarDatosVentasMes(mes: string): Promise<DatosVentasMes> {
+/**
+ * ID de divisa en Vientri (tabla DIVISA) para cada moneda que soporta el tablero. Confirmado contra
+ * la base real: 1 = Pesos ($), 4 = Dólares (US). Hay otras (CCL, MEP, euros, reales...) pero son
+ * marginales (0 comprobantes de venta reales al armar esto) y no tienen vista propia todavía.
+ */
+const ID_DIVISA_POR_MONEDA: Record<'ARS' | 'USD', number> = { ARS: 1, USD: 4 }
+
+function idDivisaDe(moneda: string): number {
+  return ID_DIVISA_POR_MONEDA[moneda === 'USD' ? 'USD' : 'ARS']
+}
+
+/**
+ * Lee comprobantes de venta del mes (fecha YYYY-MM) + catálogos, filtrados por moneda.
+ * El filtro de moneda se hace en memoria (no en la query) para no depender de un índice compuesto
+ * sobre fecha+idDivisa; el volumen mensual (cientos de filas) lo permite sin problema.
+ * Join comprobante↔items se hace en memoria.
+ */
+export async function cargarDatosVentasMes(mes: string, moneda: string): Promise<DatosVentasMes> {
   const desde = `${mes}-01`
   const hasta = `${mes}-31`
+  const idDivisa = idDivisaDe(moneda)
   const snapCmp = await adminDb()
     .collection(VIENTRI_COMPROBANTES)
     .where('fecha', '>=', desde)
     .where('fecha', '<=', hasta)
     .get()
-  const comprobantes: ComprobanteVentaRow[] = snapCmp.docs.map((d) => {
-    const data = d.data()
-    return {
-      id: Number(data.id) || 0,
-      persona: data.persona ?? null,
-      fecha: typeof data.fecha === 'string' ? data.fecha : null,
-      totalCentavos: Number(data.totalCentavos) || 0,
-      idUnegocio: typeof data.idUnegocio === 'number' ? data.idUnegocio : null,
-      moneda: typeof data.moneda === 'string' ? data.moneda : null,
-    }
-  })
+  const comprobantes: ComprobanteVentaRow[] = snapCmp.docs
+    .filter((d) => {
+      const idDivisaReal = typeof d.data().idDivisa === 'number' ? d.data().idDivisa : 1
+      // Pesos es el default de Vientri cuando no viene idDivisa: sin dato = ARS, nunca USD.
+      return idDivisaReal === idDivisa
+    })
+    .map((d) => {
+      const data = d.data()
+      return {
+        id: Number(data.id) || 0,
+        persona: data.persona ?? null,
+        fecha: typeof data.fecha === 'string' ? data.fecha : null,
+        totalCentavos: Number(data.totalCentavos) || 0,
+        idUnegocio: typeof data.idUnegocio === 'number' ? data.idUnegocio : null,
+        moneda: typeof data.moneda === 'string' ? data.moneda : null,
+      }
+    })
 
   const idsCmp = new Set(comprobantes.map((c) => c.id))
   const items: ItemComprobanteRow[] = []
@@ -94,17 +117,23 @@ export async function hayItemsImportados(): Promise<boolean> {
   return !snap.empty
 }
 
-/** Solo el total facturado del mes (sin traer items ni catálogos): para el gráfico de evolución mensual. */
-export async function cargarTotalMes(mes: string): Promise<number> {
+/** Solo el total facturado del mes, filtrado por moneda (sin traer items ni catálogos): para el gráfico de evolución mensual. */
+export async function cargarTotalMes(mes: string, moneda: string): Promise<number> {
   const desde = `${mes}-01`
   const hasta = `${mes}-31`
+  const idDivisa = idDivisaDe(moneda)
   const snap = await adminDb()
     .collection(VIENTRI_COMPROBANTES)
     .where('fecha', '>=', desde)
     .where('fecha', '<=', hasta)
-    .select('totalCentavos')
+    .select('totalCentavos', 'idDivisa')
     .get()
   let total = 0
-  for (const d of snap.docs) total += Number(d.data().totalCentavos) || 0
+  for (const d of snap.docs) {
+    const data = d.data()
+    const idDivisaReal = typeof data.idDivisa === 'number' ? data.idDivisa : 1
+    if (idDivisaReal !== idDivisa) continue
+    total += Number(data.totalCentavos) || 0
+  }
   return total
 }

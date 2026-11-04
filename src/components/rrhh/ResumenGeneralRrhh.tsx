@@ -3,7 +3,9 @@ import type { InformeRrhh, PeriodoRrhh } from '../../services/rrhhApi'
 import { aclaracionCorte, mesLargo, numero, pesosCorto } from './formatoRrhh'
 import { bajasNoPrevistas, porcentaje, sumarIndicadores, tasaAusentismo, tempranasNoPrevistas, totalLicenciasLargas } from './indicadoresDatos'
 import { atencionDelMes } from './atencionRrhh'
+import { LineaTiempoRrhh, type MesAgregado } from './LineaTiempoRrhh'
 import { AtenderRrhh, BandaRrhh } from './ResumenSimpleRrhh'
+import { TarjetaRrhh } from './TarjetaRrhh'
 
 export type SeccionRrhh = 'resumen' | 'horas' | 'personal' | 'dotacion' | 'costos' | 'evolucion'
 
@@ -55,7 +57,17 @@ function Tema({
 }
 
 /** Primera pantalla: lo más importante del último mes cerrado, en cuatro temas, con acceso a cada sección. */
-export function ResumenGeneralRrhh({ datos, ultimoCerrado, onIr }: { datos: InformeRrhh; ultimoCerrado: PeriodoRrhh | undefined; onIr: (s: SeccionRrhh) => void }) {
+export function ResumenGeneralRrhh({
+  datos,
+  ultimoCerrado,
+  onIr,
+  lineaTiempo,
+}: {
+  datos: InformeRrhh
+  ultimoCerrado: PeriodoRrhh | undefined
+  onIr: (s: SeccionRrhh) => void
+  lineaTiempo: MesAgregado[]
+}) {
   const mes = ultimoCerrado?.mes ?? datos.ultimoMes
   const he = ultimoCerrado?.total
 
@@ -171,6 +183,15 @@ export function ResumenGeneralRrhh({ datos, ultimoCerrado, onIr }: { datos: Info
       </div>
 
       <AtenderRrhh frases={atender} />
+
+      {lineaTiempo.length > 0 ? (
+        <TarjetaRrhh
+          titulo="Cómo vienen las horas extra"
+          subtitulo="Últimos meses cerrados, el mes en curso y la previsión (barras rayadas)."
+        >
+          <LineaTiempoRrhh meses={lineaTiempo} />
+        </TarjetaRrhh>
+      ) : null}
     </div>
   )
 }

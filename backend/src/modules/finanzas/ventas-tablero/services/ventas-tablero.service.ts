@@ -2,7 +2,7 @@ import { dateKeyInArgentina } from '../../agenda/domain/vencimiento.alert.js'
 import { sumarMeses } from '../../tablero/domain/fechas.js'
 import { armarTableroVentas } from '../domain/calcular.js'
 import type { TableroVentas } from '../domain/tipos.js'
-import { cargarDatosVentasMes, cargarTendenciaRango, cargarTotalMes, hayItemsImportados } from './ventas-tablero.repository.js'
+import { cargarDatosVentasMes, cargarTendenciaRango, hayItemsImportados } from './ventas-tablero.repository.js'
 
 const MESES_TENDENCIA = 6
 
@@ -19,12 +19,12 @@ export async function obtenerTableroVentas(input: { mes: string; moneda: string 
   for (let i = MESES_TENDENCIA - 1; i >= 0; i--) mesesTendencia.push(sumarMeses(input.mes, -i))
   const mesAnioAnterior = sumarMeses(input.mes, -12)
 
-  const [datosMes, datosMesAnterior, sinItems, tendenciaDetallada, totalMismoMesAnioAnteriorCentavos] = await Promise.all([
+  const [datosMes, datosMesAnterior, sinItems, tendenciaDetallada, [mismoMesAnioAnteriorDetalle]] = await Promise.all([
     cargarDatosVentasMes(input.mes, input.moneda),
     cargarDatosVentasMes(sumarMeses(input.mes, -1), input.moneda),
     hayItemsImportados().then((hay) => !hay),
     cargarTendenciaRango(mesesTendencia, input.moneda),
-    cargarTotalMes(mesAnioAnterior, input.moneda),
+    cargarTendenciaRango([mesAnioAnterior], input.moneda),
   ])
 
   const tendencia = tendenciaDetallada.map((t) => ({ mes: t.mes, totalCentavos: t.totalCentavos }))
@@ -35,12 +35,13 @@ export async function obtenerTableroVentas(input: { mes: string; moneda: string 
     comprobantesMes: datosMes.comprobantes,
     itemsMes: datosMes.items,
     comprobantesMesAnterior: datosMesAnterior.comprobantes,
-    totalMismoMesAnioAnteriorCentavos,
+    totalMismoMesAnioAnteriorCentavos: mismoMesAnioAnteriorDetalle.totalCentavos,
     mesAnioAnterior,
     unegocio: datosMes.unegocio,
     art: datosMes.art,
     tendencia,
     tendenciaDetallada,
+    mismoMesAnioAnteriorPorUnidad: mismoMesAnioAnteriorDetalle.porUnegocio,
     hoy: dateKeyInArgentina(new Date()),
     sinDatosDeItems: sinItems,
     generadoEn: new Date().toISOString(),

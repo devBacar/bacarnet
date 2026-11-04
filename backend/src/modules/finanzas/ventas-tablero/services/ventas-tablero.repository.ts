@@ -40,6 +40,11 @@ function idDivisaDe(moneda: string): number {
   return ID_DIVISA_POR_MONEDA[moneda === 'USD' ? 'USD' : 'ARS']
 }
 
+/** Vientri a veces manda id_unegocio=0 para "sin asignar" (además de no mandar el campo): se trata igual que null. */
+function normalizarIdUnegocio(v: unknown): number | null {
+  return typeof v === 'number' && v !== 0 ? v : null
+}
+
 /**
  * Lee comprobantes de venta del mes (fecha YYYY-MM) + catálogos, filtrados por moneda.
  * El filtro de moneda se hace en memoria (no en la query) para no depender de un índice compuesto
@@ -68,7 +73,7 @@ export async function cargarDatosVentasMes(mes: string, moneda: string): Promise
         persona: data.persona ?? null,
         fecha: typeof data.fecha === 'string' ? data.fecha : null,
         totalCentavos: Number(data.totalCentavos) || 0,
-        idUnegocio: typeof data.idUnegocio === 'number' ? data.idUnegocio : null,
+        idUnegocio: normalizarIdUnegocio(data.idUnegocio),
         moneda: typeof data.moneda === 'string' ? data.moneda : null,
       }
     })
@@ -169,7 +174,7 @@ export async function cargarTendenciaRango(meses: string[], moneda: string): Pro
     if (!entrada) continue
     const total = Number(data.totalCentavos) || 0
     entrada.total += total
-    const idUn = typeof data.idUnegocio === 'number' ? data.idUnegocio : null
+    const idUn = normalizarIdUnegocio(data.idUnegocio)
     const clave = idUn !== null ? String(idUn) : 'sin-unegocio'
     entrada.porUn.set(clave, (entrada.porUn.get(clave) ?? 0) + total)
   }

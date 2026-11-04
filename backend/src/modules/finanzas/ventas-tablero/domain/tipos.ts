@@ -17,6 +17,13 @@ export interface UnegocioVentaTablero {
   variacionPorcentaje: number | null
   /** true si cayó 20% o más vs. el mes anterior (y el mes anterior tenía facturación). */
   caidaFuerte: boolean
+  /** Desde acá: mismos KPI que los de arriba (totales de la empresa) pero calculados solo para esta unidad. */
+  cantidadComprobantes: number
+  cantidadClientes: number
+  ticketPromedioCentavos: number
+  concentracionTop5Porcentaje: number | null
+  centavosMismoMesAnioAnterior: number
+  variacionInteranualPorcentaje: number | null
 }
 
 export interface ClienteVentaTablero {
@@ -30,6 +37,8 @@ export interface ClientePerdidoTablero {
   vientriId: number
   nombre: string
   centavosMesAnterior: number
+  /** Desglose por unidad de negocio de lo que facturaba el mes anterior, para filtrar por unidad. */
+  porUnegocio: Array<{ idUnegocio: number | null; nombre: string; centavosMesAnterior: number }>
 }
 
 export interface MesTendenciaTablero {

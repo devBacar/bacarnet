@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { pathBanda } from '../graficos/curvasSvg'
 import type { TipoMesRrhh } from '../../services/rrhhApi'
 import { mesCorto, mesLargo, numero, pesosCorto } from './formatoRrhh'
 
@@ -45,16 +46,25 @@ export function LineaTiempoRrhh({ meses }: { meses: MesAgregado[] }) {
   const anchoUtil = ANCHO - IZQ - DER
   const altoUtil = ALTO - ARRIBA - ABAJO
   const anchoMes = anchoUtil / meses.length
-  const separacion = anchoMes * 0.32
   const y = (v: number) => ARRIBA + altoUtil - (altoUtil * v) / maximo
   const lineas: number[] = []
   for (let v = 0; v <= maximo + 1e-6; v += paso) lineas.push(v)
   const iActual = meses.findIndex((m) => m.tipo === 'actual')
   const iPrimeraPrevision = meses.findIndex((m) => m.tipo === 'prevision')
+  const iPrimerProyectado = meses.findIndex((m) => m.tipo !== 'real')
   const variacion = (i: number) => {
     if (i === 0 || !totales[i - 1]) return null
     return ((totales[i] - totales[i - 1]) / totales[i - 1]) * 100
   }
+
+  const xDe = (i: number) => IZQ + i * anchoMes + anchoMes / 2
+  let acumulado = meses.map(() => 0)
+  const bandas = SERIES.map((s) => {
+    const inferior = acumulado
+    const superior = meses.map((m, i) => inferior[i] + m[s.clave])
+    acumulado = superior
+    return { serie: s, inferior, superior }
+  })
 
   return (
     <div className="min-w-0">
@@ -125,55 +135,50 @@ export function LineaTiempoRrhh({ meses }: { meses: MesAgregado[] }) {
               className="stroke-neutral-300 dark:stroke-zinc-600"
             />
           )}
-          {meses.map((m, i) => {
-            const x = IZQ + i * anchoMes + separacion / 2
-            const ancho = anchoMes - separacion
-            const proyectado = m.tipo !== 'real'
-            let base = ARRIBA + altoUtil
-            const segmentos = SERIES.map((s) => {
-              const valor = m[s.clave]
-              if (valor <= 0) return null
-              const alto = (altoUtil * valor) / maximo
-              const altoVisible = Math.max(0, alto - (base < ARRIBA + altoUtil ? 2 : 0))
-              base -= alto
-              return (
-                <g key={s.clave}>
-                  <rect x={x} y={base} width={ancho} height={altoVisible} rx={1.5} className={s.clase} opacity={proyectado ? 0.55 : 1} />
-                  {proyectado && <rect x={x} y={base} width={ancho} height={altoVisible} fill="url(#rrhh-rayado)" />}
-                </g>
-              )
-            })
-            return (
-              <g
-                key={m.mes}
-                onMouseEnter={() => setActivo(i)}
-                onMouseLeave={() => setActivo(null)}
-                onFocus={() => setActivo(i)}
-                onBlur={() => setActivo(null)}
-                tabIndex={0}
-                className="outline-none"
-              >
-                {segmentos}
-                <text x={x + ancho / 2} y={y(totales[i]) - 6} textAnchor="middle" className="fill-neutral-900 text-[11px] tabular-nums dark:fill-gray-100">
-                  {numero(totales[i])}
-                </text>
-                <text
-                  x={IZQ + i * anchoMes + anchoMes / 2}
-                  y={ARRIBA + altoUtil + 16}
-                  textAnchor="middle"
-                  className={`text-[11px] ${m.tipo === 'actual' ? 'fill-neutral-900 font-bold dark:fill-gray-100' : 'fill-neutral-500 dark:fill-gray-400'}`}
-                >
-                  {mesCorto(m.mes)}
-                </text>
-                {m.feriados > 0 && (
-                  <text x={IZQ + i * anchoMes + anchoMes / 2} y={ARRIBA + altoUtil + 31} textAnchor="middle" className="fill-neutral-500 text-[10px] dark:fill-gray-400">
-                    {m.feriados} {m.feriados === 1 ? 'feriado' : 'feriados'}
-                  </text>
-                )}
-                <rect x={IZQ + i * anchoMes} y={ARRIBA} width={anchoMes} height={altoUtil} fill="transparent" />
-              </g>
-            )
+          {bandas.map((banda) => {
+            const puntosArriba = banda.superior.map((v, i) => ({ x: xDe(i), y: y(v) }))
+            const puntosAbajoInvertidos = [...banda.inferior.map((v, i) => ({ x: xDe(i), y: y(v) }))].reverse()
+            return <path key={banda.serie.clave} d={pathBanda(puntosArriba, puntosAbajoInvertidos)} className={banda.serie.clase} fillOpacity={0.85} />
           })}
+          {iPrimerProyectado >= 0 && (
+            <rect
+              x={iPrimerProyectado === 0 ? IZQ : IZQ + (iPrimerProyectado - 0.5) * anchoMes}
+              y={ARRIBA - 18}
+              width={ANCHO - DER - (iPrimerProyectado === 0 ? IZQ : IZQ + (iPrimerProyectado - 0.5) * anchoMes)}
+              height={altoUtil + 18}
+              fill="url(#rrhh-rayado)"
+              opacity={0.5}
+            />
+          )}
+          {meses.map((m, i) => (
+            <g
+              key={m.mes}
+              onMouseEnter={() => setActivo(i)}
+              onMouseLeave={() => setActivo(null)}
+              onFocus={() => setActivo(i)}
+              onBlur={() => setActivo(null)}
+              tabIndex={0}
+              className="outline-none"
+            >
+              <text x={xDe(i)} y={y(totales[i]) - 6} textAnchor="middle" className="fill-neutral-900 text-[11px] tabular-nums dark:fill-gray-100">
+                {numero(totales[i])}
+              </text>
+              <text
+                x={xDe(i)}
+                y={ARRIBA + altoUtil + 16}
+                textAnchor="middle"
+                className={`text-[11px] ${m.tipo === 'actual' ? 'fill-neutral-900 font-bold dark:fill-gray-100' : 'fill-neutral-500 dark:fill-gray-400'}`}
+              >
+                {mesCorto(m.mes)}
+              </text>
+              {m.feriados > 0 && (
+                <text x={xDe(i)} y={ARRIBA + altoUtil + 31} textAnchor="middle" className="fill-neutral-500 text-[10px] dark:fill-gray-400">
+                  {m.feriados} {m.feriados === 1 ? 'feriado' : 'feriados'}
+                </text>
+              )}
+              <rect x={IZQ + i * anchoMes} y={ARRIBA} width={anchoMes} height={altoUtil} fill="transparent" />
+            </g>
+          ))}
           <line x1={IZQ} x2={ANCHO - DER} y1={ARRIBA + altoUtil} y2={ARRIBA + altoUtil} className="stroke-neutral-300 dark:stroke-zinc-600" />
         </svg>
         {activo !== null && (

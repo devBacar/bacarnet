@@ -19,6 +19,14 @@ import type {
 /** % de caída vs. el mes anterior a partir del cual se marca `caidaFuerte` en una unidad de negocio. */
 const UMBRAL_CAIDA_FUERTE = 20
 
+/**
+ * Unidades de negocio que no se muestran en el desglose del tablero (pedido explícito: no tienen
+ * actividad relevante hoy). Su facturación sigue sumando en los totales de la empresa, solo se
+ * ocultan como fila/columna/serie propia en "Por unidad", el mix mensual y el mapa de calor.
+ * id 5 = ALQUILER DE MÁQUINAS DE RECUENTO.
+ */
+const UNIDADES_OCULTAS = new Set<number>([5])
+
 function proyectarMes(mes: string, hoy: string, totalCentavos: number): ProyeccionVentas | null {
   if (mesDeFecha(hoy) !== mes) return null
   const ultimo = ultimoDiaMes(mes)
@@ -53,6 +61,8 @@ export function armarTableroVentas(input: {
   art: Map<number, string>
   tendencia: MesTendenciaTablero[]
   tendenciaDetallada: TendenciaMesDetallada[]
+  /** Desglose por unidad de negocio del mismo mes, un año atrás (para el interanual por unidad). */
+  mismoMesAnioAnteriorPorUnidad: Array<{ idUnegocio: number | null; centavos: number }>
   hoy: string
   sinDatosDeItems: boolean
   generadoEn: string
@@ -69,6 +79,8 @@ export function armarTableroVentas(input: {
 
   const porUnegocioMap = new Map<string, UnegocioVentaTablero>()
   const porClienteMap = new Map<number, ClienteVentaTablero>()
+  const cantidadComprobantesPorUnidad = new Map<string, number>()
+  const clientesCentavosPorUnidad = new Map<string, Map<number, number>>()
 
   for (const c of comprobantesMes) {
     const idUn = c.idUnegocio
@@ -76,10 +88,26 @@ export function armarTableroVentas(input: {
     const claveUn = idUn !== null ? String(idUn) : 'sin-unegocio'
     let un = porUnegocioMap.get(claveUn)
     if (!un) {
-      un = { idUnegocio: idUn, nombre: nombreUn, centavos: 0, porcentaje: null, items: [], centavosMesAnterior: 0, variacionPorcentaje: null, caidaFuerte: false }
+      un = {
+        idUnegocio: idUn,
+        nombre: nombreUn,
+        centavos: 0,
+        porcentaje: null,
+        items: [],
+        centavosMesAnterior: 0,
+        variacionPorcentaje: null,
+        caidaFuerte: false,
+        cantidadComprobantes: 0,
+        cantidadClientes: 0,
+        ticketPromedioCentavos: 0,
+        concentracionTop5Porcentaje: null,
+        centavosMismoMesAnioAnterior: 0,
+        variacionInteranualPorcentaje: null,
+      }
       porUnegocioMap.set(claveUn, un)
     }
     un.centavos += c.totalCentavos
+    cantidadComprobantesPorUnidad.set(claveUn, (cantidadComprobantesPorUnidad.get(claveUn) ?? 0) + 1)
 
     const itemsDelCmp = itemsPorCmp.get(c.id) ?? []
     for (const it of itemsDelCmp) {
@@ -99,26 +127,48 @@ export function armarTableroVentas(input: {
       const existenteUn = cli.porUnegocio.find((x) => x.idUnegocio === idUn)
       if (existenteUn) existenteUn.centavos += c.totalCentavos
       else cli.porUnegocio.push({ idUnegocio: idUn, nombre: nombreUn, centavos: c.totalCentavos })
+
+      const clientesUnidad = clientesCentavosPorUnidad.get(claveUn) ?? new Map<number, number>()
+      clientesUnidad.set(c.persona.vientriId, (clientesUnidad.get(c.persona.vientriId) ?? 0) + c.totalCentavos)
+      clientesCentavosPorUnidad.set(claveUn, clientesUnidad)
     }
   }
 
   // --- Mes anterior: totales por unidad y por cliente, para variación y altas/bajas. ---
   const porUnegocioAnteriorMap = new Map<string, number>()
-  const porClienteAnteriorMap = new Map<number, { nombre: string; centavos: number }>()
+  const porClienteAnteriorMap = new Map<number, { nombre: string; centavos: number; porUnegocio: Map<string, { nombre: string; centavos: number }> }>()
   for (const c of input.comprobantesMesAnterior) {
-    const claveUn = c.idUnegocio !== null ? String(c.idUnegocio) : 'sin-unegocio'
+    const idUn = c.idUnegocio
+    const claveUn = idUn !== null ? String(idUn) : 'sin-unegocio'
+    const nombreUn = idUn !== null ? unegocio.get(idUn) ?? `Unidad #${idUn}` : 'Sin unidad de negocio'
     porUnegocioAnteriorMap.set(claveUn, (porUnegocioAnteriorMap.get(claveUn) ?? 0) + c.totalCentavos)
     if (c.persona) {
       const previo = porClienteAnteriorMap.get(c.persona.vientriId)
       const nombre = c.persona.nombre ?? `Cliente #${c.persona.vientriId}`
-      porClienteAnteriorMap.set(c.persona.vientriId, { nombre, centavos: (previo?.centavos ?? 0) + c.totalCentavos })
+      const porUnegocioCli = previo?.porUnegocio ?? new Map<string, { nombre: string; centavos: number }>()
+      const previoUn = porUnegocioCli.get(claveUn)
+      porUnegocioCli.set(claveUn, { nombre: nombreUn, centavos: (previoUn?.centavos ?? 0) + c.totalCentavos })
+      porClienteAnteriorMap.set(c.persona.vientriId, { nombre, centavos: (previo?.centavos ?? 0) + c.totalCentavos, porUnegocio: porUnegocioCli })
     }
+  }
+
+  const mismoMesAnioAnteriorPorUnidadMap = new Map<string, number>()
+  for (const u of input.mismoMesAnioAnteriorPorUnidad) {
+    const clave = u.idUnegocio !== null ? String(u.idUnegocio) : 'sin-unegocio'
+    mismoMesAnioAnteriorPorUnidadMap.set(clave, (mismoMesAnioAnteriorPorUnidadMap.get(clave) ?? 0) + u.centavos)
   }
 
   const porUnegocio = [...porUnegocioMap.entries()]
     .map(([clave, u]) => {
       const centavosMesAnterior = porUnegocioAnteriorMap.get(clave) ?? 0
       const variacionPorcentaje = centavosMesAnterior > 0 ? ((u.centavos - centavosMesAnterior) / centavosMesAnterior) * 100 : null
+      const cantidadComprobantesUnidad = cantidadComprobantesPorUnidad.get(clave) ?? 0
+      const clientesUnidad = clientesCentavosPorUnidad.get(clave)
+      const cantidadClientesUnidad = clientesUnidad?.size ?? 0
+      const top5CentavosUnidad = clientesUnidad ? [...clientesUnidad.values()].sort((a, b) => b - a).slice(0, 5).reduce((s, v) => s + v, 0) : 0
+      const centavosMismoMesAnioAnterior = mismoMesAnioAnteriorPorUnidadMap.get(clave) ?? 0
+      const variacionInteranualPorcentaje =
+        centavosMismoMesAnioAnterior > 0 ? ((u.centavos - centavosMismoMesAnioAnterior) / centavosMismoMesAnioAnterior) * 100 : null
       return {
         ...u,
         porcentaje: totalCentavos > 0 ? (u.centavos / totalCentavos) * 100 : null,
@@ -126,8 +176,15 @@ export function armarTableroVentas(input: {
         centavosMesAnterior,
         variacionPorcentaje,
         caidaFuerte: variacionPorcentaje !== null && variacionPorcentaje <= -UMBRAL_CAIDA_FUERTE,
+        cantidadComprobantes: cantidadComprobantesUnidad,
+        cantidadClientes: cantidadClientesUnidad,
+        ticketPromedioCentavos: cantidadComprobantesUnidad > 0 ? Math.round(u.centavos / cantidadComprobantesUnidad) : 0,
+        concentracionTop5Porcentaje: u.centavos > 0 && clientesUnidad ? (top5CentavosUnidad / u.centavos) * 100 : null,
+        centavosMismoMesAnioAnterior,
+        variacionInteranualPorcentaje,
       }
     })
+    .filter((u) => u.idUnegocio === null || !UNIDADES_OCULTAS.has(u.idUnegocio))
     .sort((a, b) => b.centavos - a.centavos)
 
   const clientes = [...porClienteMap.values()].sort((a, b) => b.centavos - a.centavos)
@@ -135,7 +192,16 @@ export function armarTableroVentas(input: {
   const clientesNuevos = clientes.filter((c) => !porClienteAnteriorMap.has(c.vientriId)).slice(0, 10)
   const clientesPerdidos: ClientePerdidoTablero[] = [...porClienteAnteriorMap.entries()]
     .filter(([vientriId]) => !porClienteMap.has(vientriId))
-    .map(([vientriId, v]) => ({ vientriId, nombre: v.nombre, centavosMesAnterior: v.centavos }))
+    .map(([vientriId, v]) => ({
+      vientriId,
+      nombre: v.nombre,
+      centavosMesAnterior: v.centavos,
+      porUnegocio: [...v.porUnegocio.entries()].map(([clave, pu]) => ({
+        idUnegocio: clave === 'sin-unegocio' ? null : Number(clave),
+        nombre: pu.nombre,
+        centavosMesAnterior: pu.centavos,
+      })),
+    }))
     .sort((a, b) => b.centavosMesAnterior - a.centavosMesAnterior)
     .slice(0, 10)
 
@@ -162,6 +228,7 @@ export function armarTableroVentas(input: {
   const tendenciaPorUnegocio: TendenciaUnegocioMes[] = input.tendenciaDetallada.map((t) => ({
     mes: t.mes,
     porUnegocio: t.porUnegocio
+      .filter((u) => u.idUnegocio === null || !UNIDADES_OCULTAS.has(u.idUnegocio))
       .map((u) => ({
         idUnegocio: u.idUnegocio,
         nombre: u.idUnegocio !== null ? unegocio.get(u.idUnegocio) ?? `Unidad #${u.idUnegocio}` : 'Sin unidad de negocio',

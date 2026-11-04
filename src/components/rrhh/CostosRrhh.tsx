@@ -6,7 +6,7 @@ import { descargarCsv, nombreArchivo } from './exportarRrhh'
 import { agruparCostos, agruparPor, bruto, costoLaboral, cumpleFiltro, filtrarCostos, type PeriodoCosto, type Totales } from './costosDatos'
 import { claveDe, type Agrupacion } from './evolucionDatos'
 import { numero, pesosCorto } from './formatoRrhh'
-import { GraficoBarras, Segmentado, type Serie } from './GraficoBarrasRrhh'
+import { GraficoCurvaRrhh, Segmentado, type Serie } from './GraficoBarrasRrhh'
 import { BandaRrhh, NumerosGrandes, PocasPalabras, TituloDetalle } from './ResumenSimpleRrhh'
 import { TarjetaRrhh } from './TarjetaRrhh'
 
@@ -468,11 +468,11 @@ export function CostosRrhh({
           ) : null}
 
           <TituloDetalle>Evolución</TituloDetalle>
-          <TarjetaRrhh titulo={`Evolución · ${seleccion}`} subtitulo="Pasá el mouse sobre una barra para ver el detalle.">
+          <TarjetaRrhh titulo={`Evolución · ${seleccion}`} subtitulo="Pasá el mouse sobre el gráfico para ver el detalle.">
             <div className="mb-3">
               <Segmentado etiqueta="Qué mirar" opciones={VISTAS} valor={vista} onChange={setVista} />
             </div>
-            <GraficoBarras
+            <GraficoCurvaRrhh
               etiquetas={periodos.map((x) => x.etiquetaCorta)}
               subetiquetas={periodos.map((x) => (x.meses < x.mesesTotales ? `${x.meses} de ${x.mesesTotales} meses` : ''))}
               estimados={periodos.map(() => false)}

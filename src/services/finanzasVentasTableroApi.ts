@@ -18,6 +18,12 @@ export interface UnegocioVentaTablero {
   centavosMesAnterior: number
   variacionPorcentaje: number | null
   caidaFuerte: boolean
+  cantidadComprobantes: number
+  cantidadClientes: number
+  ticketPromedioCentavos: number
+  concentracionTop5Porcentaje: number | null
+  centavosMismoMesAnioAnterior: number
+  variacionInteranualPorcentaje: number | null
 }
 
 export interface ClienteVentaTablero {
@@ -31,6 +37,7 @@ export interface ClientePerdidoTablero {
   vientriId: number
   nombre: string
   centavosMesAnterior: number
+  porUnegocio: Array<{ idUnegocio: number | null; nombre: string; centavosMesAnterior: number }>
 }
 
 export interface MesTendenciaTablero {

@@ -1,3 +1,4 @@
+import { dateKeyInArgentina } from '../../agenda/domain/vencimiento.alert.js'
 import { sumarMeses } from '../../tablero/domain/fechas.js'
 import { armarTableroVentas } from '../domain/calcular.js'
 import type { TableroVentas } from '../domain/tipos.js'
@@ -16,15 +17,16 @@ export async function obtenerTableroVentas(input: { mes: string; moneda: string 
 
   const mesesTendencia: string[] = []
   for (let i = MESES_TENDENCIA - 1; i >= 0; i--) mesesTendencia.push(sumarMeses(input.mes, -i))
+  const mesAnioAnterior = sumarMeses(input.mes, -12)
 
-  const [datosMes, datosMesAnterior, sinItems, totalesTendencia] = await Promise.all([
+  const [datosMes, datosMesAnterior, sinItems, totalesTendencia, totalMismoMesAnioAnteriorCentavos] = await Promise.all([
     cargarDatosVentasMes(input.mes, input.moneda),
     cargarDatosVentasMes(sumarMeses(input.mes, -1), input.moneda),
     hayItemsImportados().then((hay) => !hay),
     Promise.all(mesesTendencia.map((mes) => cargarTotalMes(mes, input.moneda))),
+    cargarTotalMes(mesAnioAnterior, input.moneda),
   ])
 
-  const totalMesAnteriorCentavos = datosMesAnterior.comprobantes.reduce((acc, c) => acc + c.totalCentavos, 0)
   const tendencia = mesesTendencia.map((mes, i) => ({ mes, totalCentavos: totalesTendencia[i] }))
 
   const payload = armarTableroVentas({
@@ -32,10 +34,13 @@ export async function obtenerTableroVentas(input: { mes: string; moneda: string 
     moneda: input.moneda,
     comprobantesMes: datosMes.comprobantes,
     itemsMes: datosMes.items,
-    comprobantesMesAnteriorTotalCentavos: totalMesAnteriorCentavos,
+    comprobantesMesAnterior: datosMesAnterior.comprobantes,
+    totalMismoMesAnioAnteriorCentavos,
+    mesAnioAnterior,
     unegocio: datosMes.unegocio,
     art: datosMes.art,
     tendencia,
+    hoy: dateKeyInArgentina(new Date()),
     sinDatosDeItems: sinItems,
     generadoEn: new Date().toISOString(),
   })

@@ -15,6 +15,9 @@ export interface UnegocioVentaTablero {
   centavos: number
   porcentaje: number | null
   items: ItemVentaTablero[]
+  centavosMesAnterior: number
+  variacionPorcentaje: number | null
+  caidaFuerte: boolean
 }
 
 export interface ClienteVentaTablero {
@@ -24,9 +27,27 @@ export interface ClienteVentaTablero {
   porUnegocio: Array<{ idUnegocio: number | null; nombre: string; centavos: number }>
 }
 
+export interface ClientePerdidoTablero {
+  vientriId: number
+  nombre: string
+  centavosMesAnterior: number
+}
+
 export interface MesTendenciaTablero {
   mes: string
   totalCentavos: number
+}
+
+export interface ComparativoInteranual {
+  mesAnioAnterior: string
+  totalCentavos: number
+  variacionPorcentaje: number | null
+}
+
+export interface ProyeccionVentas {
+  totalProyectadoCentavos: number
+  diasHabilesTranscurridos: number
+  diasHabilesTotales: number
 }
 
 export interface TableroVentas {
@@ -41,9 +62,13 @@ export interface TableroVentas {
   ticketPromedioCentavos: number
   concentracionTop5Porcentaje: number | null
   tendencia: MesTendenciaTablero[]
+  comparativoInteranual: ComparativoInteranual
+  proyeccion: ProyeccionVentas | null
   porUnegocio: UnegocioVentaTablero[]
   topItems: ItemVentaTablero[]
   clientes: ClienteVentaTablero[]
+  clientesNuevos: ClienteVentaTablero[]
+  clientesPerdidos: ClientePerdidoTablero[]
   sinDatosDeItems: boolean
 }
 

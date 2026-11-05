@@ -87,9 +87,18 @@ export interface TableroVentas {
   /** Top ítems facturados del mes, across todas las unidades de negocio. */
   topItems: ItemVentaTablero[]
   clientes: ClienteVentaTablero[]
-  /** Clientes que facturaron este mes y no facturaron el mes anterior (altas), ordenados por monto. */
+  /**
+   * Clientes que facturaron este mes y no facturaron el mes anterior, ordenados por monto. NO implica
+   * que sean clientes nuevos de la empresa: puede ser alguien que compra cada 2 o 3 meses.
+   */
   clientesNuevos: ClienteVentaTablero[]
-  /** Clientes que facturaron el mes anterior y no facturaron este mes (bajas/riesgo). */
+  /**
+   * Clientes que facturaron el mes anterior y todavía no facturaron este mes. NO implica que se dieron
+   * de baja ni que dejaron de ser clientes: solo que no hay un comprobante cargado en este rango de 2
+   * meses puntuales (compran con otra frecuencia, el mes puede estar sin cerrar del todo, etc.). El
+   * frontend no debe presentarlo como "baja" — ver TableroVentasPage.tsx, confirmado con el usuario
+   * el 2026-11-05 después de un caso real de clientes activos que aparecían acá.
+   */
   clientesPerdidos: ClientePerdidoTablero[]
   /** true si items.csv/unegocio.csv todavía no llegaron en ninguna importación: el desglose por ítem/unidad queda vacío. */
   sinDatosDeItems: boolean

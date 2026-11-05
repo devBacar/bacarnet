@@ -121,4 +121,14 @@ describe('calcularTableroCobros', () => {
     expect(tablero.cantidadFacturasCobradasEnPeriodo).toBe(2)
     expect(tablero.totalACobrarCentavos).toBe(0)
   })
+
+  it('"Total a cobrar/Vencido/A vencer" solo cuentan facturas emitidas dentro del período', () => {
+    const pendientes: VientriPendienteDoc[] = [
+      pendiente({ vientriId: 1, pendienteCentavos: 100_00, fecha: '2026-08-20' }), // dentro del período
+      pendiente({ vientriId: 2, pendienteCentavos: 50_00, fecha: '2026-07-01' }), // antes del período: afuera
+      pendiente({ vientriId: 3, pendienteCentavos: 30_00, fecha: null }), // sin fecha: afuera (no se puede ubicar)
+    ]
+    const tablero = calcularTableroCobros({ pendientesCobrar: pendientes, cobradas: [], hoy, periodo, moneda: 'ARS' })
+    expect(tablero.totalACobrarCentavos).toBe(100_00)
+  })
 })

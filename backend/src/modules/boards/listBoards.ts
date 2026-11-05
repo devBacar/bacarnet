@@ -10,11 +10,14 @@ import { getNegocioBoardFolderId } from '../tableros-negocio/boardNegocioConfig.
 import { getCopsBoardFolderId } from '../cops/boardCopsConfig.js'
 import { getVentasBoardFolderId } from '../finanzas/ventas-tablero/boardVentasConfig.js'
 import { getCombustibleBoardFolderId } from '../finanzas/combustible-tablero/boardCombustibleConfig.js'
+import { getCobrosBoardFolderId } from '../finanzas/cobros-tablero/boardCobrosConfig.js'
 import { getBoardsConfig } from './policy.js'
 
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 
-function tipoDeTablero(id: string): 'rrhh' | 'finanzas' | 'negocio' | 'cops' | 'ventas' | 'combustible' | null {
+function tipoDeTablero(
+  id: string,
+): 'rrhh' | 'finanzas' | 'negocio' | 'cops' | 'ventas' | 'combustible' | 'cobros' | null {
   const rrhh = getRrhhBoardFolderId()
   if (rrhh && id === rrhh) return 'rrhh'
   const finanzas = getFinanzasBoardFolderId()
@@ -27,6 +30,8 @@ function tipoDeTablero(id: string): 'rrhh' | 'finanzas' | 'negocio' | 'cops' | '
   if (ventas && id === ventas) return 'ventas'
   const combustible = getCombustibleBoardFolderId()
   if (combustible && id === combustible) return 'combustible'
+  const cobros = getCobrosBoardFolderId()
+  if (cobros && id === cobros) return 'cobros'
   return null
 }
 

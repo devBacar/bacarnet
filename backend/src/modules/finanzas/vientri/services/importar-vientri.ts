@@ -19,6 +19,7 @@ import {
   guardarLimpieza,
   leerEstado,
   sincronizarColeccion,
+  VIENTRI_APLICACIONES,
   VIENTRI_ART,
   VIENTRI_CHEQUES,
   VIENTRI_COMPRAS_COMBUSTIBLE,
@@ -214,6 +215,18 @@ export async function importarVientri(opts: {
     }
   } catch (err) {
     console.error('[importar-vientri] sync de combustible falló (la importación de cheques/pendientes se completó)', err)
+  }
+
+  // Cobros (tablero "Cobros"): aditivo, no toca nada de lo anterior. Qué pago canceló qué factura, con
+  // la fecha real de cobro (la del comprobante de pago, no la de la factura ni fecins).
+  try {
+    conteos.aplicacionesCobro = await sincronizarColeccion({
+      ...comunes,
+      coleccion: VIENTRI_APLICACIONES,
+      docs: proc.aplicacionesCobro.map((a) => ({ id: a.clave, data: a })),
+    })
+  } catch (err) {
+    console.error('[importar-vientri] sync de aplicaciones de cobro falló (la importación de cheques/pendientes se completó)', err)
   }
 
   // Agenda: se calcula siempre; se escribe solo si está activada (vientriEstado/config.agenda) y no es simulación.

@@ -1,4 +1,5 @@
 /** Procesa una carpeta de exportación de Vientri ya leída (nombre → texto). Sin Firestore: se puede testear. */
+import { armarAplicacionesCobro, type AplicacionCobroDoc } from './aplicaciones-cobro.js'
 import { armarCheques, COLUMNAS_CHEQUES, COLUMNAS_CHEQUES_PROPIOS, type ResultadoCheques } from './cheques.js'
 import { armarComprasCombustible, type VientriCompraCombustibleDoc } from './combustible.js'
 import { armarPendientes, COLUMNAS_COMPROBANTES, indiceComprobantes } from './comprobantes.js'
@@ -9,7 +10,7 @@ import { facturasPorOp } from './facturas-por-op.js'
 import { calcularPlazos, type PlazosHistoricos } from './plazos.js'
 import { COLUMNAS_PERSONAS, indicePersonas, mapearPersona } from './personas.js'
 import type { VientriChequeDoc, VientriPendienteDoc, VientriPersonaDoc } from './tipos.js'
-import { aEntero, aTexto } from './valores.js'
+import { aEntero, aFecha, aTexto } from './valores.js'
 import {
   armarArt,
   armarComprobantesVenta,
@@ -50,6 +51,8 @@ export interface ResultadoProcesamiento {
   combustible: {
     compras: VientriCompraCombustibleDoc[]
   }
+  /** Para el tablero de Cobros: qué pago canceló qué factura, con la fecha real de cobro. */
+  aplicacionesCobro: AplicacionCobroDoc[]
 }
 
 export class CarpetaInvalidaError extends Error {
@@ -130,6 +133,12 @@ export function procesarCarpeta(textos: Map<string, string>): ResultadoProcesami
 
   const comprobantes = indiceComprobantes(t('comprobantes.csv').filas)
   const mapaFacturas = facturasPorOp(t('aplicaciones.csv').filas, t('comprobantes.csv').filas, indice)
+  const fechaPorComprobante = new Map<number, string | null>()
+  for (const f of t('comprobantes.csv').filas) {
+    const id = aEntero(f.vientri_id)
+    if (id !== null) fechaPorComprobante.set(id, aFecha(f.fecha))
+  }
+  const aplicacionesCobro = armarAplicacionesCobro(t('aplicaciones.csv').filas, fechaPorComprobante)
   const { cheques, resumen } = armarCheques(t('cheques.csv').filas, t('cheques_propios.csv').filas, { personas: indice, bancos, comprobantes, facturasPorOp: mapaFacturas })
   const pendientes = armarPendientes(t('comprobantes.csv').filas, indice, monedas)
   const plazos = calcularPlazos(t('comprobantes.csv').filas, t('aplicaciones.csv').filas, control.fechaDatos)
@@ -155,5 +164,18 @@ export function procesarCarpeta(textos: Map<string, string>): ResultadoProcesami
   const compras = combustibleTexto ? armarComprasCombustible(leerCsv(combustibleTexto).filas, monedas) : []
   const combustible = { compras }
 
-  return { control, verificacion, personas, cheques, pendientes, resumenCheques: resumen, tiposComprobante, plazos, desglosesPago, ventas, combustible }
+  return {
+    control,
+    verificacion,
+    personas,
+    cheques,
+    pendientes,
+    resumenCheques: resumen,
+    tiposComprobante,
+    plazos,
+    desglosesPago,
+    ventas,
+    combustible,
+    aplicacionesCobro,
+  }
 }

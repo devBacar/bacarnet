@@ -16,6 +16,8 @@ export const VIENTRI_UNEGOCIO = 'vientriUnegocio'
 export const VIENTRI_ART = 'vientriArt'
 /** Para el tablero de Combustible (ver domain/combustible.ts). */
 export const VIENTRI_COMPRAS_COMBUSTIBLE = 'vientriComprasCombustible'
+/** Para el tablero de Cobros (ver domain/aplicaciones-cobro.ts): qué pago canceló qué factura, con fecha real. */
+export const VIENTRI_APLICACIONES = 'vientriAplicaciones'
 
 const LOTE = 400
 

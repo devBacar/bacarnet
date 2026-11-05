@@ -27,12 +27,13 @@ export interface ClienteCobro {
   comprobantes: ComprobanteCobro[]
 }
 
+/** Un pago real (total o parcial) de una factura, con su fecha real de cobro. */
 export interface FacturaCobrada {
   clave: string
   comprobante: string
   persona: { vientriId: number; nombre: string } | null
-  fecha: string | null
-  totalCentavos: number
+  fechaCobro: string | null
+  importeCobradoCentavos: number
 }
 
 export interface TableroCobros {

@@ -106,7 +106,7 @@ export function calcularTableroCobros(input: {
     totalAVencerCentavos: totalAVencer,
     antiguedad,
     cantidadClientesConDeuda: clientes.filter((c) => c.deudaCentavos > 0).length,
-    cobradoEnPeriodoCentavos: input.cobradas.reduce((acc, f) => acc + f.totalCentavos, 0),
+    cobradoEnPeriodoCentavos: input.cobradas.reduce((acc, f) => acc + f.importeCobradoCentavos, 0),
     cantidadFacturasCobradasEnPeriodo: input.cobradas.length,
     clientes,
   }

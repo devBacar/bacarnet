@@ -117,7 +117,7 @@ export function TableroCobrosPage() {
             </TarjetaTablero>
             <TarjetaTablero titulo={`Cobrado (${fechaCorta(data.periodo.desde)} a ${fechaCorta(data.periodo.hasta)})`}>
               <p className="text-heading text-2xl font-bold tabular-nums">{plata(data.cobradoEnPeriodoCentavos, data.moneda)}</p>
-              <p className="text-body-muted mt-1 text-xs">{data.cantidadFacturasCobradasEnPeriodo} facturas cobradas</p>
+              <p className="text-body-muted mt-1 text-xs">{data.cantidadFacturasCobradasEnPeriodo} cobros registrados</p>
             </TarjetaTablero>
           </div>
 
@@ -187,7 +187,10 @@ function FilaCliente({
   abierto: boolean
   onToggle: () => void
   cargandoDetalle: boolean
-  detalle: { impagas: ClienteCobro['comprobantes']; cobradas: Array<{ clave: string; comprobante: string; fecha: string | null; totalCentavos: number }> } | null
+  detalle: {
+    impagas: ClienteCobro['comprobantes']
+    cobradas: Array<{ clave: string; comprobante: string; fechaCobro: string | null; importeCobradoCentavos: number }>
+  } | null
 }) {
   return (
     <>
@@ -238,19 +241,22 @@ function FilaCliente({
                   )}
                 </div>
                 <div>
-                  <h3 className="text-heading mb-2 text-sm font-semibold">Facturas cobradas en el período</h3>
+                  <h3 className="text-heading mb-2 text-sm font-semibold">Cobros en el período</h3>
+                  <p className="text-body-muted mb-2 text-xs">
+                    Fecha real del pago (recibo/OP), no la fecha de la factura. Un pago parcial aparece aparte.
+                  </p>
                   {detalle.cobradas.length === 0 ? (
-                    <p className="text-body-muted text-sm">No cobró facturas en este rango de fechas.</p>
+                    <p className="text-body-muted text-sm">No se registraron cobros en este rango de fechas.</p>
                   ) : (
                     <ul className="space-y-1 text-sm">
                       {detalle.cobradas.map((f) => (
                         <li key={f.clave} className="flex items-center justify-between gap-2">
                           <span>
                             {f.comprobante}
-                            {f.fecha ? <span className="text-body-muted ml-1 text-xs">{fechaCorta(f.fecha)}</span> : null}
+                            {f.fechaCobro ? <span className="text-body-muted ml-1 text-xs">{fechaCorta(f.fechaCobro)}</span> : null}
                           </span>
                           <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
-                            {plata(f.totalCentavos, moneda)}
+                            {plata(f.importeCobradoCentavos, moneda)}
                           </span>
                         </li>
                       ))}

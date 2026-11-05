@@ -110,8 +110,8 @@ describe('calcularTableroCobros', () => {
     const tablero = calcularTableroCobros({
       pendientesCobrar: [],
       cobradas: [
-        { clave: 'cmp-5', comprobante: 'FAA 1', persona: { vientriId: 10, nombre: 'Cliente A' }, fecha: '2026-09-01', totalCentavos: 300_00 },
-        { clave: 'cmp-6', comprobante: 'FAA 2', persona: { vientriId: 10, nombre: 'Cliente A' }, fecha: '2026-09-02', totalCentavos: 150_00 },
+        { clave: 'apl-5', comprobante: 'FAA 1', persona: { vientriId: 10, nombre: 'Cliente A' }, fechaCobro: '2026-09-01', importeCobradoCentavos: 300_00 },
+        { clave: 'apl-6', comprobante: 'FAA 2', persona: { vientriId: 10, nombre: 'Cliente A' }, fechaCobro: '2026-09-02', importeCobradoCentavos: 150_00 },
       ],
       hoy,
       periodo,

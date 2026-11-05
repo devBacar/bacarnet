@@ -31,12 +31,18 @@ export interface ClienteCobro {
   comprobantes: ComprobanteCobro[]
 }
 
+/**
+ * Un pago real (total o parcial) que canceló una factura, con su fecha real de cobro (la del
+ * comprobante de pago/recibo/OP, no la de la factura). Una factura con dos pagos parciales en fechas
+ * distintas aparece como dos `FacturaCobrada`.
+ */
 export interface FacturaCobrada {
   clave: string
   comprobante: string
   persona: { vientriId: number; nombre: string } | null
-  fecha: string | null
-  totalCentavos: number
+  fechaCobro: string | null
+  /** Lo que se cobró en ESTE pago, no el total de la factura. */
+  importeCobradoCentavos: number
 }
 
 export interface TableroCobros {

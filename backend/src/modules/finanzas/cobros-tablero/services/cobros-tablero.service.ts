@@ -1,6 +1,6 @@
 import { calcularTableroCobros } from '../domain/calcular.js'
 import type { DetalleCliente, TableroCobros } from '../domain/tipos.js'
-import { cargarComprobantesCobrados, cargarPendientesCobrar } from './cobros-tablero.repository.js'
+import { cargarAplicacionesCobradas, cargarPendientesCobrar } from './cobros-tablero.repository.js'
 import { dateKeyInArgentina } from '../../agenda/domain/vencimiento.alert.js'
 
 export async function obtenerTableroCobros(input: {
@@ -11,7 +11,7 @@ export async function obtenerTableroCobros(input: {
   const hoy = dateKeyInArgentina(new Date())
   const [pendientesCobrar, cobradas] = await Promise.all([
     cargarPendientesCobrar(input.moneda),
-    cargarComprobantesCobrados({ desde: input.desde, hasta: input.hasta, moneda: input.moneda }),
+    cargarAplicacionesCobradas({ desde: input.desde, hasta: input.hasta, moneda: input.moneda }),
   ])
   return calcularTableroCobros({
     pendientesCobrar,
@@ -28,11 +28,12 @@ export async function obtenerDetalleCliente(input: {
   hasta: string
   moneda: 'ARS' | 'USD'
 }): Promise<DetalleCliente> {
-  const tablero = await obtenerTableroCobros({ desde: input.desde, hasta: input.hasta, moneda: input.moneda })
+  const [tablero, todasCobradas] = await Promise.all([
+    obtenerTableroCobros({ desde: input.desde, hasta: input.hasta, moneda: input.moneda }),
+    cargarAplicacionesCobradas({ desde: input.desde, hasta: input.hasta, moneda: input.moneda }),
+  ])
   const cliente = tablero.clientes.find((c) => c.personaId === input.vientriId)
-  const cobradas = (await cargarComprobantesCobrados({ desde: input.desde, hasta: input.hasta, moneda: input.moneda })).filter(
-    (f) => f.persona?.vientriId === input.vientriId,
-  )
+  const cobradas = todasCobradas.filter((f) => f.persona?.vientriId === input.vientriId)
   return {
     personaId: input.vientriId,
     nombre: cliente?.nombre ?? cobradas[0]?.persona?.nombre ?? 'Sin nombre en Vientri',

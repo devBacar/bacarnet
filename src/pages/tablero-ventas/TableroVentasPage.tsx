@@ -204,8 +204,12 @@ function Kpis({ datos, unegocioSel }: { datos: TableroVentas; unegocioSel: strin
         <Kpi
           etiqueta="Proyección a fin de mes"
           valor={plata(vista.proyeccionCentavos, datos.moneda)}
-          nota={`con ${datos.proyeccion.diasHabilesTranscurridos} de ${datos.proyeccion.diasHabilesTotales} días hábiles`}
-          notaColor="neutral"
+          nota={
+            datos.proyeccion.diasHabilesTranscurridos <= 2
+              ? `con solo ${datos.proyeccion.diasHabilesTranscurridos} de ${datos.proyeccion.diasHabilesTotales} días hábiles: todavía poco confiable`
+              : `con ${datos.proyeccion.diasHabilesTranscurridos} de ${datos.proyeccion.diasHabilesTotales} días hábiles`
+          }
+          notaColor={datos.proyeccion.diasHabilesTranscurridos <= 2 ? 'bad' : 'neutral'}
         />
       ) : null}
     </section>
@@ -241,7 +245,10 @@ function MixMensual({ datos, unegocioSel }: { datos: TableroVentas; unegocioSel:
   // Con una sola unidad elegida el "mix" (composición entre unidades) no tiene sentido: se ve en Evolución de arriba.
   if (unegocioSel !== TODAS) return null
   return (
-    <TarjetaTablero titulo="Mix mensual por unidad de negocio" subtitulo="Composición de la facturación, últimos 6 meses.">
+    <TarjetaTablero
+      titulo="Mix mensual por unidad de negocio"
+      subtitulo='Composición de la facturación, últimos 6 meses. No incluye "Alquiler de máquinas de recuento" (sin actividad relevante hoy), así que el total de cada mes acá puede ser menor al de "Evolución mensual".'
+    >
       <MixMensualPorUnegocio datos={datos.tendenciaPorUnegocio} />
     </TarjetaTablero>
   )
@@ -268,11 +275,11 @@ function PorUnegocio({ datos, unegocioSel, onQuitarFiltro }: { datos: TableroVen
           <span className="inline-flex items-center gap-2">
             Mostrando solo esta unidad.
             <button type="button" onClick={onQuitarFiltro} className="underline hover:no-underline">
-              Ver las 6
+              Ver todas
             </button>
           </span>
         ) : (
-          'Las 6 unidades de Vientri, separadas. Tocá una para ver sus ítems facturados.'
+          'Unidades de negocio de Vientri, separadas. No incluye "Alquiler de máquinas de recuento" (sin actividad relevante hoy): su facturación sí está sumada en el total de la empresa, por eso estas barras pueden no sumar lo mismo que el KPI de arriba. Tocá una unidad para ver sus ítems facturados.'
         )
       }
     >
@@ -510,7 +517,10 @@ function MapaCalorClientes({ datos, unegocioSel }: { datos: TableroVentas; unego
   if (columnas.length === 0 || filas.length === 0) return null
   const maximo = Math.max(1, ...filas.flatMap((c) => c.porUnegocio.map((pu) => pu.centavos)))
   return (
-    <TarjetaTablero titulo="Cliente × unidad de negocio" subtitulo="Top 10 clientes del mes, qué le compran a cada unidad.">
+    <TarjetaTablero
+      titulo="Cliente × unidad de negocio"
+      subtitulo='Top 10 clientes del mes, qué le compran a cada unidad. No incluye "Alquiler de máquinas de recuento": un cliente que solo compre ahí va a aparecer con guiones en todas las columnas, aunque sí facture.'
+    >
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-[12px]">
           <thead>

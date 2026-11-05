@@ -7,6 +7,7 @@ import {
   ClipboardPaste,
   Eye,
   FileWarning,
+  Layers,
   Scale,
   Search,
   Upload,
@@ -83,7 +84,7 @@ function mesActual() {
   return { desde: `${y}-${m}-01`, hasta: `${y}-${m}-${String(last).padStart(2, '0')}` }
 }
 
-type VistaTab = 'recibido' | 'emitido' | 'ocasionales'
+type VistaTab = 'todos' | 'recibido' | 'emitido' | 'ocasionales'
 
 export function FinanzasChequesPage() {
   const { user } = useAuth()
@@ -91,9 +92,9 @@ export function FinanzasChequesPage() {
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [detalleId, setDetalleId] = useState<string | null>(null)
-  const [vista, setVista] = useState<VistaTab>('recibido')
+  const [vista, setVista] = useState<VistaTab>('todos')
 
-  const [direccion, setDireccion] = useState<ChequeDireccion | ''>('recibido')
+  const [direccion, setDireccion] = useState<ChequeDireccion | ''>('')
   const [origen, setOrigen] = useState<ChequeOrigen | ''>('')
   const [estado, setEstado] = useState<ChequeEstado | ''>('')
   const [tipo, setTipo] = useState<ChequeTipo | ''>('')
@@ -189,6 +190,7 @@ export function FinanzasChequesPage() {
   const paginas = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const VISTA_TABS: [VistaTab, string, React.ReactNode][] = [
+    ['todos', 'Todos', <Layers key="t" className="h-3.5 w-3.5" />],
     ['recibido', 'Recibidos', <ArrowDownLeft key="r" className="h-3.5 w-3.5" />],
     ['emitido', 'Emitidos', <ArrowUpRight key="e" className="h-3.5 w-3.5" />],
     ['ocasionales', 'Ocasionales', <FileWarning key="o" className="h-3.5 w-3.5" />],
@@ -242,11 +244,11 @@ export function FinanzasChequesPage() {
             <button
               key={val}
               type="button"
-              data-tour={val === 'recibido' ? 'cheques-direccion' : undefined}
+              data-tour={val === 'todos' ? 'cheques-direccion' : undefined}
               onClick={() => {
                 setVista(val)
                 if (val !== 'ocasionales') {
-                  cambiarFiltro(() => { setDireccion(val); setEstado('') })
+                  cambiarFiltro(() => { setDireccion(val === 'todos' ? '' : val); setEstado('') })
                 }
               }}
               className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium ${
@@ -317,7 +319,7 @@ export function FinanzasChequesPage() {
           <div className="surface-card rounded-2xl border border-neutral-200 p-3 dark:border-zinc-800">
             <p className="text-body-muted flex items-center gap-1.5 text-xs font-medium">
               <Scale className="h-4 w-4 text-blue-600 dark:text-blue-400" aria-hidden />
-              Neto
+              Neto (recibidos − emitidos)
             </p>
             <p className="text-heading mt-1 text-lg font-bold tabular-nums">
               {formatMoneyCentavos(data.recibidosCentavos - data.emitidosCentavos, 'ARS')}
@@ -561,12 +563,12 @@ export function FinanzasChequesPage() {
                   </td>
                   <td className="px-3 py-2">
                     <TipoBadge tipo={ch.tipo} />
-                    {ch.esProveedorFinanciero ? (
+                    {direccion !== 'emitido' && ch.esProveedorFinanciero ? (
                       <span className="ml-1 inline-block rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
                         Financiero
                       </span>
                     ) : null}
-                    {ch.esInteresEncubierto ? (
+                    {direccion !== 'emitido' && ch.esInteresEncubierto ? (
                       <span
                         className="ml-1 inline-block rounded border border-orange-300 bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-900 dark:border-orange-700 dark:bg-orange-900/40 dark:text-orange-200"
                         title={ch.beneficiarioRealFinanciero ? `Beneficiario real: ${ch.beneficiarioRealFinanciero}` : undefined}
@@ -587,12 +589,12 @@ export function FinanzasChequesPage() {
                         </span>
                       </span>
                     ) : null}
-                    {ch.esRenovacion ? (
+                    {direccion !== 'emitido' && ch.esRenovacion ? (
                       <span className="ml-1 inline-block rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
                         Renov.
                       </span>
                     ) : null}
-                    {ch.operacionUsd ? (
+                    {direccion !== 'emitido' && ch.operacionUsd ? (
                       <span className="ml-1 inline-block rounded border border-green-300 bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-900 dark:border-green-700 dark:bg-green-900/40 dark:text-green-200">
                         USD
                       </span>

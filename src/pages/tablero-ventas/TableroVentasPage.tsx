@@ -570,16 +570,16 @@ function ClientesNuevosPerdidos({ datos, unegocioSel }: { datos: TableroVentas; 
   if (nuevos.length === 0 && perdidos.length === 0) return null
   return (
     <TarjetaTablero
-      titulo={filtrando ? `Clientes nuevos y perdidos · ${nombreUnidad}` : 'Clientes nuevos y perdidos'}
-      subtitulo="Comparado contra el mes anterior."
+      titulo={filtrando ? `Compras nuevas y sin compra este mes · ${nombreUnidad}` : 'Compras nuevas y sin compra este mes'}
+      subtitulo="Comparado solo contra el mes anterior: no dice si un cliente dejó de serlo, solo si tiene un comprobante cargado en estos dos meses puntuales. Un cliente puede comprar cada 2 o 3 meses y aparecer acá sin haber cambiado nada."
     >
       <div className="grid min-w-0 gap-5 sm:grid-cols-2">
         <div className="min-w-0">
           <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-emerald-700 dark:text-emerald-400">
-            <UserPlus className="h-4 w-4" aria-hidden /> Altas ({nuevos.length})
+            <UserPlus className="h-4 w-4" aria-hidden /> Compraron, no habían comprado el mes anterior ({nuevos.length})
           </h3>
           {nuevos.length === 0 ? (
-            <p className="text-[13px] text-neutral-500 dark:text-gray-500">Sin clientes nuevos este mes.</p>
+            <p className="text-[13px] text-neutral-500 dark:text-gray-500">Nadie entra en este grupo este mes.</p>
           ) : (
             <ul className="grid gap-1.5">
               {nuevos.map((c) => (
@@ -592,17 +592,17 @@ function ClientesNuevosPerdidos({ datos, unegocioSel }: { datos: TableroVentas; 
           )}
         </div>
         <div className="min-w-0">
-          <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-red-700 dark:text-red-400">
-            <UserMinus className="h-4 w-4" aria-hidden /> Bajas ({perdidos.length})
+          <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-amber-700 dark:text-amber-400">
+            <UserMinus className="h-4 w-4" aria-hidden /> Compraron el mes anterior, todavía no este mes ({perdidos.length})
           </h3>
           {perdidos.length === 0 ? (
-            <p className="text-[13px] text-neutral-500 dark:text-gray-500">Nadie dejó de facturar este mes.</p>
+            <p className="text-[13px] text-neutral-500 dark:text-gray-500">Nadie entra en este grupo este mes.</p>
           ) : (
             <ul className="grid gap-1.5">
               {perdidos.map((c) => (
                 <li key={c.vientriId} className="flex min-w-0 items-baseline justify-between gap-2 text-[13px]">
                   <span className="min-w-0 truncate text-neutral-800 dark:text-gray-200">{c.nombre}</span>
-                  <span className="shrink-0 tabular-nums text-neutral-500 dark:text-gray-500">facturaba {plataCorta(c.centavosMesAnterior)}</span>
+                  <span className="shrink-0 tabular-nums text-neutral-500 dark:text-gray-500">compró {plataCorta(c.centavosMesAnterior)} el mes anterior</span>
                 </li>
               ))}
             </ul>

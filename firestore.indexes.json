@@ -273,6 +273,20 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fechaProceso",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "categoriaId",
           "order": "ASCENDING"
         },

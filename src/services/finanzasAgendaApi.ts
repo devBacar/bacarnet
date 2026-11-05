@@ -233,6 +233,7 @@ export const PROVEEDORES_FINANCIEROS_QUERY_KEY = ['finanzas', 'agenda', 'proveed
 export interface ProveedorFinancieroItem {
   id: string
   nombre: string
+  alias: string[]
   creadoPor: string
   createdAt: string | null
 }

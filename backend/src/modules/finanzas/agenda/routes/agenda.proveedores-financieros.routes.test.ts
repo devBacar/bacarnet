@@ -59,6 +59,7 @@ vi.mock('../services/proveedores-financieros.service.js', () => ({
   agregarProveedorFinanciero: vi.fn(async () => ({
     id: 'pf1',
     nombre: 'Matriz',
+    alias: [],
     creadoPor: 'u1',
     createdAt: '2026-09-01T12:00:00.000Z',
   })),
@@ -98,14 +99,14 @@ const EDITOR = ['finanzas_agenda']
 describe('rutas proveedores financieros', () => {
   it('lista sin permiso de edición', async () => {
     vi.mocked(listarProveedoresFinancieros).mockResolvedValueOnce([
-      { id: 'pf1', nombre: 'Matriz', creadoPor: 'u1', createdAt: null },
+      { id: 'pf1', nombre: 'Matriz', alias: [], creadoPor: 'u1', createdAt: null },
     ])
     const res = await fetch(`${base}/proveedores-financieros`, {
       headers: { 'x-permisos': '' },
     })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
-      proveedores: [{ id: 'pf1', nombre: 'Matriz', creadoPor: 'u1', createdAt: null }],
+      proveedores: [{ id: 'pf1', nombre: 'Matriz', alias: [], creadoPor: 'u1', createdAt: null }],
     })
   })
 

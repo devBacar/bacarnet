@@ -21,6 +21,24 @@ export interface ObsParseada {
 }
 
 export type RolEnOperacion = 'capital' | 'interes' | 'mixto' | null
+
+/** Tipos de operación que Finanzas puede marcar a mano en un cheque ocasional. */
+export type TipoOperacionManual = 'usd' | 'renovacion' | 'rol'
+
+/** Los datos de una operación marcada a mano; solo viene el bloque del tipo elegido. */
+export interface DatosOperacionManual {
+  usd?: OperacionUsdParseada
+  /** Números de los cheques viejos que este cheque renueva. */
+  chequeIds?: string[]
+  rol?: Exclude<RolEnOperacion, null>
+}
+
+export interface SugerenciaOperacion {
+  tipo: TipoOperacionManual
+  datos: DatosOperacionManual
+  /** Cuántas veces Finanzas confirmó este mismo formato de OBS para este beneficiario. */
+  confirmaciones: number
+}
 export type RolEnCadena = 'capital' | 'interes' | 'mixto' | null
 
 export interface CostoEslabon {
@@ -116,6 +134,12 @@ export interface ChequeOcasionalDoc {
   obsOriginal: string
   revisar: string[]
   proveedorFinancieroId: string | null
+  /** Compra de IVA: OBS con "IVA" o beneficiario CONTA I / III / IIII / IV. Se recalcula en cada sincronización. */
+  esCompraIva?: boolean
+  /** Tipo de operación propuesto por un patrón aprendido; Finanzas lo confirma a mano. Se recalcula en cada sincronización. */
+  sugerencia?: SugerenciaOperacion | null
+  /** Quién marcó a mano el tipo de operación (si lo hizo alguien). */
+  clasificacionManual?: { tipo: TipoOperacionManual; uid: string; fecha: string } | null
   vientriId: number
   fechaConciliado: string | null
   vientriChqId: number | null

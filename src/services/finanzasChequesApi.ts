@@ -286,6 +286,21 @@ export async function ingresarChequesPegados(payload: IngresarChequesPayload): P
 
 // ── Cheques Ocasionales ─────────────────────────────────────────────
 
+export type TipoOperacionManual = 'usd' | 'renovacion' | 'rol'
+export type RolOperacion = 'capital' | 'interes' | 'mixto'
+
+export interface DatosOperacionManual {
+  usd?: { montoUsd: number; cotizacion: number }
+  chequeIds?: string[]
+  rol?: RolOperacion
+}
+
+export interface SugerenciaOperacion {
+  tipo: TipoOperacionManual
+  datos: DatosOperacionManual
+  confirmaciones: number
+}
+
 export interface ChequeOcasionalItem {
   numeroCheque: string
   beneficiario: string
@@ -302,13 +317,18 @@ export interface ChequeOcasionalItem {
   renovacionDe: string[]
   renovadoPor: string[]
   operacionUsd: { montoUsd: number; cotizacion: number } | null
+  rolEnOperacion?: RolOperacion | null
   obsOriginal: string
   revisar: string[]
+  esCompraIva?: boolean
+  /** Tipo de operación propuesto por lo que Finanzas ya confirmó en cheques con el mismo OBS. */
+  sugerencia?: SugerenciaOperacion | null
+  clasificacionManual?: { tipo: TipoOperacionManual; uid: string; fecha: string } | null
   vientriId: number
   baja: boolean
 }
 
-export type OcasionalesFiltro = '' | 'revisar' | 'con_renovacion' | 'con_usd'
+export type OcasionalesFiltro = '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva'
 
 export interface OcasionalesListResponse {
   cheques: ChequeOcasionalItem[]
@@ -376,6 +396,10 @@ export interface OcasionalDetalleResponse {
   cadena?: CadenaRenovacion | null
   renovacionDeDetalle?: EslabonDetalleRef[]
   renovadoPorDetalle?: EslabonDetalleRef[]
+  /** Lo que se puede leer del OBS para precargar la clasificación a mano. */
+  lecturaObs?: { usd: { montoUsd: number; cotizacion: number } | null; numerosDeCheque: string[] }
+  /** Cuántos cheques son la misma operación (mismo beneficiario, emisión y OBS), incluido este. */
+  mismaOperacion?: number
 }
 
 export interface OperacionUsdItem {
@@ -433,6 +457,72 @@ async function ocasionalesFetch(path: string, init?: RequestInit): Promise<Respo
   })
 }
 
+// ── Catálogo de proveedores financieros ──────────────────────────────
+
+export interface ProveedorCatalogoItem {
+  id: string
+  nombre: string
+  alias: string[]
+  cantidadCheques: number
+  totalCentavos: number
+}
+
+export interface BeneficiarioSinAsignarItem {
+  nombreNormalizado: string
+  nombre: string
+  variantes: string[]
+  cantidadCheques: number
+  totalCentavos: number
+  sugerencias: Array<{ proveedorId: string; nombre: string }>
+}
+
+export interface CatalogoProveedoresResponse {
+  proveedores: ProveedorCatalogoItem[]
+  sinAsignar: BeneficiarioSinAsignarItem[]
+}
+
+async function leerErrorProveedores(res: Response, porDefecto: string): Promise<Error> {
+  const body = (await res.json().catch(() => null)) as { error?: string } | null
+  return new Error(body?.error ?? porDefecto)
+}
+
+export async function fetchCatalogoProveedores(): Promise<CatalogoProveedoresResponse> {
+  const res = await ocasionalesFetch('/proveedores-financieros')
+  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo cargar el catálogo de proveedores')
+  return (await res.json()) as CatalogoProveedoresResponse
+}
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' }
+
+export async function crearProveedorCatalogo(nombre: string): Promise<{ chequesActualizados: number }> {
+  const res = await ocasionalesFetch('/proveedores-financieros', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ nombre }),
+  })
+  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo agregar el proveedor')
+  return (await res.json()) as { chequesActualizados: number }
+}
+
+export async function agregarAliasProveedor(id: string, alias: string): Promise<{ chequesActualizados: number }> {
+  const res = await ocasionalesFetch(`/proveedores-financieros/${encodeURIComponent(id)}/alias`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ alias }),
+  })
+  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo agregar el nombre alternativo')
+  return (await res.json()) as { chequesActualizados: number }
+}
+
+export async function quitarAliasProveedor(id: string, alias: string): Promise<{ chequesActualizados: number }> {
+  const res = await ocasionalesFetch(
+    `/proveedores-financieros/${encodeURIComponent(id)}/alias?alias=${encodeURIComponent(alias)}`,
+    { method: 'DELETE' },
+  )
+  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo sacar el nombre alternativo')
+  return (await res.json()) as { chequesActualizados: number }
+}
+
 export async function fetchChequesOcasionales(params: {
   filtro?: OcasionalesFiltro
   q?: string
@@ -471,6 +561,33 @@ export async function fetchOcasionalDetalle(id: string): Promise<OcasionalDetall
     throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo obtener el detalle')
   }
   return body as OcasionalDetalleResponse
+}
+
+export interface ClasificarOcasionalResponse {
+  tipo: TipoOperacionManual
+  datos: DatosOperacionManual
+  cheques: number
+  confirmaciones: number
+  recalculado: boolean
+}
+
+/** Marca a mano el tipo de operación; lo confirmado se aprende para proponerlo en cheques con el mismo OBS. */
+export async function clasificarOcasional(
+  id: string,
+  tipo: TipoOperacionManual,
+  datos: DatosOperacionManual,
+  aplicarAIguales: boolean,
+): Promise<ClasificarOcasionalResponse> {
+  const res = await ocasionalesFetch(`/${encodeURIComponent(id)}/clasificar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tipo, datos, aplicarAIguales }),
+  })
+  const body = (await res.json().catch(() => null)) as { error?: string } | ClasificarOcasionalResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo guardar el tipo de operación')
+  }
+  return body as ClasificarOcasionalResponse
 }
 
 export async function fetchOcasionalesCadenas(): Promise<OcasionalesCadenasResponse> {
@@ -601,6 +718,23 @@ export async function recalcularSeguimiento(): Promise<{ ok: boolean; operacione
     throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo recalcular el seguimiento')
   }
   return body as { ok: boolean; operaciones: number }
+}
+
+export interface RecalcularTodoResponse {
+  ok: boolean
+  chequesActualizados: number
+  completos: number
+  operaciones: number
+}
+
+/** Recalcula avisos, completos y seguimiento de los cheques ocasionales ya guardados, sin importar un CSV. */
+export async function recalcularTodoOcasionales(): Promise<RecalcularTodoResponse> {
+  const res = await ocasionalesFetch('/recalcular-todo', { method: 'POST' })
+  const body = (await res.json().catch(() => null)) as { error?: string } | RecalcularTodoResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo recalcular')
+  }
+  return body as RecalcularTodoResponse
 }
 
 export interface ImportarOcasionalesResponse {

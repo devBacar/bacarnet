@@ -2,10 +2,19 @@ import type { ChequeOcasionalDoc } from './cheque-ocasional.types.js'
 
 /** Textos de `revisar` que agrega la importación. No deben contener "imposible": esa palabra descarta el cheque de las pantallas. */
 export const REVISAR_SIN_DATOS_FINANCIEROS = 'Sin datos de operación financiera (renovación, USD, tasa o interés): revisar a mano'
+export const REVISAR_INTERES_SIN_ORIGEN = 'Interés sin operación de origen (no dice de qué cheque viene): revisar a mano'
 export const REVISAR_PROVEEDOR_NO_CARGADO = 'Proveedor no cargado en Proveedores financieros'
 
 export interface ProveedorEnLista {
   id: string
+}
+
+/** Beneficiarios (ya normalizados) que son siempre compra de IVA: CONTA I, II, III, IIII, IV, CONTA 1… */
+const BENEFICIARIO_COMPRA_IVA = /^conta\s*[ivx\d]+$/
+
+/** Compra de IVA: el OBS nombra "IVA" como palabra suelta, o el beneficiario es uno de los CONTA. */
+export function esCompraIva(beneficiarioNormalizado: string, obsOriginal: string): boolean {
+  return BENEFICIARIO_COMPRA_IVA.test(beneficiarioNormalizado) || /\biva\b/i.test(obsOriginal)
 }
 
 export interface SenalesFinancieras {
@@ -15,12 +24,17 @@ export interface SenalesFinancieras {
   tieneUsd: boolean
   tieneTasaExplicita: boolean
   tieneRol: boolean
+  /** El OBS lo marca solo como interés (sin capital ni renovación). */
+  esSoloInteres: boolean
+  /** Se sabe de dónde viene: renueva a otro cheque, o tiene USD o tasa explícita. */
+  tieneOrigen: boolean
 }
 
 export interface ClasificacionOcasional {
   esProveedorFinanciero: true
   tipoProveedor: 'financiero'
   proveedorFinancieroId: string | null
+  esCompraIva: boolean
   /** Solo los textos que agrega esta regla, en el orden en que se muestran. */
   revisarAgregados: string[]
 }
@@ -34,7 +48,9 @@ export function clasificarOcasional(
   beneficiarioNormalizado: string,
   senales: SenalesFinancieras,
   proveedores: Map<string, ProveedorEnLista>,
+  obsOriginal = '',
 ): ClasificacionOcasional {
+  const compraIva = esCompraIva(beneficiarioNormalizado, obsOriginal)
   const proveedor = beneficiarioNormalizado !== '' ? proveedores.get(beneficiarioNormalizado) ?? null : null
   const sinSenales =
     !senales.esRenovacion
@@ -43,14 +59,19 @@ export function clasificarOcasional(
     && !senales.tieneTasaExplicita
     && !senales.tieneRol
 
+  // Una compra de IVA no es una operación financiera: no tiene sentido pedir proveedor ni datos de renovación.
   const revisarAgregados: string[] = []
-  if (beneficiarioNormalizado !== '' && proveedor === null) revisarAgregados.push(REVISAR_PROVEEDOR_NO_CARGADO)
-  if (sinSenales) revisarAgregados.push(REVISAR_SIN_DATOS_FINANCIEROS)
+  if (!compraIva) {
+    if (beneficiarioNormalizado !== '' && proveedor === null) revisarAgregados.push(REVISAR_PROVEEDOR_NO_CARGADO)
+    if (sinSenales) revisarAgregados.push(REVISAR_SIN_DATOS_FINANCIEROS)
+    else if (senales.esSoloInteres && !senales.tieneOrigen) revisarAgregados.push(REVISAR_INTERES_SIN_ORIGEN)
+  }
 
   return {
     esProveedorFinanciero: true,
     tipoProveedor: 'financiero',
     proveedorFinancieroId: proveedor?.id ?? null,
+    esCompraIva: compraIva,
     revisarAgregados,
   }
 }
@@ -68,17 +89,21 @@ export function reclasificarDoc(
       tieneUsd: doc.operacionUsd !== null,
       tieneTasaExplicita: doc.tasaExplicita !== null,
       tieneRol: doc.rolEnOperacion !== null,
+      esSoloInteres: doc.rolEnOperacion === 'interes',
+      tieneOrigen: (doc.renovacionDe ?? []).length > 0 || doc.operacionUsd !== null || doc.tasaExplicita !== null,
     },
     proveedores,
+    doc.obsOriginal,
   )
   const propios = (doc.revisar ?? []).filter(
-    (r) => r !== REVISAR_PROVEEDOR_NO_CARGADO && r !== REVISAR_SIN_DATOS_FINANCIEROS,
+    (r) => r !== REVISAR_PROVEEDOR_NO_CARGADO && r !== REVISAR_SIN_DATOS_FINANCIEROS && r !== REVISAR_INTERES_SIN_ORIGEN,
   )
   return {
     ...doc,
     esProveedorFinanciero: c.esProveedorFinanciero,
     tipoProveedor: c.tipoProveedor,
     proveedorFinancieroId: c.proveedorFinancieroId,
+    esCompraIva: c.esCompraIva,
     revisar: [...propios, ...c.revisarAgregados],
   }
 }

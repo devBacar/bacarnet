@@ -66,7 +66,7 @@ export function TableroCobrosPage() {
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Cobrado desde</span>
+          <span className="text-body-muted mb-1 block">Facturado desde</span>
           <input type="date" className={CLASE_INPUT} value={desde} onChange={(e) => setDesde(e.target.value)} />
         </label>
         <label className="text-sm">
@@ -101,19 +101,21 @@ export function TableroCobrosPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <TarjetaTablero titulo="Total a cobrar">
               <p className="text-heading text-2xl font-bold tabular-nums">{plata(data.totalACobrarCentavos, data.moneda)}</p>
-              <p className="text-body-muted mt-1 text-xs">{data.cantidadClientesConDeuda} clientes con deuda</p>
+              <p className="text-body-muted mt-1 text-xs">
+                {data.cantidadClientesConDeuda} clientes · facturado del {fechaCorta(data.periodo.desde)} al {fechaCorta(data.periodo.hasta)}
+              </p>
             </TarjetaTablero>
             <TarjetaTablero titulo="Vencido">
               <p className="text-2xl font-bold tabular-nums text-red-700 dark:text-red-400">
                 {plata(data.totalVencidoCentavos, data.moneda)}
               </p>
-              <p className="text-body-muted mt-1 text-xs">ya pasó la fecha de vencimiento</p>
+              <p className="text-body-muted mt-1 text-xs">de lo facturado en el período, ya pasó la fecha de vencimiento</p>
             </TarjetaTablero>
             <TarjetaTablero titulo="A vencer">
               <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
                 {plata(data.totalAVencerCentavos, data.moneda)}
               </p>
-              <p className="text-body-muted mt-1 text-xs">todavía no vence</p>
+              <p className="text-body-muted mt-1 text-xs">de lo facturado en el período, todavía no vence</p>
             </TarjetaTablero>
             <TarjetaTablero titulo={`Cobrado (${fechaCorta(data.periodo.desde)} a ${fechaCorta(data.periodo.hasta)})`}>
               <p className="text-heading text-2xl font-bold tabular-nums">{plata(data.cobradoEnPeriodoCentavos, data.moneda)}</p>

@@ -48,6 +48,19 @@ export function clasificarComprobante(
   return { diasVencido: dias, bucket: bucketDeDias(dias) }
 }
 
+/**
+ * "Total a cobrar / Vencido / A vencer / antigüedad" se calculan solo sobre las facturas EMITIDAS
+ * dentro de `periodo` (fecha de emisión, no de vencimiento ni de cobro) — no es "cómo estaba la
+ * cartera en esa fecha", es "cuánto se debe hoy de lo facturado en ese rango". Las que no tienen
+ * fecha cargada quedan afuera: no se puede ubicarlas en ningún período.
+ */
+function pendientesEmitidasEnPeriodo(
+  pendientesCobrar: VientriPendienteDoc[],
+  periodo: { desde: string; hasta: string },
+): VientriPendienteDoc[] {
+  return pendientesCobrar.filter((p) => p.fecha !== null && p.fecha >= periodo.desde && p.fecha <= periodo.hasta)
+}
+
 export function calcularTableroCobros(input: {
   pendientesCobrar: VientriPendienteDoc[]
   cobradas: FacturaCobrada[]
@@ -55,7 +68,7 @@ export function calcularTableroCobros(input: {
   periodo: { desde: string; hasta: string }
   moneda: string
 }): TableroCobros {
-  const saldos = armarSaldosCliente(input.pendientesCobrar)
+  const saldos = armarSaldosCliente(pendientesEmitidasEnPeriodo(input.pendientesCobrar, input.periodo))
 
   const antiguedad: Record<BucketAntiguedad, number> = { '0-30': 0, '31-60': 0, '61-90': 0, mas90: 0 }
   let totalACobrar = 0

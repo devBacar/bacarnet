@@ -9,6 +9,8 @@
  *   node scripts/vientri-cheques-ocasionales-importar.mjs --archivo "C:\ruta\CHQOCA.csv"
  *   node scripts/vientri-cheques-ocasionales-importar.mjs --archivo "..." --simular
  *
+ * Un CHQOCA.csv sin encabezado no trae el id de Vientri: cada cheque se engancha por número con el que ya está
+ * guardado (importación normal de cheques_propios.csv) y los que no estén se informan y no se cargan.
  * Nunca borra: agrega los cheques nuevos y, en los que ya estaban, solo actualiza pagado/estado/baja.
  * Solo entran los que vencen desde la ventana (12 meses atrás por defecto); se cambia con --desde AAAA-MM-DD.
  *

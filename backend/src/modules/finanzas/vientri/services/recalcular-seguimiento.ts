@@ -1,7 +1,7 @@
 /**
  * Recalcula y persiste el seguimiento de operaciones de renovación de cheques ocasionales.
  *
- * Colección destino: `finanzas_vientri_operaciones_renovacion` (ID determinístico
+ * Colección destino: `renovacionesChequesAgrupados` (ID determinístico
  * `renov-{beneficiario}-{fechaEmision}-{banco}[-n]`). Es una colección derivada: se regenera
  * desde los docs de `vientriChequesOcasionales` en cada importación (upsert por huella).
  *
@@ -13,7 +13,7 @@ import { leerActivosConEslabonesDeVientri } from './completar-eslabones-vientri.
 import { inyectarChqParaAutolink } from './inyectar-chq-autolink.js'
 import { sincronizarColeccion, type ConteoEscritura } from './vientri.repository.js'
 
-export const VIENTRI_OPERACIONES_RENOVACION = 'finanzas_vientri_operaciones_renovacion'
+export const VIENTRI_OPERACIONES_RENOVACION = 'renovacionesChequesAgrupados'
 
 export interface ResultadoSeguimiento {
   operaciones: number

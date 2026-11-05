@@ -25,6 +25,7 @@ import {
 } from '../domain/clasificar-ocasional.js'
 import { normalizarDocOcasional } from '../domain/normalizar-doc-ocasional.js'
 import { calcularRenovadoPor } from '../domain/renovado-por.js'
+import { resolverIdsSinEncabezado } from '../domain/resolver-ids-sin-encabezado.js'
 import { filtrarVentanaConCadenas } from '../domain/ventana-ocasionales.js'
 import { aBool, aCentavos, aEntero, aFecha, aTexto, fechaImposible } from '../domain/valores.js'
 import {
@@ -240,7 +241,7 @@ export async function armarChequesOcasionales(opts: {
   proocaIndex?: Map<number, ProveedorOcasional>
   /** 'YYYY-MM-DD': ventana de Finanzas; además se conservan los cheques viejos de cadenas de renovación abiertas. */
   desde?: string
-}): Promise<{ docs: ChequeOcasionalDoc[]; resumen: ResumenChequesOcasionales }> {
+}): Promise<{ docs: ChequeOcasionalDoc[]; resumen: ResumenChequesOcasionales; sinIdDeVientri: string[] }> {
   const primeraLinea = opts.csv.split(/\r?\n/, 1)[0] ?? ''
   const tieneHeader = COLUMNAS_CON_HEADER.every((c) => primeraLinea.includes(c))
   const tabla = tieneHeader
@@ -251,10 +252,18 @@ export async function armarChequesOcasionales(opts: {
   const proveedores = await mapaProveedoresFinancieros()
   const proocaIndex = opts.proocaIndex ?? new Map<number, ProveedorOcasional>()
 
-  const todos: ChequeOcasionalDoc[] = []
+  let todos: ChequeOcasionalDoc[] = []
   for (const f of tabla.filas) {
     const doc = filaADoc(f, proveedores, proocaIndex)
     if (doc) todos.push(doc)
+  }
+
+  // Sin encabezado no hay vientri_id: se toma el del cheque ya guardado para no duplicarlo.
+  let sinIdDeVientri: string[] = []
+  if (!tieneHeader) {
+    const r = resolverIdsSinEncabezado(todos, await leerBase())
+    todos = r.docs
+    sinIdDeVientri = r.sinIdDeVientri
   }
 
   const docs = opts.desde ? filtrarVentanaConCadenas(todos, opts.desde) : todos
@@ -271,7 +280,7 @@ export async function armarChequesOcasionales(opts: {
     fechasImposibles: docs.filter((d) => d.revisar.some((r) => r.includes('imposible'))).length,
   }
 
-  return { docs, resumen }
+  return { docs, resumen, sinIdDeVientri }
 }
 
 export async function importarChequesOcasionales(opts: {
@@ -284,7 +293,7 @@ export async function importarChequesOcasionales(opts: {
   desde?: string
 }): Promise<ResultadoImportacionOcasionales> {
   const simular = opts.simular === true
-  const { docs, resumen } = await armarChequesOcasionales(opts)
+  const { docs, resumen, sinIdDeVientri } = await armarChequesOcasionales(opts)
 
   const importacionId = simular
     ? null
@@ -375,6 +384,9 @@ export async function importarChequesOcasionales(opts: {
     const muestra = sinCargar.slice(0, 10).join(', ')
     const resto = sinCargar.length > 10 ? ` y ${sinCargar.length - 10} más` : ''
     partes.push(`${sinCargar.length} proveedores sin cargar en Proveedores financieros: ${muestra}${resto}`)
+  }
+  if (sinIdDeVientri.length > 0) {
+    partes.push(`${sinIdDeVientri.length} cheques sin id de Vientri (no están guardados): se cargan con la importación de cheques_propios.csv`)
   }
   if (seguimientoError) {
     partes.push(`ATENCIÓN: no se pudo recalcular el seguimiento (${seguimientoError})`)

@@ -11,6 +11,13 @@ import type {
 } from '../domain/cheque.types.js'
 import type { OperacionUsdParseada } from '../../vientri/domain/cheque-ocasional.types.js'
 import { dentroDelRangoMonto } from '../domain/filtro-monto.js'
+import {
+  cargarOcasionalesComoItems,
+  getOcasionalComoItem,
+  itemCumpleFiltro,
+  sacarCopiasDeOcasionales,
+} from './ocasionales-en-cheques.js'
+import { esIdOcasional } from './ocasionales-vinculo.repository.js'
 
 export const CHEQUES_COLLECTION = 'cheques'
 const HISTORIAL_ESTADOS_SUB = 'historialEstados'
@@ -207,7 +214,29 @@ function needsInMemory(filtro: ChequesFiltro): boolean {
   )
 }
 
+function incluyeEmitidos(filtro: ChequesFiltro): boolean {
+  return filtro.direccion !== 'recibido'
+}
+
+/** Emitidos con los ocasionales tomados de su colección de Vientri, sin las copias que quedan en `cheques`. */
+async function cargarListadoUnificado(filtro: ChequesFiltro): Promise<ChequeListadoItem[]> {
+  const docs = await loadFiltradoInMemory(filtro)
+  const ocasionales = await cargarOcasionalesComoItems()
+  const deCheques = sacarCopiasDeOcasionales(
+    docs.map((doc) => toListadoItem(doc.id, doc.data())),
+    ocasionales,
+  )
+  const propios = ocasionales.filter((item) => itemCumpleFiltro(item, filtro))
+  return [...deCheques, ...propios].sort((a, b) => a.fechaPago.localeCompare(b.fechaPago))
+}
+
+function montoSumaItem(item: ChequeListadoItem, excluirRenovados: boolean): number {
+  if (excluirRenovados && item.estado === 'renovado') return 0
+  return item.montoCentavos
+}
+
 export async function countChequesFiltrados(filtro: ChequesFiltro): Promise<number> {
+  if (incluyeEmitidos(filtro)) return (await cargarListadoUnificado(filtro)).length
   if (needsInMemory(filtro)) return (await loadFiltradoInMemory(filtro)).length
   const query = applyFiltro(collection(), filtro)
   const snap = await query.count().get()
@@ -219,6 +248,10 @@ export async function pageCheques(input: {
   offset: number
   limit: number
 }): Promise<ChequeListadoItem[]> {
+  if (incluyeEmitidos(input.filtro)) {
+    const items = await cargarListadoUnificado(input.filtro)
+    return items.slice(input.offset, input.offset + input.limit)
+  }
   if (needsInMemory(input.filtro)) {
     const docs = await loadFiltradoInMemory(input.filtro)
     return docs.slice(input.offset, input.offset + input.limit).map((doc) => toListadoItem(doc.id, doc.data()))
@@ -248,6 +281,10 @@ async function aggregateSumCentavos(filtro: ChequesFiltro): Promise<number> {
 
 export async function sumChequesCentavos(filtro: ChequesFiltro): Promise<number> {
   const excluirRenovados = filtro.estado !== 'renovado'
+  if (incluyeEmitidos(filtro)) {
+    const items = await cargarListadoUnificado(filtro)
+    return items.reduce((sum, item) => sum + montoSumaItem(item, excluirRenovados), 0)
+  }
   if (needsInMemory(filtro)) {
     const docs = await loadFiltradoInMemory(filtro)
     return docs.reduce((sum, doc) => sum + montoSumaDoc(doc, excluirRenovados), 0)
@@ -263,25 +300,21 @@ export async function sumChequesPorDireccion(filtro: Omit<ChequesFiltro, 'direcc
   emitidosCentavos: number
 }> {
   const excluirRenovados = filtro.estado !== 'renovado'
-  if (filtro.vinculacion || filtro.comprobante || filtro.q || tieneRangoMonto(filtro)) {
-    const [recDocs, emDocs] = await Promise.all([
-      loadFiltradoInMemory({ ...filtro, direccion: 'recibido' }),
-      loadFiltradoInMemory({ ...filtro, direccion: 'emitido' }),
-    ])
-    const sumDocs = (docs: FirebaseFirestore.QueryDocumentSnapshot[]) =>
-      docs.reduce((s, d) => s + montoSumaDoc(d, excluirRenovados), 0)
-    return { recibidosCentavos: sumDocs(recDocs), emitidosCentavos: sumDocs(emDocs) }
+  const sumEmitidos = async () => {
+    const items = await cargarListadoUnificado({ ...filtro, direccion: 'emitido' })
+    return items.reduce((sum, item) => sum + montoSumaItem(item, excluirRenovados), 0)
   }
-  const sumDir = async (direccion: 'recibido' | 'emitido') => {
-    const total = await aggregateSumCentavos({ ...filtro, direccion })
+  const sumRecibidos = async () => {
+    if (filtro.vinculacion || filtro.comprobante || filtro.q || tieneRangoMonto(filtro)) {
+      const docs = await loadFiltradoInMemory({ ...filtro, direccion: 'recibido' })
+      return docs.reduce((s, d) => s + montoSumaDoc(d, excluirRenovados), 0)
+    }
+    const total = await aggregateSumCentavos({ ...filtro, direccion: 'recibido' })
     if (!excluirRenovados || filtro.estado) return total
-    const renovados = await aggregateSumCentavos({ ...filtro, direccion, estado: 'renovado' })
+    const renovados = await aggregateSumCentavos({ ...filtro, direccion: 'recibido', estado: 'renovado' })
     return total - renovados
   }
-  const [recibidosCentavos, emitidosCentavos] = await Promise.all([
-    sumDir('recibido'),
-    sumDir('emitido'),
-  ])
+  const [recibidosCentavos, emitidosCentavos] = await Promise.all([sumRecibidos(), sumEmitidos()])
   return { recibidosCentavos, emitidosCentavos }
 }
 
@@ -392,6 +425,7 @@ export async function upsertCheques(input: {
 }
 
 export async function getChequeById(id: string): Promise<ChequeListadoItem | null> {
+  if (esIdOcasional(id)) return getOcasionalComoItem(id)
   const snap = await collection().doc(id).get()
   if (!snap.exists) return null
   return toListadoItem(snap.id, snap.data()!)

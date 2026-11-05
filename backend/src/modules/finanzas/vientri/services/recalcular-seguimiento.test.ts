@@ -65,7 +65,7 @@ describe('recalcularSeguimiento', () => {
     expect(r.operaciones).toBe(1)
     const input = mockSync.mock.calls[0]![0]
     expect(input.coleccion).toBe(VIENTRI_OPERACIONES_RENOVACION)
-    expect(input.coleccion).toBe('finanzas_vientri_operaciones_renovacion')
+    expect(input.coleccion).toBe('renovacionesChequesAgrupados')
     expect(input.importacionId).toBe('imp-1')
     expect(input.borrarFaltantes).toBe(false)
     expect(input.simular).toBe(false)

@@ -1,7 +1,14 @@
 /**
  * Crea la carpeta "Combustible" bajo BOARDS_CONTAINER_FOLDER_ID, para que el tablero de Combustible
  * aparezca listado en /tableros.
- *   node backend/scripts/seed-combustible-board-folder.mjs
+ *
+ * OJO: BOARDS_CONTAINER_FOLDER_ID vale distinto en cada .env (producción vs. entorno de pruebas del
+ * emulador). Sin --prod, carga backend/.env.local (pruebas); con --prod, carga backend/.env.bacar-web
+ * (producción) con prioridad. No mezclar: si el .env equivocado define la variable primero, la
+ * carpeta termina creada en el contenedor de Drive equivocado (pasó una vez, hay que evitarlo).
+ *
+ *   node backend/scripts/seed-combustible-board-folder.mjs          (pruebas/emulador)
+ *   node backend/scripts/seed-combustible-board-folder.mjs --prod   (producción, pedir OK antes)
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -11,9 +18,13 @@ import { initAdmin, loadTestEnv } from './get-test-token.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 const FOLDER_NAME = 'Combustible'
+const esProd = process.argv.includes('--prod')
 
 function loadBackendEnv() {
-  for (const p of [resolve(ROOT, 'backend/.env.local'), resolve(ROOT, 'backend/.env')]) {
+  const archivos = esProd
+    ? [resolve(ROOT, 'backend/.env.bacar-web'), resolve(ROOT, 'backend/.env')]
+    : [resolve(ROOT, 'backend/.env.local'), resolve(ROOT, 'backend/.env')]
+  for (const p of archivos) {
     if (!existsSync(p)) continue
     for (const line of readFileSync(p, 'utf8').split(/\r?\n/)) {
       const trimmed = line.trim()
@@ -36,6 +47,8 @@ function loadBackendEnv() {
 loadBackendEnv()
 loadTestEnv()
 initAdmin()
+
+console.log(`Modo: ${esProd ? 'PRODUCCIÓN' : 'pruebas/emulador'} · BOARDS_CONTAINER_FOLDER_ID=${process.env.BOARDS_CONTAINER_FOLDER_ID}`)
 
 const containerId = process.env.BOARDS_CONTAINER_FOLDER_ID?.trim()
 if (!containerId) {

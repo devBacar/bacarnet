@@ -259,7 +259,7 @@ Se evalúa en este orden (gana el primero que se cumple):
 
 ### Persistencia
 
-Colección **`finanzas_vientri_operaciones_renovacion`** (derivada, se regenera desde `vientriChequesOcasionales`).
+Colección **`renovacionesChequesAgrupados`** (derivada, se regenera desde `vientriChequesOcasionales`).
 
 - ID determinístico: `renov-{beneficiarioNormalizado}-{fechaEmision}-{banco}`. Si dos operaciones comparten base (subgrupos de un mismo grupo) la segunda y siguientes llevan sufijo `-2`, `-3`… Los eCheq no tienen banco: el tramo queda como `?`.
 - Se recalcula al final de `importarChequesOcasionales` (no en modo `simular`) con `recalcularSeguimiento()`: upsert por huella con `sincronizarColeccion`.

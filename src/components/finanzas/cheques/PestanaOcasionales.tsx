@@ -10,21 +10,26 @@ import {
   Upload,
 } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
+import toast from 'react-hot-toast'
 import { useAuth } from '../../../context'
 import {
   fetchChequesOcasionales,
   fetchOcasionalDetalle,
   fetchOcasionalesResumen,
   importarOcasionalesCsv,
+  recalcularTodoOcasionales,
   type ChequeOcasionalItem,
   type OcasionalesFiltro,
   type OcasionalesResumenResponse,
 } from '../../../services/finanzasChequesApi'
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
+import { usePermisosFinanzas } from '../permisosFinanzas'
 import { OperacionesRenovacion } from './OperacionesRenovacion'
 import { PendientesDeRenovar } from './PendientesDeRenovar'
+import { ProveedoresFinancierosCatalogo } from './ProveedoresFinancierosCatalogo'
 import { SeguimientoRenovaciones } from './SeguimientoRenovaciones'
+import { ClasificarOperacionPanel } from './ClasificarOperacionPanel'
 import { BotonNuevaOperacionUsd, OperacionesDolares, ModalNuevaOperacion, type PrecargarRenovacion } from './OperacionesDolares'
 
 function formatFecha(iso: string | null): string {
@@ -39,10 +44,12 @@ const FILTRO_TABS: [OcasionalesFiltro, string][] = [
   ['revisar', 'A revisar'],
   ['con_renovacion', 'Con renovación'],
   ['con_usd', 'Con USD'],
+  ['compra_iva', 'Compra de IVA'],
 ]
 
 export function PestanaOcasionales() {
   const { user } = useAuth()
+  const puedeEditarCheques = usePermisosFinanzas().cheques
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [importMsg, setImportMsg] = useState<string | null>(null)
@@ -54,7 +61,7 @@ export function PestanaOcasionales() {
   const [montoMax, setMontoMax] = useState('')
   const [montoMaxAplicado, setMontoMaxAplicado] = useState('')
   const [page, setPage] = useState(1)
-  const [subvista, setSubvista] = useState<'cheques' | 'renovaciones' | 'seguimiento' | 'usd' | 'operaciones'>('cheques')
+  const [subvista, setSubvista] = useState<'cheques' | 'renovaciones' | 'seguimiento' | 'usd' | 'operaciones' | 'proveedores'>('cheques')
   const [beneficiarioRenov, setBeneficiarioRenov] = useState('')
   const [detalleId, setDetalleId] = useState<string | null>(null)
   const [mostrarMesesViejos, setMostrarMesesViejos] = useState(false)
@@ -69,6 +76,18 @@ export function PestanaOcasionales() {
     onError: (err) => {
       setImportMsg(err instanceof Error ? err.message : 'Error al importar CSV')
     },
+  })
+  const recalcularMutation = useMutation({
+    mutationFn: recalcularTodoOcasionales,
+    onSuccess: (r) => {
+      toast.success(
+        r.chequesActualizados > 0
+          ? `Recalculado: se actualizaron ${r.chequesActualizados} cheques`
+          : 'Recalculado: no había nada para actualizar',
+      )
+      void queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques-ocasionales'] })
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : 'No se pudo recalcular'),
   })
   useEffect(() => {
     const t = setTimeout(() => {
@@ -112,6 +131,7 @@ export function PestanaOcasionales() {
     seguimiento: 'Cheques pendientes de cobro agrupados por beneficiario. La exposición es la plata que todavía está "en la calle": cheques pendientes o rechazados que aún no se cobraron ni se renovaron. Filtrá por abiertas/todas y navegá la cadena de renovaciones.',
     usd: 'Operaciones en dólares agrupadas por cotización y beneficiario.',
     operaciones: 'Detalle de cada operación USD individual con su tipo de cambio y montos.',
+    proveedores: 'Catálogo de proveedores financieros. Cada uno reúne todas las formas en que aparece escrito su nombre en los cheques; abajo están los nombres que todavía no se asignaron a ninguno.',
   }
 
   const subTabs = (
@@ -124,6 +144,7 @@ export function PestanaOcasionales() {
             ['seguimiento', 'Seguimiento'],
             ['usd', 'USD (agrupadas)'],
             ['operaciones', 'Operaciones USD / Renovaciones'],
+            ['proveedores', 'Proveedores financieros'],
           ] as const).map(([val, label]) => (
             <button
               key={val}
@@ -156,6 +177,18 @@ export function PestanaOcasionales() {
             }}
           />
           <BotonNuevaOperacionUsd />
+          {puedeEditarCheques ? (
+            <button
+              type="button"
+              disabled={recalcularMutation.isPending}
+              onClick={() => recalcularMutation.mutate()}
+              title="Vuelve a calcular los avisos, los dólares leídos del OBS, las renovaciones y el seguimiento, sin importar un CSV"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${recalcularMutation.isPending ? 'animate-spin' : ''}`} />
+              {recalcularMutation.isPending ? 'Recalculando…' : 'Recalcular todo'}
+            </button>
+          ) : null}
           <button
             type="button"
             disabled={importMutation.isPending}
@@ -207,6 +240,15 @@ export function PestanaOcasionales() {
       <>
         {subTabs}
         <SeguimientoRenovaciones />
+      </>
+    )
+  }
+
+  if (subvista === 'proveedores') {
+    return (
+      <>
+        {subTabs}
+        <ProveedoresFinancierosCatalogo />
       </>
     )
   }
@@ -602,6 +644,11 @@ function OcasionalRow({ ch, onAbrir, onVerRenov }: { ch: ChequeOcasionalItem; on
               USD
             </span>
           ) : null}
+          {ch.esCompraIva ? (
+            <span className="inline-block rounded border border-sky-300 bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-900 dark:border-sky-700 dark:bg-sky-900/40 dark:text-sky-200">
+              Compra IVA
+            </span>
+          ) : null}
           {ch.revisar.length > 0 ? (
             <span className="inline-block rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
               A revisar
@@ -643,6 +690,7 @@ function ResumenCard({
 }
 
 function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => void }) {
+  const puedeEditarCheques = usePermisosFinanzas().cheques
   const { data, isLoading, isError } = useQuery({
     queryKey: ['finanzas', 'cheques-ocasionales', 'detalle', id],
     queryFn: () => fetchOcasionalDetalle(id),
@@ -832,6 +880,16 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
                   </div>
                 ) : null}
               </div>
+            ) : null}
+
+            {puedeEditarCheques && (ch.revisar.length > 0 || ch.sugerencia) ? (
+              <ClasificarOperacionPanel
+                key={`${id}-${ch.sugerencia?.tipo ?? ''}`}
+                id={id}
+                cheque={ch}
+                lecturaObs={data?.lecturaObs}
+                mismaOperacion={data?.mismaOperacion ?? 1}
+              />
             ) : null}
 
             {ch.revisar.length > 0 ? (

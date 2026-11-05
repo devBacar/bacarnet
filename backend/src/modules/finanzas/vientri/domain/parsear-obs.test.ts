@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parsearObs } from './parsear-obs.js'
+import { parsearObs, parsearUsdSuelto } from './parsear-obs.js'
 
 describe('parsearObs', () => {
   describe('renovación', () => {
@@ -122,6 +122,15 @@ describe('parsearObs', () => {
       expect(r.operacionUsd).toEqual({ montoUsd: 65000, cotizacion: 1470 })
     })
 
+    it('parsea u$30.076,43 TC $1570 (centavos con coma, como el OBS de DURAN)', () => {
+      expect(parsearObs('u$30.076,43 TC $1570').operacionUsd).toEqual({ montoUsd: 30076.43, cotizacion: 1570 })
+    })
+
+    it('parsea usd $30.076,43 TC $1570 (signo $ después de usd y centavos con coma)', () => {
+      const r = parsearObs('usd $30.076,43 TC $1570')
+      expect(r.operacionUsd).toEqual({ montoUsd: 30076.43, cotizacion: 1570 })
+    })
+
     it('parsea u$20.000 TC $1.560', () => {
       const r = parsearObs('u$20.000 TC $1.560')
       expect(r.operacionUsd).toEqual({ montoUsd: 20000, cotizacion: 1560 })
@@ -232,5 +241,23 @@ describe('parsearObs', () => {
       const r = parsearObs('INTERESES Y CAP')
       expect(r.renovacion).toBeNull()
     })
+  })
+})
+
+describe('parsearUsdSuelto', () => {
+  it('toma el primer número como dólares y el de TC como cotización', () => {
+    expect(parsearUsdSuelto('65000 TC1435')).toEqual({ montoUsd: 65000, cotizacion: 1435 })
+    expect(parsearUsdSuelto('30000 TC1440')).toEqual({ montoUsd: 30000, cotizacion: 1440 })
+    expect(parsearUsdSuelto('30.076,43 TC $1.570')).toEqual({ montoUsd: 30076.43, cotizacion: 1570 })
+  })
+
+  it('no inventa dólares si falta alguno de los dos números', () => {
+    expect(parsearUsdSuelto('Interes')).toBeNull()
+    expect(parsearUsdSuelto('TC1435')).toBeNull()
+    expect(parsearUsdSuelto(null)).toBeNull()
+  })
+
+  it('al importar, "65000 TC1435" sin la palabra USD sigue sin ser una operación en dólares', () => {
+    expect(parsearObs('65000 TC1435').operacionUsd).toBeNull()
   })
 })

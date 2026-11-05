@@ -7,6 +7,8 @@ export const PROVEEDORES_FINANCIEROS_COLLECTION = 'proveedoresFinancieros'
 export interface ProveedorFinancieroDocument {
   nombre: string
   nombreNormalizado: string
+  /** Otras formas en que aparece escrito el mismo proveedor (ej. "OP MANA" para MANA). */
+  alias?: string[]
   creadoPor: string
   createdAt: Timestamp
 }
@@ -14,6 +16,7 @@ export interface ProveedorFinancieroDocument {
 export interface ProveedorFinancieroVista {
   id: string
   nombre: string
+  alias: string[]
   creadoPor: string
   createdAt: string | null
 }
@@ -25,9 +28,15 @@ export async function listProveedoresFinancierosDocs(): Promise<
   return snap.docs.map((doc) => ({ id: doc.id, data: doc.data() as ProveedorFinancieroDocument }))
 }
 
+/** Nombre del proveedor + sus alias, ya normalizados: todo lo que lo identifica. */
+export function clavesDeProveedor(data: Pick<ProveedorFinancieroDocument, 'nombreNormalizado' | 'alias'>): string[] {
+  const claves = [data.nombreNormalizado, ...(data.alias ?? []).map(normalizarNombre)]
+  return [...new Set(claves.filter(Boolean))]
+}
+
 export async function nombresNormalizadosProveedoresFinancieros(): Promise<Set<string>> {
   const rows = await listProveedoresFinancierosDocs()
-  return new Set(rows.map((row) => row.data.nombreNormalizado).filter(Boolean))
+  return new Set(rows.flatMap((row) => clavesDeProveedor(row.data)))
 }
 
 export interface ProveedorFinancieroResuelto {
@@ -35,13 +44,12 @@ export interface ProveedorFinancieroResuelto {
   nombre: string
 }
 
-/** Nombre normalizado → proveedor cargado. Es la fuente única para saber a quién corresponde un nombre. */
+/** Nombre normalizado (o alias) → proveedor cargado. Es la fuente única para saber a quién corresponde un nombre. */
 export async function mapaProveedoresFinancieros(): Promise<Map<string, ProveedorFinancieroResuelto>> {
   const rows = await listProveedoresFinancierosDocs()
   const mapa = new Map<string, ProveedorFinancieroResuelto>()
   for (const row of rows) {
-    const clave = row.data.nombreNormalizado
-    if (clave) mapa.set(clave, { id: row.id, nombre: row.data.nombre })
+    for (const clave of clavesDeProveedor(row.data)) mapa.set(clave, { id: row.id, nombre: row.data.nombre })
   }
   return mapa
 }
@@ -71,6 +79,16 @@ export async function crearProveedorFinancieroDoc(nombre: string, uid: string): 
   }
   await ref.set(doc)
   return ref.id
+}
+
+export async function getProveedorFinancieroDoc(id: string): Promise<ProveedorFinancieroDocument | null> {
+  const snap = await adminDb().collection(PROVEEDORES_FINANCIEROS_COLLECTION).doc(id).get()
+  return snap.exists ? (snap.data() as ProveedorFinancieroDocument) : null
+}
+
+/** Reemplaza la lista de alias (el servicio ya validó que no choquen con otro proveedor). */
+export async function guardarAliasDoc(id: string, alias: string[]): Promise<void> {
+  await adminDb().collection(PROVEEDORES_FINANCIEROS_COLLECTION).doc(id).update({ alias })
 }
 
 export async function borrarProveedorFinancieroDoc(id: string): Promise<boolean> {

@@ -24,6 +24,7 @@ import {
   reclasificarDoc,
 } from '../domain/clasificar-ocasional.js'
 import { normalizarDocOcasional } from '../domain/normalizar-doc-ocasional.js'
+import { aplicarPatrones } from '../domain/patrones-ocasionales.js'
 import { calcularRenovadoPor } from '../domain/renovado-por.js'
 import { resolverIdsSinEncabezado } from '../domain/resolver-ids-sin-encabezado.js'
 import { filtrarVentanaConCadenas } from '../domain/ventana-ocasionales.js'
@@ -36,6 +37,7 @@ import {
 } from './vientri.repository.js'
 import { recalcularSeguimiento, type ResultadoSeguimiento } from './recalcular-seguimiento.js'
 import { reconstruirCompletos, type ResultadoCompletos } from './completos-ocasionales.js'
+import { listarPatronesOcasionales } from './patrones-ocasionales.repository.js'
 
 export const VIENTRI_CHEQUES_OCASIONALES = 'vientriChequesOcasionales'
 
@@ -77,8 +79,11 @@ function filaADoc(
       tieneUsd: obs.operacionUsd !== null,
       tieneTasaExplicita: obs.tasaExplicita !== null,
       tieneRol: obs.rol !== null,
+      esSoloInteres: obs.rol === 'interes',
+      tieneOrigen: (obs.renovacion?.chequeIds.length ?? 0) > 0 || obs.operacionUsd !== null || obs.tasaExplicita !== null,
     },
     proveedores,
+    obs.obsOriginal,
   )
 
   const estadoCodigo = aEntero(f.id_estado)
@@ -116,6 +121,7 @@ function filaADoc(
     obsOriginal: obs.obsOriginal,
     revisar,
     proveedorFinancieroId: clasificacion.proveedorFinancieroId,
+    esCompraIva: clasificacion.esCompraIva,
     fechaConciliado: aFecha(f.fecha_conciliado),
     vientriId,
     vientriChqId: aEntero(f.id_cheque),
@@ -133,7 +139,7 @@ async function leerBase(): Promise<ChequeOcasionalDoc[]> {
   return snap.docs.map((s) => normalizarDocOcasional(s.data() as ChequeOcasionalDoc))
 }
 
-const CAMPOS_DERIVADOS = ['renovadoPor', 'esProveedorFinanciero', 'tipoProveedor', 'proveedorFinancieroId', 'revisar'] as const
+const CAMPOS_DERIVADOS = ['renovadoPor', 'operacionUsd', 'esProveedorFinanciero', 'tipoProveedor', 'proveedorFinancieroId', 'esCompraIva', 'sugerencia', 'revisar'] as const
 
 /**
  * Hay campos que no vienen del CSV sino de otros cheques o de la lista de proveedores: `renovadoPor`
@@ -141,27 +147,37 @@ const CAMPOS_DERIVADOS = ['renovadoPor', 'esProveedorFinanciero', 'tipoProveedor
  * como proveedor financiero con sus avisos de `revisar` (cambian si se carga un proveedor nuevo o si el
  * cheque pasa a estar renovado). Se recalculan sobre toda la base y se escriben solo los que difieren.
  */
-async function sincronizarDerivadosEnBase(): Promise<number> {
-  const [snap, proveedores] = await Promise.all([
+export async function sincronizarDerivadosEnBase(): Promise<number> {
+  const [snap, proveedores, patrones] = await Promise.all([
     adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).get(),
     mapaProveedoresFinancieros(),
+    listarPatronesOcasionales(),
   ])
   const docs = snap.docs.map((s) => normalizarDocOcasional(s.data() as ChequeOcasionalDoc))
   const renovadoPor = calcularRenovadoPor(docs)
 
   const cambios: Array<{ id: string; datos: Pick<ChequeOcasionalDoc, (typeof CAMPOS_DERIVADOS)[number]> }> = []
   snap.docs.forEach((s, i) => {
-    const actual = { ...docs[i]!, renovadoPor: [...docs[i]!.renovadoPor].sort() }
-    const esperado = reclasificarDoc({ ...actual, renovadoPor: renovadoPor[i]! }, proveedores)
+    // Se relee solo lo que el OBS dice con la palabra USD; nunca se borra un USD ya cargado (por ejemplo a mano).
+    const base = docs[i]!
+    const operacionUsd = base.operacionUsd ?? parsearObs(base.obsOriginal).operacionUsd
+    const actual = { ...base, operacionUsd: base.operacionUsd, renovadoPor: [...base.renovadoPor].sort() }
+    const esperado = aplicarPatrones(
+      reclasificarDoc({ ...actual, operacionUsd, renovadoPor: renovadoPor[i]! }, proveedores),
+      patrones,
+    )
     const distinto = CAMPOS_DERIVADOS.some((c) => JSON.stringify(actual[c]) !== JSON.stringify(esperado[c]))
     if (!distinto) return
     cambios.push({
       id: s.id,
       datos: {
         renovadoPor: esperado.renovadoPor,
+        operacionUsd: esperado.operacionUsd,
         esProveedorFinanciero: esperado.esProveedorFinanciero,
         tipoProveedor: esperado.tipoProveedor,
         proveedorFinancieroId: esperado.proveedorFinancieroId,
+        esCompraIva: esperado.esCompraIva ?? false,
+        sugerencia: esperado.sugerencia ?? null,
         revisar: esperado.revisar,
       },
     })

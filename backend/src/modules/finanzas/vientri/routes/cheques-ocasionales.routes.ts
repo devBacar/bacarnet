@@ -1,8 +1,34 @@
-import { Router } from 'express'
+import { Router, type Response } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import { adminDb } from '../../../../lib/firebase/admin.js'
-import { importarChequesOcasionales, VIENTRI_CHEQUES_OCASIONALES } from '../services/importar-cheques-ocasionales.js'
+import { clavesDeProveedor, listProveedoresFinancierosDocs } from '../../agenda/services/proveedores-financieros.repository.js'
+import {
+  agregarAliasProveedorFinanciero,
+  agregarProveedorFinanciero,
+  ProveedorFinancieroError,
+  quitarAliasProveedorFinanciero,
+} from '../../agenda/services/proveedores-financieros.service.js'
+import { esCompraIva } from '../domain/clasificar-ocasional.js'
+import { parsearUsdSuelto } from '../domain/parsear-obs.js'
+import type { TipoOperacionManual } from '../domain/cheque-ocasional.types.js'
+import { normalizarDocOcasional } from '../domain/normalizar-doc-ocasional.js'
+import {
+  aprenderPatron,
+  camposDeLaClasificacion,
+  chequesDeLaMismaOperacion,
+  formaObs,
+  numerosDeChequeEnObs,
+  validarClasificacion,
+  yaTieneTipo,
+} from '../domain/patrones-ocasionales.js'
+import { guardarPatronOcasional, leerPatronOcasional } from '../services/patrones-ocasionales.repository.js'
+import { armarCatalogoProveedores, type ProveedorCatalogoEntrada } from '../domain/catalogo-proveedores.js'
+import {
+  importarChequesOcasionales,
+  sincronizarDerivadosEnBase,
+  VIENTRI_CHEQUES_OCASIONALES,
+} from '../services/importar-cheques-ocasionales.js'
 import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
 import { analizarOcasionalesVsEmitidos } from '../domain/analisis-ocasionales-emitidos.js'
 import { analizarInteresVsRenovaciones } from '../domain/analisis-interes-renovacion.js'
@@ -27,15 +53,19 @@ function normalizar(t: string): string {
 
 async function leerTodos(): Promise<ChequeOcasionalDoc[]> {
   const snap = await adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).get()
-  return snap.docs.map((d) => d.data() as ChequeOcasionalDoc)
+  // La marca se calcula al leer: los docs guardados antes de que existiera no la tienen hasta la próxima importación.
+  return snap.docs.map((d) => {
+    const doc = d.data() as ChequeOcasionalDoc
+    return { ...doc, esCompraIva: esCompraIva(doc.beneficiarioNormalizado ?? '', doc.obsOriginal ?? '') }
+  })
 }
 
-finanzasChequesOcasionalesRouter.get('/', async (req, res) => {
+finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
   try {
     const todos = await leerTodos()
 
     const filtro = (typeof req.query.filtro === 'string' ? req.query.filtro : '') as
-      | '' | 'revisar' | 'con_renovacion' | 'con_usd'
+      | '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva'
     const q = typeof req.query.q === 'string' ? normalizar(req.query.q.trim()) : ''
     const page = Math.max(1, Number(req.query.page) || 1)
 
@@ -45,6 +75,7 @@ finanzasChequesOcasionalesRouter.get('/', async (req, res) => {
     if (filtro === 'revisar') filtrados = filtrados.filter((d) => d.revisar.length > 0)
     else if (filtro === 'con_renovacion') filtrados = filtrados.filter((d) => d.renovacionDe.length > 0 || d.renovadoPor.length > 0)
     else if (filtro === 'con_usd') filtrados = filtrados.filter((d) => d.operacionUsd !== null)
+    else if (filtro === 'compra_iva') filtrados = filtrados.filter((d) => d.esCompraIva === true)
 
     if (q) {
       filtrados = filtrados.filter((d) =>
@@ -230,6 +261,80 @@ finanzasChequesOcasionalesRouter.post('/importar', requireFinanzasPermiso('finan
 })
 
 
+// ── Catálogo de proveedores financieros (nombre + alias) y beneficiarios sin asignar ──────────────
+
+async function armarCatalogo() {
+  const [docs, filas] = await Promise.all([leerTodos(), listProveedoresFinancierosDocs()])
+  const proveedores: ProveedorCatalogoEntrada[] = filas.map((f) => ({
+    id: f.id,
+    nombre: f.data.nombre,
+    alias: f.data.alias ?? [],
+    claves: clavesDeProveedor(f.data),
+  }))
+  return armarCatalogoProveedores(docs, proveedores)
+}
+
+/** Después de tocar nombres o alias, los cheques ya guardados se re-enganchan sin esperar a la próxima importación. */
+async function responderCambioDeProveedores(res: Response, extra: Record<string, unknown>) {
+  const chequesActualizados = await sincronizarDerivadosEnBase()
+  res.json({ ...extra, chequesActualizados })
+}
+
+function manejarErrorProveedor(res: Response, err: unknown, accion: string) {
+  if (err instanceof ProveedorFinancieroError) {
+    res.status(err.status).json({ error: err.message })
+    return
+  }
+  console.error(`[finanzas/cheques-ocasionales] ${accion}`, err)
+  res.status(500).json({ error: `No se pudo ${accion}` })
+}
+
+finanzasChequesOcasionalesRouter.get('/proveedores-financieros', async (_req, res) => {
+  try {
+    res.json(await armarCatalogo())
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] catálogo de proveedores', err)
+    res.status(500).json({ error: 'No se pudo cargar el catálogo de proveedores financieros' })
+  }
+})
+
+finanzasChequesOcasionalesRouter.post('/proveedores-financieros', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const body = req.body as Record<string, unknown>
+    const proveedor = await agregarProveedorFinanciero(body.nombre, req.authedUser!.uid)
+    await responderCambioDeProveedores(res.status(201), { proveedor })
+  } catch (err) {
+    manejarErrorProveedor(res, err, 'agregar el proveedor financiero')
+  }
+})
+
+finanzasChequesOcasionalesRouter.post(
+  '/proveedores-financieros/:id/alias',
+  requireFinanzasPermiso('finanzas_cheques'),
+  async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>
+      const proveedor = await agregarAliasProveedorFinanciero(req.params.id, body.alias)
+      await responderCambioDeProveedores(res, { proveedor })
+    } catch (err) {
+      manejarErrorProveedor(res, err, 'agregar el nombre alternativo')
+    }
+  },
+)
+
+finanzasChequesOcasionalesRouter.delete(
+  '/proveedores-financieros/:id/alias',
+  requireFinanzasPermiso('finanzas_cheques'),
+  async (req, res) => {
+    try {
+      const proveedor = await quitarAliasProveedorFinanciero(req.params.id, req.query.alias)
+      await responderCambioDeProveedores(res, { proveedor })
+    } catch (err) {
+      manejarErrorProveedor(res, err, 'sacar el nombre alternativo')
+    }
+  },
+)
+
 finanzasChequesOcasionalesRouter.get('/operaciones-renovacion', async (_req, res) => {
   try {
     const pool = await leerCompletos()
@@ -297,6 +402,38 @@ finanzasChequesOcasionalesRouter.post('/seguimiento/recalcular', requireFinanzas
   }
 })
 
+/**
+ * Un solo botón para recalcular todo sin re-importar: avisos y datos derivados de cada cheque (proveedores, alias,
+ * USD leído del OBS, renovaciones), los cheques completos y el seguimiento de renovaciones. Sin CSV.
+ */
+/** Avisos y datos derivados de cada cheque, cheques completos y seguimiento. Lanza con el paso que falló. */
+async function recalcularTodoOcasionales() {
+  let paso = 'los avisos de los cheques'
+  try {
+    const chequesActualizados = await sincronizarDerivadosEnBase()
+    paso = 'los cheques completos'
+    const completos = await reconstruirCompletos()
+    paso = 'el seguimiento de renovaciones'
+    const seguimiento = await recalcularSeguimiento({
+      docs: await leerTodos(),
+      importacionId: `manual-${Date.now()}`,
+      borrarFaltantes: true,
+    })
+    return { chequesActualizados, completos: completos.total, operaciones: seguimiento.operaciones }
+  } catch (err) {
+    throw new Error(`No se pudo recalcular ${paso}`, { cause: err })
+  }
+}
+
+finanzasChequesOcasionalesRouter.post('/recalcular-todo', requireFinanzasPermiso('finanzas_cheques'), async (_req, res) => {
+  try {
+    res.json({ ok: true, ...(await recalcularTodoOcasionales()) })
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] recalcular todo', err)
+    res.status(500).json({ error: err instanceof Error ? err.message : 'No se pudo recalcular' })
+  }
+})
+
 finanzasChequesOcasionalesRouter.post('/completos/recalcular', requireFinanzasPermiso('finanzas_cheques'), async (_req, res) => {
   try {
     const resultado = await reconstruirCompletos()
@@ -331,14 +468,99 @@ finanzasChequesOcasionalesRouter.get('/analisis-interes', async (_req, res) => {
 })
 
 // Debe ir después de '/cadenas' y '/resumen' para no capturarlas como :id
-finanzasChequesOcasionalesRouter.get('/:id', async (req, res) => {
+/**
+ * El id del doc es `oca-<vientriId>`, pero hay bases con docs guardados con el número pelado como id
+ * (copias viejas). Si no está por id, se busca por el campo `vientriId`, prefiriendo el que no está dado de baja.
+ */
+async function buscarOcasionalConId(id: string): Promise<{ id: string; data: ChequeOcasionalDoc } | null> {
+  const col = adminDb().collection(VIENTRI_CHEQUES_OCASIONALES)
+  const porId = await col.doc(id).get()
+  if (porId.exists) return { id: porId.id, data: porId.data() as ChequeOcasionalDoc }
+
+  const vientriId = Number(id.replace(/^oca-/, ''))
+  if (!Number.isInteger(vientriId) || vientriId <= 0) return null
+  const snap = await col.where('vientriId', '==', vientriId).get()
+  const docs = snap.docs.map((d) => ({ id: d.id, data: d.data() as ChequeOcasionalDoc }))
+  return docs.find((d) => !d.data.baja) ?? docs[0] ?? null
+}
+
+async function buscarOcasional(id: string): Promise<ChequeOcasionalDoc | null> {
+  return (await buscarOcasionalConId(id))?.data ?? null
+}
+
+/**
+ * Marca a mano el tipo de operación de un cheque (dólares, renovación o interés/capital) cuando el OBS no
+ * alcanza para saberlo. Por defecto se aplica también a las demás cuotas de la misma operación (mismo
+ * beneficiario, misma emisión y OBS idéntico) que todavía no tengan ese dato. Cada confirmación se guarda
+ * como patrón aprendido del beneficiario, para proponerlo en los cheques que lleguen con el mismo formato.
+ */
+finanzasChequesOcasionalesRouter.post('/:id/clasificar', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
   try {
-    const snap = await adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).doc(req.params.id).get()
-    if (!snap.exists) {
+    const elegido = await buscarOcasionalConId(req.params.id)
+    if (!elegido) {
       res.status(404).json({ error: 'Cheque ocasional no encontrado' })
       return
     }
-    const cheque = snap.data() as ChequeOcasionalDoc
+    const body = (req.body ?? {}) as { tipo?: unknown; datos?: unknown; aplicarAIguales?: unknown }
+    const validado = validarClasificacion(body.tipo, body.datos, elegido.data.obsOriginal)
+    if (!validado.ok) {
+      res.status(400).json({ error: validado.error })
+      return
+    }
+    const tipo = body.tipo as TipoOperacionManual
+    const uid = req.authedUser!.uid
+
+    const col = adminDb().collection(VIENTRI_CHEQUES_OCASIONALES)
+    const ids = new Set<string>([elegido.id])
+    if (body.aplicarAIguales !== false) {
+      const snap = await col.get()
+      const todos = snap.docs.map((d) => ({ id: d.id, ...normalizarDocOcasional(d.data() as ChequeOcasionalDoc) }))
+      const propio = todos.find((d) => d.id === elegido.id) ?? { id: elegido.id, ...normalizarDocOcasional(elegido.data) }
+      for (const d of chequesDeLaMismaOperacion(propio, todos)) {
+        if (!yaTieneTipo(d, tipo)) ids.add(d.id)
+      }
+    }
+
+    const campos = {
+      ...camposDeLaClasificacion(tipo, validado.datos),
+      clasificacionManual: { tipo, uid, fecha: new Date().toISOString() },
+    }
+    const lista = [...ids]
+    for (let i = 0; i < lista.length; i += 400) {
+      const batch = adminDb().batch()
+      for (const id of lista.slice(i, i + 400)) batch.set(col.doc(id), campos, { merge: true })
+      await batch.commit()
+    }
+
+    const clave = {
+      beneficiarioNormalizado: elegido.data.beneficiarioNormalizado,
+      tipo,
+      forma: formaObs(elegido.data.obsOriginal),
+    }
+    const patron = aprenderPatron(await leerPatronOcasional(clave), elegido.data, tipo, validado.datos)
+    await guardarPatronOcasional(patron, uid)
+
+    let recalculado = true
+    try {
+      await recalcularTodoOcasionales()
+    } catch (err) {
+      recalculado = false
+      console.error('[finanzas/cheques-ocasionales] clasificar: no se pudo recalcular', err)
+    }
+    res.json({ tipo, datos: validado.datos, cheques: lista.length, confirmaciones: patron.confirmaciones, recalculado })
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] clasificar', err)
+    res.status(500).json({ error: 'No se pudo guardar el tipo de operación' })
+  }
+})
+
+finanzasChequesOcasionalesRouter.get('/:id', async (req, res) => {
+  try {
+    const cheque = await buscarOcasional(req.params.id)
+    if (!cheque) {
+      res.status(404).json({ error: 'Cheque ocasional no encontrado' })
+      return
+    }
     const pool = await leerCompletos()
     const cadenas = reconstruirCadenas(pool)
     const clasificados = clasificarCheques(pool, cadenas)
@@ -378,8 +600,25 @@ finanzasChequesOcasionalesRouter.get('/:id', async (req, res) => {
       }
     })
 
+    const todos = await leerTodos()
+    const mismaOperacion = chequesDeLaMismaOperacion(cheque, todos.map(normalizarDocOcasional)).length
+
     res.json({
-      cheque: actualEnCompletos,
+      // Los completos se reconstruyen aparte: los datos que se marcan a mano o se recalculan salen del doc vivo.
+      cheque: {
+        ...actualEnCompletos,
+        revisar: cheque.revisar ?? [],
+        operacionUsd: cheque.operacionUsd ?? null,
+        rolEnOperacion: cheque.rolEnOperacion ?? null,
+        renovacionDe: cheque.renovacionDe?.length ? cheque.renovacionDe : actualEnCompletos.renovacionDe,
+        sugerencia: cheque.sugerencia ?? null,
+        clasificacionManual: cheque.clasificacionManual ?? null,
+      },
+      lecturaObs: {
+        usd: parsearUsdSuelto(cheque.obsOriginal),
+        numerosDeCheque: numerosDeChequeEnObs(cheque.obsOriginal),
+      },
+      mismaOperacion,
       clasificacion,
       cadena,
       renovacionDeDetalle,

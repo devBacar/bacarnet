@@ -3,7 +3,7 @@ import type { ObsParseada, OperacionUsdParseada, RenovacionParseada, RolEnOperac
 const RE_RENOVACION_CON_IDS = /renovaci[oó]n\s+(?:(?:cheques?|ch)\s*(?:n[°ºo]?\s*)?)?(?:[a-záéíóúñü\s.]*\s)?([\d\s,y/]+)/i
 const RE_TIENE_RENOVACION = /\brenovaci[oó]n(?:es)?\b/i
 
-const RE_USD = /u\$?\s*s?d?\s*([\d.]+)\s*tc\s*\$?\s*([\d.]+)/i
+const RE_USD = /u\$?\s*s?d?\s*\$?\s*([\d.]+(?:,\d+)?)\s*tc\s*\$?\s*([\d.]+(?:,\d+)?)/i
 const RE_TASA_EXPLICITA = /\$([\d.]+)\s+al\s+([\d.,]+)%/i
 
 function limpiarNumero(raw: string): number {
@@ -44,6 +44,22 @@ function parsearUsd(obs: string): OperacionUsdParseada | null {
   if (!m) return null
   const montoUsd = limpiarNumero(m[1])
   const cotizacion = limpiarNumero(m[2])
+  if (!Number.isFinite(montoUsd) || montoUsd <= 0) return null
+  if (!Number.isFinite(cotizacion) || cotizacion <= 0) return null
+  return { montoUsd, cotizacion }
+}
+
+const RE_USD_SUELTO = /([\d.]+(?:,\d+)?)\s*tc\s*\$?\s*([\d.]+(?:,\d+)?)/i
+
+/**
+ * "65000 TC1435": sin la palabra USD no se asume que son dólares al importar (queda a revisar). Cuando Finanzas
+ * lo confirma a mano, el primer número son los dólares pedidos y el de TC la cotización.
+ */
+export function parsearUsdSuelto(obs: string | null | undefined): OperacionUsdParseada | null {
+  const m = RE_USD_SUELTO.exec((obs ?? '').trim())
+  if (!m) return null
+  const montoUsd = limpiarNumero(m[1]!)
+  const cotizacion = limpiarNumero(m[2]!)
   if (!Number.isFinite(montoUsd) || montoUsd <= 0) return null
   if (!Number.isFinite(cotizacion) || cotizacion <= 0) return null
   return { montoUsd, cotizacion }

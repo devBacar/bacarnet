@@ -1235,6 +1235,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "tipo",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "fechaProceso",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "montoCentavos",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "movimientosBancarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "cuentaId",
           "order": "ASCENDING"
         },

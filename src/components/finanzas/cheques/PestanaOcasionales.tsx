@@ -913,6 +913,7 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
                 cheque={ch}
                 lecturaObs={data?.lecturaObs}
                 mismaOperacion={data?.mismaOperacion ?? 1}
+                propuestaRenovacion={data?.propuestaRenovacion}
               />
             ) : null}
 

@@ -99,6 +99,16 @@ describe('numerosDeChequeEnObs', () => {
   it('toma números de 6 dígitos o más, sin repetir', () => {
     expect(numerosDeChequeEnObs('cambio 39111588 y 39.111.589, 39111588 TC 1435')).toEqual(['39111588', '39111589'])
   })
+
+  it('completa los números abreviados con el anterior', () => {
+    expect(numerosDeChequeEnObs('39585299/300/1/2')).toEqual(['39585299', '39585300', '39585301', '39585302'])
+    expect(numerosDeChequeEnObs('39585299 / 300')).toEqual(['39585299', '39585300'])
+  })
+
+  it('no toma montos con decimales ni números cortos sueltos', () => {
+    expect(numerosDeChequeEnObs('65.000,00 TC1435')).toEqual([])
+    expect(numerosDeChequeEnObs('300/1/2')).toEqual([])
+  })
 })
 
 describe('aprenderPatron', () => {

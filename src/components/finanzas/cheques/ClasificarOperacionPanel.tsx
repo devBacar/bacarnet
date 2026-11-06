@@ -7,10 +7,12 @@ import {
   type ChequeOcasionalItem,
   type DatosOperacionManual,
   type OcasionalDetalleResponse,
+  type PropuestaRenovacionItem,
   type RolOperacion,
   type TipoOperacionManual,
 } from '../../../services/finanzasChequesApi'
 import { finanzasInputClass } from '../FinanzasFormField'
+import { ArmarRenovacion } from './ArmarRenovacion'
 
 const TIPOS: [TipoOperacionManual, string][] = [
   ['usd', 'Dólares'],
@@ -55,11 +57,13 @@ export function ClasificarOperacionPanel({
   cheque,
   lecturaObs,
   mismaOperacion,
+  propuestaRenovacion,
 }: {
   id: string
   cheque: ChequeOcasionalItem
   lecturaObs: OcasionalDetalleResponse['lecturaObs']
   mismaOperacion: number
+  propuestaRenovacion?: PropuestaRenovacionItem
 }) {
   const queryClient = useQueryClient()
   const sugerencia = cheque.sugerencia ?? null
@@ -75,8 +79,8 @@ export function ClasificarOperacionPanel({
   const [aplicarAIguales, setAplicarAIguales] = useState(true)
 
   const guardar = useMutation({
-    mutationFn: (v: { tipo: TipoOperacionManual; datos: DatosOperacionManual }) =>
-      clasificarOcasional(id, v.tipo, v.datos, aplicarAIguales),
+    mutationFn: (v: { tipo: TipoOperacionManual; datos: DatosOperacionManual; chequesDelGrupo?: string[] }) =>
+      clasificarOcasional(id, v.tipo, v.datos, aplicarAIguales, v.chequesDelGrupo),
     onSuccess: (r) => {
       const cuantos = r.cheques === 1 ? '1 cheque' : `${r.cheques} cheques`
       toast.success(`Guardado como ${ETIQUETA_TIPO[r.tipo]} en ${cuantos}. Lo aprendido para este OBS: ${r.confirmaciones} ${r.confirmaciones === 1 ? 'vez' : 'veces'}.`)
@@ -96,6 +100,8 @@ export function ClasificarOperacionPanel({
       guardar.mutate({ tipo, datos: { rol } })
     }
   }
+
+  const armarRenovacion = tipo === 'renovacion' && propuestaRenovacion != null
 
   return (
     <div className="mt-4 rounded-xl border border-neutral-200 p-3 text-sm dark:border-zinc-700">
@@ -134,52 +140,64 @@ export function ClasificarOperacionPanel({
         ))}
       </div>
 
-      <div className="mt-2 flex flex-wrap items-end gap-2">
-        {tipo === 'usd' ? (
-          <>
-            <label className="text-xs">
-              <span className="text-body-muted">Dólares pedidos</span>
-              <input className={`${finanzasInputClass} mt-0.5 w-36`} inputMode="decimal" value={montoUsd} onChange={(e) => setMontoUsd(e.target.value)} />
-            </label>
-            <label className="text-xs">
-              <span className="text-body-muted">Cotización (TC)</span>
-              <input className={`${finanzasInputClass} mt-0.5 w-28`} inputMode="decimal" value={cotizacion} onChange={(e) => setCotizacion(e.target.value)} />
-            </label>
-          </>
-        ) : tipo === 'renovacion' ? (
-          <label className="min-w-0 flex-1 text-xs">
-            <span className="text-body-muted">Cheques que renueva (números, separados por coma)</span>
-            <input className={`${finanzasInputClass} mt-0.5 w-full`} value={chequeIds} placeholder="39111588, 39111589" onChange={(e) => setChequeIds(e.target.value)} />
-          </label>
-        ) : (
-          <label className="text-xs">
-            <span className="text-body-muted">Este cheque es</span>
-            <select className={`${finanzasInputClass} mt-0.5 w-44`} value={rol} onChange={(e) => setRol(e.target.value as RolOperacion)}>
-              {ROLES.map(([v, l]) => (
-                <option key={v} value={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
+      {armarRenovacion ? (
+        <ArmarRenovacion
+          numeroAbierto={cheque.numeroCheque}
+          obs={cheque.obsOriginal}
+          propuesta={propuestaRenovacion}
+          guardando={guardar.isPending}
+          onGuardar={(ids, chequesDelGrupo) => guardar.mutate({ tipo: 'renovacion', datos: { chequeIds: ids }, chequesDelGrupo })}
+        />
+      ) : (
+        <>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            {tipo === 'usd' ? (
+              <>
+                <label className="text-xs">
+                  <span className="text-body-muted">Dólares pedidos</span>
+                  <input className={`${finanzasInputClass} mt-0.5 w-36`} inputMode="decimal" value={montoUsd} onChange={(e) => setMontoUsd(e.target.value)} />
+                </label>
+                <label className="text-xs">
+                  <span className="text-body-muted">Cotización (TC)</span>
+                  <input className={`${finanzasInputClass} mt-0.5 w-28`} inputMode="decimal" value={cotizacion} onChange={(e) => setCotizacion(e.target.value)} />
+                </label>
+              </>
+            ) : tipo === 'renovacion' ? (
+              <label className="min-w-0 flex-1 text-xs">
+                <span className="text-body-muted">Cheques que renueva (números, separados por coma)</span>
+                <input className={`${finanzasInputClass} mt-0.5 w-full`} value={chequeIds} placeholder="39111588, 39111589" onChange={(e) => setChequeIds(e.target.value)} />
+              </label>
+            ) : (
+              <label className="text-xs">
+                <span className="text-body-muted">Este cheque es</span>
+                <select className={`${finanzasInputClass} mt-0.5 w-44`} value={rol} onChange={(e) => setRol(e.target.value as RolOperacion)}>
+                  {ROLES.map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
 
-      {otros > 0 ? (
-        <label className="mt-2 flex items-center gap-2 text-xs">
-          <input type="checkbox" checked={aplicarAIguales} onChange={(e) => setAplicarAIguales(e.target.checked)} />
-          Aplicar también a {otros === 1 ? 'el otro cheque' : `los otros ${otros} cheques`} de {cheque.beneficiario || 'este beneficiario'} emitidos el mismo día con el mismo OBS
-        </label>
-      ) : null}
+          {otros > 0 ? (
+            <label className="mt-2 flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={aplicarAIguales} onChange={(e) => setAplicarAIguales(e.target.checked)} />
+              Aplicar también a {otros === 1 ? 'el otro cheque' : `los otros ${otros} cheques`} de {cheque.beneficiario || 'este beneficiario'} emitidos el mismo día con el mismo OBS
+            </label>
+          ) : null}
 
-      <button
-        type="button"
-        disabled={guardar.isPending}
-        onClick={enviar}
-        className="mt-2 rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
-      >
-        {guardar.isPending ? 'Guardando…' : 'Guardar'}
-      </button>
+          <button
+            type="button"
+            disabled={guardar.isPending}
+            onClick={enviar}
+            className="mt-2 rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-200 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+          >
+            {guardar.isPending ? 'Guardando…' : 'Guardar'}
+          </button>
+        </>
+      )}
     </div>
   )
 }

@@ -419,6 +419,31 @@ export interface OcasionalDetalleResponse {
   lecturaObs?: { usd: { montoUsd: number; cotizacion: number } | null; numerosDeCheque: string[] }
   /** Cuántos cheques son la misma operación (mismo beneficiario, emisión y OBS), incluido este. */
   mismaOperacion?: number
+  /** Para armar la renovación a mano: los cheques nuevos del grupo y los viejos que nombra el OBS. */
+  propuestaRenovacion?: PropuestaRenovacionItem
+}
+
+export interface PropuestaRenovacionItem {
+  nuevos: Array<{
+    numeroCheque: string
+    montoCentavos: number
+    fechaEmision: string | null
+    fechaVencimiento: string | null
+    renovacionDe: string[]
+  }>
+  viejos: Array<{
+    /** Número leído del OBS, ya completado ("300" → "39585300"). */
+    numeroObs: string
+    encontrado: {
+      numeroCheque: string
+      beneficiario: string
+      montoCentavos: number
+      fechaVencimiento: string | null
+      estado: string
+    } | null
+    /** Cosas para controlar antes de guardar (no impiden guardar). */
+    avisos: string[]
+  }>
 }
 
 export interface OperacionUsdItem {
@@ -520,7 +545,6 @@ export async function crearProveedorCatalogo(nombre: string): Promise<void> {
     body: JSON.stringify({ nombre }),
   })
   if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo agregar el proveedor')
-  return (await res.json()) as { chequesActualizados: number }
 }
 
 export async function agregarAliasProveedor(id: string, alias: string): Promise<void> {
@@ -560,6 +584,13 @@ export async function fusionarProveedores(quedaId: string, seVaId: string): Prom
   if (!res.ok) throw await leerErrorProveedores(res, 'No se pudieron juntar los proveedores')
 }
 
+/** Re-engancha los cheques ya guardados con la lista actual de proveedores. Recorre toda la base: tarda. */
+export async function sincronizarChequesProveedores(): Promise<{ chequesActualizados: number }> {
+  const res = await ocasionalesFetch('/proveedores-financieros/sincronizar-cheques', { method: 'POST' })
+  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudieron actualizar los cheques')
+  return (await res.json()) as { chequesActualizados: number }
+}
+
 export async function fetchChequesOcasionales(params: {
   filtro?: OcasionalesFiltro
   q?: string
@@ -582,12 +613,6 @@ export async function fetchChequesOcasionales(params: {
   return body as OcasionalesListResponse
 }
 
-}
-
-/** Re-engancha los cheques ya guardados con la lista actual de proveedores. Recorre toda la base: tarda. */
-export async function sincronizarChequesProveedores(): Promise<{ chequesActualizados: number }> {
-  const res = await ocasionalesFetch('/proveedores-financieros/sincronizar-cheques', { method: 'POST' })
-  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudieron actualizar los cheques')
 export async function fetchOcasionalesResumen(): Promise<OcasionalesResumenResponse> {
   const res = await ocasionalesFetch('/resumen')
   const body = (await res.json().catch(() => null)) as { error?: string } | OcasionalesResumenResponse | null
@@ -620,11 +645,13 @@ export async function clasificarOcasional(
   tipo: TipoOperacionManual,
   datos: DatosOperacionManual,
   aplicarAIguales: boolean,
+  /** Números de los cheques del grupo elegidos a mano; si viene, se aplica solo a esos (y al abierto). */
+  chequesDelGrupo?: string[],
 ): Promise<ClasificarOcasionalResponse> {
   const res = await ocasionalesFetch(`/${encodeURIComponent(id)}/clasificar`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tipo, datos, aplicarAIguales }),
+    body: JSON.stringify({ tipo, datos, aplicarAIguales, chequesDelGrupo }),
   })
   const body = (await res.json().catch(() => null)) as { error?: string } | ClasificarOcasionalResponse | null
   if (!res.ok) {

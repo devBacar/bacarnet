@@ -86,7 +86,7 @@ describe('calcularTableroCobros', () => {
       pendiente({ vientriId: 2, pendienteCentavos: 50_00, fechaVencimiento: '2026-10-01' }), // a vencer
       pendiente({ vientriId: 3, pendienteCentavos: -20_00, fechaVencimiento: '2026-09-01' }), // a favor
     ]
-    const tablero = calcularTableroCobros({ pendientesCobrar: pendientes, cobradas: [], hoy, periodo, moneda: 'ARS' })
+    const tablero = calcularTableroCobros({ pendientesCobrar: pendientes, cobradas: [], hoy, periodo, moneda: 'ARS', sinClasificarHoy: { cantidad: 0, montoCentavos: 0 } })
     expect(tablero.totalACobrarCentavos).toBe(150_00)
     expect(tablero.totalFavorCentavos).toBe(20_00)
     expect(tablero.totalVencidoCentavos).toBe(100_00)
@@ -101,7 +101,7 @@ describe('calcularTableroCobros', () => {
       pendiente({ vientriId: 1, pendienteCentavos: 100_00, persona: { vientriId: 10, nombre: 'Cliente A', cuit: null } }),
       pendiente({ vientriId: 2, pendienteCentavos: 200_00, persona: { vientriId: 20, nombre: 'Cliente B', cuit: null } }),
     ]
-    const tablero = calcularTableroCobros({ pendientesCobrar: pendientes, cobradas: [], hoy, periodo, moneda: 'ARS' })
+    const tablero = calcularTableroCobros({ pendientesCobrar: pendientes, cobradas: [], hoy, periodo, moneda: 'ARS', sinClasificarHoy: { cantidad: 0, montoCentavos: 0 } })
     expect(tablero.clientes).toHaveLength(2)
     expect(tablero.cantidadClientesConDeuda).toBe(2)
   })
@@ -116,6 +116,7 @@ describe('calcularTableroCobros', () => {
       hoy,
       periodo,
       moneda: 'ARS',
+      sinClasificarHoy: { cantidad: 0, montoCentavos: 0 },
     })
     expect(tablero.cobradoEnPeriodoCentavos).toBe(450_00)
     expect(tablero.cantidadFacturasCobradasEnPeriodo).toBe(2)
@@ -128,7 +129,19 @@ describe('calcularTableroCobros', () => {
       pendiente({ vientriId: 2, pendienteCentavos: 50_00, fecha: '2026-07-01' }), // antes del período: afuera
       pendiente({ vientriId: 3, pendienteCentavos: 30_00, fecha: null }), // sin fecha: afuera (no se puede ubicar)
     ]
-    const tablero = calcularTableroCobros({ pendientesCobrar: pendientes, cobradas: [], hoy, periodo, moneda: 'ARS' })
+    const tablero = calcularTableroCobros({ pendientesCobrar: pendientes, cobradas: [], hoy, periodo, moneda: 'ARS', sinClasificarHoy: { cantidad: 0, montoCentavos: 0 } })
     expect(tablero.totalACobrarCentavos).toBe(100_00)
+  })
+
+  it('pasa "sin clasificar hoy" tal cual, para que la pantalla avise que puede faltar información', () => {
+    const tablero = calcularTableroCobros({
+      pendientesCobrar: [],
+      cobradas: [],
+      hoy,
+      periodo,
+      moneda: 'ARS',
+      sinClasificarHoy: { cantidad: 3, montoCentavos: 500_00 },
+    })
+    expect(tablero.sinClasificarHoy).toEqual({ cantidad: 3, montoCentavos: 500_00 })
   })
 })

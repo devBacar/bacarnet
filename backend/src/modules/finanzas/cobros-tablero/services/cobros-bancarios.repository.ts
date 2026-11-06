@@ -84,3 +84,18 @@ export async function listCobrosBancariosEnRango(desde: string, hasta: string): 
   const snap = await col().where('fechaCobro', '>=', desde).where('fechaCobro', '<=', hasta).get()
   return snap.docs.map((d) => d.data() as CobroBancarioDoc)
 }
+
+/**
+ * Créditos de HOY que todavía no se pudieron clasificar como nada (ni cheque, ni transferencia, ni
+ * factura de Vientri) — por falta de CUIT en la contraparte, por no coincidir el monto exacto con
+ * ninguna pendiente, o por no ser un cobro de factura (puede ser un depósito en efectivo, un
+ * intercompany, etc.). No es un error: es la plata que entró hoy y todavía no se sabe de dónde es.
+ * Sirve para que el tablero avise "esto puede estar incompleto" en vez de mostrar un número en falso
+ * como si fuera definitivo.
+ */
+export async function resumenCreditosSinClasificarHoy(hoy: string): Promise<{ cantidad: number; montoCentavos: number }> {
+  const sinReservar = await listCreditosSinReservar(hoy)
+  let montoCentavos = 0
+  for (const { data } of sinReservar) montoCentavos += data.montoCentavos
+  return { cantidad: sinReservar.length, montoCentavos }
+}

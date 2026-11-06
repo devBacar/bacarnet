@@ -69,6 +69,13 @@ export interface TableroCobros {
   cantidadClientesConDeuda: number
   cobradoEnPeriodoCentavos: number
   cantidadFacturasCobradasEnPeriodo: number
+  /**
+   * Créditos bancarios de HOY que todavía no se pudieron clasificar (ni cheque, ni transferencia, ni
+   * factura de Vientri): puede ser falta de CUIT, un monto que no cierra exacto, o algo que no es un
+   * cobro de factura. No está incluido en `cobradoEnPeriodoCentavos`. Se muestra para avisar que el
+   * número de arriba puede estar incompleto, en vez de mostrarlo como si fuera definitivo.
+   */
+  sinClasificarHoy: { cantidad: number; montoCentavos: number }
   /** Clientes con saldo (deuda o favor), ordenados por saldo descendente. */
   clientes: ClienteCobro[]
 }

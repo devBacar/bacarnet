@@ -563,19 +563,6 @@ export function FinanzasChequesPage() {
                   </td>
                   <td className="px-3 py-2">
                     <TipoBadge tipo={ch.tipo} />
-                    {ch.direccion !== 'emitido' && ch.esProveedorFinanciero ? (
-                      <span className="ml-1 inline-block rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200">
-                        Financiero
-                      </span>
-                    ) : null}
-                    {ch.direccion !== 'emitido' && ch.esInteresEncubierto ? (
-                      <span
-                        className="ml-1 inline-block rounded border border-orange-300 bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-900 dark:border-orange-700 dark:bg-orange-900/40 dark:text-orange-200"
-                        title={ch.beneficiarioRealFinanciero ? `Beneficiario real: ${ch.beneficiarioRealFinanciero}` : undefined}
-                      >
-                        Interés encubierto
-                      </span>
-                    ) : null}
                   </td>
                   <td className="px-3 py-2">
                     <CondicionBadge estado={ch.estado} />
@@ -587,16 +574,6 @@ export function FinanzasChequesPage() {
                         <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-neutral-800 px-2 py-1 text-[11px] font-medium text-white shadow-lg group-hover:block dark:bg-zinc-700">
                           Debitado
                         </span>
-                      </span>
-                    ) : null}
-                    {ch.direccion !== 'emitido' && ch.esRenovacion ? (
-                      <span className="ml-1 inline-block rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
-                        Renov.
-                      </span>
-                    ) : null}
-                    {ch.direccion !== 'emitido' && ch.operacionUsd ? (
-                      <span className="ml-1 inline-block rounded border border-green-300 bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-900 dark:border-green-700 dark:bg-green-900/40 dark:text-green-200">
-                        USD
                       </span>
                     ) : null}
                   </td>

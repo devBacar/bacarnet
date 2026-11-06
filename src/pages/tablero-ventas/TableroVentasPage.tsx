@@ -519,7 +519,7 @@ function MapaCalorClientes({ datos, unegocioSel }: { datos: TableroVentas; unego
   return (
     <TarjetaTablero
       titulo="Cliente × unidad de negocio"
-      subtitulo='Top 10 clientes del mes, qué le compran a cada unidad. No incluye "Alquiler de máquinas de recuento": un cliente que solo compre ahí va a aparecer con guiones en todas las columnas, aunque sí facture.'
+      subtitulo='Top 10 clientes del mes, qué le factura cada unidad. No incluye "Alquiler de máquinas de recuento": un cliente que solo facture ahí va a aparecer con guiones en todas las columnas, aunque sí tenga comprobantes.'
     >
       <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-[12px]">
@@ -580,13 +580,13 @@ function ClientesNuevosPerdidos({ datos, unegocioSel }: { datos: TableroVentas; 
   if (nuevos.length === 0 && perdidos.length === 0) return null
   return (
     <TarjetaTablero
-      titulo={filtrando ? `Compras nuevas y sin compra este mes · ${nombreUnidad}` : 'Compras nuevas y sin compra este mes'}
-      subtitulo="Comparado solo contra el mes anterior: no dice si un cliente dejó de serlo, solo si tiene un comprobante cargado en estos dos meses puntuales. Un cliente puede comprar cada 2 o 3 meses y aparecer acá sin haber cambiado nada."
+      titulo={filtrando ? `Facturación nueva y sin facturar este mes · ${nombreUnidad}` : 'Facturación nueva y sin facturar este mes'}
+      subtitulo="Comparado solo contra el mes anterior: no dice si un cliente dejó de serlo, solo si tiene un comprobante cargado en estos dos meses puntuales. Un cliente puede facturar cada 2 o 3 meses y aparecer acá sin haber cambiado nada."
     >
       <div className="grid min-w-0 gap-5 sm:grid-cols-2">
         <div className="min-w-0">
           <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-emerald-700 dark:text-emerald-400">
-            <UserPlus className="h-4 w-4" aria-hidden /> Compraron, no habían comprado el mes anterior ({nuevos.length})
+            <UserPlus className="h-4 w-4" aria-hidden /> Facturaron, no se les había facturado el mes anterior ({nuevos.length})
           </h3>
           {nuevos.length === 0 ? (
             <p className="text-[13px] text-neutral-500 dark:text-gray-500">Nadie entra en este grupo este mes.</p>
@@ -603,7 +603,7 @@ function ClientesNuevosPerdidos({ datos, unegocioSel }: { datos: TableroVentas; 
         </div>
         <div className="min-w-0">
           <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-amber-700 dark:text-amber-400">
-            <UserMinus className="h-4 w-4" aria-hidden /> Compraron el mes anterior, todavía no este mes ({perdidos.length})
+            <UserMinus className="h-4 w-4" aria-hidden /> Se les facturó el mes anterior, todavía no este mes ({perdidos.length})
           </h3>
           {perdidos.length === 0 ? (
             <p className="text-[13px] text-neutral-500 dark:text-gray-500">Nadie entra en este grupo este mes.</p>
@@ -612,7 +612,7 @@ function ClientesNuevosPerdidos({ datos, unegocioSel }: { datos: TableroVentas; 
               {perdidos.map((c) => (
                 <li key={c.vientriId} className="flex min-w-0 items-baseline justify-between gap-2 text-[13px]">
                   <span className="min-w-0 truncate text-neutral-800 dark:text-gray-200">{c.nombre}</span>
-                  <span className="shrink-0 tabular-nums text-neutral-500 dark:text-gray-500">compró {plataCorta(c.centavosMesAnterior)} el mes anterior</span>
+                  <span className="shrink-0 tabular-nums text-neutral-500 dark:text-gray-500">se le facturó {plataCorta(c.centavosMesAnterior)} el mes anterior</span>
                 </li>
               ))}
             </ul>

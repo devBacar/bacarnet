@@ -67,6 +67,7 @@ export function calcularTableroCobros(input: {
   hoy: string
   periodo: { desde: string; hasta: string }
   moneda: string
+  sinClasificarHoy: { cantidad: number; montoCentavos: number }
 }): TableroCobros {
   const saldos = armarSaldosCliente(pendientesEmitidasEnPeriodo(input.pendientesCobrar, input.periodo))
 
@@ -121,6 +122,7 @@ export function calcularTableroCobros(input: {
     cantidadClientesConDeuda: clientes.filter((c) => c.deudaCentavos > 0).length,
     cobradoEnPeriodoCentavos: input.cobradas.reduce((acc, f) => acc + f.importeCobradoCentavos, 0),
     cantidadFacturasCobradasEnPeriodo: input.cobradas.length,
+    sinClasificarHoy: input.sinClasificarHoy,
     clientes,
   }
 }

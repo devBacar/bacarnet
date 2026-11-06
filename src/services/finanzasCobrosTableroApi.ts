@@ -51,6 +51,8 @@ export interface TableroCobros {
   cantidadClientesConDeuda: number
   cobradoEnPeriodoCentavos: number
   cantidadFacturasCobradasEnPeriodo: number
+  /** Créditos de HOY que todavía no se pudieron clasificar (ni cheque, transferencia ni factura). */
+  sinClasificarHoy: { cantidad: number; montoCentavos: number }
   clientes: ClienteCobro[]
 }
 

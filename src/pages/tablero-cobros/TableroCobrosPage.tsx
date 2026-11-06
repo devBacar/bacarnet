@@ -123,6 +123,15 @@ export function TableroCobrosPage() {
             </TarjetaTablero>
           </div>
 
+          {data.sinClasificarHoy.cantidad > 0 ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200">
+              <strong>Ojo:</strong> hoy entraron {data.sinClasificarHoy.cantidad} movimientos bancarios por{' '}
+              {plata(data.sinClasificarHoy.montoCentavos, 'ARS')} que todavía no se pudieron relacionar con ninguna
+              factura (puede faltar el CUIT, o el monto no cierra exacto). Los números de arriba pueden estar
+              incompletos hasta que se concilien o hasta que lo confirme Vientri mañana.
+            </div>
+          ) : null}
+
           <TarjetaTablero titulo="Antigüedad de la deuda vencida" subtitulo={`Al ${fechaCorta(data.hoy)}`}>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {ORDEN_BUCKETS.map((bucket) => (

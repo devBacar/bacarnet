@@ -1,6 +1,7 @@
 import { calcularTableroCobros } from '../domain/calcular.js'
 import type { DetalleCliente, TableroCobros } from '../domain/tipos.js'
 import { cargarCobrosDelPeriodo, cargarPendientesCobrar } from './cobros-tablero.repository.js'
+import { resumenCreditosSinClasificarHoy } from './cobros-bancarios.repository.js'
 import { dateKeyInArgentina } from '../../agenda/domain/vencimiento.alert.js'
 
 export async function obtenerTableroCobros(input: {
@@ -9,9 +10,11 @@ export async function obtenerTableroCobros(input: {
   moneda: 'ARS' | 'USD'
 }): Promise<TableroCobros> {
   const hoy = dateKeyInArgentina(new Date())
-  const [pendientesCobrar, cobradas] = await Promise.all([
+  const [pendientesCobrar, cobradas, sinClasificarHoy] = await Promise.all([
     cargarPendientesCobrar(input.moneda),
     cargarCobrosDelPeriodo({ desde: input.desde, hasta: input.hasta, moneda: input.moneda }),
+    // Los movimientos bancarios que se sincronizan hoy son todos de cuentas en pesos.
+    input.moneda === 'USD' ? Promise.resolve({ cantidad: 0, montoCentavos: 0 }) : resumenCreditosSinClasificarHoy(hoy),
   ])
   return calcularTableroCobros({
     pendientesCobrar,
@@ -19,6 +22,7 @@ export async function obtenerTableroCobros(input: {
     hoy,
     periodo: { desde: input.desde, hasta: input.hasta },
     moneda: input.moneda,
+    sinClasificarHoy,
   })
 }
 

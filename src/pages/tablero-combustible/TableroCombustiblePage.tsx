@@ -40,17 +40,19 @@ function Kpi({ etiqueta, valor, nota, notaColor }: { etiqueta: string; valor: st
   )
 }
 
-function Kpis({ datos }: { datos: TableroCombustible }) {
+function Kpis({ datos, esMesEnCurso }: { datos: TableroCombustible; esMesEnCurso: boolean }) {
   const variacion = datos.variacionPorcentaje
-  const notaVariacion =
-    datos.totalMesAnteriorCentavos > 0
+  const notaVariacion = esMesEnCurso
+    ? 'mes en curso: todavía puede faltar la factura consolidada'
+    : datos.totalMesAnteriorCentavos > 0
       ? variacion == null || variacion === 0
         ? 'igual que el mes anterior'
         : `${variacion > 0 ? '↑' : '↓'} ${textoPct(variacion)} vs. mes anterior`
       : 'sin mes anterior para comparar'
   const interanual = datos.variacionInteranualPorcentaje
-  const notaInteranual =
-    datos.totalMismoMesAnioAnteriorCentavos > 0
+  const notaInteranual = esMesEnCurso
+    ? 'mes en curso: no es comparable todavía'
+    : datos.totalMismoMesAnioAnteriorCentavos > 0
       ? interanual == null || interanual === 0
         ? `igual que ${mesLargo(datos.mesAnioAnterior)}`
         : `${interanual > 0 ? '↑' : '↓'} ${textoPct(interanual)} vs. ${mesLargo(datos.mesAnioAnterior)}`
@@ -61,7 +63,7 @@ function Kpis({ datos }: { datos: TableroCombustible }) {
         etiqueta="Gasto total del mes"
         valor={plata(datos.totalCentavos, 'ARS')}
         nota={notaVariacion}
-        notaColor={variacion == null ? 'neutral' : variacion > 0 ? 'bad' : variacion < 0 ? 'good' : 'neutral'}
+        notaColor={esMesEnCurso ? 'neutral' : variacion == null ? 'neutral' : variacion > 0 ? 'bad' : variacion < 0 ? 'good' : 'neutral'}
       />
       <Kpi
         etiqueta="Vs. mismo mes, año anterior"
@@ -72,6 +74,16 @@ function Kpis({ datos }: { datos: TableroCombustible }) {
       <Kpi etiqueta="Comprobantes del mes" valor={datos.cantidadComprobantes.toLocaleString('es-AR')} />
       <Kpi etiqueta="Promedio por comprobante" valor={plata(datos.ticketPromedioCentavos, 'ARS')} />
     </section>
+  )
+}
+
+function AvisoMesEnCurso() {
+  return (
+    <article className="min-w-0 rounded-xl border border-amber-300 bg-amber-50 p-4 text-[13px] leading-snug text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+      Estás viendo el mes en curso. Los proveedores de combustible suelen facturar consolidado a fin de
+      mes, así que el gasto de acá puede verse mucho más bajo de lo real hasta que cierre el mes
+      (no significa que se gastó menos).
+    </article>
   )
 }
 
@@ -201,7 +213,12 @@ export function TableroCombustiblePage() {
   })
   const datos = tablero.data
   const mesVisible = mes ?? datos?.mes ?? ''
-  const opcionesMes = mesesDesde(datos?.primerMesConDatos ?? '2025-01', mesVisible || new Date().toISOString().slice(0, 7))
+  // Ancla en el mes actual real (no en el elegido): si ancla en el elegido, cada vez que se elige un
+  // mes más viejo la ventana entera se corre para atrás y los meses más nuevos desaparecen del menú.
+  const mesActual = new Date().toISOString().slice(0, 7)
+  const anclaMeses = mesVisible > mesActual ? mesVisible : mesActual
+  const opcionesMes = mesesDesde(datos?.primerMesConDatos ?? '2025-01', anclaMeses)
+  const esMesEnCurso = mesVisible === mesActual
 
   return (
     <div className="mx-auto grid w-full min-w-0 max-w-6xl gap-5 px-4 py-6 sm:px-6">
@@ -241,8 +258,9 @@ export function TableroCombustiblePage() {
 
       {datos ? (
         <div className="grid min-w-0 gap-5">
+          {esMesEnCurso ? <AvisoMesEnCurso /> : null}
           <AvisoSinMovil />
-          <Kpis datos={datos} />
+          <Kpis datos={datos} esMesEnCurso={esMesEnCurso} />
           <Evolucion datos={datos} />
           <ComparativoAnual datos={datos} />
           <div className="grid min-w-0 gap-5 lg:grid-cols-2">

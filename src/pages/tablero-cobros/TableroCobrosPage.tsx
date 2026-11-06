@@ -102,24 +102,31 @@ export function TableroCobrosPage() {
             <TarjetaTablero titulo="Total a cobrar">
               <p className="text-heading text-2xl font-bold tabular-nums">{plata(data.totalACobrarCentavos, data.moneda)}</p>
               <p className="text-body-muted mt-1 text-xs">
-                {data.cantidadClientesConDeuda} clientes · facturado del {fechaCorta(data.periodo.desde)} al {fechaCorta(data.periodo.hasta)}
+                {data.cantidadClientesConDeuda} clientes · de lo facturado del {fechaCorta(data.periodo.desde)} al {fechaCorta(data.periodo.hasta)}, lo que sigue
+                sin cobrarse hoy
               </p>
             </TarjetaTablero>
             <TarjetaTablero titulo="Vencido">
               <p className="text-2xl font-bold tabular-nums text-red-700 dark:text-red-400">
                 {plata(data.totalVencidoCentavos, data.moneda)}
               </p>
-              <p className="text-body-muted mt-1 text-xs">de lo facturado en el período, ya pasó la fecha de vencimiento</p>
+              <p className="text-body-muted mt-1 text-xs">de lo facturado en el período y sigue sin cobrarse, lo que ya venció a hoy ({fechaCorta(data.hoy)})</p>
             </TarjetaTablero>
             <TarjetaTablero titulo="A vencer">
               <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
                 {plata(data.totalAVencerCentavos, data.moneda)}
               </p>
-              <p className="text-body-muted mt-1 text-xs">de lo facturado en el período, todavía no vence</p>
+              <p className="text-body-muted mt-1 text-xs">de lo facturado en el período y sigue sin cobrarse, lo que todavía no vence a hoy ({fechaCorta(data.hoy)})</p>
             </TarjetaTablero>
             <TarjetaTablero titulo={`Cobrado (${fechaCorta(data.periodo.desde)} a ${fechaCorta(data.periodo.hasta)})`}>
               <p className="text-heading text-2xl font-bold tabular-nums">{plata(data.cobradoEnPeriodoCentavos, data.moneda)}</p>
               <p className="text-body-muted mt-1 text-xs">{data.cantidadFacturasCobradasEnPeriodo} cobros registrados</p>
+              {data.cobradoProvisorioCentavos > 0 ? (
+                <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  De eso, {plata(data.cobradoProvisorioCentavos, data.moneda)} todavía es provisorio: se detectó por el movimiento bancario (CUIT + monto),
+                  pero Vientri todavía no lo confirmó. Confirmado: {plata(data.cobradoConfirmadoCentavos, data.moneda)}.
+                </p>
+              ) : null}
             </TarjetaTablero>
           </div>
 

@@ -50,6 +50,10 @@ export interface TableroCobros {
   antiguedad: Record<BucketAntiguedad, number>
   cantidadClientesConDeuda: number
   cobradoEnPeriodoCentavos: number
+  /** De lo cobrado, lo que ya confirmó Vientri (aplicaciones.csv): definitivo. */
+  cobradoConfirmadoCentavos: number
+  /** De lo cobrado, lo que se infirió por matching bancario y todavía no confirmó Vientri: provisorio. */
+  cobradoProvisorioCentavos: number
   cantidadFacturasCobradasEnPeriodo: number
   /** Créditos de HOY que todavía no se pudieron clasificar (ni cheque, transferencia ni factura). */
   sinClasificarHoy: { cantidad: number; montoCentavos: number }

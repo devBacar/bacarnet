@@ -2,7 +2,7 @@ import { Router, type Response } from 'express'
 import { requireFinanzasPermiso, requireViewFinanzas, requireWorkspaceUser } from '../../../auth/middleware.js'
 import { parseMultipartUpload } from '../../../drive/parseMultipartUpload.js'
 import { adminDb } from '../../../../lib/firebase/admin.js'
-import { clavesDeProveedor, listProveedoresFinancierosDocs } from '../../agenda/services/proveedores-financieros.repository.js'
+import { clavesDeProveedor, listProveedoresFinancierosDocs, mapaProveedoresFinancieros } from '../../agenda/services/proveedores-financieros.repository.js'
 import {
   agregarAliasProveedorFinanciero,
   agregarProveedorFinanciero,
@@ -37,6 +37,7 @@ import { analizarInteresVsRenovaciones } from '../domain/analisis-interes-renova
 import { reconstruirCadenas, clasificarCheques, resumirCostoFinanciero } from '../domain/cadena-renovacion.js'
 import { agruparOperacionesRenovacion } from '../domain/operacion-renovacion.js'
 import { armarSeguimiento } from '../domain/seguimiento.js'
+import { agruparOperacionesUsd, resumirUsdPorProveedor } from '../domain/operaciones-usd.js'
 import { MESES_VENTANA, restarMeses } from '../domain/ventana.js'
 import type { FiltroSeguimiento, OperacionPersistida } from '../domain/seguimiento.types.js'
 import { recalcularSeguimiento, VIENTRI_OPERACIONES_RENOVACION } from '../services/recalcular-seguimiento.js'
@@ -124,9 +125,9 @@ finanzasChequesOcasionalesRouter.get('/cadenas', async (_req, res) => {
 
 finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
   try {
-    const pool = await leerCompletos()
+    const [pool, catalogo] = await Promise.all([leerCompletos(), mapaProveedoresFinancieros()])
     const cadenas = reconstruirCadenas(pool)
-    const resumen = resumirCostoFinanciero(cadenas)
+    const resumen = resumirCostoFinanciero(cadenas, catalogo)
 
     // Stats solo de docs reales (no sintéticos)
     const activos = pool.filter((d) => d.vientriId !== 0)
@@ -140,54 +141,10 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
 
     const sumMonto = (arr: ChequeOcasionalDoc[]) => arr.reduce((s, d) => s + d.montoCentavos, 0)
 
-    let totalMontoUsd = 0
-    let sumaPonderadaTc = 0
-    const gruposUsdMap = new Map<
-      string,
-      {
-        beneficiario: string
-        beneficiarioNormalizado: string
-        fechaEmision: string | null
-        montoUsd: number
-        cotizacion: number
-        equivalenteCentavos: number
-        cantidadCheques: number
-        sumaChequesCentavos: number
-        obsComun: string
-        cheques: Array<{ numeroCheque: string; montoCentavos: number; fechaVencimiento: string | null; fechaEmision: string | null }>
-      }
-    >()
-
-    for (const d of usdItems) {
-      if (d.operacionUsd) {
-        const key = `${d.beneficiarioNormalizado}|${d.operacionUsd.montoUsd}|${d.operacionUsd.cotizacion}|${d.fechaEmision ?? ''}`
-        const detalleCheque = { numeroCheque: d.numeroCheque, montoCentavos: d.montoCentavos, fechaVencimiento: d.fechaVencimiento, fechaEmision: d.fechaEmision }
-        const existente = gruposUsdMap.get(key)
-        if (existente) {
-          existente.cantidadCheques += 1
-          existente.sumaChequesCentavos += d.montoCentavos
-          existente.cheques.push(detalleCheque)
-        } else {
-          gruposUsdMap.set(key, {
-            beneficiario: d.beneficiario,
-            beneficiarioNormalizado: d.beneficiarioNormalizado,
-            fechaEmision: d.fechaEmision,
-            montoUsd: d.operacionUsd.montoUsd,
-            cotizacion: d.operacionUsd.cotizacion,
-            equivalenteCentavos: Math.round(d.operacionUsd.montoUsd * d.operacionUsd.cotizacion * 100),
-            cantidadCheques: 1,
-            sumaChequesCentavos: d.montoCentavos,
-            obsComun: d.obsOriginal,
-            cheques: [detalleCheque],
-          })
-          totalMontoUsd += d.operacionUsd.montoUsd
-          sumaPonderadaTc += d.operacionUsd.montoUsd * d.operacionUsd.cotizacion
-        }
-      }
-    }
-    const operacionesUsdAgrupadas = [...gruposUsdMap.values()].sort(
-      (a, b) => b.sumaChequesCentavos - a.sumaChequesCentavos,
-    )
+    const operacionesUsdAgrupadas = agruparOperacionesUsd(usdItems, catalogo)
+    const usdPorProveedor = resumirUsdPorProveedor(operacionesUsdAgrupadas)
+    const totalMontoUsd = operacionesUsdAgrupadas.reduce((s, op) => s + op.montoUsd, 0)
+    const sumaPonderadaTc = operacionesUsdAgrupadas.reduce((s, op) => s + op.montoUsd * op.cotizacion, 0)
     const cotizacionPromedioUsd = totalMontoUsd > 0 ? Math.round(sumaPonderadaTc / totalMontoUsd) : 0
 
     const porMesMap = new Map<string, { mes: string; cantidad: number; montoCentavos: number }>()
@@ -215,6 +172,7 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
       conUsd: usdItems.length,
       operacionesUsdUnicas: operacionesUsdAgrupadas.length,
       operacionesUsdAgrupadas,
+      usdPorProveedor,
       totalMontoUsd,
       cotizacionPromedioUsd,
       porMes,
@@ -402,12 +360,15 @@ function hoyArgentina(): string {
 finanzasChequesOcasionalesRouter.get('/seguimiento', async (req, res) => {
   try {
     const filtro: FiltroSeguimiento = req.query.estado === 'todas' ? 'todas' : 'abiertas'
-    const snap = await adminDb().collection(VIENTRI_OPERACIONES_RENOVACION).get()
+    const [snap, catalogo] = await Promise.all([
+      adminDb().collection(VIENTRI_OPERACIONES_RENOVACION).get(),
+      mapaProveedoresFinancieros(),
+    ])
     const operaciones = snap.docs.map((d) => {
       const { huella, importacionId, actualizadoAt, ...rest } = d.data() as OperacionPersistida & Record<string, unknown>
       return rest as OperacionPersistida
     })
-    res.json(armarSeguimiento(operaciones, hoyArgentina(), filtro))
+    res.json(armarSeguimiento(operaciones, hoyArgentina(), filtro, catalogo))
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] seguimiento', err)
     res.status(500).json({ error: 'No se pudo obtener el seguimiento de renovaciones' })

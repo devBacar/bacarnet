@@ -20,7 +20,8 @@ import {
   recalcularTodoOcasionales,
   type ChequeOcasionalItem,
   type OcasionalesFiltro,
-  type OcasionalesResumenResponse,
+  type OperacionUsdAgrupadaItem,
+  type UsdPorProveedorItem,
 } from '../../../services/finanzasChequesApi'
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
@@ -63,6 +64,7 @@ export function PestanaOcasionales() {
   const [page, setPage] = useState(1)
   const [subvista, setSubvista] = useState<'cheques' | 'renovaciones' | 'seguimiento' | 'usd' | 'operaciones' | 'proveedores'>('cheques')
   const [beneficiarioRenov, setBeneficiarioRenov] = useState('')
+  const [vistaUsd, setVistaUsd] = useState<'general' | 'proveedor'>('general')
   const [detalleId, setDetalleId] = useState<string | null>(null)
   const [mostrarMesesViejos, setMostrarMesesViejos] = useState(false)
   const [precargarRenov, setPrecargarRenov] = useState<PrecargarRenovacion | null>(null)
@@ -129,7 +131,7 @@ export function PestanaOcasionales() {
     cheques: 'Listado de todos los cheques ocasionales importados desde Vientri. Filtrá por estado, buscá por beneficiario o número.',
     renovaciones: 'Operaciones de renovación: qué cheques viejos se cambiaron por nuevos, con qué interés y en qué plazo.',
     seguimiento: 'Cheques pendientes de cobro agrupados por beneficiario. La exposición es la plata que todavía está "en la calle": cheques pendientes o rechazados que aún no se cobraron ni se renovaron. Filtrá por abiertas/todas y navegá la cadena de renovaciones.',
-    usd: 'Operaciones en dólares agrupadas por cotización y beneficiario.',
+    usd: 'Operaciones en dólares, con el nombre del proveedor tal como está en el catálogo. Podés verlas una por una o sumadas por proveedor.',
     operaciones: 'Detalle de cada operación USD individual con su tipo de cambio y montos.',
     proveedores: 'Catálogo de proveedores financieros. Cada uno reúne todas las formas en que aparece escrito su nombre en los cheques; abajo están los nombres que todavía no se asignaron a ninguno.',
   }
@@ -264,6 +266,7 @@ export function PestanaOcasionales() {
 
   if (subvista === 'usd') {
     const ops = resumen?.operacionesUsdAgrupadas ?? []
+    const porProveedor = resumen?.usdPorProveedor ?? []
     return (
       <>
         {subTabs}
@@ -274,18 +277,39 @@ export function PestanaOcasionales() {
                 Operaciones en Dólares agrupadas (detección de fraccionamiento)
               </h3>
               <p className="text-body-muted text-xs">
-                Agrupa cheques del mismo beneficiario, monto USD y cotización pactada para identificar operaciones grandes partidas en varios cheques chicos.
+                Agrupa cheques del mismo proveedor, monto USD y cotización pactada para identificar operaciones grandes partidas en varios cheques chicos.
               </p>
             </div>
-            {resumen?.totalMontoUsd ? (
-              <span className="text-xs font-semibold text-green-700 dark:text-green-400">
-                {ops.length} operaciones reales · US$ {resumen.totalMontoUsd.toLocaleString('es-AR')} (TC prom. $ {(resumen.cotizacionPromedioUsd ?? 0).toLocaleString('es-AR')})
-              </span>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-3">
+              {resumen?.totalMontoUsd ? (
+                <span className="text-xs font-semibold text-green-700 dark:text-green-400">
+                  {ops.length} operaciones reales · US$ {resumen.totalMontoUsd.toLocaleString('es-AR')} (TC prom. $ {(resumen.cotizacionPromedioUsd ?? 0).toLocaleString('es-AR')})
+                </span>
+              ) : null}
+              <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
+                {([
+                  ['general', 'Vista general'],
+                  ['proveedor', 'Por proveedor'],
+                ] as const).map(([val, label]) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setVistaUsd(val)}
+                    className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                      vistaUsd === val ? 'bg-brand-primary text-white shadow-sm' : 'text-body-muted hover:text-heading'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </header>
 
           {ops.length === 0 ? (
             <p className="text-body-muted py-6 text-center text-sm">No hay operaciones en USD registradas.</p>
+          ) : vistaUsd === 'proveedor' ? (
+            <TablaUsdPorProveedor grupos={porProveedor} />
           ) : (
             <TablaUsdAgrupadas ops={ops} />
           )}
@@ -916,9 +940,108 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
   )
 }
 
-type OpUsdAgrupada = NonNullable<OcasionalesResumenResponse['operacionesUsdAgrupadas']>[number]
+function SinAsignarBadge() {
+  return (
+    <span
+      className="ml-1.5 inline-block rounded border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+      title="Este nombre todavía no está asignado a ningún proveedor. Se asigna en la solapa Proveedores financieros."
+    >
+      Sin asignar
+    </span>
+  )
+}
 
-function TablaUsdAgrupadas({ ops }: { ops: OpUsdAgrupada[] }) {
+function TablaUsdPorProveedor({ grupos }: { grupos: UsdPorProveedorItem[] }) {
+  const [expandido, setExpandido] = useState<string | null>(null)
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="min-w-full text-xs">
+        <thead className="border-b border-subtle text-left text-body-muted">
+          <tr>
+            <th className="w-6 px-1 py-2"></th>
+            <th className="px-2.5 py-2">Proveedor</th>
+            <th className="px-2.5 py-2 text-center">Operaciones</th>
+            <th className="px-2.5 py-2 text-center">Cheques</th>
+            <th className="px-2.5 py-2 text-right">Total USD</th>
+            <th className="px-2.5 py-2 text-right">TC promedio</th>
+            <th className="px-2.5 py-2 text-right">Equivalente (USD × TC)</th>
+            <th className="px-2.5 py-2 text-right">Suma cheques ARS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {grupos.map((g) => {
+            const key = g.proveedorId ?? `sin-${g.beneficiario}`
+            const abierto = expandido === key
+            return (
+              <Fragment key={key}>
+                <tr
+                  className="cursor-pointer border-t border-subtle hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
+                  onClick={() => setExpandido(abierto ? null : key)}
+                >
+                  <td className="px-1 py-2 text-center text-body-muted">
+                    {abierto ? <ChevronUp className="inline h-3.5 w-3.5" /> : <ChevronDown className="inline h-3.5 w-3.5" />}
+                  </td>
+                  <td className="px-2.5 py-2">
+                    <span className="font-medium">{g.beneficiario}</span>
+                    {g.proveedorId === null ? <SinAsignarBadge /> : null}
+                  </td>
+                  <td className="px-2.5 py-2 text-center tabular-nums">{g.cantidadOperaciones}</td>
+                  <td className="px-2.5 py-2 text-center tabular-nums">{g.cantidadCheques}</td>
+                  <td className="px-2.5 py-2 text-right font-semibold text-green-700 dark:text-green-400">
+                    US$ {g.totalUsd.toLocaleString('es-AR')}
+                  </td>
+                  <td className="px-2.5 py-2 text-right tabular-nums">$ {g.cotizacionPromedio.toLocaleString('es-AR')}</td>
+                  <td className="px-2.5 py-2 text-right tabular-nums">{formatMoneyCentavos(g.equivalenteCentavos, 'ARS')}</td>
+                  <td className="text-brand-primary px-2.5 py-2 text-right font-semibold tabular-nums">
+                    {formatMoneyCentavos(g.sumaChequesCentavos, 'ARS')}
+                  </td>
+                </tr>
+                {abierto ? (
+                  <tr className="border-t border-dashed border-neutral-200 dark:border-zinc-700">
+                    <td colSpan={8} className="px-2.5 py-2">
+                      <div className="ml-6 rounded-lg border border-neutral-200 bg-neutral-50/80 dark:border-zinc-700 dark:bg-zinc-800/50">
+                        <table className="min-w-full text-xs">
+                          <thead className="text-left text-[11px] text-body-muted">
+                            <tr>
+                              <th className="px-2.5 py-1.5">Emisión</th>
+                              <th className="px-2.5 py-1.5 text-right">Operación USD</th>
+                              <th className="px-2.5 py-1.5 text-right">TC pactado</th>
+                              <th className="px-2.5 py-1.5 text-center">Cheques</th>
+                              <th className="px-2.5 py-1.5 text-right">Suma cheques ARS</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.operaciones.map((op) => (
+                              <tr
+                                key={`${op.montoUsd}-${op.cotizacion}-${op.fechaEmision ?? ''}-${op.cheques[0]?.numeroCheque ?? ''}`}
+                                className="border-t border-neutral-200/60 dark:border-zinc-700/60"
+                              >
+                                <td className="whitespace-nowrap px-2.5 py-1.5">{formatFecha(op.fechaEmision)}</td>
+                                <td className="whitespace-nowrap px-2.5 py-1.5 text-right">US$ {op.montoUsd.toLocaleString('es-AR')}</td>
+                                <td className="whitespace-nowrap px-2.5 py-1.5 text-right tabular-nums">$ {op.cotizacion.toLocaleString('es-AR')}</td>
+                                <td className="whitespace-nowrap px-2.5 py-1.5 text-center tabular-nums">{op.cantidadCheques}</td>
+                                <td className="whitespace-nowrap px-2.5 py-1.5 text-right tabular-nums font-medium">
+                                  {formatMoneyCentavos(op.sumaChequesCentavos, 'ARS')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function TablaUsdAgrupadas({ ops }: { ops: OperacionUsdAgrupadaItem[] }) {
   const [expandida, setExpandida] = useState<string | null>(null)
 
   return (
@@ -939,7 +1062,7 @@ function TablaUsdAgrupadas({ ops }: { ops: OpUsdAgrupada[] }) {
         </thead>
         <tbody>
           {ops.map((op) => {
-            const key = `${op.beneficiarioNormalizado}-${op.montoUsd}-${op.cotizacion}-${op.fechaEmision ?? ''}`
+            const key = `${op.proveedorId ?? op.beneficiarioNormalizado}-${op.montoUsd}-${op.cotizacion}-${op.fechaEmision ?? ''}`
             const diff = op.sumaChequesCentavos - op.equivalenteCentavos
             const abierta = expandida === key
             return (
@@ -953,6 +1076,7 @@ function TablaUsdAgrupadas({ ops }: { ops: OpUsdAgrupada[] }) {
                   </td>
                   <td className="px-2.5 py-2">
                     <span className="font-medium">{op.beneficiario}</span>
+                    {op.proveedorId === null ? <SinAsignarBadge /> : null}
                     {op.obsComun ? (
                       <p className="text-body-muted mt-0.5 max-w-[200px] truncate font-mono text-[11px]" title={op.obsComun}>
                         {op.obsComun}

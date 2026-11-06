@@ -39,8 +39,10 @@ export interface OperacionSeguimientoItem extends OperacionPersistida {
 }
 
 export interface BeneficiarioSeguimiento {
+  /** Nombre del proveedor en el catálogo, o como está escrito si no está cargado. */
   beneficiario: string
   beneficiarioNormalizado: string
+  proveedorId: string | null
   /** Cheques nuevos en estado pendiente + rechazado. */
   posicionesAbiertas: number
   rechazadas: number

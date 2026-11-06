@@ -1,3 +1,4 @@
+import { resolverProveedor, type ProveedorDelCatalogo } from './operaciones-usd.js'
 import type {
   CadenaRenovacion,
   ChequeClasificado,
@@ -202,18 +203,22 @@ export interface ResumenCostoFinanciero {
 }
 
 /**
- * Resume el costo financiero total agrupado por beneficiario.
+ * Resume el costo financiero total agrupado por beneficiario. Con el catálogo, las distintas formas de
+ * escribir un proveedor se suman juntas y se muestran con su nombre del catálogo.
  */
-export function resumirCostoFinanciero(cadenas: CadenaRenovacion[]): ResumenCostoFinanciero {
+export function resumirCostoFinanciero(
+  cadenas: CadenaRenovacion[],
+  catalogo: ReadonlyMap<string, ProveedorDelCatalogo> = new Map(),
+): ResumenCostoFinanciero {
   const porBenef = new Map<string, { beneficiario: string; cadenas: CadenaRenovacion[] }>()
 
   for (const c of cadenas) {
-    const key = c.beneficiarioNormalizado
-    const grupo = porBenef.get(key)
+    const prov = resolverProveedor(c.beneficiario, c.beneficiarioNormalizado, catalogo)
+    const grupo = porBenef.get(prov.clave)
     if (grupo) {
       grupo.cadenas.push(c)
     } else {
-      porBenef.set(key, { beneficiario: c.beneficiario, cadenas: [c] })
+      porBenef.set(prov.clave, { beneficiario: prov.nombre, cadenas: [c] })
     }
   }
 

@@ -718,10 +718,13 @@ function ComparacionMeses({
   )
 }
 
+/** Vientri no maneja compras/ventas en dólares para este circuito: el tablero solo opera en pesos. */
+const MONEDA: MonedaTablero = 'ARS'
+
 export function TableroVentasPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [mes, setMes] = useState<string | null>(searchParams.get('mes'))
-  const [moneda, setMoneda] = useState<MonedaTablero>(searchParams.get('moneda') === 'USD' ? 'USD' : 'ARS')
+  const moneda = MONEDA
   const [unegocioSel, setUnegocioSel] = useState<string>(searchParams.get('unidad') ?? TODAS)
   const [mesComparar, setMesComparar] = useState<string | null>(searchParams.get('comparar'))
   const [busquedaCliente, setBusquedaCliente] = useState('')
@@ -730,12 +733,11 @@ export function TableroVentasPage() {
   useEffect(() => {
     const params = new URLSearchParams()
     if (mes) params.set('mes', mes)
-    if (moneda !== 'ARS') params.set('moneda', moneda)
     if (unegocioSel !== TODAS) params.set('unidad', unegocioSel)
     if (mesComparar) params.set('comparar', mesComparar)
     setSearchParams(params, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mes, moneda, unegocioSel, mesComparar])
+  }, [mes, unegocioSel, mesComparar])
 
   const tablero = useQuery({
     queryKey: ['finanzas-ventas-tablero', mes, moneda],
@@ -812,13 +814,6 @@ export function TableroVentasPage() {
                 {mesLargo(opcion)}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="grid min-w-0 gap-1 text-[13px] font-semibold text-neutral-600 dark:text-gray-400">
-          Moneda
-          <select value={moneda} onChange={(e) => setMoneda(e.target.value === 'USD' ? 'USD' : 'ARS')} className={CLASE_SELECT}>
-            <option value="ARS">Pesos</option>
-            <option value="USD">Dólares</option>
           </select>
         </label>
         {datos && datos.porUnegocio.length > 0 ? (

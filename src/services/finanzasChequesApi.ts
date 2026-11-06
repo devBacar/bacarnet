@@ -704,6 +704,8 @@ export interface OperacionSeguimientoItem extends Omit<OperacionRenovacionItem, 
   operacionesAnterioresIds: string[]
   fechaVtoMax: string | null
   exposicionCentavos: number
+  /** Se armó a mano desde "A revisar". */
+  origenRevisar?: boolean
   estadoOperacion: 'abierta' | 'cerrada'
   ancestrosIds: string[]
 }

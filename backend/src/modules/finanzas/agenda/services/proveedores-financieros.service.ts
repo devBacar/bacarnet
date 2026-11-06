@@ -1,11 +1,14 @@
 import { agendaTimestampToIso } from '../domain/agendaTimestamps.js'
 import { normalizarNombre } from '../domain/normalizar-nombre.js'
+import { aplicarFusion, aplicarRenombre } from '../domain/proveedores-financieros-cambios.js'
 import {
-  borrarProveedorFinancieroDoc,
   clavesDeProveedor,
   crearProveedorFinancieroDoc,
+  darDeBajaProveedorFinancieroDoc,
+  fusionarProveedoresDocs,
   getProveedorFinancieroDoc,
   guardarAliasDoc,
+  guardarNombreDoc,
   listProveedoresFinancierosDocs,
   type ProveedorFinancieroVista,
 } from './proveedores-financieros.repository.js'
@@ -120,8 +123,49 @@ export async function quitarAliasProveedorFinanciero(id: string, aliasRaw: unkno
   return aVista(id, { ...data, alias: nuevos })
 }
 
-export async function quitarProveedorFinanciero(id: string): Promise<void> {
+export async function renombrarProveedorFinanciero(id: string, nombreRaw: unknown): Promise<ProveedorFinancieroVista> {
+  if (typeof nombreRaw !== 'string') throw new ProveedorFinancieroError('Escribí el nombre del proveedor', 400)
+  const nombre = nombreRaw.trim().replace(/\s+/g, ' ')
+  if (!nombre) throw new ProveedorFinancieroError('Escribí el nombre del proveedor', 400)
+  if (nombre.length > 120) throw new ProveedorFinancieroError('El nombre es demasiado largo', 400)
+
+  const data = await getProveedorFinancieroDoc(id)
+  if (!data) throw new ProveedorFinancieroError('Proveedor no encontrado', 404)
+
+  const dueno = await buscarDuenoDeNombre(normalizarNombre(nombre))
+  if (dueno && dueno.id !== id) throw new ProveedorFinancieroError(`Ese nombre ya pertenece a ${dueno.nombre}`, 400)
+
+  const cambios = aplicarRenombre({ nombre: data.nombre, nombreNormalizado: data.nombreNormalizado, alias: data.alias ?? [] }, nombre)
+  await guardarNombreDoc(id, cambios)
+  return aVista(id, { ...data, ...cambios })
+}
+
+/** `quedaId` absorbe a `seVaId`: se lleva todos sus nombres y el otro se da de baja. */
+export async function fusionarProveedoresFinancieros(
+  quedaId: string,
+  seVaIdRaw: unknown,
+  uid: string,
+): Promise<ProveedorFinancieroVista> {
+  if (typeof seVaIdRaw !== 'string' || !seVaIdRaw.trim()) {
+    throw new ProveedorFinancieroError('Elegí el proveedor a juntar', 400)
+  }
+  const seVaId = seVaIdRaw.trim()
+  if (seVaId === quedaId) throw new ProveedorFinancieroError('No se puede juntar un proveedor consigo mismo', 400)
+
+  const [queda, seVa] = await Promise.all([getProveedorFinancieroDoc(quedaId), getProveedorFinancieroDoc(seVaId)])
+  if (!queda || !seVa) throw new ProveedorFinancieroError('Proveedor no encontrado', 404)
+
+  const resultado = aplicarFusion(
+    { nombre: queda.nombre, nombreNormalizado: queda.nombreNormalizado, alias: queda.alias ?? [] },
+    { nombre: seVa.nombre, nombreNormalizado: seVa.nombreNormalizado, alias: seVa.alias ?? [] },
+  )
+  await fusionarProveedoresDocs(quedaId, resultado.alias, seVaId, uid)
+  return aVista(quedaId, { ...queda, alias: resultado.alias })
+}
+
+/** Baja lógica: el proveedor deja de enganchar cheques pero no se borra. */
+export async function quitarProveedorFinanciero(id: string, uid = ''): Promise<void> {
   if (!id?.trim()) throw new ProveedorFinancieroError('Falta el proveedor', 400)
-  const ok = await borrarProveedorFinancieroDoc(id)
+  const ok = await darDeBajaProveedorFinancieroDoc(id, uid)
   if (!ok) throw new ProveedorFinancieroError('Proveedor no encontrado', 404)
 }

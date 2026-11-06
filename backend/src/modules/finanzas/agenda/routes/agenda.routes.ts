@@ -62,7 +62,7 @@ finanzasAgendaRouter.delete(
   requireFinanzasPermiso('finanzas_agenda'),
   async (req, res) => {
     try {
-      await quitarProveedorFinanciero(req.params.id)
+      await quitarProveedorFinanciero(req.params.id, req.authedUser!.uid)
       res.status(204).send()
     } catch (err) {
       if (err instanceof ProveedorFinancieroError) {

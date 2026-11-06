@@ -6,8 +6,10 @@ import { clavesDeProveedor, listProveedoresFinancierosDocs } from '../../agenda/
 import {
   agregarAliasProveedorFinanciero,
   agregarProveedorFinanciero,
+  fusionarProveedoresFinancieros,
   ProveedorFinancieroError,
   quitarAliasProveedorFinanciero,
+  renombrarProveedorFinanciero,
 } from '../../agenda/services/proveedores-financieros.service.js'
 import { esCompraIva } from '../domain/clasificar-ocasional.js'
 import { parsearUsdSuelto } from '../domain/parsear-obs.js'
@@ -331,6 +333,35 @@ finanzasChequesOcasionalesRouter.delete(
       await responderCambioDeProveedores(res, { proveedor })
     } catch (err) {
       manejarErrorProveedor(res, err, 'sacar el nombre alternativo')
+    }
+  },
+)
+
+finanzasChequesOcasionalesRouter.patch(
+  '/proveedores-financieros/:id',
+  requireFinanzasPermiso('finanzas_cheques'),
+  async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>
+      const proveedor = await renombrarProveedorFinanciero(req.params.id, body.nombre)
+      await responderCambioDeProveedores(res, { proveedor })
+    } catch (err) {
+      manejarErrorProveedor(res, err, 'cambiar el nombre del proveedor')
+    }
+  },
+)
+
+/** El proveedor de la URL absorbe al de `seVaId`: se lleva sus nombres y el otro se da de baja. */
+finanzasChequesOcasionalesRouter.post(
+  '/proveedores-financieros/:id/fusionar',
+  requireFinanzasPermiso('finanzas_cheques'),
+  async (req, res) => {
+    try {
+      const body = req.body as Record<string, unknown>
+      const proveedor = await fusionarProveedoresFinancieros(req.params.id, body.seVaId, req.authedUser!.uid)
+      await responderCambioDeProveedores(res, { proveedor })
+    } catch (err) {
+      manejarErrorProveedor(res, err, 'juntar los proveedores')
     }
   },
 )

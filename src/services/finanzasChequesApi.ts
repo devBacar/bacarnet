@@ -523,6 +523,28 @@ export async function quitarAliasProveedor(id: string, alias: string): Promise<{
   return (await res.json()) as { chequesActualizados: number }
 }
 
+/** Cambia el nombre que se muestra; el nombre anterior queda como otra forma de escribirlo. */
+export async function renombrarProveedor(id: string, nombre: string): Promise<{ chequesActualizados: number }> {
+  const res = await ocasionalesFetch(`/proveedores-financieros/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ nombre }),
+  })
+  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo cambiar el nombre')
+  return (await res.json()) as { chequesActualizados: number }
+}
+
+/** `quedaId` se lleva todos los nombres de `seVaId`, que se da de baja. */
+export async function fusionarProveedores(quedaId: string, seVaId: string): Promise<{ chequesActualizados: number }> {
+  const res = await ocasionalesFetch(`/proveedores-financieros/${encodeURIComponent(quedaId)}/fusionar`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ seVaId }),
+  })
+  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudieron juntar los proveedores')
+  return (await res.json()) as { chequesActualizados: number }
+}
+
 export async function fetchChequesOcasionales(params: {
   filtro?: OcasionalesFiltro
   q?: string

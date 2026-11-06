@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, X } from 'lucide-react'
+import { Pencil, Plus, X } from 'lucide-react'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../../context'
@@ -7,7 +7,9 @@ import {
   agregarAliasProveedor,
   crearProveedorCatalogo,
   fetchCatalogoProveedores,
+  fusionarProveedores,
   quitarAliasProveedor,
+  renombrarProveedor,
   type BeneficiarioSinAsignarItem,
   type ProveedorCatalogoItem,
 } from '../../../services/finanzasChequesApi'
@@ -60,7 +62,17 @@ export function ProveedoresFinancierosCatalogo() {
     onSuccess: (r) => refrescar(r.chequesActualizados, 'Nombre sacado'),
     onError: fallo,
   })
-  const ocupado = crear.isPending || agregarAlias.isPending || quitarAlias.isPending
+  const renombrar = useMutation({
+    mutationFn: (v: { id: string; nombre: string }) => renombrarProveedor(v.id, v.nombre),
+    onSuccess: (r) => refrescar(r.chequesActualizados, 'Nombre cambiado'),
+    onError: fallo,
+  })
+  const fusionar = useMutation({
+    mutationFn: (v: { quedaId: string; seVaId: string }) => fusionarProveedores(v.quedaId, v.seVaId),
+    onSuccess: (r) => refrescar(r.chequesActualizados, 'Proveedores juntados'),
+    onError: fallo,
+  })
+  const ocupado = crear.isPending || agregarAlias.isPending || quitarAlias.isPending || renombrar.isPending || fusionar.isPending
 
   if (isLoading) return <p className="text-body-muted text-sm">Cargando proveedores financieros…</p>
   if (isError) {
@@ -137,10 +149,13 @@ export function ProveedoresFinancierosCatalogo() {
               <FilaProveedor
                 key={p.id}
                 proveedor={p}
+                otros={proveedores.filter((o) => o.id !== p.id)}
                 puedeEditar={puedeEditar}
                 ocupado={ocupado}
                 onAgregarAlias={(alias) => agregarAlias.mutate({ id: p.id, alias })}
                 onQuitarAlias={(alias) => quitarAlias.mutate({ id: p.id, alias })}
+                onRenombrar={(nombre) => renombrar.mutate({ id: p.id, nombre })}
+                onFusionar={(seVaId) => fusionar.mutate({ quedaId: p.id, seVaId })}
               />
             ))}
           </ul>
@@ -217,22 +232,103 @@ function FilaSinAsignar({
 
 function FilaProveedor({
   proveedor,
+  otros,
   puedeEditar,
   ocupado,
   onAgregarAlias,
   onQuitarAlias,
+  onRenombrar,
+  onFusionar,
 }: {
   proveedor: ProveedorCatalogoItem
+  otros: ProveedorCatalogoItem[]
   puedeEditar: boolean
   ocupado: boolean
   onAgregarAlias: (alias: string) => void
   onQuitarAlias: (alias: string) => void
+  onRenombrar: (nombre: string) => void
+  onFusionar: (seVaId: string) => void
 }) {
   const [alias, setAlias] = useState('')
+  const [editando, setEditando] = useState(false)
+  const [nombre, setNombre] = useState(proveedor.nombre)
+
+  const guardarNombre = () => {
+    const limpio = nombre.trim()
+    if (limpio && limpio !== proveedor.nombre) onRenombrar(limpio)
+    setEditando(false)
+  }
+
+  const pedirFusion = (seVaId: string) => {
+    const seVa = otros.find((o) => o.id === seVaId)
+    if (!seVa) return
+    const ok = window.confirm(
+      `¿Juntar "${seVa.nombre}" dentro de "${proveedor.nombre}"?\n\n` +
+        `Todos los nombres de "${seVa.nombre}" pasan a "${proveedor.nombre}" y sus cheques quedan con este proveedor. ` +
+        `"${seVa.nombre}" deja de aparecer en la lista.`,
+    )
+    if (ok) onFusionar(seVaId)
+  }
+
   return (
     <li className="py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-heading text-sm font-semibold">{proveedor.nombre}</span>
+        {editando ? (
+          <form
+            className="flex items-center gap-1.5"
+            onSubmit={(e) => {
+              e.preventDefault()
+              guardarNombre()
+            }}
+          >
+            <input
+              className={`${finanzasInputClass} w-64 !py-1 text-sm`}
+              value={nombre}
+              maxLength={120}
+              autoFocus
+              aria-label={`Nuevo nombre para ${proveedor.nombre}`}
+              onChange={(e) => setNombre(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setNombre(proveedor.nombre)
+                  setEditando(false)
+                }
+              }}
+            />
+            <button type="submit" disabled={ocupado || !nombre.trim()} className={botonChico}>
+              Guardar
+            </button>
+            <button
+              type="button"
+              className={botonChico}
+              onClick={() => {
+                setNombre(proveedor.nombre)
+                setEditando(false)
+              }}
+            >
+              Cancelar
+            </button>
+          </form>
+        ) : (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-heading text-sm font-semibold">{proveedor.nombre}</span>
+            {puedeEditar ? (
+              <button
+                type="button"
+                disabled={ocupado}
+                title="Cambiar el nombre del proveedor"
+                aria-label={`Cambiar el nombre de ${proveedor.nombre}`}
+                className="text-neutral-400 hover:text-neutral-700 disabled:opacity-50 dark:hover:text-zinc-200"
+                onClick={() => {
+                  setNombre(proveedor.nombre)
+                  setEditando(true)
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </span>
+        )}
         <span className="text-body-muted text-xs">
           {textoCheques(proveedor.cantidadCheques)} · {formatMoneyCentavos(proveedor.totalCentavos, 'ARS')}
         </span>
@@ -279,6 +375,24 @@ function FilaProveedor({
               <Plus className="h-3.5 w-3.5" />
             </button>
           </form>
+        ) : null}
+        {puedeEditar && otros.length > 0 ? (
+          <select
+            className={`${finanzasInputClass} w-52 !py-1 text-xs`}
+            value=""
+            disabled={ocupado}
+            aria-label={`Juntar otro proveedor dentro de ${proveedor.nombre}`}
+            onChange={(e) => {
+              if (e.target.value) pedirFusion(e.target.value)
+            }}
+          >
+            <option value="">Juntar con otro proveedor…</option>
+            {otros.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.nombre}
+              </option>
+            ))}
+          </select>
         ) : null}
       </div>
     </li>

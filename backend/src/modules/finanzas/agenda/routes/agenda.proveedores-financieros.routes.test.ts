@@ -144,6 +144,6 @@ describe('rutas proveedores financieros', () => {
       headers: { 'x-permisos': EDITOR.join(',') },
     })
     expect(baja.status).toBe(204)
-    expect(quitarProveedorFinanciero).toHaveBeenCalledWith('pf1')
+    expect(quitarProveedorFinanciero).toHaveBeenCalledWith('pf1', 'u1')
   })
 })

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Download, Search, TrendingUp, UserMinus, UserPlus, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { BarraHorizontal, EvolucionMensual, MixMensualPorUnegocio, colorCalor, colorUnegocio, estadoVariacion } from '../../components/tablero-ventas/graficos'
+import { BarraHorizontal, EvolucionMensual, MixMensualPorUnegocio, colorCalor, colorTextoCalor, colorUnegocio, estadoVariacion } from '../../components/tablero-ventas/graficos'
 import { TarjetaTablero } from '../../components/tablero-finanzas/TarjetaTablero'
 import { fechaHora, mesLargo, plata, plataCorta, textoPct } from '../../components/tablero-finanzas/formatoTablero'
 import {
@@ -544,8 +544,8 @@ function MapaCalorClientes({ datos, unegocioSel }: { datos: TableroVentas; unego
                   return (
                     <td
                       key={claveUnegocio(col.idUnegocio)}
-                      className="px-2 py-1.5 text-right tabular-nums text-neutral-900 dark:text-gray-100"
-                      style={{ backgroundColor: valor > 0 ? colorCalor(valor, maximo) : undefined }}
+                      className={`px-2 py-1.5 text-right tabular-nums ${valor > 0 ? '' : 'text-neutral-400 dark:text-gray-500'}`}
+                      style={valor > 0 ? { backgroundColor: colorCalor(valor, maximo), color: colorTextoCalor(valor, maximo) } : undefined}
                     >
                       {valor > 0 ? plataCorta(valor) : '—'}
                     </td>
@@ -744,7 +744,11 @@ export function TableroVentasPage() {
   })
   const datos = tablero.data
   const mesVisible = mes ?? datos?.mes ?? ''
-  const opcionesMes = mesesRecientes(mesVisible || new Date().toISOString().slice(0, 7), 13)
+  // Ancla en el mes actual real (no en el elegido): si ancla en el elegido, cada vez que se elige un
+  // mes más viejo la ventana entera se corre para atrás y los meses más nuevos desaparecen del menú.
+  const mesActual = new Date().toISOString().slice(0, 7)
+  const anclaMeses = mesVisible > mesActual ? mesVisible : mesActual
+  const opcionesMes = mesesRecientes(anclaMeses, 13)
 
   const tableroComparar = useQuery({
     queryKey: ['finanzas-ventas-tablero', mesComparar, moneda],

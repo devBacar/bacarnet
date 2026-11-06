@@ -121,6 +121,8 @@ export function calcularTableroCobros(input: {
     antiguedad,
     cantidadClientesConDeuda: clientes.filter((c) => c.deudaCentavos > 0).length,
     cobradoEnPeriodoCentavos: input.cobradas.reduce((acc, f) => acc + f.importeCobradoCentavos, 0),
+    cobradoConfirmadoCentavos: input.cobradas.filter((f) => f.fuente === 'vientri').reduce((acc, f) => acc + f.importeCobradoCentavos, 0),
+    cobradoProvisorioCentavos: input.cobradas.filter((f) => f.fuente === 'banco').reduce((acc, f) => acc + f.importeCobradoCentavos, 0),
     cantidadFacturasCobradasEnPeriodo: input.cobradas.length,
     sinClasificarHoy: input.sinClasificarHoy,
     clientes,

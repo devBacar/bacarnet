@@ -123,6 +123,23 @@ describe('calcularTableroCobros', () => {
     expect(tablero.totalACobrarCentavos).toBe(0)
   })
 
+  it('separa lo confirmado por Vientri de lo provisorio por matching bancario', () => {
+    const tablero = calcularTableroCobros({
+      pendientesCobrar: [],
+      cobradas: [
+        { clave: 'apl-5', idCmpFactura: 5, comprobante: 'FAA 1', persona: { vientriId: 10, nombre: 'Cliente A' }, fechaCobro: '2026-09-01', importeCobradoCentavos: 300_00, fuente: 'vientri' },
+        { clave: 'banco-6', idCmpFactura: 6, comprobante: 'FAA 2', persona: { vientriId: 10, nombre: 'Cliente A' }, fechaCobro: '2026-09-02', importeCobradoCentavos: 150_00, fuente: 'banco' },
+      ],
+      hoy,
+      periodo,
+      moneda: 'ARS',
+      sinClasificarHoy: { cantidad: 0, montoCentavos: 0 },
+    })
+    expect(tablero.cobradoEnPeriodoCentavos).toBe(450_00)
+    expect(tablero.cobradoConfirmadoCentavos).toBe(300_00)
+    expect(tablero.cobradoProvisorioCentavos).toBe(150_00)
+  })
+
   it('"Total a cobrar/Vencido/A vencer" solo cuentan facturas emitidas dentro del período', () => {
     const pendientes: VientriPendienteDoc[] = [
       pendiente({ vientriId: 1, pendienteCentavos: 100_00, fecha: '2026-08-20' }), // dentro del período

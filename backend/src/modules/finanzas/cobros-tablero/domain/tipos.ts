@@ -67,7 +67,17 @@ export interface TableroCobros {
   /** Antigüedad de la deuda vencida, por bucket. */
   antiguedad: Record<BucketAntiguedad, number>
   cantidadClientesConDeuda: number
+  /** Suma de confirmado + provisorio: ver esos dos campos antes de mostrar este total solo. */
   cobradoEnPeriodoCentavos: number
+  /** De lo cobrado en el período, lo que ya confirmó Vientri (aplicaciones.csv): esto sí es definitivo. */
+  cobradoConfirmadoCentavos: number
+  /**
+   * De lo cobrado en el período, lo que se infirió por matching bancario (CUIT + monto exacto) y
+   * todavía NO confirmó Vientri. Es una inferencia razonable, no una certeza: puede ajustarse cuando
+   * Vientri lo registre. La UI tiene que mostrar este número aparte del confirmado, nunca mezclado
+   * sin aclarar.
+   */
+  cobradoProvisorioCentavos: number
   cantidadFacturasCobradasEnPeriodo: number
   /**
    * Créditos bancarios de HOY que todavía no se pudieron clasificar (ni cheque, ni transferencia, ni

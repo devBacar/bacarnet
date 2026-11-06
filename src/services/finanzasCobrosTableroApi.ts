@@ -34,6 +34,8 @@ export interface FacturaCobrada {
   persona: { vientriId: number; nombre: string } | null
   fechaCobro: string | null
   importeCobradoCentavos: number
+  /** 'banco': todavía no lo confirmó Vientri, se infirió de un crédito bancario (CUIT + monto exacto). */
+  fuente: 'vientri' | 'banco'
 }
 
 export interface TableroCobros {

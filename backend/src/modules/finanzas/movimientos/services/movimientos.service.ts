@@ -35,6 +35,7 @@ import {
 } from '../../contraparte/services/enriquecer-contrapartes.js'
 import { reconciliarTransferenciasConMovimientos } from '../../transferencias/services/reconciliar-movimientos.js'
 import { reconciliarChequesConMovimientos } from '../../cheques/services/reconciliar-cheques-movimientos.js'
+import { reconciliarCobrosConMovimientos } from '../../cobros-tablero/services/reconciliar-cobros-movimientos.js'
 
 const TZ = 'America/Argentina/Buenos_Aires'
 const DIAS_HISTORIA_INICIAL = 90
@@ -78,6 +79,12 @@ export interface MovimientosSyncResult {
     reservasReanudadas: number
   }
   reconciliacionCheques: {
+    revisados: number
+    vinculados: number
+    sinCandidato: number
+    multiples: number
+  }
+  reconciliacionCobros: {
     revisados: number
     vinculados: number
     sinCandidato: number
@@ -315,6 +322,14 @@ async function syncMovimientosConTurno(input: { actorUid: string }): Promise<Mov
     }
   }
 
+  // Corre después de enriquecerContrapartes: necesita el CUIT ya completado para matchear contra Vientri.
+  let reconciliacionCobros = { revisados: 0, vinculados: 0, sinCandidato: 0, multiples: 0 }
+  try {
+    reconciliacionCobros = await reconciliarCobrosConMovimientos()
+  } catch (err) {
+    console.error('[finanzas/movimientos] No se pudieron reconciliar cobros con movimientos', err)
+  }
+
   return {
     hoy: hoyArgentina(now),
     traidos: porCuenta.reduce((acc, c) => acc + c.traidos + c.diaTraidos, 0),
@@ -325,6 +340,7 @@ async function syncMovimientosConTurno(input: { actorUid: string }): Promise<Mov
     cuentas: porCuenta,
     reconciliacion,
     reconciliacionCheques,
+    reconciliacionCobros,
   }
 }
 

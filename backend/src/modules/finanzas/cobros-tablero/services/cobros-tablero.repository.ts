@@ -2,6 +2,7 @@ import { adminDb } from '../../../../lib/firebase/admin.js'
 import { VIENTRI_APLICACIONES, VIENTRI_COMPROBANTES, VIENTRI_PENDIENTES } from '../../vientri/services/vientri.repository.js'
 import type { VientriPendienteDoc } from '../../vientri/domain/tipos.js'
 import type { FacturaCobrada } from '../domain/tipos.js'
+import { listCobrosBancariosEnRango } from './cobros-bancarios.repository.js'
 
 /**
  * ID de divisa en Vientri (tabla DIVISA), igual mapeo confirmado que usa el tablero de Ventas
@@ -65,13 +66,42 @@ export async function cargarAplicacionesCobradas(input: {
     if (idDivisaReal !== idDivisa) continue
     cobradas.push({
       clave: typeof a.clave === 'string' ? a.clave : `apl-${a.vientriId}`,
+      idCmpFactura: Number(a.idCmpFactura),
       comprobante: typeof factura.comprobante === 'string' ? factura.comprobante : String(a.idCmpFactura),
       persona: factura.persona
         ? { vientriId: Number(factura.persona.vientriId), nombre: String(factura.persona.nombre ?? 'Sin nombre') }
         : null,
       fechaCobro: typeof a.fechaCobro === 'string' ? a.fechaCobro : null,
       importeCobradoCentavos: Number(a.importeCentavos) || 0,
+      fuente: 'vientri',
     })
   }
   return cobradas
+}
+
+/**
+ * Combina los cobros reales de Vientri con los provisorios detectados por el banco (ver
+ * reconciliar-cobros-movimientos.ts), sin contar dos veces la misma factura: si Vientri ya confirmó
+ * una factura dentro de este mismo rango, se descarta el provisorio bancario de esa factura (el dato
+ * real gana). Los provisorios solo existen en ARS (los movimientos bancarios que se sincronizan hoy
+ * son todos de cuentas en pesos).
+ */
+export async function cargarCobrosDelPeriodo(input: { desde: string; hasta: string; moneda: string }): Promise<FacturaCobrada[]> {
+  const [reales, provisorios] = await Promise.all([
+    cargarAplicacionesCobradas(input),
+    input.moneda === 'USD' ? Promise.resolve([]) : listCobrosBancariosEnRango(input.desde, input.hasta),
+  ])
+  const facturasYaConfirmadas = new Set(reales.map((f) => f.idCmpFactura))
+  const bancoSinDuplicar: FacturaCobrada[] = provisorios
+    .filter((p) => !facturasYaConfirmadas.has(p.idCmpFactura))
+    .map((p) => ({
+      clave: `banco-${p.movimientoBancarioId}`,
+      idCmpFactura: p.idCmpFactura,
+      comprobante: p.comprobante,
+      persona: p.personaVientriId !== null ? { vientriId: p.personaVientriId, nombre: p.personaNombre } : null,
+      fechaCobro: p.fechaCobro,
+      importeCobradoCentavos: p.montoCentavos,
+      fuente: 'banco' as const,
+    }))
+  return [...reales, ...bancoSinDuplicar]
 }

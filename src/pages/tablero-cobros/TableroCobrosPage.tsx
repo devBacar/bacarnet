@@ -191,7 +191,13 @@ function FilaCliente({
   cargandoDetalle: boolean
   detalle: {
     impagas: ClienteCobro['comprobantes']
-    cobradas: Array<{ clave: string; comprobante: string; fechaCobro: string | null; importeCobradoCentavos: number }>
+    cobradas: Array<{
+      clave: string
+      comprobante: string
+      fechaCobro: string | null
+      importeCobradoCentavos: number
+      fuente: 'vientri' | 'banco'
+    }>
   } | null
 }) {
   return (
@@ -256,6 +262,14 @@ function FilaCliente({
                           <span>
                             {f.comprobante}
                             {f.fechaCobro ? <span className="text-body-muted ml-1 text-xs">{fechaCorta(f.fechaCobro)}</span> : null}
+                            {f.fuente === 'banco' ? (
+                              <span
+                                className="ml-1 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"
+                                title="Detectado por el banco, todavía no lo confirmó Vientri"
+                              >
+                                banco
+                              </span>
+                            ) : null}
                           </span>
                           <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
                             {plata(f.importeCobradoCentavos, moneda)}

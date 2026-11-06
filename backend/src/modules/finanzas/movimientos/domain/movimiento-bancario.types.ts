@@ -57,6 +57,12 @@ export interface MovimientoBancarioDocument {
   reservadoPorChequeId?: string | null
   /** Varios cheques juntos (lote), cuando el banco los compensó en una sola línea. Confirmado a mano. */
   reservadoPorChequeIds?: string[] | null
+  /**
+   * Factura de Vientri que este crédito ya cubrió (match CUIT+monto exacto, ver
+   * finanzas/cobros-tablero/domain/matching-bancario.ts). Provisorio: cuando Vientri trae su propia
+   * `aplicaciones.csv` para esa factura, el tablero de Cobros prioriza ese dato real.
+   */
+  reservadoPorCobroId?: string | null
   /** Categoría libre. Se reaplica si un sync reemplaza el día y la fila reaparece. */
   categoriaId?: string | null
   /** Texto libre del usuario. También se reaplica junto con la categoría. */

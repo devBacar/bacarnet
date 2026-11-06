@@ -38,11 +38,19 @@ export interface ClienteCobro {
  */
 export interface FacturaCobrada {
   clave: string
+  /** Id del comprobante (factura) cancelado, para no contar dos veces el mismo cobro desde dos fuentes. */
+  idCmpFactura: number
   comprobante: string
   persona: { vientriId: number; nombre: string } | null
   fechaCobro: string | null
   /** Lo que se cobró en ESTE pago, no el total de la factura. */
   importeCobradoCentavos: number
+  /**
+   * 'vientri': confirmado por `aplicaciones.csv` (fuente definitiva). 'banco': todavía no llegó la
+   * confirmación de Vientri; se infirió del crédito bancario (CUIT + monto exacto). Provisorio: cuando
+   * Vientri confirma esa misma factura, este registro deja de mostrarse (no se duplica).
+   */
+  fuente: 'vientri' | 'banco'
 }
 
 export interface TableroCobros {

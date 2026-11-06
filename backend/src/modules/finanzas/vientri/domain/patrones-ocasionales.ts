@@ -5,7 +5,7 @@ import type {
   SugerenciaOperacion,
   TipoOperacionManual,
 } from './cheque-ocasional.types.js'
-import { parsearUsdSuelto } from './parsear-obs.js'
+import { expandirBarras, parsearUsdSuelto } from './parsear-obs.js'
 
 /**
  * Aprendizaje de cheques ocasionales: cada vez que Finanzas marca a mano el tipo de operación de un cheque,
@@ -82,12 +82,17 @@ export function chequesDeLaMismaOperacion<T extends ChequeOcasionalDoc>(elegido:
   )
 }
 
-/** Números de cheque que aparecen en el OBS (6 dígitos o más), para proponer qué cheques renueva. */
+/**
+ * Números de cheque que aparecen en el OBS (6 dígitos o más), para proponer qué cheques renueva. Los abreviados
+ * se completan con el número anterior: "39585299/300/1/2" son 39585299, 39585300, 39585301 y 39585302.
+ */
 export function numerosDeChequeEnObs(obs: string): string[] {
   const vistos = new Set<string>()
-  for (const m of obs.matchAll(/\d[\d.]{5,}/g)) {
-    const n = m[0].replace(/\./g, '')
-    if (n.length >= 6) vistos.add(n)
+  for (const m of obs.matchAll(/\d[\d.]{5,}(?:\s*(?:\/|,|\by\b)\s*\d[\d.]*)*/gi)) {
+    const bloque = m[0].replace(/\./g, '')
+    const base = /^\d+/.exec(bloque)![0]
+    if (base.length < 6) continue
+    for (const n of expandirBarras(bloque)) if (n.length >= 6) vistos.add(n)
   }
   return [...vistos]
 }

@@ -26,6 +26,8 @@ export interface OperacionPersistida extends Omit<OperacionRenovacion, 'chequesN
   fechaVtoMax: string | null
   /** Suma de los nuevos en estado pendiente + rechazado. */
   exposicionCentavos: number
+  /** La renovación se armó a mano desde "A revisar" (algún cheque nuevo tiene clasificación manual de renovación). */
+  origenRevisar?: boolean
 }
 
 export type EstadoOperacion = 'abierta' | 'cerrada'

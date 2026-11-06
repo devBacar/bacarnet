@@ -127,6 +127,10 @@ export function derivarSeguimiento(
       .filter((c) => ESTADOS_EN_EXPOSICION.has(c.estado))
       .reduce((s, c) => s + c.montoCentavos, 0)
 
+    const origenRevisar = op.chequesNuevos.some((c) =>
+      clavesDeNumero(c.numeroCheque).some((k) => docPorNumero.get(k)?.clasificacionManual?.tipo === 'renovacion'),
+    )
+
     return {
       ...op,
       id,
@@ -134,6 +138,7 @@ export function derivarSeguimiento(
       operacionesAnterioresIds: [...anteriores].sort(),
       fechaVtoMax,
       exposicionCentavos,
+      origenRevisar,
     }
   })
 

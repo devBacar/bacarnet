@@ -93,6 +93,21 @@ describe('construirSeguimiento', () => {
     expect(ops[0]!.operacionesAnterioresIds).toEqual([])
     expect(ops[0]!.chequesNuevos[0]!.estado).toBe('pendiente')
     expect(ops[0]!.chequesNuevos[0]!.operacionSiguienteId).toBeNull()
+    expect(ops[0]!.origenRevisar).toBe(false)
+  })
+
+  it('renovación armada a mano desde "A revisar" queda marcada', () => {
+    const ops = construirSeguimiento([
+      doc({
+        numeroCheque: num(501),
+        pagado: false,
+        esRenovacion: true,
+        fechaEmision: '2026-05-01',
+        fechaVencimiento: '2026-08-01',
+        clasificacionManual: { tipo: 'renovacion', uid: 'u1', fecha: '2026-11-06T10:00:00.000Z' },
+      }),
+    ])
+    expect(ops[0]!.origenRevisar).toBe(true)
   })
 
   it('cadena A→B→C: cada op apunta solo a la anterior inmediata', () => {

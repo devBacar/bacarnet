@@ -327,6 +327,7 @@ function OperacionPosiciones({
             viene de {op.operacionesAnterioresIds.length === 1 ? 'otra operación' : `${op.operacionesAnterioresIds.length} operaciones`}
           </span>
         ) : null}
+        {op.origenRevisar ? <NotaOrigenRevisar /> : null}
         <span className="text-body-muted ml-auto inline-flex items-center gap-3 text-xs tabular-nums">
           <span>
             Exposición{' '}
@@ -412,6 +413,17 @@ function armarPares(op: OperacionSeguimientoItem): ParCheques[] {
   return pares
 }
 
+function NotaOrigenRevisar() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded border border-sky-300 bg-sky-50 px-2 py-0.5 text-xs text-sky-900 dark:border-sky-700 dark:bg-sky-900/30 dark:text-sky-200"
+      title="Vientri no la marcó como renovación: alguien la armó a mano desde la lista A revisar."
+    >
+      Esta renovación se originó en A revisar
+    </span>
+  )
+}
+
 function CadenaModal({
   op,
   opsPorId,
@@ -481,6 +493,11 @@ function CadenaModal({
               <span className="font-medium">{op.estadoOperacion === 'abierta' ? 'Abierta' : 'Cerrada'}</span>
               {op.diasRenovacion != null ? ` · ${op.diasRenovacion} días` : ''}
             </p>
+            {op.origenRevisar ? (
+              <p className="mt-1">
+                <NotaOrigenRevisar />
+              </p>
+            ) : null}
           </div>
           <button type="button" onClick={onCerrar} className="text-body-muted hover:text-heading px-1 text-xl leading-none">
             ×

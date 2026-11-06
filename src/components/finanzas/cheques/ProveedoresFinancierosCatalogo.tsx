@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, X } from 'lucide-react'
-import { useState } from 'react'
+import { Pencil, Plus, RefreshCw, X } from 'lucide-react'
+import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../../context'
 import {
@@ -10,6 +10,7 @@ import {
   fusionarProveedores,
   quitarAliasProveedor,
   renombrarProveedor,
+  sincronizarChequesProveedores,
   type BeneficiarioSinAsignarItem,
   type ProveedorCatalogoItem,
 } from '../../../services/finanzasChequesApi'
@@ -38,38 +39,67 @@ export function ProveedoresFinancierosCatalogo() {
     enabled: Boolean(user),
   })
 
-  const refrescar = (chequesActualizados: number, mensaje: string) => {
-    toast.success(chequesActualizados > 0 ? `${mensaje} (${textoCheques(chequesActualizados)} actualizados)` : mensaje)
-    void queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques-ocasionales'] })
+  // Actualizar los cheques recorre toda la base: corre aparte para no frenar la pantalla.
+  // Si hay otro cambio mientras corre, se vuelve a correr una sola vez al terminar.
+  const [actualizandoCheques, setActualizandoCheques] = useState(false)
+  const sincronizando = useRef(false)
+  const repetir = useRef(false)
+  const sincronizarEnSegundoPlano = async () => {
+    if (sincronizando.current) {
+      repetir.current = true
+      return
+    }
+    sincronizando.current = true
+    setActualizandoCheques(true)
+    let total = 0
+    try {
+      do {
+        repetir.current = false
+        total += (await sincronizarChequesProveedores()).chequesActualizados
+      } while (repetir.current)
+      if (total > 0) toast.success(`${textoCheques(total)} actualizados con los proveedores nuevos`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudieron actualizar los cheques')
+    } finally {
+      sincronizando.current = false
+      setActualizandoCheques(false)
+      void queryClient.invalidateQueries({ queryKey: ['finanzas', 'cheques-ocasionales'] })
+    }
+  }
+
+  const refrescar = (mensaje: string) => {
+    toast.success(mensaje)
+    void queryClient.invalidateQueries({ queryKey: QUERY_KEY })
+    void sincronizarEnSegundoPlano()
   }
   const fallo = (err: unknown) => toast.error(err instanceof Error ? err.message : 'No se pudo guardar')
 
   const crear = useMutation({
     mutationFn: (nombre: string) => crearProveedorCatalogo(nombre),
-    onSuccess: (r) => {
+    onSuccess: () => {
       setNuevo('')
-      refrescar(r.chequesActualizados, 'Proveedor agregado')
+      refrescar('Proveedor agregado')
     },
     onError: fallo,
   })
   const agregarAlias = useMutation({
     mutationFn: (v: { id: string; alias: string }) => agregarAliasProveedor(v.id, v.alias),
-    onSuccess: (r) => refrescar(r.chequesActualizados, 'Nombre agregado al proveedor'),
+    onSuccess: () => refrescar('Nombre agregado al proveedor'),
     onError: fallo,
   })
   const quitarAlias = useMutation({
     mutationFn: (v: { id: string; alias: string }) => quitarAliasProveedor(v.id, v.alias),
-    onSuccess: (r) => refrescar(r.chequesActualizados, 'Nombre sacado'),
+    onSuccess: () => refrescar('Nombre sacado'),
     onError: fallo,
   })
   const renombrar = useMutation({
     mutationFn: (v: { id: string; nombre: string }) => renombrarProveedor(v.id, v.nombre),
-    onSuccess: (r) => refrescar(r.chequesActualizados, 'Nombre cambiado'),
+    onSuccess: () => refrescar('Nombre cambiado'),
     onError: fallo,
   })
   const fusionar = useMutation({
     mutationFn: (v: { quedaId: string; seVaId: string }) => fusionarProveedores(v.quedaId, v.seVaId),
-    onSuccess: (r) => refrescar(r.chequesActualizados, 'Proveedores juntados'),
+    onSuccess: () => refrescar('Proveedores juntados'),
     onError: fallo,
   })
   const ocupado = crear.isPending || agregarAlias.isPending || quitarAlias.isPending || renombrar.isPending || fusionar.isPending
@@ -88,6 +118,12 @@ export function ProveedoresFinancierosCatalogo() {
 
   return (
     <div className="space-y-6">
+      {actualizandoCheques ? (
+        <p className="text-body-muted flex items-center gap-2 text-xs">
+          <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+          Actualizando los cheques con los cambios de proveedores. Podés seguir trabajando.
+        </p>
+      ) : null}
       <section className="surface-card rounded-2xl border border-neutral-200 p-4 dark:border-zinc-800">
         <h3 className="text-heading text-sm font-semibold">Sin asignar ({sinAsignar.length})</h3>
         <p className="text-body-muted mt-0.5 text-xs">

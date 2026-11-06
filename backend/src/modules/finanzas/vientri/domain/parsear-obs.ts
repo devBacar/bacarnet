@@ -10,7 +10,11 @@ function limpiarNumero(raw: string): number {
   return Number(raw.replace(/\./g, '').replace(',', '.').trim())
 }
 
-function expandirBarras(bloque: string): string[] {
+/**
+ * "39585299/300/1/2" → 39585299, 39585300, 39585301, 39585302: cada parte corta reemplaza las últimas cifras
+ * del número anterior (ya completado).
+ */
+export function expandirBarras(bloque: string): string[] {
   const partes = bloque.replace(/\s*y\s*/gi, '/').replace(/[,\s]+/g, '/').split('/')
   const ids: string[] = []
   let ultimoCompleto = ''
@@ -21,7 +25,9 @@ function expandirBarras(bloque: string): string[] {
       ultimoCompleto = t
       ids.push(t)
     } else if (ultimoCompleto) {
-      ids.push(ultimoCompleto.slice(0, ultimoCompleto.length - t.length) + t)
+      // Se encadena: en "299/300/1" el "1" completa al 300 ya expandido, no al 299.
+      ultimoCompleto = ultimoCompleto.slice(0, ultimoCompleto.length - t.length) + t
+      ids.push(ultimoCompleto)
     } else {
       ids.push(t)
     }

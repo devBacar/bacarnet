@@ -194,7 +194,7 @@ function Kpis({ datos, unegocioSel }: { datos: TableroVentas; unegocioSel: strin
         notaColor={vista.interanualVariacionPorcentaje == null ? 'neutral' : vista.interanualVariacionPorcentaje > 0 ? 'good' : 'bad'}
       />
       <Kpi etiqueta="Comprobantes emitidos" valor={vista.cantidadComprobantes.toLocaleString('es-AR')} />
-      <Kpi etiqueta="Ticket promedio" valor={plata(vista.ticketPromedioCentavos, datos.moneda)} />
+      <Kpi etiqueta="Factura promedio" valor={plata(vista.ticketPromedioCentavos, datos.moneda)} />
       <Kpi
         etiqueta="Clientes facturados"
         valor={vista.cantidadClientes.toLocaleString('es-AR')}
@@ -699,7 +699,7 @@ function ComparacionMeses({
           </thead>
           <tbody>
             <FilaComparacion etiqueta={filtrando ? `Ventas totales · ${nombreUnidad}` : 'Ventas totales'} a={vistaA.totalCentavos} b={vistaB.totalCentavos} moneda={moneda} />
-            <FilaComparacion etiqueta="Ticket promedio" a={vistaA.ticketPromedioCentavos} b={vistaB.ticketPromedioCentavos} moneda={moneda} />
+            <FilaComparacion etiqueta="Factura promedio" a={vistaA.ticketPromedioCentavos} b={vistaB.ticketPromedioCentavos} moneda={moneda} />
             <FilaComparacion
               etiqueta="Comprobantes emitidos"
               a={vistaA.cantidadComprobantes}

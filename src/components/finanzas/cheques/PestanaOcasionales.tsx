@@ -31,6 +31,7 @@ import { PendientesDeRenovar } from './PendientesDeRenovar'
 import { ProveedoresFinancierosCatalogo } from './ProveedoresFinancierosCatalogo'
 import { SeguimientoRenovaciones } from './SeguimientoRenovaciones'
 import { ClasificarOperacionPanel } from './ClasificarOperacionPanel'
+import { InteresSugerido, etiquetaInteresSugerido } from './InteresSugerido'
 import { BotonNuevaOperacionUsd, OperacionesDolares, ModalNuevaOperacion, type PrecargarRenovacion } from './OperacionesDolares'
 
 function formatFecha(iso: string | null): string {
@@ -678,6 +679,14 @@ function OcasionalRow({ ch, onAbrir, onVerRenov }: { ch: ChequeOcasionalItem; on
               A revisar
             </span>
           ) : null}
+          {ch.interesSugerido ? (
+            <span
+              title={ch.revisar.find((r) => r.startsWith('Posible interés')) ?? ''}
+              className="inline-block rounded border border-violet-300 bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200"
+            >
+              {etiquetaInteresSugerido(ch.interesSugerido)}
+            </span>
+          ) : null}
         </div>
       </td>
       <td className="max-w-[200px] truncate px-3 py-2 text-xs text-body-muted" title={ch.obsOriginal}>
@@ -904,6 +913,10 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
                   </div>
                 ) : null}
               </div>
+            ) : null}
+
+            {ch.interesSugerido ? (
+              <InteresSugerido sugerencia={ch.interesSugerido} numeroCheque={ch.numeroCheque} montoCentavos={ch.montoCentavos} />
             ) : null}
 
             {puedeEditarCheques && (ch.revisar.length > 0 || ch.sugerencia) ? (

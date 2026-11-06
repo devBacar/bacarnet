@@ -24,6 +24,8 @@ import {
   reclasificarDoc,
 } from '../domain/clasificar-ocasional.js'
 import { normalizarDocOcasional } from '../domain/normalizar-doc-ocasional.js'
+import { aplicarInteresSugerido, sugerirInteresesSueltos } from '../domain/interes-posicion.js'
+import { resolverProveedor } from '../domain/operaciones-usd.js'
 import { aplicarPatrones } from '../domain/patrones-ocasionales.js'
 import { calcularRenovadoPor } from '../domain/renovado-por.js'
 import { resolverIdsSinEncabezado } from '../domain/resolver-ids-sin-encabezado.js'
@@ -139,7 +141,7 @@ async function leerBase(): Promise<ChequeOcasionalDoc[]> {
   return snap.docs.map((s) => normalizarDocOcasional(s.data() as ChequeOcasionalDoc))
 }
 
-const CAMPOS_DERIVADOS = ['renovadoPor', 'operacionUsd', 'esProveedorFinanciero', 'tipoProveedor', 'proveedorFinancieroId', 'esCompraIva', 'sugerencia', 'revisar'] as const
+const CAMPOS_DERIVADOS = ['renovadoPor', 'operacionUsd', 'esProveedorFinanciero', 'tipoProveedor', 'proveedorFinancieroId', 'esCompraIva', 'sugerencia', 'interesSugerido', 'revisar'] as const
 
 /**
  * Hay campos que no vienen del CSV sino de otros cheques o de la lista de proveedores: `renovadoPor`
@@ -156,16 +158,24 @@ export async function sincronizarDerivadosEnBase(): Promise<number> {
   const docs = snap.docs.map((s) => normalizarDocOcasional(s.data() as ChequeOcasionalDoc))
   const renovadoPor = calcularRenovadoPor(docs)
 
-  const cambios: Array<{ id: string; datos: Pick<ChequeOcasionalDoc, (typeof CAMPOS_DERIVADOS)[number]> }> = []
-  snap.docs.forEach((s, i) => {
+  const actuales = docs.map((base) => ({ ...base, operacionUsd: base.operacionUsd, renovadoPor: [...base.renovadoPor].sort() }))
+  const esperados = actuales.map((actual, i) => {
     // Se relee solo lo que el OBS dice con la palabra USD; nunca se borra un USD ya cargado (por ejemplo a mano).
-    const base = docs[i]!
-    const operacionUsd = base.operacionUsd ?? parsearObs(base.obsOriginal).operacionUsd
-    const actual = { ...base, operacionUsd: base.operacionUsd, renovadoPor: [...base.renovadoPor].sort() }
-    const esperado = aplicarPatrones(
+    const operacionUsd = actual.operacionUsd ?? parsearObs(actual.obsOriginal).operacionUsd
+    return aplicarPatrones(
       reclasificarDoc({ ...actual, operacionUsd, renovadoPor: renovadoPor[i]! }, proveedores),
       patrones,
     )
+  })
+  // El interés suelto se busca sobre la base ya recalculada: necesita saber qué cheques siguen renovados o vivos.
+  const intereses = sugerirInteresesSueltos(esperados, proveedores)
+
+  const cambios: Array<{ id: string; datos: Pick<ChequeOcasionalDoc, (typeof CAMPOS_DERIVADOS)[number]> }> = []
+  snap.docs.forEach((s, i) => {
+    const actual = actuales[i]!
+    const sinInteres = esperados[i]!
+    const nombre = resolverProveedor(sinInteres.beneficiario, sinInteres.beneficiarioNormalizado, proveedores).nombre
+    const esperado = aplicarInteresSugerido(sinInteres, intereses.get(sinInteres) ?? null, nombre)
     const distinto = CAMPOS_DERIVADOS.some((c) => JSON.stringify(actual[c]) !== JSON.stringify(esperado[c]))
     if (!distinto) return
     cambios.push({
@@ -178,6 +188,7 @@ export async function sincronizarDerivadosEnBase(): Promise<number> {
         proveedorFinancieroId: esperado.proveedorFinancieroId,
         esCompraIva: esperado.esCompraIva ?? false,
         sugerencia: esperado.sugerencia ?? null,
+        interesSugerido: esperado.interesSugerido ?? null,
         revisar: esperado.revisar,
       },
     })

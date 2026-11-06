@@ -27,6 +27,7 @@ export function normalizarDocOcasional(d: ChequeOcasionalDoc): ChequeOcasionalDo
     proveedorFinancieroId: d.proveedorFinancieroId ?? null,
     esCompraIva: d.esCompraIva ?? false,
     sugerencia: d.sugerencia ?? null,
+    interesSugerido: d.interesSugerido ?? null,
     clasificacionManual: d.clasificacionManual ?? null,
     fechaConciliado: d.fechaConciliado ?? null,
     vientriChqId: d.vientriChqId ?? null,

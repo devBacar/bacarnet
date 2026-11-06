@@ -628,6 +628,7 @@ finanzasChequesOcasionalesRouter.get('/:id', async (req, res) => {
         rolEnOperacion: cheque.rolEnOperacion ?? null,
         renovacionDe: cheque.renovacionDe?.length ? cheque.renovacionDe : actualEnCompletos.renovacionDe,
         sugerencia: cheque.sugerencia ?? null,
+        interesSugerido: cheque.interesSugerido ?? null,
         clasificacionManual: cheque.clasificacionManual ?? null,
       },
       lecturaObs: {

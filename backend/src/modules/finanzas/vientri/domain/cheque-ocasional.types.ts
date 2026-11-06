@@ -1,3 +1,5 @@
+import type { SugerenciaInteres } from './interes-posicion.js'
+
 export interface RenovacionParseada {
   chequeIds: string[]
 }
@@ -138,6 +140,8 @@ export interface ChequeOcasionalDoc {
   esCompraIva?: boolean
   /** Tipo de operación propuesto por un patrón aprendido; Finanzas lo confirma a mano. Se recalcula en cada sincronización. */
   sugerencia?: SugerenciaOperacion | null
+  /** Sobre qué cheques parece calculado un interés pagado aparte (ver `interes-posicion.ts`). Se recalcula en cada sincronización. */
+  interesSugerido?: SugerenciaInteres | null
   /** Quién marcó a mano el tipo de operación (si lo hizo alguien). */
   clasificacionManual?: { tipo: TipoOperacionManual; uid: string; fecha: string } | null
   vientriId: number

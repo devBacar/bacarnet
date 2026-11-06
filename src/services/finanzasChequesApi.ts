@@ -301,6 +301,30 @@ export interface SugerenciaOperacion {
   confirmaciones: number
 }
 
+export interface OperacionDeLaBaseInteres {
+  fechaEmision: string | null
+  obs: string
+  cantidadCheques: number
+  montoCentavos: number
+}
+
+/**
+ * Sobre qué cheques del proveedor parece calculado un interés pagado aparte. "mismo_vencimiento": % sobre el
+ * capital que vence el mismo día; "mes_vencimiento": % mensual sobre todo lo que vence en `mesBase`.
+ */
+export interface SugerenciaInteres {
+  forma: 'mismo_vencimiento' | 'mes_vencimiento'
+  tasaPorcentaje: number
+  mesBase: string | null
+  chequesPorMes: number | null
+  meses: number | null
+  baseCentavos: number
+  cantidadChequesBase: number
+  operaciones: OperacionDeLaBaseInteres[]
+  porCheque: Array<{ numeroCheque: string; fechaVencimiento: string; baseCentavos: number; operacion: OperacionDeLaBaseInteres }>
+  chequesInteres: string[]
+}
+
 export interface ChequeOcasionalItem {
   numeroCheque: string
   beneficiario: string
@@ -323,6 +347,8 @@ export interface ChequeOcasionalItem {
   esCompraIva?: boolean
   /** Tipo de operación propuesto por lo que Finanzas ya confirmó en cheques con el mismo OBS. */
   sugerencia?: SugerenciaOperacion | null
+  /** Interés pagado aparte: sobre qué cheques parece calculado. Solo una sugerencia. */
+  interesSugerido?: SugerenciaInteres | null
   clasificacionManual?: { tipo: TipoOperacionManual; uid: string; fecha: string } | null
   vientriId: number
   baja: boolean

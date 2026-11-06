@@ -1,0 +1,260 @@
+import type { ChequeOcasionalDoc } from './cheque-ocasional.types.js'
+import type { ProveedorDelCatalogo } from './operaciones-usd.js'
+import { mismoBeneficiario } from './propuesta-renovacion.js'
+import { REVISAR_INTERES_SIN_ORIGEN } from './clasificar-ocasional.js'
+
+/**
+ * Cheques de interés pagados aparte ("Intereses" en el OBS, sin decir de qué cheques vienen). Se busca sobre qué
+ * cheques del mismo proveedor se calculó el interés, probando tasas redondas hasta que el monto dé al peso:
+ *  - mismo vencimiento: cada cheque de interés vence el mismo día que su capital y es un % justo de él
+ *    (ej. 8 % sobre la renovación cuyos cheques vencen ese día);
+ *  - mes de vencimiento: el interés es un % mensual sobre todo lo que el proveedor tiene venciendo en un mes,
+ *    pagado en varios cheques iguales por mes (ej. 6 % mensual sobre lo de enero, 3 cheques por mes).
+ * Es solo una sugerencia para que Finanzas la confirme; no cambia ningún dato de la operación.
+ */
+
+/** Texto de `revisar` que agrega esta regla. Se reconoce por el comienzo para poder recalcularlo. */
+export const REVISAR_INTERES_POSIBLE_PREFIJO = 'Posible interés '
+
+/** Diferencia aceptada entre el monto del cheque y la cuenta (1 peso: los cheques se redondean). */
+const TOLERANCIA_CENTAVOS = 100
+/** Tasas que se prueban, en centésimos de punto: de 0,25 % a 20 % de a 0,25 %. */
+const TASAS_BP = Array.from({ length: 80 }, (_, i) => (i + 1) * 25)
+
+export interface OperacionDeLaBase {
+  fechaEmision: string | null
+  obs: string
+  cantidadCheques: number
+  montoCentavos: number
+}
+
+export interface InteresPorVencimiento {
+  numeroCheque: string
+  fechaVencimiento: string
+  baseCentavos: number
+  operacion: OperacionDeLaBase
+}
+
+export interface SugerenciaInteres {
+  forma: 'mismo_vencimiento' | 'mes_vencimiento'
+  /** 6 = 6 %. En "mes de vencimiento" es mensual; en "mismo vencimiento" es sobre el capital de ese día. */
+  tasaPorcentaje: number
+  /** 'YYYY-MM' del mes cuyos vencimientos son la base (solo "mes de vencimiento"). */
+  mesBase: string | null
+  chequesPorMes: number | null
+  meses: number | null
+  baseCentavos: number
+  cantidadChequesBase: number
+  /** De qué operaciones salen los cheques de la base. */
+  operaciones: OperacionDeLaBase[]
+  /** Solo "mismo vencimiento": la base de cada cheque de interés. */
+  porCheque: InteresPorVencimiento[]
+  /** Números de los cheques de interés del grupo. */
+  chequesInteres: string[]
+}
+
+const coincide = (baseCentavos: number, bp: number, divisor: number, montoCentavos: number) =>
+  Math.abs(Math.round((baseCentavos * bp) / 10_000 / divisor) - montoCentavos) <= TOLERANCIA_CENTAVOS
+
+const claveOperacion = (d: ChequeOcasionalDoc) => `${d.fechaEmision ?? ''}|${d.beneficiarioNormalizado}|${d.obsOriginal.trim()}`
+
+function operacionesDe(cheques: ChequeOcasionalDoc[]): OperacionDeLaBase[] {
+  const por = new Map<string, OperacionDeLaBase>()
+  for (const d of cheques) {
+    const k = claveOperacion(d)
+    const op = por.get(k) ?? { fechaEmision: d.fechaEmision, obs: d.obsOriginal.trim(), cantidadCheques: 0, montoCentavos: 0 }
+    op.cantidadCheques += 1
+    op.montoCentavos += d.montoCentavos
+    por.set(k, op)
+  }
+  return [...por.values()].sort((a, b) => (a.fechaEmision ?? '').localeCompare(b.fechaEmision ?? ''))
+}
+
+const numerosCortos = (lista: string[]) => lista.map((n) => n.split('-').pop() ?? n)
+
+/**
+ * Cheques del proveedor que estaban vivos cuando se emitió el interés: ya emitidos, sin vencer, sin cobrar y
+ * no reemplazados todavía por una renovación. Los de interés no cuentan como base.
+ */
+function chequesVivos(
+  grupo: ChequeOcasionalDoc[],
+  todos: ChequeOcasionalDoc[],
+  catalogo: ReadonlyMap<string, ProveedorDelCatalogo>,
+): ChequeOcasionalDoc[] {
+  const primero = grupo[0]!
+  const emision = primero.fechaEmision!
+  const enGrupo = new Set(grupo)
+  const emisionPorNumero = new Map<string, string | null>()
+  for (const d of todos) emisionPorNumero.set(d.numeroCheque.split('-').pop() ?? d.numeroCheque, d.fechaEmision)
+
+  return todos.filter((d) => {
+    if (enGrupo.has(d) || d.baja || d.montoCentavos <= 0 || d.rolEnOperacion === 'interes') return false
+    if (!d.fechaEmision || !d.fechaVencimiento || d.fechaEmision > emision || d.fechaVencimiento < emision) return false
+    if (d.fechaConciliado && d.fechaConciliado < emision) return false
+    const renovadoAntes = numerosCortos(d.renovadoPor ?? []).some((n) => {
+      const f = emisionPorNumero.get(n)
+      return f != null && f <= emision
+    })
+    if (renovadoAntes) return false
+    return mismoBeneficiario(d, primero, catalogo)
+  })
+}
+
+function porMismoVencimiento(grupo: ChequeOcasionalDoc[], vivos: ChequeOcasionalDoc[]): SugerenciaInteres | null {
+  // Para cada cheque de interés, las bases posibles: lo que vence ese día, o la operación entera que tiene cheques ese día.
+  const candidatas = grupo.map((c) => {
+    const delDia = vivos.filter((d) => d.fechaVencimiento === c.fechaVencimiento)
+    if (delDia.length === 0) return []
+    const bases: ChequeOcasionalDoc[][] = [delDia]
+    for (const k of new Set(delDia.map(claveOperacion))) bases.push(vivos.filter((d) => claveOperacion(d) === k))
+    return bases
+  })
+  if (candidatas.some((b) => b.length === 0)) return null
+
+  for (const bp of TASAS_BP) {
+    const elegidas: ChequeOcasionalDoc[][] = []
+    for (let i = 0; i < grupo.length; i++) {
+      const base = candidatas[i]!.find((b) => coincide(b.reduce((s, d) => s + d.montoCentavos, 0), bp, 1, grupo[i]!.montoCentavos))
+      if (!base) break
+      elegidas.push(base)
+    }
+    if (elegidas.length !== grupo.length) continue
+
+    const todasLasBases = [...new Set(elegidas.flat())]
+    return {
+      forma: 'mismo_vencimiento',
+      tasaPorcentaje: bp / 100,
+      mesBase: null,
+      chequesPorMes: null,
+      meses: null,
+      baseCentavos: todasLasBases.reduce((s, d) => s + d.montoCentavos, 0),
+      cantidadChequesBase: todasLasBases.length,
+      operaciones: operacionesDe(todasLasBases),
+      porCheque: grupo.map((c, i) => ({
+        numeroCheque: c.numeroCheque,
+        fechaVencimiento: c.fechaVencimiento!,
+        baseCentavos: elegidas[i]!.reduce((s, d) => s + d.montoCentavos, 0),
+        operacion: operacionesDe(elegidas[i]!)[0]!,
+      })),
+      chequesInteres: grupo.map((c) => c.numeroCheque),
+    }
+  }
+  return null
+}
+
+/** Días entre vencimientos que todavía cuentan como la misma cuota (29/11, 30/11 y 01/12 son una sola). */
+const DIAS_MISMA_CUOTA = 5
+
+/**
+ * Cuántos cheques tiene cada cuota mensual, según cómo se agrupan los vencimientos. Sin esto el monto no alcanza:
+ * 3 cheques por mes al 6 % dan lo mismo que 1 cheque por mes al 2 %. Null si las cuotas no son parejas.
+ */
+function chequesPorCuota(grupo: ChequeOcasionalDoc[]): number | null {
+  const vtos = grupo.map((c) => Date.parse(`${c.fechaVencimiento}T12:00:00Z`)).sort((a, b) => a - b)
+  const cuotas: number[] = []
+  let anterior = -Infinity
+  for (const v of vtos) {
+    if (v - anterior > DIAS_MISMA_CUOTA * 86_400_000) cuotas.push(0)
+    cuotas[cuotas.length - 1]! += 1
+    anterior = v
+  }
+  return cuotas.every((n) => n === cuotas[0]) ? cuotas[0]! : null
+}
+
+function porMesDeVencimiento(grupo: ChequeOcasionalDoc[], vivos: ChequeOcasionalDoc[]): SugerenciaInteres | null {
+  // Solo cuotas iguales: el mismo interés mensual partido en k cheques por mes.
+  const monto = grupo[0]!.montoCentavos
+  if (grupo.some((c) => c.montoCentavos !== monto)) return null
+  const k = chequesPorCuota(grupo)
+  if (k === null) return null
+
+  const porMes = new Map<string, ChequeOcasionalDoc[]>()
+  for (const d of vivos) {
+    const mes = d.fechaVencimiento!.slice(0, 7)
+    porMes.set(mes, [...(porMes.get(mes) ?? []), d])
+  }
+
+  for (const bp of TASAS_BP) {
+    for (const [mes, base] of [...porMes].sort(([a], [b]) => a.localeCompare(b))) {
+      const total = base.reduce((s, d) => s + d.montoCentavos, 0)
+      if (!coincide(total, bp, k, monto)) continue
+      return {
+        forma: 'mes_vencimiento',
+        tasaPorcentaje: bp / 100,
+        mesBase: mes,
+        chequesPorMes: k,
+        meses: grupo.length / k,
+        baseCentavos: total,
+        cantidadChequesBase: base.length,
+        operaciones: operacionesDe(base),
+        porCheque: [],
+        chequesInteres: grupo.map((c) => c.numeroCheque),
+      }
+    }
+  }
+  return null
+}
+
+/** Busca sobre qué cheques del proveedor se calculó un grupo de cheques de interés (mismo beneficiario, emisión y OBS). */
+export function sugerirInteres(
+  grupo: ChequeOcasionalDoc[],
+  todos: ChequeOcasionalDoc[],
+  catalogo: ReadonlyMap<string, ProveedorDelCatalogo> = new Map(),
+): SugerenciaInteres | null {
+  if (grupo.length === 0 || !grupo[0]!.fechaEmision || grupo.some((c) => !c.fechaVencimiento || c.montoCentavos <= 0)) return null
+  const vivos = chequesVivos(grupo, todos, catalogo)
+  if (vivos.length === 0) return null
+  return porMismoVencimiento(grupo, vivos) ?? porMesDeVencimiento(grupo, vivos)
+}
+
+/**
+ * Sugerencias para todos los cheques que tienen el aviso "Interés sin operación de origen". Devuelve una entrada
+ * por cheque (los del mismo grupo comparten la sugerencia); los que no tienen sugerencia no aparecen.
+ */
+export function sugerirInteresesSueltos(
+  todos: ChequeOcasionalDoc[],
+  catalogo: ReadonlyMap<string, ProveedorDelCatalogo> = new Map(),
+): Map<ChequeOcasionalDoc, SugerenciaInteres> {
+  const grupos = new Map<string, ChequeOcasionalDoc[]>()
+  for (const d of todos) {
+    if (d.baja || !d.fechaEmision || !d.revisar.includes(REVISAR_INTERES_SIN_ORIGEN)) continue
+    const k = claveOperacion(d)
+    grupos.set(k, [...(grupos.get(k) ?? []), d])
+  }
+  const resultado = new Map<ChequeOcasionalDoc, SugerenciaInteres>()
+  for (const grupo of grupos.values()) {
+    const s = sugerirInteres(grupo, todos, catalogo)
+    if (s) for (const d of grupo) resultado.set(d, s)
+  }
+  return resultado
+}
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+const pesos = (c: number) => `$${Math.round(c / 100).toLocaleString('es-AR')}`
+const porcentaje = (p: number) => `${p.toLocaleString('es-AR', { maximumFractionDigits: 2 })}%`
+const fechaCorta = (ymd: string | null) => (ymd ? ymd.split('-').reverse().join('/') : 'sin fecha')
+const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`
+
+/** Texto de `revisar` para un cheque del grupo (en "mismo vencimiento" nombra la base de ese cheque). */
+export function textoInteresSugerido(doc: ChequeOcasionalDoc, s: SugerenciaInteres, nombreProveedor: string): string {
+  if (s.forma === 'mes_vencimiento') {
+    const [anio, mes] = s.mesBase!.split('-')
+    const ops = plural(s.operaciones.length, 'operación', 'operaciones')
+    const cheques = plural(s.cantidadChequesBase, 'cheque', 'cheques')
+    const cuotas = `${plural(s.chequesPorMes!, 'cheque', 'cheques')} por mes`
+    return `${REVISAR_INTERES_POSIBLE_PREFIJO}del ${porcentaje(s.tasaPorcentaje)} mensual sobre los cheques de ${nombreProveedor} que vencen en ${MESES[Number(mes) - 1]} de ${anio} (${pesos(s.baseCentavos)} en ${cheques} de ${ops}), ${cuotas}`
+  }
+  const propio = s.porCheque.find((p) => p.numeroCheque === doc.numeroCheque) ?? s.porCheque[0]!
+  return `${REVISAR_INTERES_POSIBLE_PREFIJO}del ${porcentaje(s.tasaPorcentaje)} sobre ${pesos(propio.baseCentavos)} que vencen el mismo día (operación del ${fechaCorta(propio.operacion.fechaEmision)}${propio.operacion.obs ? `, "${propio.operacion.obs}"` : ''})`
+}
+
+/** Pone o saca la sugerencia de interés en un cheque, conservando los demás avisos. */
+export function aplicarInteresSugerido(
+  doc: ChequeOcasionalDoc,
+  s: SugerenciaInteres | null,
+  nombreProveedor: string,
+): ChequeOcasionalDoc {
+  const propios = doc.revisar.filter((r) => !r.startsWith(REVISAR_INTERES_POSIBLE_PREFIJO))
+  if (!s) return { ...doc, interesSugerido: null, revisar: propios }
+  return { ...doc, interesSugerido: s, revisar: [...propios, textoInteresSugerido(doc, s, nombreProveedor)] }
+}

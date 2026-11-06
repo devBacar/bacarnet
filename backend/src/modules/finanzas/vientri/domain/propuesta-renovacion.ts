@@ -53,7 +53,8 @@ function fechaCorta(ymd: string): string {
   return `${d}/${m}/${y}`
 }
 
-function mismoBeneficiario(
+/** Mismo proveedor del catálogo (los alias cuentan como el mismo); si ninguno está cargado, nombres compatibles. */
+export function mismoBeneficiario(
   a: Pick<ChequeOcasionalDoc, 'beneficiario' | 'beneficiarioNormalizado'>,
   b: Pick<ChequeOcasionalDoc, 'beneficiario' | 'beneficiarioNormalizado'>,
   catalogo: ReadonlyMap<string, ProveedorDelCatalogo>,

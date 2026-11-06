@@ -234,10 +234,12 @@ async function armarCatalogo() {
   return armarCatalogoProveedores(docs, proveedores)
 }
 
-/** Después de tocar nombres o alias, los cheques ya guardados se re-enganchan sin esperar a la próxima importación. */
+/**
+ * Responde enseguida. Los cheques ya guardados se re-enganchan aparte con POST /proveedores-financieros/sincronizar-cheques,
+ * que la pantalla dispara en segundo plano (recorre toda la base y tarda).
+ */
 async function responderCambioDeProveedores(res: Response, extra: Record<string, unknown>) {
-  const chequesActualizados = await sincronizarDerivadosEnBase()
-  res.json({ ...extra, chequesActualizados })
+  res.json(extra)
 }
 
 function manejarErrorProveedor(res: Response, err: unknown, accion: string) {
@@ -259,6 +261,19 @@ finanzasChequesOcasionalesRouter.get('/proveedores-financieros', async (_req, re
 })
 
 finanzasChequesOcasionalesRouter.post('/proveedores-financieros', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+/** Re-engancha los cheques ya guardados con la lista actual de proveedores, sin esperar a la próxima importación. */
+finanzasChequesOcasionalesRouter.post(
+  '/proveedores-financieros/sincronizar-cheques',
+  requireFinanzasPermiso('finanzas_cheques'),
+  async (_req, res) => {
+    try {
+      res.json({ chequesActualizados: await sincronizarDerivadosEnBase() })
+    } catch (err) {
+      manejarErrorProveedor(res, err, 'actualizar los cheques')
+    }
+  },
+)
+
   try {
     const body = req.body as Record<string, unknown>
     const proveedor = await agregarProveedorFinanciero(body.nombre, req.authedUser!.uid)

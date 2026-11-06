@@ -513,7 +513,7 @@ export async function fetchCatalogoProveedores(): Promise<CatalogoProveedoresRes
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
-export async function crearProveedorCatalogo(nombre: string): Promise<{ chequesActualizados: number }> {
+export async function crearProveedorCatalogo(nombre: string): Promise<void> {
   const res = await ocasionalesFetch('/proveedores-financieros', {
     method: 'POST',
     headers: JSON_HEADERS,
@@ -523,45 +523,41 @@ export async function crearProveedorCatalogo(nombre: string): Promise<{ chequesA
   return (await res.json()) as { chequesActualizados: number }
 }
 
-export async function agregarAliasProveedor(id: string, alias: string): Promise<{ chequesActualizados: number }> {
+export async function agregarAliasProveedor(id: string, alias: string): Promise<void> {
   const res = await ocasionalesFetch(`/proveedores-financieros/${encodeURIComponent(id)}/alias`, {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({ alias }),
   })
   if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo agregar el nombre alternativo')
-  return (await res.json()) as { chequesActualizados: number }
 }
 
-export async function quitarAliasProveedor(id: string, alias: string): Promise<{ chequesActualizados: number }> {
+export async function quitarAliasProveedor(id: string, alias: string): Promise<void> {
   const res = await ocasionalesFetch(
     `/proveedores-financieros/${encodeURIComponent(id)}/alias?alias=${encodeURIComponent(alias)}`,
     { method: 'DELETE' },
   )
   if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo sacar el nombre alternativo')
-  return (await res.json()) as { chequesActualizados: number }
 }
 
 /** Cambia el nombre que se muestra; el nombre anterior queda como otra forma de escribirlo. */
-export async function renombrarProveedor(id: string, nombre: string): Promise<{ chequesActualizados: number }> {
+export async function renombrarProveedor(id: string, nombre: string): Promise<void> {
   const res = await ocasionalesFetch(`/proveedores-financieros/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: JSON_HEADERS,
     body: JSON.stringify({ nombre }),
   })
   if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo cambiar el nombre')
-  return (await res.json()) as { chequesActualizados: number }
 }
 
 /** `quedaId` se lleva todos los nombres de `seVaId`, que se da de baja. */
-export async function fusionarProveedores(quedaId: string, seVaId: string): Promise<{ chequesActualizados: number }> {
+export async function fusionarProveedores(quedaId: string, seVaId: string): Promise<void> {
   const res = await ocasionalesFetch(`/proveedores-financieros/${encodeURIComponent(quedaId)}/fusionar`, {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify({ seVaId }),
   })
   if (!res.ok) throw await leerErrorProveedores(res, 'No se pudieron juntar los proveedores')
-  return (await res.json()) as { chequesActualizados: number }
 }
 
 export async function fetchChequesOcasionales(params: {
@@ -586,6 +582,12 @@ export async function fetchChequesOcasionales(params: {
   return body as OcasionalesListResponse
 }
 
+}
+
+/** Re-engancha los cheques ya guardados con la lista actual de proveedores. Recorre toda la base: tarda. */
+export async function sincronizarChequesProveedores(): Promise<{ chequesActualizados: number }> {
+  const res = await ocasionalesFetch('/proveedores-financieros/sincronizar-cheques', { method: 'POST' })
+  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudieron actualizar los cheques')
 export async function fetchOcasionalesResumen(): Promise<OcasionalesResumenResponse> {
   const res = await ocasionalesFetch('/resumen')
   const body = (await res.json().catch(() => null)) as { error?: string } | OcasionalesResumenResponse | null

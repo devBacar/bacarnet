@@ -13,12 +13,24 @@ const AZUL_SECUENCIAL = '#2a78d6'
 /** Rampa secuencial azul (claro→oscuro), del skill de dataviz: para magnitud, nunca para identidad. */
 const RAMPA_SECUENCIAL = ['#f0f6fd', '#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#1c5cab']
 
+function pasoCalor(valor: number, maximo: number): number {
+  if (valor <= 0 || maximo <= 0) return 0
+  const intensidad = Math.min(valor / maximo, 1)
+  return Math.min(Math.floor(intensidad * RAMPA_SECUENCIAL.length), RAMPA_SECUENCIAL.length - 1)
+}
+
 /** Color de fondo de una celda del mapa de calor, según qué tan grande es el valor contra el máximo de la tabla. */
 export function colorCalor(valor: number, maximo: number): string {
-  if (valor <= 0 || maximo <= 0) return RAMPA_SECUENCIAL[0]
-  const intensidad = Math.min(valor / maximo, 1)
-  const paso = Math.min(Math.floor(intensidad * RAMPA_SECUENCIAL.length), RAMPA_SECUENCIAL.length - 1)
-  return RAMPA_SECUENCIAL[paso]
+  return RAMPA_SECUENCIAL[pasoCalor(valor, maximo)]
+}
+
+/**
+ * Color de texto para una celda del mapa de calor: depende de qué tan oscuro es el fondo de ESA
+ * celda (fijo, no cambia con el tema), no del modo claro/oscuro de la página. Si no, en modo oscuro
+ * el texto claro queda invisible sobre las celdas de fondo claro de la rampa.
+ */
+export function colorTextoCalor(valor: number, maximo: number): string {
+  return pasoCalor(valor, maximo) >= 4 ? '#f5f7fa' : '#1c1c1c'
 }
 
 /** Paleta de estado (fija, nunca se reusa para series): good/warning/critical del skill de dataviz. */

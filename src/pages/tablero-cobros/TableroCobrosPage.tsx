@@ -10,8 +10,6 @@ import {
   type MonedaTablero,
 } from '../../services/finanzasCobrosTableroApi'
 
-const CLASE_SELECT =
-  'w-full min-w-0 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-[14px] font-normal text-neutral-900 sm:w-auto dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100'
 const CLASE_INPUT =
   'w-full min-w-0 rounded-md border border-neutral-300 bg-white px-2.5 py-1.5 text-[14px] font-normal text-neutral-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-gray-100'
 
@@ -33,10 +31,13 @@ function hace30diasIso(): string {
   return d.toISOString().slice(0, 10)
 }
 
+/** Vientri Cobros solo trabaja en pesos: los movimientos bancarios que se concilian son todos de cuentas en ARS. */
+const MONEDA: MonedaTablero = 'ARS'
+
 export function TableroCobrosPage() {
   const [desde, setDesde] = useState(hace30diasIso())
   const [hasta, setHasta] = useState(hoyIso())
-  const [moneda, setMoneda] = useState<MonedaTablero>('ARS')
+  const moneda = MONEDA
   const [busqueda, setBusqueda] = useState('')
   const [clienteAbierto, setClienteAbierto] = useState<number | null>(null)
 
@@ -72,13 +73,6 @@ export function TableroCobrosPage() {
         <label className="text-sm">
           <span className="text-body-muted mb-1 block">hasta</span>
           <input type="date" className={CLASE_INPUT} value={hasta} onChange={(e) => setHasta(e.target.value)} />
-        </label>
-        <label className="text-sm">
-          <span className="text-body-muted mb-1 block">Moneda</span>
-          <select className={CLASE_SELECT} value={moneda} onChange={(e) => setMoneda(e.target.value as MonedaTablero)}>
-            <option value="ARS">Pesos</option>
-            <option value="USD">Dólares</option>
-          </select>
         </label>
         <label className="ml-auto text-sm">
           <span className="text-body-muted mb-1 block">Buscar cliente</span>
@@ -178,7 +172,7 @@ export function TableroCobrosPage() {
                   {clientesFiltrados.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="text-body-muted px-4 py-8 text-center">
-                        No hay clientes con movimientos en pesos/dólares con ese filtro.
+                        No hay clientes con movimientos en pesos con ese filtro.
                       </td>
                     </tr>
                   ) : null}

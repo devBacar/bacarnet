@@ -35,7 +35,9 @@
 | **Debitado / acreditado** | El banco ya movió la plata. Emitido → se **debita**; recibido → se **acredita**. |
 | **Conciliar / vincular** | Asociar un cheque con la línea del extracto bancario (`movimientosBancarios`) donde impactó. |
 | **Renovar** | Un cheque que no se puede pagar a tiempo se **reemplaza** por uno nuevo de mayor monto; la diferencia es interés. El viejo queda en estado `renovado`. |
-| **Proveedor financiero** | Persona/empresa que presta plata o cambia dólares y cobra con cheques. En Agenda están en la colección `proveedoresFinancieros`. Un cheque suyo **no es un gasto real**, es una operación financiera. |
+| **Proveedor financiero** | Persona/empresa que presta plata o cambia dólares y cobra con cheques. En Agenda están en la colección `proveedoresFinancieros`, cada uno con su nombre y una lista de **alias** (otras formas en que aparece escrito, ej. "OP X" para "X"). Un cheque suyo **no es un gasto real**, es una operación financiera. **Todos** los ocasionales se tratan como del circuito financiero: ya no existe la categoría "gasto real" en este módulo. |
+| **Compra de IVA** | Ocasional cuyo OBS dice "IVA" como palabra suelta o cuyo beneficiario es uno de los "CONTA" (I, II, III, IIII, IV, 1…). No pide proveedor ni datos financieros. |
+| **Patrón aprendido** | Lo que Finanzas confirmó a mano sobre el formato del OBS de un beneficiario; sirve para **sugerir** (nunca aplicar solo) el mismo tipo de operación en cheques nuevos. |
 | **Interés encubierto** | Cheque cuyo beneficiario real es un proveedor financiero (aunque en Vientri figure como "proveedor" común). |
 | **Operación de renovación** | Bloque N cheques viejos → M cheques nuevos, mismo beneficiario y misma fecha. Es el modelo principal (no la cadena A→B→C). |
 | **Seguimiento / exposición** | Posiciones abiertas con cada beneficiario: cheques nuevos `pendiente` o `rechazado` que todavía hay que cubrir. |
@@ -201,11 +203,25 @@ Concepto: un cheque no se "paga", se **renueva**. Mientras no se carga el nuevo,
 
 > Detalle completo en `backend/src/modules/finanzas/vientri/CHEQUES_OCASIONALES.md`, `PLAN_OPERACIONES_RENOVACION.md` y `RELEVAMIENTO_OCASIONALES.md`. Acá va lo esencial. Algunos nombres de archivo en esos docs ya no coinciden 1:1 con el árbol: verificá con `ls` antes de citarlos.
 
-**Qué es:** BACAR entrega cheques a "proveedores financieros" que prestan plata o cambian dólares. El cheque se **renueva** periódicamente por otro de mayor monto; la diferencia es el interés. Ej.: $5.000.000 → $5.800.000 (interés $800.000) → $6.700.000. En Vientri los beneficiarios figuran como proveedores comunes, por eso hay que **clasificarlos**. La clasificación de proveedores financieros es **manual/asistida, nunca automática** (decisión del usuario: ningún patrón de datos distingue de forma confiable los tipos de circuito).
+**Qué es:** BACAR entrega cheques a "proveedores financieros" que prestan plata o cambian dólares. El cheque se **renueva** periódicamente por otro de mayor monto; la diferencia es el interés. Ej.: $5.000.000 → $5.800.000 (interés $800.000) → $6.700.000. En Vientri los beneficiarios figuran como proveedores comunes. **Todos los ocasionales son del circuito financiero**; lo que hay que decidir es *qué tipo de operación* es cada uno (dólares, renovación, interés/capital, compra de IVA). Esa decisión es **manual/asistida, nunca automática** (decisión del usuario: ningún patrón de datos distingue de forma confiable los tipos de circuito): el sistema solo **sugiere** y una persona confirma.
 
 **Parseo del campo OBS** (`parsear-obs.ts`): detecta renovaciones (`Renovacion cheque n° 123`, `cheques 44001234/35/36`, `Renovacion` sola) y operaciones USD (`u$70.000 TC1565`, `usd 70.000 TC 1540`). En montos, el punto es separador de miles.
 
-**Importación:** `importarChequesOcasionales` → colección `vientriChequesOcasionales`. Dos vías: automática desde el zip de Vientri, o CSV manual (`POST /api/finanzas/cheques-ocasionales/importar` o `node backend/scripts/vientri-cheques-ocasionales-importar.mjs --archivo ... [--simular|--prod]`). **`--prod` requiere OK del usuario.** Contra emulador usar `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` y `GCLOUD_PROJECT=bacar-web`.
+**Importación:** `importarChequesOcasionales` → colección `vientriChequesOcasionales`. Dos vías: automática desde el zip de Vientri, o CSV manual (`POST /api/finanzas/cheques-ocasionales/importar` o `node backend/scripts/vientri-cheques-ocasionales-importar.mjs --archivo ... [--simular|--prod] [--desde ...]`). **`--prod` requiere OK del usuario.** Contra emulador usar `FIRESTORE_EMULATOR_HOST=127.0.0.1:8080` y `GCLOUD_PROJECT=bacar-web`. Reglas de la importación:
+- **Nunca borra.** Los cheques nuevos se agregan completos; en los que ya estaban solo se actualizan los **campos vivos** (`CAMPOS_VIVOS_OCASIONALES`: `pagado, estado, estadoCodigo, fechaConciliado, baja`; ver `campos-vivos.ts`). Lo marcado a mano no se pisa.
+- Usa la **ventana de 12 meses** también en la carga manual y en el script.
+- **No crea proveedores solo**: devuelve la lista de beneficiarios que faltan cargar (`proveedoresSinCargar`).
+- El CSV de CHQOCA **sin encabezado** no trae `vientri_id`: se engancha por número con el cheque ya guardado (conserva estado, fecha de conciliación y baja); los que no estén guardados se informan y no se cargan (`resolver-ids-sin-encabezado.ts`).
+- Después recalcula, **sobre toda la base** (`sincronizarDerivadosEnBase`, `CAMPOS_DERIVADOS`): `renovadoPor` (link inverso, `renovado-por.ts`), `operacionUsd`, `esProveedorFinanciero`, `tipoProveedor`, `proveedorFinancieroId`, `esCompraIva`, `sugerencia` y `revisar`. Si falla el guardado, la importación cierra con `ok: false` y responde 500; si falla solo el seguimiento, queda en `seguimientoError`.
+- Docs guardados por versiones viejas se completan con valores vacíos al leerlos (`normalizar-doc-ocasional.ts`), porque Firestore no acepta `undefined`.
+
+**Avisos en `revisar`** (texto visible, no bloquea): *Proveedor no cargado en Proveedores financieros* · *Sin datos de operación financiera (renovación, USD, tasa o interés)* · *Interés sin operación de origen* · *Sugerencia: …* · *Fuera de lo habitual…* (cotización fuera del rango aprendido ±10 %, desde 3 confirmaciones). **Ojo:** esos textos no pueden contener la palabra "imposible": las pantallas descartan los cheques cuyo `revisar` la incluya (fecha imposible). Constantes en `clasificar-ocasional.ts` y `patrones-ocasionales.ts`.
+
+**Catálogo de proveedores financieros con alias** (`catalogo-proveedores.ts`, rutas `/proveedores-financieros`): cada proveedor reúne todas las formas de su nombre; el sistema engancha por nombre o alias normalizado (`mapaProveedoresFinancieros` es la fuente única). Un nombre no puede ser alias de dos proveedores. Hay además una lista de **beneficiarios sin asignar** con sugerencias por similitud de nombre. Al cambiar nombres o alias se recalculan los avisos.
+
+**Clasificación manual que aprende** (`POST /:id/clasificar`, `clasificar-ocasional.ts`, `patrones-ocasionales.ts`): desde el detalle del cheque Finanzas marca tipo `usd | renovacion | rol` (rol = capital/interés/mixto). Por defecto se aplica también a las cuotas de la **misma operación** (mismo beneficiario + misma emisión + mismo OBS) que todavía no tengan ese dato (`aplicarAIguales: false` lo evita). Se guarda `clasificacionManual {tipo, uid, fecha}` y un **patrón** por beneficiario + forma del OBS (los números cuentan como `#`: "65000 TC1435" y "30000 TC1440" son la misma forma). Los patrones sirven para proponer (`sugerencia`) y avisar valores raros, **nunca para aplicar solo**. Después recalcula todo.
+
+**Emitidos incluye los ocasionales** (`cheques/services/ocasionales-en-cheques.ts`): el listado y los totales de Emitidos (y de la pestaña Todos) leen los ocasionales desde `vientriChequesOcasionales` (id `oca:<id>`, siempre físicos) y **sacan las copias** que Vientri deja en `cheques` (las `oca-…` y la copia eCheq gemela) para no sumar dos veces. El estado del ocasional se deriva: código 13 → `rechazado`; código 5 o `renovadoPor` → `renovado`; `pagado` → `debitado`; si no `pendiente`. Se ignoran los dados de baja, con fecha imposible o sin número/vencimiento/monto.
 
 **Modelo principal: operación de renovación** (`operacion-renovacion.ts`, `agruparOperacionesRenovacion`). Agrupa por `beneficiarioNormalizado + fechaEmision + banco`. Cómo vincula viejos con nuevos:
 1. **Explícito**: el OBS del nuevo lista los IDs de los viejos.
@@ -220,7 +236,11 @@ Concepto: un cheque no se "paga", se **renueva**. Mientras no se carga el nuevo,
 
 **Estados CHQOCA (`id_estado`):** 0 en cartera · 1 depositado · 2 vendido · 3 rechazado · 4 entregado · 5 **renovado** · 6 pendiente débito · 7 debitado · 9 anulado.
 
-**Endpoints** (`/api/finanzas/cheques-ocasionales`): `GET /` (filtro `financiero|gasto_real|con_renovacion|con_usd`, `q`, `page`) · `/cadenas` · `/resumen` · `/operaciones-renovacion` · `/seguimiento?estado=abiertas|todas` · `/analisis-emitidos` · `/analisis-interes` · `/:id` · `POST /importar` · `POST /seguimiento/recalcular` · `POST /completos/recalcular`.
+**Endpoints** (`/api/finanzas/cheques-ocasionales`): `GET /` (filtro `revisar|con_renovacion|con_usd|compra_iva`, `q`, `page`) · `/cadenas` · `/resumen` · `/operaciones-renovacion` · `/seguimiento?estado=abiertas|todas` · `/analisis-emitidos` · `/analisis-interes` · `/proveedores-financieros` (GET catálogo, POST alta) · `POST|DELETE /proveedores-financieros/:id/alias` · `POST /:id/clasificar` · `/:id` · `POST /importar` · `POST /recalcular-todo` · `POST /seguimiento/recalcular` · `POST /completos/recalcular`. Las escrituras exigen `finanzas_cheques`. Ya **no existen** los filtros `financiero` ni `gasto_real`.
+
+**Vínculo de renovaciones:** primero se vinculan todas las **explícitas** (reservan sus viejos) y recién después las **implícitas**; así el resultado no depende del orden de los docs ni duplica un cheque viejo en dos operaciones.
+
+**Scripts de apoyo** (`backend/scripts/`, simulan por defecto; probar siempre en emulador): `vientri-cheques-ocasionales-reclasificar.mjs` (recalcula clasificación sobre lo ya guardado; `--aplicar` para escribir solo esos cuatro campos; requiere `npm run build` en backend) · `vientri-cheques-ocasionales-duplicados-baja.mjs` (baja lógica `baja:true`+`bajaMotivo` de copias viejas con id = número de cheque; nunca borra) · `vientri-cheque-linea-tiempo.mjs` y `vientri-analisis-intereses-ocasionales.mjs` (solo lectura sobre CSV) · `scripts/copiar-prod-a-emulador.mjs` (copia colecciones de prod al emulador; **solo lee prod**; usar `--simular` primero, idealmente con una service account de solo lectura).
 
 **Pendiente (de los docs):** sync de ocasionales de proveedores financieros con la Agenda como origen `ocasionales`; pantalla de resumen ejecutivo del costo financiero.
 
@@ -269,9 +289,9 @@ Conciliar lote: `POST /api/finanzas/movimientos/:id/conciliar-lote`. Vientri (so
 ## 11. Frontend
 
 - **Ruta:** `/finanzas/cheques` → `src/pages/finanzas/ChequesPage.tsx` (~1270 líneas, componente `FinanzasChequesPage`, título "Chequera Virtual"). Nav en `finanzasNavConfig.ts`.
-- **Pestañas:** Recibidos · Emitidos · **Ocasionales**. Sub-filtro por tipo (Todos/eCheq/Físicos). Filtros: origen, estado, vinculación con banco, comprobante, rango de vencimiento (por defecto el mes actual, recordado en `sessionStorage`), **monto desde/hasta**, buscador con debounce de 400 ms.
+- **Pestañas:** **Todos** (nueva, por defecto) · Recibidos · Emitidos · **Ocasionales**. En Todos/Emitidos el "Neto" es recibidos − emitidos y los avisos de proveedor financiero, renovación y USD no se muestran. Sub-filtro por tipo (Todos/eCheq/Físicos). Filtros: origen, estado, vinculación con banco, comprobante, rango de vencimiento (por defecto el mes actual, recordado en `sessionStorage`), **monto desde/hasta**, buscador con debounce de 400 ms.
 - **Acciones de escritura** (visibles solo con permiso `cheques` en `usePermisosFinanzas`): "Ingresar cheques" (pegar TSV), "Importar Excel", cambio de estado.
-- **Ocasionales** → `PestanaOcasionales.tsx` con sub-vistas: `OperacionesRenovacion.tsx`, `SeguimientoRenovaciones.tsx`, `PendientesDeRenovar.tsx`, `CadenasRenovacion.tsx`, `OperacionesDolares.tsx`.
+- **Ocasionales** → `PestanaOcasionales.tsx` con sub-vistas: `OperacionesRenovacion.tsx`, `SeguimientoRenovaciones.tsx`, `PendientesDeRenovar.tsx`, `CadenasRenovacion.tsx`, `OperacionesDolares.tsx`, y la sub-solapa nueva **Proveedores financieros** (`ProveedoresFinancierosCatalogo.tsx`: catálogo, alias y beneficiarios sin asignar). Filtros de la lista: A revisar, Compra de IVA, con renovación, con USD. Botón **Recalcular todo** (solo con permiso `cheques`): rehace avisos, dólares leídos del OBS, renovaciones y seguimiento sin importar un CSV. En el detalle de un cheque a revisar o con sugerencia aparece `ClasificarOperacionPanel.tsx` (clasificación manual, ver §7).
 - **Contrato con el back:** `src/services/finanzasChequesApi.ts` (tipos espejo + `fetch*`). Mantener sincronizado con los tipos de `cheques.repository.ts` (`ChequeListadoItem`).
 - **Guía de recorrido:** `src/components/finanzas/recorrido/guias/cheques.ts`.
 - **Pago con cheque en Hoy:** `src/components/finanzas/hoy/pagoConCheque.ts` **debe coincidir** con `backend/.../hoy/domain/pago-con-cheque.ts`.
@@ -288,14 +308,15 @@ backend/src/modules/finanzas/
 │   ├── routes/        cheques.routes.ts
 │   └── services/      cheques.repository (Firestore, 1077 l.) · cheques.service (listado + import Excel legado) ·
 │                      sincronizar-desde-vientri · reconciliar-cheques-movimientos · conciliar-lote-cheques ·
-│                      ocasionales-vinculo.repository
+│                      ocasionales-vinculo.repository · ocasionales-en-cheques (Emitidos unificado)
 ├── contraparte/domain/fuente-cheque.ts     matching cheque↔movimiento (claseMovimientoCheque, chequesCandidatos)
 ├── hoy/domain/cheques-hoy.ts, pago-con-cheque.ts   + hoy/services/hoy.acciones.ts (endoso / cheque propio)
 ├── movimientos/routes/movimientos.routes.ts        conciliar-lote
 └── vientri/
     ├── CHEQUES_OCASIONALES.md · PLAN_OPERACIONES_RENOVACION.md · RELEVAMIENTO_OCASIONALES.md
     ├── domain/        cheques (armarCheques) · tipos · ventana · agenda-cheques · cheques-renovados ·
-    │                  clasificar-cheque-proveedor · cheque-ocasional.types · parsear-obs · operacion-renovacion ·
+    │                  clasificar-cheque-proveedor · clasificar-ocasional · patrones-ocasionales · catalogo-proveedores ·
+    │                  normalizar-doc-ocasional · renovado-por · campos-vivos · cheque-ocasional.types · parsear-obs · operacion-renovacion ·
     │                  seguimiento(.types) · cadena-renovacion (deprec.) · operacion-dolares(.types) · analisis-*
     ├── routes/        vientri · cheques-ocasionales · operaciones-dolares
     └── services/      importar-vientri · traer-desde-drive · importar-cheques-ocasionales · recalcular-seguimiento ·
@@ -322,7 +343,10 @@ Tests: `npm run test:finanzas`. Específicos: `npx vitest run backend/src/module
 5. **El mismo cheque puede existir dos veces** (físico + eCheq): ver gemelos. Cualquier conteo/suma debe considerarlo.
 6. **Cheques ocasionales conciliables llevan id `oca:<id>`** y viven en otra colección; las funciones de vínculo despachan por prefijo (`vincularCualquiera`).
 7. **Ventana de 12 meses:** cheques más viejos no se importan; no es un bug que falten.
-8. **El filtro de listado combina query Firestore + filtros en memoria** (`vinculacion`, `comprobante`, `q`, `interesEncubierto`, monto). Con más filtros en memoria la paginación puede ser costosa; ojo con colecciones grandes.
+8. **El filtro de listado combina query Firestore + filtros en memoria** (`vinculacion`, `comprobante`, `q`, `interesEncubierto`, monto). Con más filtros en memoria la paginación puede ser costosa; ojo con colecciones grandes. **Y desde que Emitidos incluye ocasionales, cualquier listado/total con `direccion` distinta de `recibido` (Todos y Emitidos) carga en memoria `cheques` filtrados + TODA `vientriChequesOcasionales`** (`cargarListadoUnificado`), ordena y pagina a mano. Es correcto pero costoso: no lo copies para otras pantallas sin medir.
+    - **Cualquier suma de emitidos debe pasar por el listado unificado**; sumar solo `cheques` duplica o pierde ocasionales.
+    - **Doc de ocasional duplicado:** versiones viejas del importador guardaron algunos con el número de cheque como id (sin prefijo `oca-`) y sin estado. El detalle y el script de bajas los manejan; no asumas que `id = oca-<vientri_id>` siempre.
+    - **`revisar` es un campo de avisos que se reescribe** en cada recálculo: no guardes ahí datos que quieras conservar.
 9. **`ChequeDocument` no declara los campos de ocasionales**, aunque la API y la UI sí los usan.
 10. **Montos del filtro** llegan en **pesos** por query string y se convierten a centavos en el backend.
 11. **Fechas imposibles** en Vientri (ej. año 2206) se marcan en `revisar`; no se corrigen solas.
@@ -331,7 +355,7 @@ Tests: `npm run test:finanzas`. Específicos: `npx vitest run backend/src/module
 
 ## 14. Estado actual y pendientes conocidos
 
-- Hecho: sync Vientri→cheques, conciliación por número/monto con gemelos y ocasionales, conciliación de lotes con confirmación, renovación manual (individual y batch), operaciones USD/renovación en pesos, seguimiento de renovaciones, cola de pendientes, filtro por monto, integración con Agenda y Hoy.
+- Hecho: sync Vientri→cheques, conciliación por número/monto con gemelos y ocasionales, conciliación de lotes con confirmación, renovación manual (individual y batch), operaciones USD/renovación en pesos, seguimiento de renovaciones, cola de pendientes, filtro por monto, integración con Agenda y Hoy; (nov 2026) ocasionales unificados en Emitidos/Todos sin duplicar, todos los ocasionales financieros con catálogo de proveedores y alias, clasificación manual con aprendizaje de patrones, compra de IVA, importación que nunca borra, vínculo explícito-primero de renovaciones, scripts de reclasificación y bajas de duplicados, índices de `movimientosBancarios` por `tipo+fechaProceso(+montoCentavos)` en `firestore.indexes.json`.
 - Pendiente (documentado): sync de ocasionales con Agenda (origen `ocasionales`), resumen ejecutivo del costo financiero, importación automática completa de la copia Vientri para ocasionales, "Renovar" desde Hoy para cheques que no vencen hoy, ventana de 30 días en la conciliación (propuesta), sueldos como "día pesado" (depende de `rrhh/salario/`, no está mergeado).
 - Abierto: ticket #2307 — ~$1.090M de movimientos bancarios sin conciliar contra ningún compromiso (sin investigar).
 - Revisión pendiente en Finanzas: ~99 cheques de Banco Córdoba sin débito.

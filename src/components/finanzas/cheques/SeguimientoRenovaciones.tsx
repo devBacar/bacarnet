@@ -241,9 +241,9 @@ export function SeguimientoRenovaciones() {
         <CadenaModal
           op={opActual}
           opsPorId={opsPorId}
-          puedeVolver={pila.length > 1}
+          camino={pila}
           onIr={(id) => setPila((p) => [...p, id])}
-          onVolver={() => setPila((p) => p.slice(0, -1))}
+          onSaltar={(i) => setPila((p) => p.slice(0, i + 1))}
           onCerrar={() => setPila([])}
         />
       ) : null}
@@ -415,19 +415,26 @@ function armarPares(op: OperacionSeguimientoItem): ParCheques[] {
 function CadenaModal({
   op,
   opsPorId,
-  puedeVolver,
+  camino,
   onIr,
-  onVolver,
+  onSaltar,
   onCerrar,
 }: {
   op: OperacionSeguimientoItem
   opsPorId: Map<string, OperacionSeguimientoItem>
-  puedeVolver: boolean
+  /** Operaciones abiertas en orden; la última es `op`. */
+  camino: string[]
   onIr: (opId: string) => void
-  onVolver: () => void
+  /** Vuelve a la operación en esa posición del camino. */
+  onSaltar: (indice: number) => void
   onCerrar: () => void
 }) {
   const pares = useMemo(() => armarPares(op), [op])
+  const etiquetaDe = (id: string) => {
+    const o = opsPorId.get(id)
+    return o ? etiquetaOp(o) : id
+  }
+  const anteriorId = camino.length > 1 ? camino[camino.length - 2] : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCerrar}>
@@ -435,18 +442,39 @@ function CadenaModal({
         className="surface-card max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
+        {anteriorId ? (
+          <nav className="mb-4 rounded-lg border border-neutral-200 bg-neutral-50/80 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800/40">
+            <button
+              type="button"
+              onClick={() => onSaltar(camino.length - 2)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-sm font-medium text-heading hover:bg-neutral-100 dark:border-zinc-600 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Volver a {etiquetaDe(anteriorId)}
+            </button>
+            <div className="mt-2 flex flex-wrap items-center gap-1 text-xs">
+              <span className="text-body-muted">Recorrido:</span>
+              {camino.map((id, i) => {
+                const esActual = i === camino.length - 1
+                return (
+                  <span key={`${id}-${i}`} className="inline-flex items-center gap-1">
+                    {i > 0 ? <span className="text-body-muted">›</span> : null}
+                    {esActual ? (
+                      <span className="font-semibold text-heading">{etiquetaDe(id)}</span>
+                    ) : (
+                      <button type="button" onClick={() => onSaltar(i)} className="text-brand-primary underline">
+                        {etiquetaDe(id)}
+                      </button>
+                    )}
+                  </span>
+                )
+              })}
+            </div>
+          </nav>
+        ) : null}
+
         <header className="mb-4 flex items-start justify-between gap-4">
           <div>
-            {puedeVolver ? (
-              <button
-                type="button"
-                onClick={onVolver}
-                className="text-brand-primary mb-1 inline-flex items-center gap-1 text-xs underline"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Volver
-              </button>
-            ) : null}
             <h2 className="text-heading text-lg font-semibold">{etiquetaOp(op)}</h2>
             <p className="text-body-muted text-sm">
               {op.beneficiario || '—'} ·{' '}

@@ -233,6 +233,33 @@ describe('armarSeguimiento', () => {
     expect(claudia.exposicionCentavos).toBe(200_000_00)
   })
 
+  it('con el catálogo, junta las formas de escribir un proveedor y lo muestra con su nombre', () => {
+    const gonzales = doc({ numeroCheque: num(80), beneficiario: 'GONZALES FABIAN', beneficiarioNormalizado: 'gonzales fabian', esRenovacion: true, fechaEmision: '2026-05-01', fechaVencimiento: '2026-08-01' })
+    const gonzalez = doc({ numeroCheque: num(90), beneficiario: 'GONZALEZ F', beneficiarioNormalizado: 'gonzalez f', esRenovacion: true, fechaEmision: '2026-06-01', fechaVencimiento: '2026-09-01' })
+    const catalogo = new Map([
+      ['gonzales fabian', { id: 'provfin-gonzalez', nombre: 'GONZALEZ FABIAN' }],
+      ['gonzalez f', { id: 'provfin-gonzalez', nombre: 'GONZALEZ FABIAN' }],
+    ])
+
+    const r = armarSeguimiento(construirSeguimiento([gonzales, gonzalez]), '2026-07-01', 'abiertas', catalogo)
+    expect(r.beneficiarios).toHaveLength(1)
+    expect(r.beneficiarios[0]!.beneficiario).toBe('GONZALEZ FABIAN')
+    expect(r.beneficiarios[0]!.proveedorId).toBe('provfin-gonzalez')
+    expect(r.beneficiarios[0]!.operaciones).toHaveLength(2)
+  })
+
+  it('dos proveedores distintos del catálogo no se juntan aunque los nombres se parezcan', () => {
+    const a = doc({ numeroCheque: num(110), beneficiario: 'CLAUDIA PEREZ', beneficiarioNormalizado: 'claudia perez', esRenovacion: true, fechaEmision: '2026-05-01', fechaVencimiento: '2026-08-01' })
+    const b = doc({ numeroCheque: num(120), beneficiario: 'CLAUDIA RUIZ', beneficiarioNormalizado: 'claudia ruiz', esRenovacion: true, fechaEmision: '2026-06-01', fechaVencimiento: '2026-09-01' })
+    const catalogo = new Map([
+      ['claudia perez', { id: 'provfin-perez', nombre: 'CLAUDIA PEREZ' }],
+      ['claudia ruiz', { id: 'provfin-ruiz', nombre: 'CLAUDIA RUIZ' }],
+    ])
+
+    const r = armarSeguimiento(construirSeguimiento([a, b]), '2026-07-01', 'abiertas', catalogo)
+    expect(r.beneficiarios).toHaveLength(2)
+  })
+
   it('KPIs: vencidos, por vencer y concentración', () => {
     const docs = [
       doc({ numeroCheque: num(100), esRenovacion: true, fechaEmision: '2026-05-01', fechaVencimiento: '2026-06-01', beneficiario: 'ALFA', beneficiarioNormalizado: 'alfa', montoCentavos: 500_000_00 }),

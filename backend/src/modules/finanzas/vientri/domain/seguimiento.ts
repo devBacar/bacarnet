@@ -1,5 +1,6 @@
 import type { ChequeOcasionalDoc, OperacionRenovacion } from './cheque-ocasional.types.js'
 import { agruparOperacionesRenovacion, beneficiariosCompatibles } from './operacion-renovacion.js'
+import { resolverProveedor, type ProveedorDelCatalogo } from './operaciones-usd.js'
 import type {
   BeneficiarioSeguimiento,
   ChequeConEstado,
@@ -184,13 +185,14 @@ function ancestrosTransitivos(op: OperacionPersistida, porId: Map<string, Operac
 
 /**
  * Arma la respuesta del seguimiento a partir de las operaciones persistidas:
- * calcula abierta/cerrada con `hoy` (YYYY-MM-DD), filtra, agrupa por beneficiario compatible
- * (HNA CLAUDIA + HERMANA CLAUDIA) y resuelve los ancestros de cada operación.
+ * calcula abierta/cerrada con `hoy` (YYYY-MM-DD), filtra, agrupa y resuelve los ancestros de cada operación.
+ * Agrupa por proveedor del catálogo; lo que no está cargado, por beneficiario compatible (HNA CLAUDIA + HERMANA CLAUDIA).
  */
 export function armarSeguimiento(
   operaciones: OperacionPersistida[],
   hoy: string,
   filtro: FiltroSeguimiento,
+  catalogo: ReadonlyMap<string, ProveedorDelCatalogo> = new Map(),
 ): SeguimientoResponse {
   const porId = new Map(operaciones.map((o) => [o.id, o]))
   const items: OperacionSeguimientoItem[] = operaciones.map((op) => ({
@@ -208,11 +210,17 @@ export function armarSeguimiento(
     (a, b) => (b.fechaEmision ?? '').localeCompare(a.fechaEmision ?? '') || a.id.localeCompare(b.id),
   )
   for (const op of ordenadas) {
-    let grupo = grupos.find((g) => beneficiariosCompatibles(g.beneficiarioNormalizado, op.beneficiarioNormalizado))
+    const prov = resolverProveedor(op.beneficiario, op.beneficiarioNormalizado, catalogo)
+    let grupo = grupos.find((g) =>
+      prov.proveedorId !== null
+        ? g.proveedorId === prov.proveedorId
+        : g.proveedorId === null && beneficiariosCompatibles(g.beneficiarioNormalizado, op.beneficiarioNormalizado),
+    )
     if (!grupo) {
       grupo = {
-        beneficiario: op.beneficiario,
+        beneficiario: prov.nombre,
         beneficiarioNormalizado: op.beneficiarioNormalizado,
+        proveedorId: prov.proveedorId,
         posicionesAbiertas: 0,
         rechazadas: 0,
         exposicionCentavos: 0,

@@ -338,6 +338,34 @@ export interface OcasionalesListResponse {
   pages: number
 }
 
+/** Una operación en dólares partida en uno o más cheques. `beneficiario` es el nombre del catálogo si está cargado. */
+export interface OperacionUsdAgrupadaItem {
+  beneficiario: string
+  beneficiarioNormalizado: string
+  /** null: el nombre todavía no está asignado a ningún proveedor del catálogo. */
+  proveedorId: string | null
+  fechaEmision: string | null
+  montoUsd: number
+  cotizacion: number
+  equivalenteCentavos: number
+  cantidadCheques: number
+  sumaChequesCentavos: number
+  obsComun: string
+  cheques: Array<{ numeroCheque: string; montoCentavos: number; fechaVencimiento: string | null; fechaEmision: string | null }>
+}
+
+export interface UsdPorProveedorItem {
+  beneficiario: string
+  proveedorId: string | null
+  cantidadOperaciones: number
+  cantidadCheques: number
+  totalUsd: number
+  cotizacionPromedio: number
+  equivalenteCentavos: number
+  sumaChequesCentavos: number
+  operaciones: OperacionUsdAgrupadaItem[]
+}
+
 export interface OcasionalesResumenResponse {
   totalCheques: number
   totalMontoCentavos?: number
@@ -349,18 +377,9 @@ export interface OcasionalesResumenResponse {
   conRenovacion: number
   conUsd: number
   operacionesUsdUnicas?: number
-  operacionesUsdAgrupadas?: Array<{
-    beneficiario: string
-    beneficiarioNormalizado: string
-    fechaEmision: string | null
-    montoUsd: number
-    cotizacion: number
-    equivalenteCentavos: number
-    cantidadCheques: number
-    sumaChequesCentavos: number
-    obsComun: string
-    cheques: Array<{ numeroCheque: string; montoCentavos: number; fechaVencimiento: string | null; fechaEmision: string | null }>
-  }>
+  operacionesUsdAgrupadas?: OperacionUsdAgrupadaItem[]
+  /** Las mismas operaciones sumadas por proveedor del catálogo. */
+  usdPorProveedor?: UsdPorProveedorItem[]
   totalMontoUsd?: number
   cotizacionPromedioUsd?: number
   porMes?: Array<{
@@ -690,8 +709,10 @@ export interface OperacionSeguimientoItem extends Omit<OperacionRenovacionItem, 
 }
 
 export interface BeneficiarioSeguimientoItem {
+  /** Nombre del proveedor en el catálogo, o como está escrito si no está cargado. */
   beneficiario: string
   beneficiarioNormalizado: string
+  proveedorId: string | null
   posicionesAbiertas: number
   rechazadas: number
   exposicionCentavos: number

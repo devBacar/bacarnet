@@ -1,7 +1,7 @@
 import type { ChequeOcasionalDoc } from './cheque-ocasional.types.js'
 import type { ProveedorDelCatalogo } from './operaciones-usd.js'
 import { mismoBeneficiario } from './propuesta-renovacion.js'
-import { REVISAR_INTERES_SIN_ORIGEN } from './clasificar-ocasional.js'
+import { REVISAR_INTERES_SIN_ORIGEN, REVISAR_SIN_DATOS_FINANCIEROS } from './clasificar-ocasional.js'
 
 /**
  * Cheques de interés pagados aparte ("Intereses" en el OBS, sin decir de qué cheques vienen). Se busca sobre qué
@@ -246,6 +246,91 @@ export function textoInteresSugerido(doc: ChequeOcasionalDoc, s: SugerenciaInter
   }
   const propio = s.porCheque.find((p) => p.numeroCheque === doc.numeroCheque) ?? s.porCheque[0]!
   return `${REVISAR_INTERES_POSIBLE_PREFIJO}del ${porcentaje(s.tasaPorcentaje)} sobre ${pesos(propio.baseCentavos)} que vencen el mismo día (operación del ${fechaCorta(propio.operacion.fechaEmision)}${propio.operacion.obs ? `, "${propio.operacion.obs}"` : ''})`
+}
+
+/**
+ * Diferencias de interés: un cheque sin datos (por ejemplo "DIFERENCIA") que es un % chico y justo de la misma base
+ * sobre la que ya se calculó un interés del proveedor (ej. el 1 % de lo que vence en enero, 10 días después del 6 %
+ * mensual sobre ese mismo enero). Solo se busca contra bases ya usadas por un interés: probado contra todos los meses
+ * del proveedor, un cheque común coincide por casualidad con demasiada frecuencia.
+ */
+
+/** Texto de `revisar` que agrega esta regla. Reemplaza a "Sin datos de operación financiera". */
+export const REVISAR_DIFERENCIA_POSIBLE_PREFIJO = 'Posible diferencia de interés: '
+
+/** Tasas que se prueban para una diferencia, en centésimos de punto: de 0,25 % a 3 % de a 0,25 %. */
+const TASAS_DIFERENCIA_BP = Array.from({ length: 12 }, (_, i) => (i + 1) * 25)
+/** Días después del interés en los que todavía puede llegar la diferencia. */
+const DIAS_MAX_DIFERENCIA = 60
+/** Una base múltiplo de $1.000 se considera redonda y no se usa para diferencias. */
+const BASE_REDONDA_CENTAVOS = 1_000_00
+
+export interface SugerenciaDiferencia {
+  tasaPorcentaje: number
+  /** La sugerencia de interés de la que sale la base. */
+  interes: SugerenciaInteres
+  /** 'YYYY-MM-DD' de emisión de los cheques de interés. */
+  fechaEmisionInteres: string
+}
+
+const diasEntre = (desde: string, hasta: string) =>
+  Math.round((Date.parse(`${hasta}T12:00:00Z`) - Date.parse(`${desde}T12:00:00Z`)) / 86_400_000)
+
+/**
+ * Busca diferencias de interés entre los cheques con el aviso "Sin datos de operación financiera", contra las
+ * sugerencias de interés ya calculadas (`sugerirInteresesSueltos`). Si un cheque coincide con más de una base, no se
+ * adivina: queda sin sugerencia.
+ */
+export function sugerirDiferenciasDeInteres(
+  todos: ChequeOcasionalDoc[],
+  intereses: ReadonlyMap<ChequeOcasionalDoc, SugerenciaInteres>,
+  catalogo: ReadonlyMap<string, ProveedorDelCatalogo> = new Map(),
+): Map<ChequeOcasionalDoc, SugerenciaDiferencia> {
+  // Una entrada por sugerencia (los cheques del mismo grupo comparten el objeto), con un cheque del grupo de muestra.
+  // Una base redonda ($500.000, $1.200.000) no sirve: cualquier cheque de monto redondo "da justo" un % de ella.
+  const bases = new Map<SugerenciaInteres, ChequeOcasionalDoc>()
+  for (const [d, s] of intereses) {
+    if (bases.has(s) || !d.fechaEmision || d.beneficiarioNormalizado === '' || s.baseCentavos % BASE_REDONDA_CENTAVOS === 0) continue
+    bases.set(s, d)
+  }
+
+  const resultado = new Map<ChequeOcasionalDoc, SugerenciaDiferencia>()
+  if (bases.size === 0) return resultado
+  for (const d of todos) {
+    if (d.baja || !d.fechaEmision || d.montoCentavos <= 0 || d.beneficiarioNormalizado === '') continue
+    if (!d.revisar.includes(REVISAR_SIN_DATOS_FINANCIEROS)) continue
+    const encontradas: SugerenciaDiferencia[] = []
+    for (const [s, muestra] of bases) {
+      const dias = diasEntre(muestra.fechaEmision!, d.fechaEmision)
+      if (dias < 0 || dias > DIAS_MAX_DIFERENCIA || !mismoBeneficiario(d, muestra, catalogo)) continue
+      const bp = TASAS_DIFERENCIA_BP.find((t) => coincide(s.baseCentavos, t, 1, d.montoCentavos))
+      if (bp !== undefined) encontradas.push({ tasaPorcentaje: bp / 100, interes: s, fechaEmisionInteres: muestra.fechaEmision! })
+    }
+    if (encontradas.length === 1) resultado.set(d, encontradas[0]!)
+  }
+  return resultado
+}
+
+/** Texto de `revisar` para un cheque con diferencia de interés sugerida. */
+export function textoDiferenciaSugerida(s: SugerenciaDiferencia): string {
+  const i = s.interes
+  const sobre = i.forma === 'mes_vencimiento'
+    ? (() => {
+        const [anio, mes] = i.mesBase!.split('-')
+        return `los ${pesos(i.baseCentavos)} que vencen en ${MESES[Number(mes) - 1]} de ${anio}`
+      })()
+    : pesos(i.baseCentavos)
+  return `${REVISAR_DIFERENCIA_POSIBLE_PREFIJO}${porcentaje(s.tasaPorcentaje)} sobre ${sobre} (mismo cálculo que los intereses del ${fechaCorta(s.fechaEmisionInteres)})`
+}
+
+/**
+ * Pone o saca la diferencia de interés en un cheque. Con sugerencia, el aviso "Sin datos" se reemplaza por el de la
+ * diferencia (el cheque sigue a revisar hasta que Finanzas lo confirme); sin sugerencia, solo se saca el texto propio.
+ */
+export function aplicarDiferenciaSugerida(doc: ChequeOcasionalDoc, s: SugerenciaDiferencia | null): ChequeOcasionalDoc {
+  const propios = doc.revisar.filter((r) => !r.startsWith(REVISAR_DIFERENCIA_POSIBLE_PREFIJO))
+  if (!s) return { ...doc, revisar: propios }
+  return { ...doc, revisar: [...propios.filter((r) => r !== REVISAR_SIN_DATOS_FINANCIEROS), textoDiferenciaSugerida(s)] }
 }
 
 /** Pone o saca la sugerencia de interés en un cheque, conservando los demás avisos. */

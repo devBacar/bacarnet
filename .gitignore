@@ -62,6 +62,7 @@ scripts/git-filter-repo-passwords.txt
 
 # Entorno de pruebas local (emuladores, backend compilado aparte, respaldos). Nunca commitear.
 .emulator-data/
+.emulator-data-*/
 firebase-export-*/
 backend_clean/
 backend/.secrets/

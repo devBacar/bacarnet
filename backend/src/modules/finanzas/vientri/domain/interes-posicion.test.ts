@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import type { ChequeOcasionalDoc } from './cheque-ocasional.types.js'
-import { REVISAR_INTERES_SIN_ORIGEN } from './clasificar-ocasional.js'
+import { REVISAR_INTERES_SIN_ORIGEN, REVISAR_SIN_DATOS_FINANCIEROS } from './clasificar-ocasional.js'
 import {
+  REVISAR_DIFERENCIA_POSIBLE_PREFIJO,
   REVISAR_INTERES_POSIBLE_PREFIJO,
+  aplicarDiferenciaSugerida,
   aplicarInteresSugerido,
+  sugerirDiferenciasDeInteres,
   sugerirInteres,
   sugerirInteresesSueltos,
 } from './interes-posicion.js'
@@ -155,5 +158,88 @@ describe('sugerirInteresesSueltos y aplicarInteresSugerido', () => {
     const s = sugerirInteres(grupo, [base, ...grupo])!
     const r = aplicarInteresSugerido(grupo[0]!, s, 'PRESTAMISTA').revisar.at(-1)
     expect(r).toBe('Posible interés del 6% mensual sobre los cheques de PRESTAMISTA que vencen en enero de 2027 ($150.000.050 en 1 cheque de 1 operación), 1 cheque por mes')
+  })
+})
+
+describe('sugerirDiferenciasDeInteres y aplicarDiferenciaSugerida', () => {
+  // Interés del 6 % mensual sobre lo que vence en enero ($150.000.050), emitido el 22/09 en 3 cheques por mes.
+  const enero = [
+    cheque({ montoCentavos: 50_000_000_00, fechaEmision: '2026-07-13', fechaVencimiento: '2027-01-08', obsOriginal: 'u$70.000 TC1525' }),
+    cheque({ montoCentavos: 50_000_000_00, fechaEmision: '2026-08-03', fechaVencimiento: '2027-01-15', obsOriginal: 'u$70.000 TC1565' }),
+    cheque({ montoCentavos: 50_000_050_00, fechaEmision: '2026-09-22', fechaVencimiento: '2027-01-25', obsOriginal: 'Renovacion' }),
+  ]
+  const vtos = ['2026-11-29', '2026-11-30', '2026-12-01', '2027-01-01', '2027-01-02', '2027-01-03', '2027-02-01', '2027-02-02', '2027-02-03']
+  const grupo = vtos.map((v) => interes(3_000_001_00, v, { fechaEmision: '2026-09-22' }))
+  const sinDatos = (overrides: Partial<ChequeOcasionalDoc>) =>
+    cheque({ montoCentavos: 1_500_000_00, fechaEmision: '2026-10-02', fechaVencimiento: '2027-01-17', obsOriginal: 'DIFERENCIA', revisar: [REVISAR_SIN_DATOS_FINANCIEROS], ...overrides })
+
+  const buscar = (otros: ChequeOcasionalDoc[]) => {
+    const todos = [...enero, ...grupo, ...otros]
+    return sugerirDiferenciasDeInteres(todos, sugerirInteresesSueltos(todos))
+  }
+
+  it('encuentra el % chico y justo sobre la misma base del interés y reemplaza el aviso "Sin datos"', () => {
+    const dif = sinDatos({})
+    const s = buscar([dif]).get(dif)
+    expect(s).toMatchObject({ tasaPorcentaje: 1, fechaEmisionInteres: '2026-09-22' })
+    expect(s!.interes.baseCentavos).toBe(150_000_050_00)
+
+    const r = aplicarDiferenciaSugerida(dif, s!)
+    expect(r.revisar).toEqual([
+      'Posible diferencia de interés: 1% sobre los $150.000.050 que vencen en enero de 2027 (mismo cálculo que los intereses del 22/09/2026)',
+    ])
+    expect(r.revisar.join(' ').toLowerCase()).not.toContain('imposible')
+  })
+
+  it('no sugiere nada si el monto no da al peso, si es de otro proveedor o si no está en la ventana de días', () => {
+    const cheques = [
+      sinDatos({ montoCentavos: 1_234_567_00 }),
+      sinDatos({ beneficiario: 'OTRO', beneficiarioNormalizado: 'otro' }),
+      sinDatos({ fechaEmision: '2026-09-20' }),
+      sinDatos({ fechaEmision: '2026-11-30' }),
+    ]
+    const mapa = buscar(cheques)
+    for (const c of cheques) expect(mapa.has(c)).toBe(false)
+  })
+
+  it('solo mira cheques "Sin datos": uno con renovación o USD no se toca', () => {
+    const conRenovacion = sinDatos({ obsOriginal: 'Renovacion', esRenovacion: true, revisar: [] })
+    expect(buscar([conRenovacion]).has(conRenovacion)).toBe(false)
+  })
+
+  it('sin un interés ya explicado no busca contra los meses del proveedor', () => {
+    const dif = sinDatos({})
+    const todos = [...enero, dif]
+    expect(sugerirDiferenciasDeInteres(todos, sugerirInteresesSueltos(todos)).size).toBe(0)
+  })
+
+  it('no usa bases redondas: con $1.200.000 cualquier cheque redondo daría un % justo', () => {
+    // 2 % mensual sobre $1.200.000 que vencen el 25/10 = $24.000; después, un cheque común de $24.000.
+    const base = cheque({ montoCentavos: 1_200_000_00, fechaEmision: '2026-09-01', fechaVencimiento: '2026-10-25' })
+    const int = interes(24_000_00, '2026-10-25', { fechaEmision: '2026-09-22' })
+    const comun = sinDatos({ montoCentavos: 12_000_00, obsOriginal: 'op patio' })
+    const todos = [base, int, comun]
+    const intereses = sugerirInteresesSueltos(todos)
+    expect(intereses.size).toBe(1)
+    expect(sugerirDiferenciasDeInteres(todos, intereses).size).toBe(0)
+  })
+
+  it('si coincide con dos bases distintas no adivina', () => {
+    // Segundo interés del proveedor: 3 % mensual sobre $300.000.100 que vencen en marzo; 0,5 % de esa base = 1 % de enero.
+    const marzo = cheque({ montoCentavos: 300_000_100_00, fechaEmision: '2026-09-01', fechaVencimiento: '2027-03-10' })
+    const otroGrupo = ['2027-03-01'].map((v) => interes(9_000_003_00, v, { fechaEmision: '2026-09-25', obsOriginal: 'Interes' }))
+    const dif = sinDatos({})
+    const todos = [...enero, marzo, ...grupo, ...otroGrupo, dif]
+    const intereses = sugerirInteresesSueltos(todos)
+    expect(new Set(intereses.values()).size).toBe(2)
+    expect(sugerirDiferenciasDeInteres(todos, intereses).has(dif)).toBe(false)
+  })
+
+  it('al recalcular sin sugerencia se va solo el texto propio y no se duplica', () => {
+    const dif = sinDatos({})
+    const s = buscar([dif]).get(dif)!
+    const conTexto = aplicarDiferenciaSugerida(dif, s)
+    expect(aplicarDiferenciaSugerida(conTexto, s).revisar.filter((r) => r.startsWith(REVISAR_DIFERENCIA_POSIBLE_PREFIJO))).toHaveLength(1)
+    expect(aplicarDiferenciaSugerida(conTexto, null).revisar).toEqual([])
   })
 })

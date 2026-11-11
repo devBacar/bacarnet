@@ -24,7 +24,17 @@ import {
   reclasificarDoc,
 } from '../domain/clasificar-ocasional.js'
 import { normalizarDocOcasional } from '../domain/normalizar-doc-ocasional.js'
-import { aplicarInteresSugerido, sugerirInteresesSueltos } from '../domain/interes-posicion.js'
+import {
+  REVISAR_SIN_DESTINATARIO,
+  completarBeneficiarioDesdeObs,
+  nombresConocidos,
+} from '../domain/beneficiario-desde-obs.js'
+import {
+  aplicarDiferenciaSugerida,
+  aplicarInteresSugerido,
+  sugerirDiferenciasDeInteres,
+  sugerirInteresesSueltos,
+} from '../domain/interes-posicion.js'
 import { resolverProveedor } from '../domain/operaciones-usd.js'
 import { aplicarPatrones } from '../domain/patrones-ocasionales.js'
 import { calcularRenovadoPor } from '../domain/renovado-por.js'
@@ -97,7 +107,7 @@ function filaADoc(
   const revisar: string[] = []
   if (fechaImposible(fechaVencimiento)) revisar.push(`Fecha imposible (${fechaVencimiento})`)
   if (montoCentavos <= 0) revisar.push('Importe cero o negativo')
-  if (beneficiarioNorm === '') revisar.push('Sin destinatario')
+  if (beneficiarioNorm === '') revisar.push(REVISAR_SIN_DESTINATARIO)
   revisar.push(...clasificacion.revisarAgregados)
 
   return {
@@ -141,7 +151,7 @@ async function leerBase(): Promise<ChequeOcasionalDoc[]> {
   return snap.docs.map((s) => normalizarDocOcasional(s.data() as ChequeOcasionalDoc))
 }
 
-const CAMPOS_DERIVADOS = ['renovadoPor', 'operacionUsd', 'esProveedorFinanciero', 'tipoProveedor', 'proveedorFinancieroId', 'esCompraIva', 'sugerencia', 'interesSugerido', 'revisar'] as const
+const CAMPOS_DERIVADOS = ['beneficiario', 'beneficiarioNormalizado', 'beneficiarioDesdeObs', 'renovadoPor', 'operacionUsd', 'esProveedorFinanciero', 'tipoProveedor', 'proveedorFinancieroId', 'esCompraIva', 'sugerencia', 'interesSugerido', 'revisar'] as const
 
 /**
  * Hay campos que no vienen del CSV sino de otros cheques o de la lista de proveedores: `renovadoPor`
@@ -159,28 +169,39 @@ export async function sincronizarDerivadosEnBase(): Promise<number> {
   const renovadoPor = calcularRenovadoPor(docs)
 
   const actuales = docs.map((base) => ({ ...base, operacionUsd: base.operacionUsd, renovadoPor: [...base.renovadoPor].sort() }))
+  // Último recurso para los que vienen sin destinatario: el nombre del comienzo del OBS, si es un nombre ya conocido.
+  const conocidos = nombresConocidos(actuales.filter((d) => !d.beneficiarioDesdeObs), proveedores)
   const esperados = actuales.map((actual, i) => {
+    const conBeneficiario = completarBeneficiarioDesdeObs(actual, conocidos)
     // Se relee solo lo que el OBS dice con la palabra USD; nunca se borra un USD ya cargado (por ejemplo a mano).
-    const operacionUsd = actual.operacionUsd ?? parsearObs(actual.obsOriginal).operacionUsd
+    const operacionUsd = conBeneficiario.operacionUsd ?? parsearObs(conBeneficiario.obsOriginal).operacionUsd
     return aplicarPatrones(
-      reclasificarDoc({ ...actual, operacionUsd, renovadoPor: renovadoPor[i]! }, proveedores),
+      reclasificarDoc({ ...conBeneficiario, operacionUsd, renovadoPor: renovadoPor[i]! }, proveedores),
       patrones,
     )
   })
   // El interés suelto se busca sobre la base ya recalculada: necesita saber qué cheques siguen renovados o vivos.
   const intereses = sugerirInteresesSueltos(esperados, proveedores)
+  // Las diferencias de interés solo se buscan contra las bases que ya explicó un interés.
+  const diferencias = sugerirDiferenciasDeInteres(esperados, intereses, proveedores)
 
   const cambios: Array<{ id: string; datos: Pick<ChequeOcasionalDoc, (typeof CAMPOS_DERIVADOS)[number]> }> = []
   snap.docs.forEach((s, i) => {
     const actual = actuales[i]!
     const sinInteres = esperados[i]!
     const nombre = resolverProveedor(sinInteres.beneficiario, sinInteres.beneficiarioNormalizado, proveedores).nombre
-    const esperado = aplicarInteresSugerido(sinInteres, intereses.get(sinInteres) ?? null, nombre)
+    const esperado = aplicarDiferenciaSugerida(
+      aplicarInteresSugerido(sinInteres, intereses.get(sinInteres) ?? null, nombre),
+      diferencias.get(sinInteres) ?? null,
+    )
     const distinto = CAMPOS_DERIVADOS.some((c) => JSON.stringify(actual[c]) !== JSON.stringify(esperado[c]))
     if (!distinto) return
     cambios.push({
       id: s.id,
       datos: {
+        beneficiario: esperado.beneficiario,
+        beneficiarioNormalizado: esperado.beneficiarioNormalizado,
+        beneficiarioDesdeObs: esperado.beneficiarioDesdeObs ?? false,
         renovadoPor: esperado.renovadoPor,
         operacionUsd: esperado.operacionUsd,
         esProveedorFinanciero: esperado.esProveedorFinanciero,

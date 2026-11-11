@@ -19,6 +19,7 @@ import { formatMoneyCentavos } from '../../components/finanzas/formatMoney'
 import { usePermisosFinanzas } from '../../components/finanzas/permisosFinanzas'
 import { useAuth } from '../../context'
 import { PestanaOcasionales } from '../../components/finanzas/cheques/PestanaOcasionales'
+import { useParamsUrl, valorPermitido } from '../../components/finanzas/cheques/useParamsUrl'
 import {
   CHEQUE_DIRECCION_LABELS,
   CHEQUE_ESTADO_LABELS,
@@ -84,7 +85,8 @@ function mesActual() {
   return { desde: `${y}-${m}-01`, hasta: `${y}-${m}-${String(last).padStart(2, '0')}` }
 }
 
-type VistaTab = 'todos' | 'recibido' | 'emitido' | 'ocasionales'
+const VISTAS = ['todos', 'recibido', 'emitido', 'ocasionales'] as const
+type VistaTab = (typeof VISTAS)[number]
 
 export function FinanzasChequesPage() {
   const { user } = useAuth()
@@ -92,9 +94,15 @@ export function FinanzasChequesPage() {
   const queryClient = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
   const [detalleId, setDetalleId] = useState<string | null>(null)
-  const [vista, setVista] = useState<VistaTab>('todos')
+  const { params, cambiar } = useParamsUrl()
+  const vista = valorPermitido<VistaTab>(params.get('vista'), VISTAS, 'todos')
+  /** Al cambiar de pestaña se limpian los parámetros de Ocasionales para no arrastrar el camino viejo. */
+  const setVista = (v: VistaTab) =>
+    cambiar({ vista: v === 'todos' ? null : v, sub: null, filtro: null, usd: null, benef: null, seg: null, cadena: null })
 
-  const [direccion, setDireccion] = useState<ChequeDireccion | ''>('')
+  const [direccion, setDireccion] = useState<ChequeDireccion | ''>(() =>
+    vista === 'recibido' || vista === 'emitido' ? vista : '',
+  )
   const [origen, setOrigen] = useState<ChequeOrigen | ''>('')
   const [estado, setEstado] = useState<ChequeEstado | ''>('')
   const [tipo, setTipo] = useState<ChequeTipo | ''>('')

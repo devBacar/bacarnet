@@ -119,6 +119,8 @@ export interface ChequeOcasionalDoc {
   beneficiarioNormalizado: string
   beneficiarioFormal: string | null
   beneficiarioCuit: string | null
+  /** El cheque vino sin destinatario y el beneficiario se tomó del comienzo del OBS (ver `beneficiario-desde-obs.ts`). */
+  beneficiarioDesdeObs?: boolean
   montoCentavos: number
   fechaVencimiento: string | null
   fechaEmision: string | null

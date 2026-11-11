@@ -12,6 +12,7 @@ import {
   type SeguimientoEstadoFiltro,
 } from '../../../services/finanzasChequesApi'
 import { formatMoneyCentavos } from '../formatMoney'
+import { useParamsUrl, valorPermitido } from './useParamsUrl'
 
 function formatFecha(iso: string | null): string {
   if (!iso) return '—'
@@ -62,9 +63,12 @@ function etiquetaOp(op: OperacionSeguimientoItem): string {
 export function SeguimientoRenovaciones() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const [estado, setEstado] = useState<SeguimientoEstadoFiltro>('abiertas')
-  /** Pila de navegación del drill-down: la última es la operación que se está viendo. */
-  const [pila, setPila] = useState<string[]>([])
+  const { params, cambiar } = useParamsUrl()
+  const estado = valorPermitido<SeguimientoEstadoFiltro>(params.get('seg'), ['abiertas', 'todas'], 'abiertas')
+  const setEstado = (v: SeguimientoEstadoFiltro) => cambiar({ seg: v === 'abiertas' ? null : v })
+  /** Pila de navegación del drill-down (en la URL como ?cadena=id1,id2): la última es la operación que se está viendo. */
+  const pila = useMemo(() => (params.get('cadena') ?? '').split(',').filter(Boolean), [params])
+  const setPila = (nueva: string[]) => cambiar({ cadena: nueva.join(',') || null })
 
   const recalcularMut = useMutation({
     mutationFn: recalcularSeguimiento,
@@ -242,8 +246,8 @@ export function SeguimientoRenovaciones() {
           op={opActual}
           opsPorId={opsPorId}
           camino={pila}
-          onIr={(id) => setPila((p) => [...p, id])}
-          onSaltar={(i) => setPila((p) => p.slice(0, i + 1))}
+          onIr={(id) => setPila([...pila, id])}
+          onSaltar={(i) => setPila(pila.slice(0, i + 1))}
           onCerrar={() => setPila([])}
         />
       ) : null}

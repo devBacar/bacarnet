@@ -10,6 +10,7 @@ export function normalizarDocOcasional(d: ChequeOcasionalDoc): ChequeOcasionalDo
     ...d,
     beneficiarioFormal: d.beneficiarioFormal ?? null,
     beneficiarioCuit: d.beneficiarioCuit ?? null,
+    beneficiarioDesdeObs: d.beneficiarioDesdeObs ?? false,
     fechaVencimiento: d.fechaVencimiento ?? null,
     fechaEmision: d.fechaEmision ?? null,
     estadoCodigo: d.estadoCodigo ?? null,

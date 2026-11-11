@@ -1,11 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, RefreshCw, X } from 'lucide-react'
+import { Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../../context'
 import {
   agregarAliasProveedor,
   crearProveedorCatalogo,
+  darDeBajaProveedor,
   fetchCatalogoProveedores,
   fusionarProveedores,
   quitarAliasProveedor,
@@ -22,6 +23,9 @@ const QUERY_KEY = ['finanzas', 'cheques-ocasionales', 'proveedores-financieros']
 
 const botonChico =
   'rounded-md border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
+
+// En pantalla ancha las dos listas van una al lado de la otra, cada una con su propio scroll.
+const listaConScroll = 'lg:max-h-[calc(100vh-18rem)] lg:overflow-y-auto lg:pr-1'
 
 function textoCheques(n: number): string {
   return n === 1 ? '1 cheque' : `${n} cheques`
@@ -102,7 +106,18 @@ export function ProveedoresFinancierosCatalogo() {
     onSuccess: () => refrescar('Proveedores juntados'),
     onError: fallo,
   })
-  const ocupado = crear.isPending || agregarAlias.isPending || quitarAlias.isPending || renombrar.isPending || fusionar.isPending
+  const darDeBaja = useMutation({
+    mutationFn: (id: string) => darDeBajaProveedor(id),
+    onSuccess: () => refrescar('Proveedor dado de baja'),
+    onError: fallo,
+  })
+  const ocupado =
+    crear.isPending ||
+    agregarAlias.isPending ||
+    quitarAlias.isPending ||
+    renombrar.isPending ||
+    fusionar.isPending ||
+    darDeBaja.isPending
 
   if (isLoading) return <p className="text-body-muted text-sm">Cargando proveedores financieros…</p>
   if (isError) {
@@ -124,79 +139,82 @@ export function ProveedoresFinancierosCatalogo() {
           Actualizando los cheques con los cambios de proveedores. Podés seguir trabajando.
         </p>
       ) : null}
-      <section className="surface-card rounded-2xl border border-neutral-200 p-4 dark:border-zinc-800">
-        <h3 className="text-heading text-sm font-semibold">Sin asignar ({sinAsignar.length})</h3>
-        <p className="text-body-muted mt-0.5 text-xs">
-          Nombres de cheques que no coinciden con ningún proveedor. Elegí a cuál pertenecen, o agregalos como proveedor nuevo.
-        </p>
-        {sinAsignar.length === 0 ? (
-          <p className="text-body-muted mt-3 text-sm">No hay nombres sin asignar.</p>
-        ) : (
-          <ul className="mt-3 space-y-2">
-            {sinAsignar.map((b) => (
-              <FilaSinAsignar
-                key={b.nombreNormalizado}
-                item={b}
-                proveedores={proveedores}
-                puedeEditar={puedeEditar}
-                ocupado={ocupado}
-                onAlias={(id) => agregarAlias.mutate({ id, alias: b.nombre })}
-                onNuevo={() => crear.mutate(b.nombre)}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+        <section className="surface-card min-w-0 rounded-2xl border border-neutral-200 p-4 dark:border-zinc-800">
+          <h3 className="text-heading text-sm font-semibold">Sin asignar ({sinAsignar.length})</h3>
+          <p className="text-body-muted mt-0.5 text-xs">
+            Nombres de cheques que no coinciden con ningún proveedor. Elegí a cuál pertenecen, o agregalos como proveedor nuevo.
+          </p>
+          {sinAsignar.length === 0 ? (
+            <p className="text-body-muted mt-3 text-sm">No hay nombres sin asignar.</p>
+          ) : (
+            <ul className={`mt-3 space-y-2 ${listaConScroll}`}>
+              {sinAsignar.map((b) => (
+                <FilaSinAsignar
+                  key={b.nombreNormalizado}
+                  item={b}
+                  proveedores={proveedores}
+                  puedeEditar={puedeEditar}
+                  ocupado={ocupado}
+                  onAlias={(id) => agregarAlias.mutate({ id, alias: b.nombre })}
+                  onNuevo={() => crear.mutate(b.nombre)}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
 
-      <section className="surface-card rounded-2xl border border-neutral-200 p-4 dark:border-zinc-800">
-        <header className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h3 className="text-heading text-sm font-semibold">Catálogo ({proveedores.length})</h3>
-            <p className="text-body-muted mt-0.5 text-xs">
-              Cada proveedor reúne todas las formas en que aparece escrito en los cheques.
-            </p>
-          </div>
-          {puedeEditar ? (
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault()
-                if (nuevo.trim()) crear.mutate(nuevo.trim())
-              }}
-            >
-              <input
-                className={`${finanzasInputClass} w-56`}
-                placeholder="Nuevo proveedor"
-                value={nuevo}
-                maxLength={120}
-                onChange={(e) => setNuevo(e.target.value)}
-              />
-              <button type="submit" disabled={ocupado || !nuevo.trim()} className={botonChico}>
-                Agregar
-              </button>
-            </form>
-          ) : null}
-        </header>
-        {proveedores.length === 0 ? (
-          <p className="text-body-muted mt-3 text-sm">Todavía no hay proveedores cargados.</p>
-        ) : (
-          <ul className="mt-3 divide-y divide-neutral-100 dark:divide-zinc-800">
-            {proveedores.map((p) => (
-              <FilaProveedor
-                key={p.id}
-                proveedor={p}
-                otros={proveedores.filter((o) => o.id !== p.id)}
-                puedeEditar={puedeEditar}
-                ocupado={ocupado}
-                onAgregarAlias={(alias) => agregarAlias.mutate({ id: p.id, alias })}
-                onQuitarAlias={(alias) => quitarAlias.mutate({ id: p.id, alias })}
-                onRenombrar={(nombre) => renombrar.mutate({ id: p.id, nombre })}
-                onFusionar={(seVaId) => fusionar.mutate({ quedaId: p.id, seVaId })}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+        <section className="surface-card min-w-0 rounded-2xl border border-neutral-200 p-4 dark:border-zinc-800">
+          <header className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="text-heading text-sm font-semibold">Catálogo ({proveedores.length})</h3>
+              <p className="text-body-muted mt-0.5 text-xs">
+                Cada proveedor reúne todas las formas en que aparece escrito en los cheques.
+              </p>
+            </div>
+            {puedeEditar ? (
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (nuevo.trim()) crear.mutate(nuevo.trim())
+                }}
+              >
+                <input
+                  className={`${finanzasInputClass} w-56`}
+                  placeholder="Nuevo proveedor"
+                  value={nuevo}
+                  maxLength={120}
+                  onChange={(e) => setNuevo(e.target.value)}
+                />
+                <button type="submit" disabled={ocupado || !nuevo.trim()} className={botonChico}>
+                  Agregar
+                </button>
+              </form>
+            ) : null}
+          </header>
+          {proveedores.length === 0 ? (
+            <p className="text-body-muted mt-3 text-sm">Todavía no hay proveedores cargados.</p>
+          ) : (
+            <ul className={`mt-3 divide-y divide-neutral-100 dark:divide-zinc-800 ${listaConScroll}`}>
+              {proveedores.map((p) => (
+                <FilaProveedor
+                  key={p.id}
+                  proveedor={p}
+                  otros={proveedores.filter((o) => o.id !== p.id)}
+                  puedeEditar={puedeEditar}
+                  ocupado={ocupado}
+                  onAgregarAlias={(alias) => agregarAlias.mutate({ id: p.id, alias })}
+                  onQuitarAlias={(alias) => quitarAlias.mutate({ id: p.id, alias })}
+                  onRenombrar={(nombre) => renombrar.mutate({ id: p.id, nombre })}
+                  onFusionar={(seVaId) => fusionar.mutate({ quedaId: p.id, seVaId })}
+                  onDarDeBaja={() => darDeBaja.mutate(p.id)}
+                />
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
     </div>
   )
 }
@@ -275,6 +293,7 @@ function FilaProveedor({
   onQuitarAlias,
   onRenombrar,
   onFusionar,
+  onDarDeBaja,
 }: {
   proveedor: ProveedorCatalogoItem
   otros: ProveedorCatalogoItem[]
@@ -284,6 +303,7 @@ function FilaProveedor({
   onQuitarAlias: (alias: string) => void
   onRenombrar: (nombre: string) => void
   onFusionar: (seVaId: string) => void
+  onDarDeBaja: () => void
 }) {
   const [alias, setAlias] = useState('')
   const [editando, setEditando] = useState(false)
@@ -304,6 +324,16 @@ function FilaProveedor({
         `"${seVa.nombre}" deja de aparecer en la lista.`,
     )
     if (ok) onFusionar(seVaId)
+  }
+
+  const pedirBaja = () => {
+    const ok = window.confirm(
+      `¿Dar de baja "${proveedor.nombre}"?\n\n` +
+        `Deja de aparecer en el catálogo y sus cheques (${textoCheques(proveedor.cantidadCheques)}) quedan sin proveedor: ` +
+        `vuelven a "Sin asignar" para que los puedas asignar a otro.\n\n` +
+        `Si te equivocaste, lo podés volver a agregar con el mismo nombre.`,
+    )
+    if (ok) onDarDeBaja()
   }
 
   return (
@@ -361,6 +391,18 @@ function FilaProveedor({
                 }}
               >
                 <Pencil className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+            {puedeEditar ? (
+              <button
+                type="button"
+                disabled={ocupado}
+                title="Dar de baja el proveedor"
+                aria-label={`Dar de baja ${proveedor.nombre}`}
+                className="text-neutral-400 hover:text-red-600 disabled:opacity-50"
+                onClick={pedirBaja}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
             ) : null}
           </span>

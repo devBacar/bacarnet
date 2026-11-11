@@ -612,6 +612,12 @@ export async function fusionarProveedores(quedaId: string, seVaId: string): Prom
   if (!res.ok) throw await leerErrorProveedores(res, 'No se pudieron juntar los proveedores')
 }
 
+/** Baja lógica: el proveedor deja de aparecer y sus nombres vuelven a "Sin asignar". No se borra. */
+export async function darDeBajaProveedor(id: string): Promise<void> {
+  const res = await ocasionalesFetch(`/proveedores-financieros/${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) throw await leerErrorProveedores(res, 'No se pudo dar de baja el proveedor')
+}
+
 /** Re-engancha los cheques ya guardados con la lista actual de proveedores. Recorre toda la base: tarda. */
 export async function sincronizarChequesProveedores(): Promise<{ chequesActualizados: number }> {
   const res = await ocasionalesFetch('/proveedores-financieros/sincronizar-cheques', { method: 'POST' })
@@ -928,4 +934,91 @@ export async function confirmarRenovacionCheques(
     const body = (await res.json().catch(() => null)) as { error?: string } | null
     throw new Error(body?.error ?? 'No se pudo confirmar la renovación')
   }
+}
+
+// ── Revisión asistida de "A revisar" (contrato con backend: vientri/domain/analisis-revisar.ts) ──
+
+export type FuerzaHipotesis = 'fuerte' | 'posible' | 'debil'
+export type TipoHipotesis =
+  | 'renovacion_obs'
+  | 'interes_renovacion'
+  | 'interes_posicion'
+  | 'diferencia'
+  | 'dolares'
+  | 'origen_posible'
+
+export interface ChequeEvidencia {
+  numeroCheque: string
+  beneficiario: string
+  montoCentavos: number
+  fechaEmision: string | null
+  fechaVencimiento: string | null
+  fechaConciliado: string | null
+  estado: string
+  pagado: boolean
+  obs: string
+}
+
+/** La cuenta que respalda una hipótesis: base × tasa = esperado, comparado contra el total del grupo. */
+export interface CuentaHipotesis {
+  baseCentavos: number
+  tasaPorcentaje: number | null
+  esperadoCentavos: number
+  diferenciaCentavos: number
+}
+
+export interface HipotesisRevisar {
+  tipo: TipoHipotesis
+  fuerza: FuerzaHipotesis
+  titulo: string
+  explicacion: string
+  cuenta: CuentaHipotesis | null
+  cheques: ChequeEvidencia[]
+  chequesTotal: number
+  avisos: string[]
+  /** Lo que se guarda al confirmar (mismo pedido que la clasificación a mano). Null si no hay nada para guardar. */
+  confirmar: { tipo: TipoOperacionManual; datos: DatosOperacionManual; etiqueta: string; efecto: string } | null
+}
+
+export interface RenovacionDelDia {
+  obs: string
+  vinculada: boolean
+  viejos: ChequeEvidencia[]
+  nuevos: ChequeEvidencia[]
+  totalViejosCentavos: number
+  totalNuevosCentavos: number
+  interesCentavos: number
+  tasaPorcentaje: number | null
+  grupoSobreViejosPorcentaje: number | null
+  grupoSobreNuevosPorcentaje: number | null
+}
+
+export interface GrupoARevisar {
+  /** Id del primer cheque del grupo, para abrir su detalle. */
+  id: string
+  beneficiario: string
+  proveedor: string
+  proveedorCargado: boolean
+  fechaEmision: string | null
+  obs: string
+  cantidadCheques: number
+  totalCentavos: number
+  motivos: string[]
+  cheques: (ChequeEvidencia & { id: string; aRevisar: boolean })[]
+  /** Renovaciones del proveedor emitidas el mismo día (a la que pertenece un interés o diferencia de ese día). */
+  renovacionesDelDia: RenovacionDelDia[]
+  mismoDia: { obs: string; cantidadCheques: number; totalCentavos: number }[]
+  hipotesis: HipotesisRevisar[]
+}
+
+export interface RevisarAsistidoResponse {
+  grupos: GrupoARevisar[]
+  totales: { grupos: number; cheques: number; conSugerenciaFuerte: number; sinSugerencia: number }
+}
+
+export async function fetchRevisarAsistido(): Promise<RevisarAsistidoResponse> {
+  const res = await ocasionalesFetch('/revisar-asistido')
+  const body = (await res.json().catch(() => null)) as { error?: string } | RevisarAsistidoResponse | null
+  if (!res.ok) throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo armar la revisión')
+  return body as RevisarAsistidoResponse
 }

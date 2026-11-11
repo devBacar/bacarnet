@@ -12,10 +12,20 @@ import type { ChequeListadoItem, ChequesFiltro } from './cheques.repository.js'
  * copias que Vientri deja en `cheques` (una como físico "oca-…" y otra como eCheq).
  */
 
+/**
+ * Estado 7 de Vientri en un ocasional: se canceló con la renovación (los cheques viejos de una renovación). Medido
+ * contra el banco: ninguno tiene débito propio, así que no es "debitado" aunque Vientri lo marque pagado.
+ */
+const ESTADO_CANCELADO_POR_RENOVACION = 7
+
 function estadoDelOcasional(d: ChequeOcasionalDoc): ChequeEstado {
   if (d.estadoCodigo === 13) return 'rechazado'
-  if (d.estadoCodigo === 5 || d.renovadoPor.length > 0) return 'renovado'
+  if (d.estadoCodigo === 5 || d.estadoCodigo === ESTADO_CANCELADO_POR_RENOVACION || d.renovadoPor.length > 0) return 'renovado'
   return d.pagado ? 'debitado' : 'pendiente'
+}
+
+function estadoBancarioDelOcasional(d: ChequeOcasionalDoc): string {
+  return d.estadoCodigo === ESTADO_CANCELADO_POR_RENOVACION ? 'Cancelado por renovación' : d.estado
 }
 
 export function ocasionalAItem(docId: string, d: ChequeOcasionalDoc): ChequeListadoItem {
@@ -31,7 +41,7 @@ export function ocasionalAItem(docId: string, d: ChequeOcasionalDoc): ChequeList
     fechaPago: d.fechaVencimiento ?? '',
     montoCentavos: d.montoCentavos,
     estado: estadoDelOcasional(d),
-    estadoBancario: d.estado,
+    estadoBancario: estadoBancarioDelOcasional(d),
     endosante: null,
     bancoEmisor: null,
     bancoEmisorCodigo: null,

@@ -12,7 +12,7 @@ import {
   listChequesVinculados,
   vincularChequeConMovimiento,
 } from './cheques.repository.js'
-import { agruparGemelos, sonGemelos } from '../domain/gemelos-cheque.js'
+import { agruparGemelos, mismoChequeParaConciliar } from '../domain/gemelos-cheque.js'
 import {
   esIdOcasional,
   listOcasionalesSinVincular,
@@ -69,13 +69,14 @@ export async function reconciliarChequesConMovimientos(
   const emitidosVinculados = [...emitidosVinculadosCheques, ...ocasionalesVinculados]
 
   // Un físico y su eCheq son el mismo cheque: si uno ya tiene movimiento, el gemelo hereda el vínculo.
+  // Un ocasional y su copia en `cheques` también (ver `mismoChequeParaConciliar`).
   const heredados = new Set<string>()
   for (const [direccion, sinVincular, vinculados] of [
     ['recibido', recibidosSinVincular, recibidosVinculados],
     ['emitido', emitidosSinVincular, emitidosVinculados],
   ] as const) {
     for (const cheque of sinVincular) {
-      const gemelo = vinculados.find((v) => sonGemelos(cheque, v))
+      const gemelo = vinculados.find((v) => mismoChequeParaConciliar(cheque, v))
       if (!gemelo) continue
       await vincularCualquiera(cheque.id, {
         movimientoBancarioId: gemelo.movimientoBancarioId,
@@ -140,7 +141,7 @@ export async function reconciliarChequesConMovimientos(
   const ocupados = new Set<string>()
   const movsVinculados = new Set<string>()
 
-  const grupos = agruparGemelos(cheques)
+  const grupos = agruparGemelos(cheques, mismoChequeParaConciliar)
   const grupoPorRepresentante = new Map(grupos.map((g) => [g[0].id, g]))
   const representantes = grupos.map((g) => g[0])
 

@@ -74,12 +74,14 @@ const numerosCortos = (lista: string[]) => lista.map((n) => n.split('-').pop() ?
 
 /**
  * Cheques del proveedor que estaban vivos cuando se emitió el interés: ya emitidos, sin vencer, sin cobrar y
- * no reemplazados todavía por una renovación. Los de interés no cuentan como base.
+ * no reemplazados todavía por una renovación. Los de interés no cuentan como base. Tampoco los de operaciones en
+ * dólares: esos cheques ya traen el interés adentro, así que no se les calcula interés aparte (salvo `incluirUsd`).
  */
 function chequesVivos(
   grupo: ChequeOcasionalDoc[],
   todos: ChequeOcasionalDoc[],
   catalogo: ReadonlyMap<string, ProveedorDelCatalogo>,
+  incluirUsd: boolean,
 ): ChequeOcasionalDoc[] {
   const primero = grupo[0]!
   const emision = primero.fechaEmision!
@@ -89,6 +91,7 @@ function chequesVivos(
 
   return todos.filter((d) => {
     if (enGrupo.has(d) || d.baja || d.montoCentavos <= 0 || d.rolEnOperacion === 'interes') return false
+    if (!incluirUsd && d.operacionUsd != null) return false
     if (!d.fechaEmision || !d.fechaVencimiento || d.fechaEmision > emision || d.fechaVencimiento < emision) return false
     if (d.fechaConciliado && d.fechaConciliado < emision) return false
     const renovadoAntes = numerosCortos(d.renovadoPor ?? []).some((n) => {
@@ -195,14 +198,19 @@ function porMesDeVencimiento(grupo: ChequeOcasionalDoc[], vivos: ChequeOcasional
   return null
 }
 
-/** Busca sobre qué cheques del proveedor se calculó un grupo de cheques de interés (mismo beneficiario, emisión y OBS). */
+/**
+ * Busca sobre qué cheques del proveedor se calculó un grupo de cheques de interés (mismo beneficiario, emisión y OBS).
+ * `incluirUsd` suma a la base los cheques de operaciones en dólares; en teoría no corresponde (ya traen el interés),
+ * así que solo se usa para mostrar la coincidencia como dudosa, nunca para la sugerencia que se guarda.
+ */
 export function sugerirInteres(
   grupo: ChequeOcasionalDoc[],
   todos: ChequeOcasionalDoc[],
   catalogo: ReadonlyMap<string, ProveedorDelCatalogo> = new Map(),
+  opts: { incluirUsd?: boolean } = {},
 ): SugerenciaInteres | null {
   if (grupo.length === 0 || !grupo[0]!.fechaEmision || grupo.some((c) => !c.fechaVencimiento || c.montoCentavos <= 0)) return null
-  const vivos = chequesVivos(grupo, todos, catalogo)
+  const vivos = chequesVivos(grupo, todos, catalogo, opts.incluirUsd ?? false)
   if (vivos.length === 0) return null
   return porMismoVencimiento(grupo, vivos) ?? porMesDeVencimiento(grupo, vivos)
 }

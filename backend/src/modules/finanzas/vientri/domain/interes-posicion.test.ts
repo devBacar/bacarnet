@@ -124,6 +124,16 @@ describe('sugerirInteres: mes de vencimiento', () => {
     expect(s!.operaciones).toHaveLength(3)
   })
 
+  it('los cheques de operaciones en dólares no son base de interés (ya lo traen adentro), salvo que se pida', () => {
+    const conUsd = enero.map((c, i) => (i < 2 ? { ...c, operacionUsd: { montoUsd: 70000, cotizacion: 1525 } } : c))
+    expect(sugerirInteres(grupo, [...conUsd, otroMes, ...grupo])).toBeNull()
+    expect(sugerirInteres(grupo, [...conUsd, otroMes, ...grupo], new Map(), { incluirUsd: true })).toMatchObject({
+      forma: 'mes_vencimiento',
+      tasaPorcentaje: 6,
+      baseCentavos: 150_000_050_00,
+    })
+  })
+
   it('no sugiere nada si ningún mes da al peso', () => {
     const raros = grupo.map((c) => ({ ...c, montoCentavos: 3_123_457_00 }))
     expect(sugerirInteres(raros, [...enero, otroMes, ...raros])).toBeNull()

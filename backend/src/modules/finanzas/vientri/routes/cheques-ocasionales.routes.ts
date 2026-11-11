@@ -9,6 +9,7 @@ import {
   fusionarProveedoresFinancieros,
   ProveedorFinancieroError,
   quitarAliasProveedorFinanciero,
+  quitarProveedorFinanciero,
   renombrarProveedorFinanciero,
 } from '../../agenda/services/proveedores-financieros.service.js'
 import { esCompraIva } from '../domain/clasificar-ocasional.js'
@@ -37,6 +38,7 @@ import { analizarInteresVsRenovaciones } from '../domain/analisis-interes-renova
 import { reconstruirCadenas, clasificarCheques, resumirCostoFinanciero } from '../domain/cadena-renovacion.js'
 import { agruparOperacionesRenovacion } from '../domain/operacion-renovacion.js'
 import { armarSeguimiento } from '../domain/seguimiento.js'
+import { analizarARevisar } from '../domain/analisis-revisar.js'
 import { agruparOperacionesUsd, resumirUsdPorProveedor } from '../domain/operaciones-usd.js'
 import { armarPropuestaRenovacion, chequesElegidosDelGrupo } from '../domain/propuesta-renovacion.js'
 import { MESES_VENTANA, restarMeses } from '../domain/ventana.js'
@@ -339,6 +341,43 @@ finanzasChequesOcasionalesRouter.post(
     }
   },
 )
+
+/** Baja lógica: el proveedor deja de enganchar cheques y sus nombres vuelven a "Sin asignar". No se borra. */
+finanzasChequesOcasionalesRouter.delete(
+  '/proveedores-financieros/:id',
+  requireFinanzasPermiso('finanzas_cheques'),
+  async (req, res) => {
+    try {
+      await quitarProveedorFinanciero(req.params.id, req.authedUser!.uid)
+      res.status(204).send()
+    } catch (err) {
+      manejarErrorProveedor(res, err, 'dar de baja el proveedor')
+    }
+  },
+)
+
+/**
+ * Revisión asistida: los cheques "A revisar" juntos por operación (mismo beneficiario, emisión y OBS), cada grupo
+ * con las explicaciones posibles y la cuenta que las respalda. Solo lectura.
+ */
+finanzasChequesOcasionalesRouter.get('/revisar-asistido', async (_req, res) => {
+  try {
+    const [todosCrudos, pool, catalogo] = await Promise.all([leerTodos(), leerCompletos(), mapaProveedoresFinancieros()])
+    const grupos = analizarARevisar(todosCrudos.map(normalizarDocOcasional), catalogo, agruparOperacionesRenovacion(pool))
+    res.json({
+      grupos,
+      totales: {
+        grupos: grupos.length,
+        cheques: grupos.reduce((s, g) => s + g.cheques.filter((c) => c.aRevisar).length, 0),
+        conSugerenciaFuerte: grupos.filter((g) => g.hipotesis.some((h) => h.fuerza === 'fuerte')).length,
+        sinSugerencia: grupos.filter((g) => g.hipotesis.length === 0).length,
+      },
+    })
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] revisar-asistido', err)
+    res.status(500).json({ error: 'No se pudo armar la revisión' })
+  }
+})
 
 finanzasChequesOcasionalesRouter.get('/operaciones-renovacion', async (_req, res) => {
   try {

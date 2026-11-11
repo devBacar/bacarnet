@@ -26,10 +26,10 @@ import {
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
 import { usePermisosFinanzas } from '../permisosFinanzas'
-import { OperacionesRenovacion } from './OperacionesRenovacion'
 import { PendientesDeRenovar } from './PendientesDeRenovar'
 import { ProveedoresFinancierosCatalogo } from './ProveedoresFinancierosCatalogo'
-import { SeguimientoRenovaciones } from './SeguimientoRenovaciones'
+import { Renovaciones } from './Renovaciones'
+import { RevisionAsistida } from './RevisionAsistida'
 import { ClasificarOperacionPanel } from './ClasificarOperacionPanel'
 import { useParamsUrl, valorPermitido } from './useParamsUrl'
 import { InteresSugerido, etiquetaInteresSugerido } from './InteresSugerido'
@@ -42,7 +42,7 @@ function formatFecha(iso: string | null): string {
   return `${day}/${month}/${year}`
 }
 
-const SUBVISTAS = ['cheques', 'renovaciones', 'seguimiento', 'usd', 'operaciones', 'proveedores'] as const
+const SUBVISTAS = ['cheques', 'revision', 'renovaciones', 'usd', 'operaciones', 'proveedores'] as const
 type Subvista = (typeof SUBVISTAS)[number]
 
 const FILTRO_TABS: [OcasionalesFiltro, string][] = [
@@ -69,13 +69,13 @@ export function PestanaOcasionales() {
   const [montoMax, setMontoMax] = useState('')
   const [montoMaxAplicado, setMontoMaxAplicado] = useState('')
   const [page, setPage] = useState(1)
-  const subvista = valorPermitido(params.get('sub'), SUBVISTAS, 'cheques')
-  const beneficiarioRenov = params.get('benef') ?? ''
+  // Seguimiento ahora vive dentro de Renovaciones: los links viejos con ?sub=seguimiento abren ahí.
+  const subParam = params.get('sub')
+  const subvista = valorPermitido(subParam === 'seguimiento' ? 'renovaciones' : subParam, SUBVISTAS, 'cheques')
   const vistaUsd = valorPermitido(params.get('usd'), ['general', 'proveedor'] as const, 'general')
   /** Cambiar de sub-pestaña limpia lo que era propio de la anterior. */
-  const setSubvista = (v: Subvista, beneficiario?: string) =>
-    cambiar({ sub: v === 'cheques' ? null : v, benef: beneficiario || null, usd: null, seg: null, cadena: null })
-  const setBeneficiarioRenov = (v: string) => cambiar({ benef: v || null }, { reemplazar: true })
+  const setSubvista = (v: Subvista) =>
+    cambiar({ sub: v === 'cheques' ? null : v, benef: null, usd: null, seg: null, ver: null, cadena: null })
   const setVistaUsd = (v: 'general' | 'proveedor') => cambiar({ usd: v === 'general' ? null : v })
   const [detalleId, setDetalleId] = useState<string | null>(null)
   const [mostrarMesesViejos, setMostrarMesesViejos] = useState(false)
@@ -134,14 +134,23 @@ export function PestanaOcasionales() {
   const total = data?.total ?? 0
   const paginas = Math.max(1, data?.pages ?? 1)
 
-  const irARenovaciones = (beneficiarioNormalizado: string) => {
-    setSubvista('renovaciones', beneficiarioNormalizado)
-  }
+  /** Con beneficiario, muestra todas sus renovaciones (también las cerradas): el cheque puede estar en una vieja. */
+  const irARenovaciones = (beneficiarioNormalizado: string) =>
+    cambiar({
+      sub: 'renovaciones',
+      benef: beneficiarioNormalizado || null,
+      seg: beneficiarioNormalizado ? 'todas' : null,
+      usd: null,
+      ver: null,
+      cadena: null,
+    })
 
   const descripcionVista: Record<typeof subvista, string> = {
     cheques: 'Listado de todos los cheques ocasionales importados desde Vientri. Filtrá por estado, buscá por beneficiario o número.',
-    renovaciones: 'Operaciones de renovación: qué cheques viejos se cambiaron por nuevos, con qué interés y en qué plazo.',
-    seguimiento: 'Cheques pendientes de cobro agrupados por beneficiario. La exposición es la plata que todavía está "en la calle": cheques pendientes o rechazados que aún no se cobraron ni se renovaron. Filtrá por abiertas/todas y navegá la cadena de renovaciones.',
+    revision:
+      'Los cheques a revisar, juntos por operación (mismo beneficiario, misma emisión y mismo OBS). Abrí una para ver de dónde puede venir: renovación, interés, diferencia, dólares o cheques que salieron en esos días.',
+    renovaciones:
+      'Qué cheques se cambiaron por otros nuevos, con qué interés, y cuánta plata sigue "en la calle" (cheques pendientes o rechazados que todavía no se cobraron ni se renovaron). Miralo sumado por proveedor o una operación por fila; "Ver cadena" muestra todas las renovaciones encadenadas.',
     usd: 'Operaciones en dólares, con el nombre del proveedor tal como está en el catálogo. Podés verlas una por una o sumadas por proveedor.',
     operaciones: 'Detalle de cada operación USD individual con su tipo de cambio y montos.',
     proveedores: 'Catálogo de proveedores financieros. Cada uno reúne todas las formas en que aparece escrito su nombre en los cheques; abajo están los nombres que todavía no se asignaron a ninguno.',
@@ -153,8 +162,8 @@ export function PestanaOcasionales() {
         <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
           {([
             ['cheques', 'Cheques'],
+            ['revision', 'Revisión asistida'],
             ['renovaciones', 'Renovaciones'],
-            ['seguimiento', 'Seguimiento'],
             ['usd', 'USD (agrupadas)'],
             ['operaciones', 'Operaciones USD / Renovaciones'],
             ['proveedores', 'Proveedores financieros'],
@@ -225,6 +234,16 @@ export function PestanaOcasionales() {
     </div>
   )
 
+  if (subvista === 'revision') {
+    return (
+      <>
+        {subTabs}
+        <RevisionAsistida onAbrirCheque={setDetalleId} />
+        {detalleId ? <OcasionalDetalleModal id={detalleId} onClose={() => setDetalleId(null)} /> : null}
+      </>
+    )
+  }
+
   if (subvista === 'renovaciones') {
     return (
       <>
@@ -240,19 +259,7 @@ export function PestanaOcasionales() {
             precargar={precargarRenov}
           />
         ) : null}
-        <OperacionesRenovacion
-          beneficiarioFiltro={beneficiarioRenov}
-          onLimpiarFiltro={() => setBeneficiarioRenov('')}
-        />
-      </>
-    )
-  }
-
-  if (subvista === 'seguimiento') {
-    return (
-      <>
-        {subTabs}
-        <SeguimientoRenovaciones />
+        <Renovaciones />
       </>
     )
   }

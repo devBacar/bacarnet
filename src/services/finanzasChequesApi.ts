@@ -349,6 +349,8 @@ export interface ChequeOcasionalItem {
   sugerencia?: SugerenciaOperacion | null
   /** Interés pagado aparte: sobre qué cheques parece calculado. Solo una sugerencia. */
   interesSugerido?: SugerenciaInteres | null
+  /** Vino sin destinatario: el beneficiario se tomó del comienzo del OBS. */
+  beneficiarioDesdeObs?: boolean
   clasificacionManual?: { tipo: TipoOperacionManual; uid: string; fecha: string } | null
   vientriId: number
   baja: boolean

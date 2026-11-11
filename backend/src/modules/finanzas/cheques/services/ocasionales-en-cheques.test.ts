@@ -54,6 +54,13 @@ describe('ocasionales en la lista de Emitidos', () => {
     expect(ocasionalAItem('a', ocasional()).id).toBe('oca:a')
   })
 
+  it('el estado 7 (cancelado con la renovación) no se muestra como debitado aunque Vientri lo marque pagado', () => {
+    const item = ocasionalAItem('a', ocasional({ estadoCodigo: 7, estado: 'Estado 7', pagado: true, fechaConciliado: '2026-09-22' }))
+    expect(item.estado).toBe('renovado')
+    expect(item.estadoBancario).toBe('Cancelado por renovación')
+    expect(ocasionalAItem('a', ocasional({ estadoCodigo: 10, pagado: true })).estado).toBe('debitado')
+  })
+
   it('saca de `cheques` la copia eCheq y la "oca-…", pero deja los demás cheques', () => {
     const oca = ocasionalAItem('a', ocasional())
     const echeq = copia()

@@ -26,26 +26,42 @@ function col() {
   return adminDb().collection(VIENTRI_CHEQUES_OCASIONALES)
 }
 
+/**
+ * Estado de Vientri del ocasional que sí se debita en el banco ("Pago confirmado a proveedor"). Medido contra los
+ * movimientos (13/08 al 11/11/2026): el 96 % tiene su débito. Los de estado 7 se cancelan con la renovación y no
+ * tienen débito propio; los pendientes todavía no se cobraron. Ninguno de esos se busca en el banco.
+ */
+export const ESTADO_OCASIONAL_DEBITADO = 10
+
+/**
+ * Un ocasional que se puede buscar en el banco, o null. La fecha que se usa para buscar el débito es la de conciliado
+ * de Vientri (el día que el banco lo pagó), no el vencimiento: los ocasionales se cobran muchas veces tarde.
+ */
+export function ocasionalParaVincular(docId: string, d: Record<string, unknown>): OcasionalSinVincular | null {
+  if (d.baja === true || d.movimientoBancarioId) return null
+  if (d.estadoCodigo !== ESTADO_OCASIONAL_DEBITADO) return null
+  if (typeof d.numeroCheque !== 'string' || !d.numeroCheque) return null
+  if (typeof d.fechaConciliado !== 'string' || !d.fechaConciliado) return null
+  if (typeof d.montoCentavos !== 'number') return null
+  return {
+    id: `${PREFIJO_OCASIONAL}${docId}`,
+    numero: d.numeroCheque,
+    montoCentavos: d.montoCentavos,
+    fechaEmision: typeof d.fechaEmision === 'string' ? d.fechaEmision : '',
+    fechaPago: d.fechaConciliado,
+    emisor: '',
+    cliente: null,
+    destinatario: typeof d.beneficiario === 'string' ? d.beneficiario : null,
+    estado: null,
+  }
+}
+
 export async function listOcasionalesSinVincular(): Promise<OcasionalSinVincular[]> {
   const snap = await col().get()
   const items: OcasionalSinVincular[] = []
   for (const doc of snap.docs) {
-    const d = doc.data()
-    if (d.baja === true || d.movimientoBancarioId) continue
-    if (typeof d.numeroCheque !== 'string' || !d.numeroCheque) continue
-    if (typeof d.fechaVencimiento !== 'string' || !d.fechaVencimiento) continue
-    if (typeof d.montoCentavos !== 'number') continue
-    items.push({
-      id: `${PREFIJO_OCASIONAL}${doc.id}`,
-      numero: d.numeroCheque,
-      montoCentavos: d.montoCentavos,
-      fechaEmision: typeof d.fechaEmision === 'string' ? d.fechaEmision : '',
-      fechaPago: d.fechaVencimiento,
-      emisor: '',
-      cliente: null,
-      destinatario: typeof d.beneficiario === 'string' ? d.beneficiario : null,
-      estado: null,
-    })
+    const item = ocasionalParaVincular(doc.id, doc.data())
+    if (item) items.push(item)
   }
   return items
 }

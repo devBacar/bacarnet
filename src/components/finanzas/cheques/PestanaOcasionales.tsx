@@ -31,6 +31,7 @@ import { PendientesDeRenovar } from './PendientesDeRenovar'
 import { ProveedoresFinancierosCatalogo } from './ProveedoresFinancierosCatalogo'
 import { SeguimientoRenovaciones } from './SeguimientoRenovaciones'
 import { ClasificarOperacionPanel } from './ClasificarOperacionPanel'
+import { useParamsUrl, valorPermitido } from './useParamsUrl'
 import { InteresSugerido, etiquetaInteresSugerido } from './InteresSugerido'
 import { BotonNuevaOperacionUsd, OperacionesDolares, ModalNuevaOperacion, type PrecargarRenovacion } from './OperacionesDolares'
 
@@ -40,6 +41,9 @@ function formatFecha(iso: string | null): string {
   if (!year || !month || !day) return iso
   return `${day}/${month}/${year}`
 }
+
+const SUBVISTAS = ['cheques', 'renovaciones', 'seguimiento', 'usd', 'operaciones', 'proveedores'] as const
+type Subvista = (typeof SUBVISTAS)[number]
 
 const FILTRO_TABS: [OcasionalesFiltro, string][] = [
   ['', 'Todos'],
@@ -55,7 +59,9 @@ export function PestanaOcasionales() {
   const queryClient = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [importMsg, setImportMsg] = useState<string | null>(null)
-  const [filtro, setFiltro] = useState<OcasionalesFiltro>('')
+  const { params, cambiar } = useParamsUrl()
+  const filtro = valorPermitido<OcasionalesFiltro>(params.get('filtro'), FILTRO_TABS.map(([v]) => v), '')
+  const setFiltro = (v: OcasionalesFiltro) => cambiar({ filtro: v || null })
   const [busqueda, setBusqueda] = useState('')
   const [q, setQ] = useState('')
   const [montoMin, setMontoMin] = useState('')
@@ -63,9 +69,14 @@ export function PestanaOcasionales() {
   const [montoMax, setMontoMax] = useState('')
   const [montoMaxAplicado, setMontoMaxAplicado] = useState('')
   const [page, setPage] = useState(1)
-  const [subvista, setSubvista] = useState<'cheques' | 'renovaciones' | 'seguimiento' | 'usd' | 'operaciones' | 'proveedores'>('cheques')
-  const [beneficiarioRenov, setBeneficiarioRenov] = useState('')
-  const [vistaUsd, setVistaUsd] = useState<'general' | 'proveedor'>('general')
+  const subvista = valorPermitido(params.get('sub'), SUBVISTAS, 'cheques')
+  const beneficiarioRenov = params.get('benef') ?? ''
+  const vistaUsd = valorPermitido(params.get('usd'), ['general', 'proveedor'] as const, 'general')
+  /** Cambiar de sub-pestaña limpia lo que era propio de la anterior. */
+  const setSubvista = (v: Subvista, beneficiario?: string) =>
+    cambiar({ sub: v === 'cheques' ? null : v, benef: beneficiario || null, usd: null, seg: null, cadena: null })
+  const setBeneficiarioRenov = (v: string) => cambiar({ benef: v || null }, { reemplazar: true })
+  const setVistaUsd = (v: 'general' | 'proveedor') => cambiar({ usd: v === 'general' ? null : v })
   const [detalleId, setDetalleId] = useState<string | null>(null)
   const [mostrarMesesViejos, setMostrarMesesViejos] = useState(false)
   const [precargarRenov, setPrecargarRenov] = useState<PrecargarRenovacion | null>(null)
@@ -124,8 +135,7 @@ export function PestanaOcasionales() {
   const paginas = Math.max(1, data?.pages ?? 1)
 
   const irARenovaciones = (beneficiarioNormalizado: string) => {
-    setBeneficiarioRenov(beneficiarioNormalizado)
-    setSubvista('renovaciones')
+    setSubvista('renovaciones', beneficiarioNormalizado)
   }
 
   const descripcionVista: Record<typeof subvista, string> = {
@@ -152,7 +162,7 @@ export function PestanaOcasionales() {
             <button
               key={val}
               type="button"
-              onClick={() => { setSubvista(val); if (val === 'renovaciones') setBeneficiarioRenov('') }}
+              onClick={() => setSubvista(val)}
               className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                 subvista === val
                   ? 'bg-brand-primary text-white shadow-sm'

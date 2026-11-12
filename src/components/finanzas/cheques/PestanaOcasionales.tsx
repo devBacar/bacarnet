@@ -53,7 +53,28 @@ const FILTRO_TABS: [OcasionalesFiltro, string][] = [
   ['con_renovacion', 'Con renovación'],
   ['con_usd', 'Con USD'],
   ['compra_iva', 'Compra de IVA'],
+  ['otros_pagos', 'Otros pagos'],
 ]
+
+/** Misma clave que el backend: los otros pagos se juntan por fecha de emisión + OBS + beneficiario. */
+function claveGrupoOtroPago(ch: ChequeOcasionalItem): string {
+  return `${ch.fechaEmision ?? ''}|${ch.obsOriginal.trim().toLowerCase()}|${ch.beneficiarioNormalizado}`
+}
+
+/** Junta cheques consecutivos con la misma clave (el backend ya los manda ordenados por grupo). */
+function agruparOtrosPagos(cheques: ChequeOcasionalItem[]): ChequeOcasionalItem[][] {
+  const grupos: ChequeOcasionalItem[][] = []
+  let clave: string | null = null
+  for (const ch of cheques) {
+    const k = claveGrupoOtroPago(ch)
+    if (k === clave) grupos[grupos.length - 1].push(ch)
+    else {
+      grupos.push([ch])
+      clave = k
+    }
+  }
+  return grupos
+}
 
 export function PestanaOcasionales() {
   const { user } = useAuth()
@@ -595,14 +616,38 @@ export function PestanaOcasionales() {
               </tr>
             </thead>
             <tbody>
-              {(data?.cheques ?? []).map((ch) => (
-                <OcasionalRow
-                  key={ch.vientriId}
-                  ch={ch}
-                  onAbrir={() => setDetalleId(`oca-${ch.vientriId}`)}
-                  onVerRenov={() => irARenovaciones(ch.beneficiarioNormalizado)}
-                />
-              ))}
+              {filtro === 'otros_pagos'
+                ? agruparOtrosPagos(data?.cheques ?? []).map((grupo) => (
+                    <Fragment key={claveGrupoOtroPago(grupo[0])}>
+                      <tr className="border-t border-neutral-300 bg-neutral-100 text-xs dark:border-zinc-700 dark:bg-zinc-800/60">
+                        <td colSpan={8} className="px-3 py-2">
+                          <span className="text-heading font-semibold">{grupo[0].beneficiario || '—'}</span>
+                          <span className="text-body-muted"> · emitido el {formatFecha(grupo[0].fechaEmision)}</span>
+                          {grupo[0].obsOriginal ? <span className="text-body-muted"> · {grupo[0].obsOriginal}</span> : null}
+                          <span className="text-body-muted"> · {grupo.length} {grupo.length === 1 ? 'cheque' : 'cheques'} · </span>
+                          <span className="text-brand-primary font-semibold">
+                            {formatMoneyCentavos(grupo.reduce((s, c) => s + c.montoCentavos, 0), 'ARS')}
+                          </span>
+                        </td>
+                      </tr>
+                      {grupo.map((ch) => (
+                        <OcasionalRow
+                          key={ch.vientriId}
+                          ch={ch}
+                          onAbrir={() => setDetalleId(`oca-${ch.vientriId}`)}
+                          onVerRenov={() => irARenovaciones(ch.beneficiarioNormalizado)}
+                        />
+                      ))}
+                    </Fragment>
+                  ))
+                : (data?.cheques ?? []).map((ch) => (
+                    <OcasionalRow
+                      key={ch.vientriId}
+                      ch={ch}
+                      onAbrir={() => setDetalleId(`oca-${ch.vientriId}`)}
+                      onVerRenov={() => irARenovaciones(ch.beneficiarioNormalizado)}
+                    />
+                  ))}
             </tbody>
           </table>
           {(data?.cheques.length ?? 0) === 0 ? (

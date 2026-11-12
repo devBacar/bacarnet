@@ -4,8 +4,10 @@ import {
   REVISAR_INTERES_SIN_ORIGEN,
   REVISAR_PROVEEDOR_NO_CARGADO,
   REVISAR_SIN_DATOS_FINANCIEROS,
+  claveGrupoOtroPago,
   clasificarOcasional,
   esCompraIva,
+  esOtroPago,
   reclasificarDoc,
 } from './clasificar-ocasional.js'
 
@@ -165,5 +167,33 @@ describe('reclasificarDoc', () => {
     expect(r.pagado).toBe(true)
     expect(r.montoCentavos).toBe(555)
     expect(r.renovadoPor).toEqual(['x'])
+  })
+})
+
+describe('esOtroPago', () => {
+  it('Iván Barrera solo cuando el OBS dice retiro, en cualquier orden del nombre', () => {
+    expect(esOtroPago('ivan barrera', 'RETIRO 10/11')).toBe(true)
+    expect(esOtroPago('barrera ivan', 'retiros socio')).toBe(true)
+    expect(esOtroPago('ivan barrera', 'RENOV CHQ 123')).toBe(false)
+  })
+  it('Fabrega Gabriela y Cavazza siempre', () => {
+    expect(esOtroPago('fabrega gabriela', '')).toBe(true)
+    expect(esOtroPago('gabriela fabrega', 'lo que sea')).toBe(true)
+    expect(esOtroPago('cavazza', '')).toBe(true)
+    expect(esOtroPago('cavazza hnos', 'x')).toBe(true)
+  })
+  it('otros beneficiarios no', () => {
+    expect(esOtroPago('presta plata', 'retiro')).toBe(false)
+    expect(esOtroPago('gabriela perez', '')).toBe(false)
+  })
+})
+
+describe('claveGrupoOtroPago', () => {
+  it('junta por fecha de emisión + OBS + beneficiario', () => {
+    const a = claveGrupoOtroPago({ fechaEmision: '2026-11-01', obsOriginal: 'RETIRO ', beneficiarioNormalizado: 'ivan barrera' })
+    const b = claveGrupoOtroPago({ fechaEmision: '2026-11-01', obsOriginal: 'retiro', beneficiarioNormalizado: 'ivan barrera' })
+    const c = claveGrupoOtroPago({ fechaEmision: '2026-11-02', obsOriginal: 'retiro', beneficiarioNormalizado: 'ivan barrera' })
+    expect(a).toBe(b)
+    expect(a).not.toBe(c)
   })
 })

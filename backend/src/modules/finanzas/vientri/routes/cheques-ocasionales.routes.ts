@@ -12,7 +12,7 @@ import {
   quitarProveedorFinanciero,
   renombrarProveedorFinanciero,
 } from '../../agenda/services/proveedores-financieros.service.js'
-import { esCompraIva } from '../domain/clasificar-ocasional.js'
+import { claveGrupoOtroPago, esCompraIva, esOtroPago } from '../domain/clasificar-ocasional.js'
 import { parsearUsdSuelto } from '../domain/parsear-obs.js'
 import type { TipoOperacionManual } from '../domain/cheque-ocasional.types.js'
 import { normalizarDocOcasional } from '../domain/normalizar-doc-ocasional.js'
@@ -72,7 +72,7 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
     const todos = await leerTodos()
 
     const filtro = (typeof req.query.filtro === 'string' ? req.query.filtro : '') as
-      | '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva'
+      | '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva' | 'otros_pagos'
     const q = typeof req.query.q === 'string' ? normalizar(req.query.q.trim()) : ''
     const page = Math.max(1, Number(req.query.page) || 1)
 
@@ -83,6 +83,7 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
     else if (filtro === 'con_renovacion') filtrados = filtrados.filter((d) => d.renovacionDe.length > 0 || d.renovadoPor.length > 0)
     else if (filtro === 'con_usd') filtrados = filtrados.filter((d) => d.operacionUsd !== null)
     else if (filtro === 'compra_iva') filtrados = filtrados.filter((d) => d.esCompraIva === true)
+    else if (filtro === 'otros_pagos') filtrados = filtrados.filter((d) => esOtroPago(d.beneficiarioNormalizado ?? '', d.obsOriginal ?? ''))
 
     if (q) {
       filtrados = filtrados.filter((d) =>
@@ -96,14 +97,35 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
     )
     filtrados = filtrados.filter((d) => dentroDelRangoMonto(d.montoCentavos, rangoMonto))
 
+    const total = filtrados.length
+    const totalCentavos = filtrados.reduce((s, d) => s + d.montoCentavos, 0)
+
+    if (filtro === 'otros_pagos') {
+      // Se pagina por grupo (emisión + OBS + beneficiario) para que un grupo nunca quede partido entre páginas.
+      const grupos = new Map<string, ChequeOcasionalDoc[]>()
+      for (const d of filtrados) {
+        const k = claveGrupoOtroPago(d)
+        const g = grupos.get(k)
+        if (g) g.push(d)
+        else grupos.set(k, [d])
+      }
+      const ordenados = [...grupos.values()]
+        .map((g) => g.sort((a, b) => (a.fechaVencimiento ?? '').localeCompare(b.fechaVencimiento ?? '')))
+        .sort((a, b) => (b[0].fechaEmision ?? '').localeCompare(a[0].fechaEmision ?? '')
+          || a[0].beneficiarioNormalizado.localeCompare(b[0].beneficiarioNormalizado))
+      const pages = Math.max(1, Math.ceil(ordenados.length / POR_PAGINA))
+      const start = (page - 1) * POR_PAGINA
+      const items = ordenados.slice(start, start + POR_PAGINA).flat()
+      res.json({ cheques: items, total, totalCentavos, page, pages })
+      return
+    }
+
     filtrados.sort((a, b) => {
       const fa = a.fechaVencimiento ?? ''
       const fb = b.fechaVencimiento ?? ''
       return fb.localeCompare(fa)
     })
 
-    const total = filtrados.length
-    const totalCentavos = filtrados.reduce((s, d) => s + d.montoCentavos, 0)
     const pages = Math.max(1, Math.ceil(total / POR_PAGINA))
     const start = (page - 1) * POR_PAGINA
     const items = filtrados.slice(start, start + POR_PAGINA)

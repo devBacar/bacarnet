@@ -373,7 +373,7 @@ export interface ChequeOcasionalItem {
   baja: boolean
 }
 
-export type OcasionalesFiltro = '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva'
+export type OcasionalesFiltro = '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva' | 'otros_pagos'
 
 export interface OcasionalesListResponse {
   cheques: ChequeOcasionalItem[]

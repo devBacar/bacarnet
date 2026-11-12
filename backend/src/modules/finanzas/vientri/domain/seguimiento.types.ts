@@ -1,4 +1,5 @@
 import type { ChequeEnOperacion, OperacionRenovacion } from './cheque-ocasional.types.js'
+import type { InteresAparte } from './operaciones-del-cheque.js'
 
 /**
  * Estado de un cheque NUEVO dentro de una operación de renovación.
@@ -34,10 +35,24 @@ export type EstadoOperacion = 'abierta' | 'cerrada'
 
 export type FiltroSeguimiento = 'abiertas' | 'todas'
 
+/** Cheques viejos de la operación que salieron a nombre de otro proveedor (ej. POVO 20/02/2026 renueva cheques de MANA). */
+export interface ViejosDeOtroBeneficiario {
+  beneficiario: string
+  cantidadCheques: number
+  montoCentavos: number
+}
+
 export interface OperacionSeguimientoItem extends OperacionPersistida {
   estadoOperacion: EstadoOperacion
   /** Ancestros transitivos (ids), del más cercano al más lejano. */
   ancestrosIds: string[]
+  /** Vacío si todos los viejos son del mismo proveedor que la operación (o no se sabe de quién son). */
+  viejosDeOtroBeneficiario: ViejosDeOtroBeneficiario[]
+  /**
+   * Interés que esta renovación pagó aparte, en otros cheques, y Finanzas confirmó. No entra en `interesCentavos`
+   * (que es solo nuevos − viejos) ni en la exposición.
+   */
+  interesAparte: InteresAparte | null
 }
 
 export interface BeneficiarioSeguimiento {

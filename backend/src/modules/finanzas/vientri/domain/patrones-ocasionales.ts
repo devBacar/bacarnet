@@ -1,6 +1,7 @@
 import type {
   ChequeOcasionalDoc,
   DatosOperacionManual,
+  InteresDeRenovacion,
   RolEnOperacion,
   SugerenciaOperacion,
   TipoOperacionManual,
@@ -29,6 +30,9 @@ export const ETIQUETA_TIPO: Record<TipoOperacionManual, string> = {
   renovacion: 'renovación',
   rol: 'interés / capital',
 }
+
+/** Número corto de un cheque (lo que va después del último guion). */
+const numeroCortoDe = (numero: string): string => numero.split('-').pop() ?? numero
 
 const ETIQUETA_ROL: Record<Exclude<RolEnOperacion, null>, string> = {
   capital: 'capital',
@@ -124,7 +128,33 @@ export function validarClasificacion(tipo: unknown, datosRaw: unknown, obs: stri
     if (datos.rol !== 'capital' && datos.rol !== 'interes' && datos.rol !== 'mixto') {
       return { ok: false, error: 'Elegí si es capital, interés o las dos cosas' }
     }
-    return { ok: true, datos: { rol: datos.rol } }
+    if (datos.interesDePorCheque === undefined || datos.interesDePorCheque === null) return { ok: true, datos: { rol: datos.rol } }
+    if (datos.rol !== 'interes') return { ok: false, error: 'Solo un interés puede ir asociado a una renovación' }
+    const crudo = datos.interesDePorCheque as Record<string, unknown>
+    const interesDePorCheque: Record<string, InteresDeRenovacion> = {}
+    for (const [numero, valor] of Object.entries(crudo)) {
+      if (!/^[\d-]{4,}$/.test(numero)) return { ok: false, error: 'Los números de cheque solo pueden tener dígitos y guiones' }
+      const i = (valor ?? {}) as Record<string, unknown>
+      const fecha = i.fechaRenovacion === null || i.fechaRenovacion === undefined ? null : String(i.fechaRenovacion)
+      if (fecha !== null && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return { ok: false, error: 'La fecha de la renovación no es válida' }
+      const tasa = Number(i.tasaPorcentaje)
+      const meses = Number(i.meses)
+      const base = Number(i.baseCentavos)
+      if (!Number.isFinite(tasa) || tasa <= 0 || tasa > 100) return { ok: false, error: 'La tasa del interés no es válida' }
+      if (!Number.isInteger(meses) || meses <= 0) return { ok: false, error: 'La cantidad de meses no es válida' }
+      if (!Number.isInteger(base) || base <= 0) return { ok: false, error: 'La base del interés no es válida' }
+      interesDePorCheque[numeroCortoDe(numero)] = {
+        fechaRenovacion: fecha,
+        obsRenovacion: String(i.obsRenovacion ?? '').trim(),
+        tasaPorcentaje: tasa,
+        porMes: i.porMes === true,
+        meses,
+        baseCentavos: base,
+        baseDescripcion: String(i.baseDescripcion ?? '').trim(),
+      }
+    }
+    if (Object.keys(interesDePorCheque).length === 0) return { ok: false, error: 'Falta a qué operación corresponde cada cheque' }
+    return { ok: true, datos: { rol: 'interes', interesDePorCheque } }
   }
   return { ok: false, error: 'Tipo de operación desconocido' }
 }
@@ -133,16 +163,22 @@ export function validarClasificacion(tipo: unknown, datosRaw: unknown, obs: stri
 export function camposDeLaClasificacion(
   tipo: TipoOperacionManual,
   datos: DatosOperacionManual,
-): Partial<Pick<ChequeOcasionalDoc, 'operacionUsd' | 'renovacionDe' | 'esRenovacion' | 'rolEnOperacion'>> {
+  numeroCheque = '',
+): Partial<Pick<ChequeOcasionalDoc, 'operacionUsd' | 'renovacionDe' | 'esRenovacion' | 'rolEnOperacion' | 'interesDe'>> {
   if (tipo === 'usd') return { operacionUsd: datos.usd! }
   if (tipo === 'renovacion') return { renovacionDe: datos.chequeIds!, esRenovacion: true }
-  return { rolEnOperacion: datos.rol! }
+  const interesDe = datos.interesDePorCheque?.[numeroCortoDe(numeroCheque)]
+  return interesDe ? { rolEnOperacion: datos.rol!, interesDe } : { rolEnOperacion: datos.rol! }
 }
 
-/** ¿El cheque ya tiene cargado este tipo de operación? Entonces no se le propone ni se le pisa en grupo. */
-export function yaTieneTipo(doc: ChequeOcasionalDoc, tipo: TipoOperacionManual): boolean {
+/**
+ * ¿El cheque ya tiene cargado este tipo de operación? Entonces no se le propone ni se le pisa en grupo.
+ * Un interés que se asocia a una renovación cuenta como nuevo dato aunque el cheque ya diga "interés".
+ */
+export function yaTieneTipo(doc: ChequeOcasionalDoc, tipo: TipoOperacionManual, datos?: DatosOperacionManual): boolean {
   if (tipo === 'usd') return doc.operacionUsd != null
   if (tipo === 'renovacion') return (doc.renovacionDe ?? []).length > 0
+  if (datos?.interesDePorCheque) return doc.interesDe != null || !(numeroCortoDe(doc.numeroCheque) in datos.interesDePorCheque)
   return doc.rolEnOperacion != null
 }
 

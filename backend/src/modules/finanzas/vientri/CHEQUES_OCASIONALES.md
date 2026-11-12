@@ -263,7 +263,7 @@ Colección **`renovacionesChequesAgrupados`** (derivada, se regenera desde `vien
 
 - ID determinístico: `renov-{beneficiarioNormalizado}-{fechaEmision}-{banco}`. Si dos operaciones comparten base (subgrupos de un mismo grupo) la segunda y siguientes llevan sufijo `-2`, `-3`… Los eCheq no tienen banco: el tramo queda como `?`.
 - Se recalcula al final de `importarChequesOcasionales` (no en modo `simular`) con `recalcularSeguimiento()`: upsert por huella con `sincronizarColeccion`.
-- Por defecto **no borra** las operaciones que dejaron de existir (`borrarFaltantes: false`).
+- La importación y "Recalcular todo" **borran** las operaciones que dejaron de existir (`borrarFaltantes: true`): es una colección derivada y, si quedaran, aparecerían operaciones viejas al lado de las nuevas. (`recalcularSeguimiento()` sin la opción no borra.)
 - Si el recálculo falla, la importación no se cae: el error queda en `seguimientoError` del resultado, en el `mensaje` y en el log.
 - Cada documento es una `OperacionPersistida`: la `OperacionRenovacion` + `chequesNuevos[].estado` / `operacionSiguienteId`, `operacionesAnterioresIds`, `fechaVtoMax` y `exposicionCentavos`.
 

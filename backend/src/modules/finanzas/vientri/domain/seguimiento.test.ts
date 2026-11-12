@@ -263,6 +263,70 @@ describe('armarSeguimiento', () => {
     expect(r.beneficiarios[0]!.operaciones).toHaveLength(2)
   })
 
+  it('marca la operación que renueva cheques de otro proveedor (POVO 20/02/2026 renueva cheques de MANA)', () => {
+    const mana = [700, 701].map((n) =>
+      doc({ numeroCheque: num(n), beneficiario: 'MANA', beneficiarioNormalizado: 'mana', montoCentavos: 2_780_000_00, pagado: true, fechaEmision: '2026-01-30', fechaVencimiento: '2026-02-14', obsOriginal: 'Op' }),
+    )
+    const propio = doc({ numeroCheque: num(702), beneficiario: 'POVO', beneficiarioNormalizado: 'povo', montoCentavos: 1_000_000_00, pagado: true, fechaEmision: '2026-01-30', fechaVencimiento: '2026-02-14', obsOriginal: 'Op' })
+    const nuevo = doc({
+      numeroCheque: num(800),
+      beneficiario: 'POVO',
+      beneficiarioNormalizado: 'povo',
+      montoCentavos: 7_000_000_00,
+      esRenovacion: true,
+      renovacionDe: ['00000700', '00000701', '00000702'],
+      fechaEmision: '2026-02-20',
+      fechaVencimiento: '2026-08-14',
+    })
+    const catalogo = new Map([
+      ['mana', { id: 'provfin-mana', nombre: 'MANA' }],
+      ['povo', { id: 'provfin-povo', nombre: 'POVO' }],
+    ])
+    const r = armarSeguimiento(construirSeguimiento([...mana, propio, nuevo]), '2026-07-01', 'abiertas', catalogo)
+    const op = r.beneficiarios[0]!.operaciones[0]!
+    expect(op.viejosDeOtroBeneficiario).toEqual([{ beneficiario: 'MANA', cantidadCheques: 2, montoCentavos: 5_560_000_00 }])
+  })
+
+  it('trae el interés que la renovación pagó aparte (confirmado), con sus cheques y su estado', () => {
+    // Renovación del 22/09 con cheques nuevos por el mismo importe; el interés sale aparte en 2 cheques.
+    const viejo = doc({ numeroCheque: num(720), pagado: true, fechaEmision: '2026-07-01', fechaVencimiento: '2026-09-22', obsOriginal: 'Op' })
+    const nuevo = doc({ numeroCheque: num(820), esRenovacion: true, renovacionDe: ['00000720'], fechaEmision: '2026-09-22', fechaVencimiento: '2027-01-22', obsOriginal: 'Renovacion cheques 720' })
+    const interesDe = { fechaRenovacion: '2026-09-22', obsRenovacion: 'Renovacion cheques 720', tasaPorcentaje: 6, porMes: true, meses: 3, baseCentavos: 100_000_00, baseDescripcion: 'lo que vence en enero de 2027' }
+    const intereses = [
+      doc({ numeroCheque: num(901), montoCentavos: 9_000_00, rolEnOperacion: 'interes', fechaEmision: '2026-09-22', fechaVencimiento: '2026-11-22', obsOriginal: 'Intereses', interesDe }),
+      doc({ numeroCheque: num(900), montoCentavos: 9_000_00, rolEnOperacion: 'interes', pagado: true, fechaEmision: '2026-09-22', fechaVencimiento: '2026-10-22', obsOriginal: 'Intereses', interesDe }),
+      // Otro proveedor con la misma fecha y OBS: no es de esta renovación.
+      doc({ numeroCheque: num(902), beneficiario: 'POVO', beneficiarioNormalizado: 'povo', montoCentavos: 5_000_00, fechaEmision: '2026-09-22', obsOriginal: 'Intereses', interesDe }),
+    ]
+    const r = armarSeguimiento(construirSeguimiento([viejo, nuevo]), '2026-10-01', 'abiertas', new Map(), intereses)
+    const op = r.beneficiarios[0]!.operaciones[0]!
+    expect(op.interesCentavos).toBe(0)
+    expect(op.interesAparte).toMatchObject({ cantidadCheques: 2, totalCentavos: 18_000_00, tasaPorcentaje: 6, porMes: true, meses: 3, baseCentavos: 100_000_00 })
+    expect(op.interesAparte!.cheques.map((c) => [c.numeroCheque, c.estado])).toEqual([
+      [num(900), 'debitado'],
+      [num(901), 'pendiente'],
+    ])
+    // Sin cheques de interés confirmados, no hay interés aparte.
+    expect(armarSeguimiento(construirSeguimiento([viejo, nuevo]), '2026-10-01', 'abiertas').beneficiarios[0]!.operaciones[0]!.interesAparte).toBeNull()
+  })
+
+  it('no marca alias del mismo proveedor ni operaciones guardadas sin el beneficiario de los viejos', () => {
+    const viejo = doc({ numeroCheque: num(710), beneficiario: 'GONZALES FABIAN', beneficiarioNormalizado: 'gonzales fabian', pagado: true, fechaEmision: '2026-04-01', fechaVencimiento: '2026-05-01', obsOriginal: 'Op' })
+    const nuevo = doc({ numeroCheque: num(810), beneficiario: 'GONZALEZ F', beneficiarioNormalizado: 'gonzalez f', esRenovacion: true, renovacionDe: ['00000710'], fechaEmision: '2026-05-01', fechaVencimiento: '2026-08-01' })
+    const catalogo = new Map([
+      ['gonzales fabian', { id: 'provfin-gonzalez', nombre: 'GONZALEZ FABIAN' }],
+      ['gonzalez f', { id: 'provfin-gonzalez', nombre: 'GONZALEZ FABIAN' }],
+    ])
+    const ops = construirSeguimiento([viejo, nuevo])
+    expect(armarSeguimiento(ops, '2026-07-01', 'abiertas', catalogo).beneficiarios[0]!.operaciones[0]!.viejosDeOtroBeneficiario).toEqual([])
+    // Una forma de escribirlo que falta en el catálogo tampoco cuenta como otro si los nombres se parecen.
+    const conFabian = construirSeguimiento([viejo, { ...nuevo, beneficiario: 'GONZALEZ FABIAN', beneficiarioNormalizado: 'gonzalez fabian' }])
+    const soloUno = new Map([['gonzalez fabian', { id: 'provfin-gonzalez', nombre: 'GONZALEZ FABIAN' }]])
+    expect(armarSeguimiento(conFabian, '2026-07-01', 'abiertas', soloUno).beneficiarios[0]!.operaciones[0]!.viejosDeOtroBeneficiario).toEqual([])
+    const viejas = ops.map((o) => ({ ...o, chequesViejos: o.chequesViejos.map(({ beneficiario: _b, beneficiarioNormalizado: _n, ...c }) => c) }))
+    expect(armarSeguimiento(viejas, '2026-07-01', 'abiertas').beneficiarios[0]!.operaciones[0]!.viejosDeOtroBeneficiario).toEqual([])
+  })
+
   it('dos proveedores distintos del catálogo no se juntan aunque los nombres se parezcan', () => {
     const a = doc({ numeroCheque: num(110), beneficiario: 'CLAUDIA PEREZ', beneficiarioNormalizado: 'claudia perez', esRenovacion: true, fechaEmision: '2026-05-01', fechaVencimiento: '2026-08-01' })
     const b = doc({ numeroCheque: num(120), beneficiario: 'CLAUDIA RUIZ', beneficiarioNormalizado: 'claudia ruiz', esRenovacion: true, fechaEmision: '2026-06-01', fechaVencimiento: '2026-09-01' })

@@ -20,6 +20,8 @@ import {
   recalcularTodoOcasionales,
   type ChequeOcasionalItem,
   type OcasionalesFiltro,
+  type OperacionDelChequeItem,
+  type OperacionRenovacionItem,
   type OperacionUsdAgrupadaItem,
   type UsdPorProveedorItem,
 } from '../../../services/finanzasChequesApi'
@@ -739,6 +741,116 @@ function ResumenCard({
   )
 }
 
+/** Una renovación vista como operación: todos los cheques que vencían contra todos los que los reemplazaron. */
+function OperacionDelCheque({
+  titulo,
+  op,
+  numeroCheque,
+}: {
+  titulo: string
+  op: OperacionDelChequeItem
+  numeroCheque: string
+}) {
+  const listaCheques = (cheques: OperacionRenovacionItem['chequesViejos']) => (
+    <ul className="mt-1 space-y-0.5">
+      {cheques.map((c) => {
+        const esEste = c.numeroCheque === numeroCheque
+        return (
+          <li
+            key={c.numeroCheque}
+            className={`flex flex-wrap items-center justify-between gap-2 font-mono ${esEste ? 'font-semibold text-violet-900 dark:text-violet-200' : ''}`}
+          >
+            <span>
+              {c.numeroCheque}
+              {esEste ? <span className="ml-1 font-sans text-[11px]">(este)</span> : null}
+            </span>
+            <span>
+              {formatMoneyCentavos(c.montoCentavos, 'ARS')}
+              {c.fechaVencimiento ? ` · vto ${formatFecha(c.fechaVencimiento)}` : ''}
+            </span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+
+  return (
+    <div className="rounded-lg border border-violet-200/70 bg-white/60 p-2.5 text-xs dark:border-violet-800/50 dark:bg-transparent">
+      <p className="text-heading font-semibold">{titulo}</p>
+      {op.obsOriginal ? <p className="text-body-muted mt-0.5">OBS: {op.obsOriginal}</p> : null}
+
+      {op.vinculada ? (
+        <>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            <dt className="text-body-muted">Vencían</dt>
+            <dd className="text-right">
+              {op.chequesViejos.length} {op.chequesViejos.length === 1 ? 'cheque' : 'cheques'} ·{' '}
+              <span className="text-heading font-semibold">{formatMoneyCentavos(op.totalViejosCentavos, 'ARS')}</span>
+            </dd>
+            <dt className="text-body-muted">Se reemplazaron por</dt>
+            <dd className="text-right">
+              {op.chequesNuevos.length} {op.chequesNuevos.length === 1 ? 'cheque' : 'cheques'} ·{' '}
+              <span className="text-heading font-semibold">{formatMoneyCentavos(op.totalNuevosCentavos, 'ARS')}</span>
+              {op.fechaVtoNuevos ? ` · vencen ${formatFecha(op.fechaVtoNuevos)}` : ''}
+            </dd>
+            {op.interesCentavos === 0 && op.interesAparte ? (
+              <>
+                <dt className="text-body-muted">Interés adentro de los nuevos</dt>
+                <dd className="text-right">No tienen: mismo importe</dd>
+              </>
+            ) : (
+              <>
+                <dt className="text-body-muted">Interés de la operación</dt>
+                <dd className="text-right font-semibold text-red-600 dark:text-red-400">
+                  {formatMoneyCentavos(op.interesCentavos, 'ARS')} ({(op.tasaImplicita * 100).toFixed(1)}%
+                  {op.tasaMensualEstimada !== null ? ` · ${(op.tasaMensualEstimada * 100).toFixed(1)}% por mes` : ''})
+                </dd>
+              </>
+            )}
+            {op.interesAparte ? (
+              <>
+                <dt className="text-body-muted">Interés pagado aparte</dt>
+                <dd className="text-right font-semibold text-red-600 dark:text-red-400">
+                  {formatMoneyCentavos(op.interesAparte.totalCentavos, 'ARS')} en {op.interesAparte.cantidadCheques}{' '}
+                  {op.interesAparte.cantidadCheques === 1 ? 'cheque' : 'cheques'}
+                  <span className="text-body-muted block font-normal">
+                    {op.interesAparte.tasaPorcentaje.toLocaleString('es-AR', { maximumFractionDigits: 2 })}%
+                    {op.interesAparte.porMes
+                      ? ` mensual × ${op.interesAparte.meses} ${op.interesAparte.meses === 1 ? 'mes' : 'meses'}`
+                      : ''}{' '}
+                    sobre {op.interesAparte.baseDescripcion}
+                  </span>
+                </dd>
+              </>
+            ) : null}
+          </dl>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-violet-800 dark:text-violet-300">
+              Ver los {op.chequesViejos.length + op.chequesNuevos.length} cheques de la operación
+            </summary>
+            <p className="text-body-muted mt-1.5 font-medium">Vencían</p>
+            {listaCheques(op.chequesViejos)}
+            <p className="text-body-muted mt-1.5 font-medium">Los reemplazaron</p>
+            {listaCheques(op.chequesNuevos)}
+          </details>
+        </>
+      ) : (
+        <>
+          <p className="text-body-muted mt-1">
+            {op.chequesNuevos.length} {op.chequesNuevos.length === 1 ? 'cheque nuevo' : 'cheques nuevos'} por{' '}
+            {formatMoneyCentavos(op.totalNuevosCentavos, 'ARS')}. No se encontraron los cheques que reemplaza, así que
+            no se puede calcular el interés.
+          </p>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-violet-800 dark:text-violet-300">Ver los cheques nuevos</summary>
+            {listaCheques(op.chequesNuevos)}
+          </details>
+        </>
+      )}
+    </div>
+  )
+}
+
 function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => void }) {
   const puedeEditarCheques = usePermisosFinanzas().cheques
   const { data, isLoading, isError } = useQuery({
@@ -746,8 +858,8 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
     queryFn: () => fetchOcasionalDetalle(id),
   })
   const ch = data?.cheque
-  const clasif = data?.clasificacion
-  const cadena = data?.cadena
+  const opOrigen = data?.operacionOrigen ?? null
+  const opRenovacion = data?.operacionRenovacion ?? null
   const renovDe = data?.renovacionDeDetalle ?? []
   const renovPor = data?.renovadoPorDetalle ?? []
 
@@ -762,15 +874,6 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
     ch?.operacionUsd
       ? Math.round(ch.operacionUsd.montoUsd * ch.operacionUsd.cotizacion * 100)
       : null
-
-  const rolLabel =
-    clasif?.rolEnCadena === 'capital'
-      ? 'Capital inicial de la cadena'
-      : clasif?.rolEnCadena === 'mixto'
-        ? 'Eslabón intermedio (renovado)'
-        : clasif?.rolEnCadena === 'interes'
-          ? 'Eslabón vigente (capital + interés acumulado)'
-          : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
@@ -790,13 +893,6 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
                 <p className="text-body-muted text-sm">
                   {ch.beneficiario || '—'} · {ch.estado || (ch.pagado ? 'Pagado' : 'Pendiente')}
                 </p>
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {rolLabel ? (
-                    <span className="inline-block rounded border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
-                      {rolLabel}
-                    </span>
-                  ) : null}
-                </div>
               </div>
               <p className="text-brand-primary whitespace-nowrap text-lg font-semibold">
                 {formatMoneyCentavos(ch.montoCentavos, 'ARS')}
@@ -805,7 +901,14 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
 
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
               <dt className="text-body-muted">Beneficiario real (DESTINATARIO)</dt>
-              <dd className="font-medium">{ch.beneficiario || '—'}</dd>
+              <dd className="font-medium">
+                {ch.beneficiario || '—'}
+                {ch.beneficiarioDesdeRenovacion ? (
+                  <span className="text-body-muted ml-1.5 text-xs font-normal">(vino sin destinatario: se tomó de los cheques que renueva)</span>
+                ) : ch.beneficiarioDesdeObs ? (
+                  <span className="text-body-muted ml-1.5 text-xs font-normal">(vino sin destinatario: se tomó del OBS)</span>
+                ) : null}
+              </dd>
               <dt className="text-body-muted">Emisión</dt>
               <dd>{formatFecha(ch.fechaEmision)}</dd>
               <dt className="text-body-muted">Vencimiento</dt>
@@ -853,14 +956,21 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
               </div>
             ) : null}
 
-            {(renovDe.length > 0 || renovPor.length > 0 || cadena) ? (
-              <div className="mt-4 rounded-xl border border-violet-200 bg-violet-50/50 p-3 text-sm dark:border-violet-900/60 dark:bg-violet-950/20">
+            {opOrigen || opRenovacion || renovDe.length > 0 || renovPor.length > 0 ? (
+              <div className="mt-4 space-y-3 rounded-xl border border-violet-200 bg-violet-50/50 p-3 text-sm dark:border-violet-900/60 dark:bg-violet-950/20">
                 <p className="text-xs font-semibold uppercase tracking-wide text-violet-900 dark:text-violet-300">
-                  Tracking de Renovación y Costo Financiero
+                  Renovación y costo financiero
                 </p>
 
-                {renovDe.length > 0 ? (
-                  <div className="mt-2">
+                {opOrigen ? (
+                  <OperacionDelCheque
+                    titulo={`Salió de la renovación del ${formatFecha(opOrigen.fechaEmision)}`}
+                    op={opOrigen}
+                    numeroCheque={ch.numeroCheque}
+                  />
+                ) : null}
+                {!opOrigen && renovDe.length > 0 ? (
+                  <div>
                     <p className="text-body-muted text-xs font-medium">
                       Reemplaza a ({renovDe.length} {renovDe.length === 1 ? 'cheque viejo' : 'cheques viejos'}):
                     </p>
@@ -897,35 +1007,25 @@ function OcasionalDetalleModal({ id, onClose }: { id: string; onClose: () => voi
                   </div>
                 ) : null}
 
-                {renovPor.length > 0 ? (
-                  <div className="mt-2">
-                    <p className="text-body-muted text-xs font-medium">Renovado posteriormente por:</p>
+                {opRenovacion ? (
+                  <OperacionDelCheque
+                    titulo={`Se renovó en la operación del ${formatFecha(opRenovacion.fechaEmision)}`}
+                    op={opRenovacion}
+                    numeroCheque={ch.numeroCheque}
+                  />
+                ) : renovPor.length > 0 ? (
+                  <div>
+                    <p className="text-body-muted text-xs font-medium">Renovado por:</p>
                     <ul className="mt-1 space-y-1 text-xs">
                       {renovPor.map((r) => (
                         <li key={r.numeroCheque} className="flex flex-wrap items-center justify-between gap-2 font-mono">
                           <span>{r.numeroCheque}</span>
-                          <span>
-                            {r.montoCentavos !== null ? formatMoneyCentavos(r.montoCentavos, 'ARS') : 'Monto s/d'}
-                          </span>
+                          <span>{r.montoCentavos !== null ? formatMoneyCentavos(r.montoCentavos, 'ARS') : 'Monto s/d'}</span>
                         </li>
                       ))}
                     </ul>
-                  </div>
-                ) : null}
-
-                {cadena ? (
-                  <div className="mt-2 border-t border-violet-200/70 pt-2 text-xs dark:border-violet-800/50">
-                    <p className="text-body-muted">
-                      Cadena completa ({cadena.cheques.length} eslabones):{' '}
-                      <span className="text-heading font-medium">
-                        {formatMoneyCentavos(cadena.capitalInicialCentavos, 'ARS')} →{' '}
-                        {formatMoneyCentavos(cadena.montoFinalCentavos, 'ARS')}
-                      </span>{' '}
-                      · Interés:{' '}
-                      <span className="font-semibold text-red-600 dark:text-red-400">
-                        {formatMoneyCentavos(cadena.interesTotalCentavos, 'ARS')} (
-                        {(cadena.tasaImplicita * 100).toFixed(1)}%)
-                      </span>
+                    <p className="text-body-muted mt-1 text-xs">
+                      No se pudo armar la operación completa, así que no se calcula el interés.
                     </p>
                   </div>
                 ) : null}

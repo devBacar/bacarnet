@@ -36,3 +36,11 @@ describe('normalizarDocOcasional', () => {
     expect(d.baja).toBe(true)
   })
 })
+
+describe('normalizarDocOcasional: interés confirmado con la primera versión', () => {
+  it('pasa tasaMensualPorcentaje a tasaPorcentaje por mes', () => {
+    const viejo = { fechaRenovacion: '2026-09-22', obsRenovacion: 'R', tasaMensualPorcentaje: 6, meses: 3, baseCentavos: 100, baseDescripcion: 'x' }
+    const d = normalizarDocOcasional({ interesDe: viejo } as unknown as ChequeOcasionalDoc)
+    expect(d.interesDe).toEqual({ fechaRenovacion: '2026-09-22', obsRenovacion: 'R', tasaPorcentaje: 6, porMes: true, meses: 3, baseCentavos: 100, baseDescripcion: 'x' })
+  })
+})

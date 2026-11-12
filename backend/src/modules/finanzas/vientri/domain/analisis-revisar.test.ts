@@ -90,11 +90,14 @@ describe('analizarARevisar', () => {
     expect(g!.hipotesis.find((x) => x.tipo === 'diferencia')).toMatchObject({
       fuerza: 'posible',
       cuenta: { baseCentavos: 1234567800, tasaPorcentaje: 1, diferenciaCentavos: 0 },
-      confirmar: { tipo: 'rol', datos: { rol: 'interes' } },
+      confirmar: { tipo: 'rol', datos: { rol: 'interes' }, etiqueta: 'Confirmar como interés de la renovación del 10/06/2026' },
     })
-    // Si el grupo ya dice que es interés, no hay nada nuevo para guardar.
+    // Aunque ya diga "interés", se puede atar a la renovación; si ya está atado, no hay nada nuevo para guardar.
     const [yaInteres] = analizar([...viejos, ...nuevos, { ...dif, rolEnOperacion: 'interes' }])
-    expect(yaInteres!.hipotesis.find((x) => x.tipo === 'diferencia')!.confirmar).toBeNull()
+    expect(yaInteres!.hipotesis.find((x) => x.tipo === 'diferencia')!.confirmar).not.toBeNull()
+    const atado = { ...dif, rolEnOperacion: 'interes' as const, interesDe: { fechaRenovacion: '2026-06-10', obsRenovacion: 'Renovacion cheques 39000001/02', tasaPorcentaje: 1, porMes: false, meses: 1, baseCentavos: 1234567800, baseDescripcion: 'los cheques viejos' } }
+    const [yaAtado] = analizar([...viejos, ...nuevos, atado])
+    expect(yaAtado!.hipotesis.find((x) => x.tipo === 'diferencia')!.confirmar).toBeNull()
   })
 
   it('una base redonda queda como coincidencia débil y con aviso', () => {

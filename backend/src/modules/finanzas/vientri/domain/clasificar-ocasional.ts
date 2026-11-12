@@ -90,7 +90,7 @@ export function reclasificarDoc(
       tieneTasaExplicita: doc.tasaExplicita !== null,
       tieneRol: doc.rolEnOperacion !== null,
       esSoloInteres: doc.rolEnOperacion === 'interes',
-      tieneOrigen: (doc.renovacionDe ?? []).length > 0 || doc.operacionUsd !== null || doc.tasaExplicita !== null,
+      tieneOrigen: (doc.renovacionDe ?? []).length > 0 || doc.operacionUsd !== null || doc.tasaExplicita !== null || doc.interesDe != null,
     },
     proveedores,
     doc.obsOriginal,

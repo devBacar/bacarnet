@@ -37,6 +37,7 @@ import { analizarOcasionalesVsEmitidos } from '../domain/analisis-ocasionales-em
 import { analizarInteresVsRenovaciones } from '../domain/analisis-interes-renovacion.js'
 import { reconstruirCadenas, clasificarCheques, resumirCostoFinanciero } from '../domain/cadena-renovacion.js'
 import { agruparOperacionesRenovacion } from '../domain/operacion-renovacion.js'
+import { interesAparteDe, operacionesDelCheque } from '../domain/operaciones-del-cheque.js'
 import { armarSeguimiento } from '../domain/seguimiento.js'
 import { analizarARevisar } from '../domain/analisis-revisar.js'
 import { agruparOperacionesUsd, resumirUsdPorProveedor } from '../domain/operaciones-usd.js'
@@ -415,15 +416,18 @@ function hoyArgentina(): string {
 finanzasChequesOcasionalesRouter.get('/seguimiento', async (req, res) => {
   try {
     const filtro: FiltroSeguimiento = req.query.estado === 'todas' ? 'todas' : 'abiertas'
-    const [snap, catalogo] = await Promise.all([
+    const [snap, catalogo, conInteres] = await Promise.all([
       adminDb().collection(VIENTRI_OPERACIONES_RENOVACION).get(),
       mapaProveedoresFinancieros(),
+      // Solo los cheques con interés confirmado: el interés que cada renovación pagó aparte.
+      adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).where('interesDe', '!=', null).get(),
     ])
     const operaciones = snap.docs.map((d) => {
       const { huella, importacionId, actualizadoAt, ...rest } = d.data() as OperacionPersistida & Record<string, unknown>
       return rest as OperacionPersistida
     })
-    res.json(armarSeguimiento(operaciones, hoyArgentina(), filtro, catalogo))
+    const docsInteres = conInteres.docs.map((d) => normalizarDocOcasional(d.data() as ChequeOcasionalDoc))
+    res.json(armarSeguimiento(operaciones, hoyArgentina(), filtro, catalogo, docsInteres))
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] seguimiento', err)
     res.status(500).json({ error: 'No se pudo obtener el seguimiento de renovaciones' })
@@ -559,6 +563,8 @@ finanzasChequesOcasionalesRouter.post('/:id/clasificar', requireFinanzasPermiso(
 
     const col = adminDb().collection(VIENTRI_CHEQUES_OCASIONALES)
     const ids = new Set<string>([elegido.id])
+    // Número de cheque de cada doc: un interés guarda a qué operación corresponde cada cheque por separado.
+    const numeros = new Map<string, string>([[elegido.id, elegido.data.numeroCheque]])
     const elegidosAMano = Array.isArray(body.chequesDelGrupo) ? body.chequesDelGrupo.map(String) : null
     if (elegidosAMano || body.aplicarAIguales !== false) {
       const snap = await col.get()
@@ -567,22 +573,26 @@ finanzasChequesOcasionalesRouter.post('/:id/clasificar', requireFinanzasPermiso(
       const grupo = chequesDeLaMismaOperacion(propio, todos)
       if (elegidosAMano) {
         // Finanzas eligió a mano qué cheques del grupo son de esta operación: se les aplica aunque ya tuvieran el dato.
-        for (const d of chequesElegidosDelGrupo(propio, grupo, elegidosAMano)) ids.add(d.id)
+        for (const d of chequesElegidosDelGrupo(propio, grupo, elegidosAMano)) {
+          ids.add(d.id)
+          numeros.set(d.id, d.numeroCheque)
+        }
       } else {
         for (const d of grupo) {
-          if (!yaTieneTipo(d, tipo)) ids.add(d.id)
+          if (!yaTieneTipo(d, tipo, validado.datos)) {
+            ids.add(d.id)
+            numeros.set(d.id, d.numeroCheque)
+          }
         }
       }
     }
 
-    const campos = {
-      ...camposDeLaClasificacion(tipo, validado.datos),
-      clasificacionManual: { tipo, uid, fecha: new Date().toISOString() },
-    }
+    const marca = { clasificacionManual: { tipo, uid, fecha: new Date().toISOString() } }
+    const camposDe = (id: string) => ({ ...camposDeLaClasificacion(tipo, validado.datos, numeros.get(id) ?? ''), ...marca })
     const lista = [...ids]
     for (let i = 0; i < lista.length; i += 400) {
       const batch = adminDb().batch()
-      for (const id of lista.slice(i, i + 400)) batch.set(col.doc(id), campos, { merge: true })
+      for (const id of lista.slice(i, i + 400)) batch.set(col.doc(id), camposDe(id), { merge: true })
       await batch.commit()
     }
 
@@ -616,8 +626,6 @@ finanzasChequesOcasionalesRouter.get('/:id', async (req, res) => {
       return
     }
     const pool = await leerCompletos()
-    const cadenas = reconstruirCadenas(pool)
-    const clasificados = clasificarCheques(pool, cadenas)
 
     const porNumero = new Map<string, ChequeOcasionalDoc>()
     for (const d of pool) {
@@ -629,10 +637,11 @@ finanzasChequesOcasionalesRouter.get('/:id', async (req, res) => {
     }
 
     const actualEnCompletos = porNumero.get(cheque.numeroCheque) ?? cheque
-    const clasificacion = clasificados.find((c) => c.numeroCheque === cheque.numeroCheque) ?? null
-    const cadena = clasificacion?.cadenaId
-      ? cadenas.find((c) => c.id === clasificacion.cadenaId) ?? null
-      : null
+    // Finanzas mira la renovación por operación (todos los viejos contra todos los nuevos), no cheque a cheque.
+    const { origen: operacionOrigen, renovacion: operacionRenovacion } = operacionesDelCheque(
+      actualEnCompletos.numeroCheque,
+      agruparOperacionesRenovacion(pool),
+    )
 
     const renovacionDeDetalle = actualEnCompletos.renovacionDe.map((num) => {
       const v = porNumero.get(num)
@@ -676,8 +685,8 @@ finanzasChequesOcasionalesRouter.get('/:id', async (req, res) => {
       },
       mismaOperacion,
       propuestaRenovacion: armarPropuestaRenovacion(normalizarDocOcasional(cheque), todos, catalogo),
-      clasificacion,
-      cadena,
+      operacionOrigen: operacionOrigen ? { ...operacionOrigen, interesAparte: interesAparteDe(operacionOrigen, todos, catalogo) } : null,
+      operacionRenovacion: operacionRenovacion ? { ...operacionRenovacion, interesAparte: interesAparteDe(operacionRenovacion, todos, catalogo) } : null,
       renovacionDeDetalle,
       renovadoPorDetalle,
     })

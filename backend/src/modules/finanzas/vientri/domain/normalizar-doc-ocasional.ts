@@ -1,4 +1,16 @@
-import type { ChequeOcasionalDoc } from './cheque-ocasional.types.js'
+import type { ChequeOcasionalDoc, InteresDeRenovacion } from './cheque-ocasional.types.js'
+
+/**
+ * Los intereses confirmados con la primera versión del botón (12/11/2026) guardaron `tasaMensualPorcentaje` en vez de
+ * `tasaPorcentaje` + `porMes`: siempre eran por mes.
+ */
+function normalizarInteresDe(i: ChequeOcasionalDoc['interesDe']): InteresDeRenovacion | null {
+  if (!i) return null
+  const viejo = i as InteresDeRenovacion & { tasaMensualPorcentaje?: number }
+  if (viejo.tasaPorcentaje !== undefined) return { ...viejo, porMes: viejo.porMes ?? false }
+  const { tasaMensualPorcentaje, ...resto } = viejo
+  return { ...resto, tasaPorcentaje: tasaMensualPorcentaje ?? 0, porMes: true }
+}
 
 /**
  * Los docs guardados por versiones viejas de la importación pueden no tener algunos campos. Como ahora
@@ -11,6 +23,7 @@ export function normalizarDocOcasional(d: ChequeOcasionalDoc): ChequeOcasionalDo
     beneficiarioFormal: d.beneficiarioFormal ?? null,
     beneficiarioCuit: d.beneficiarioCuit ?? null,
     beneficiarioDesdeObs: d.beneficiarioDesdeObs ?? false,
+    beneficiarioDesdeRenovacion: d.beneficiarioDesdeRenovacion ?? false,
     fechaVencimiento: d.fechaVencimiento ?? null,
     fechaEmision: d.fechaEmision ?? null,
     estadoCodigo: d.estadoCodigo ?? null,
@@ -29,6 +42,7 @@ export function normalizarDocOcasional(d: ChequeOcasionalDoc): ChequeOcasionalDo
     esCompraIva: d.esCompraIva ?? false,
     sugerencia: d.sugerencia ?? null,
     interesSugerido: d.interesSugerido ?? null,
+    interesDe: normalizarInteresDe(d.interesDe),
     clasificacionManual: d.clasificacionManual ?? null,
     fechaConciliado: d.fechaConciliado ?? null,
     vientriChqId: d.vientriChqId ?? null,

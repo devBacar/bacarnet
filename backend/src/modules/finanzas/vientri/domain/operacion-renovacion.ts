@@ -51,6 +51,8 @@ function docAChequeEnOp(d: ChequeOcasionalDoc): ChequeEnOperacion {
     fechaEmision: d.fechaEmision,
     rol: d.rolEnOperacion ?? null,
     pagado: d.pagado,
+    beneficiario: d.beneficiario,
+    beneficiarioNormalizado: d.beneficiarioNormalizado,
   }
 }
 

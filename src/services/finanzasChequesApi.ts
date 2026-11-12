@@ -289,10 +289,24 @@ export async function ingresarChequesPegados(payload: IngresarChequesPayload): P
 export type TipoOperacionManual = 'usd' | 'renovacion' | 'rol'
 export type RolOperacion = 'capital' | 'interes' | 'mixto'
 
+/** Interés pagado aparte que Finanzas confirmó: a qué renovación corresponde y cómo se calculó. */
+export interface InteresDeRenovacion {
+  fechaRenovacion: string | null
+  obsRenovacion: string
+  /** 6 = 6 %. Si `porMes`, es por mes durante `meses`. */
+  tasaPorcentaje: number
+  porMes: boolean
+  meses: number
+  baseCentavos: number
+  baseDescripcion: string
+}
+
 export interface DatosOperacionManual {
   usd?: { montoUsd: number; cotizacion: number }
   chequeIds?: string[]
   rol?: RolOperacion
+  /** Solo con rol "interés": a qué operación corresponde cada cheque de interés, por número corto de cheque. */
+  interesDePorCheque?: Record<string, InteresDeRenovacion>
 }
 
 export interface SugerenciaOperacion {
@@ -349,8 +363,11 @@ export interface ChequeOcasionalItem {
   sugerencia?: SugerenciaOperacion | null
   /** Interés pagado aparte: sobre qué cheques parece calculado. Solo una sugerencia. */
   interesSugerido?: SugerenciaInteres | null
+  interesDe?: InteresDeRenovacion | null
   /** Vino sin destinatario: el beneficiario se tomó del comienzo del OBS. */
   beneficiarioDesdeObs?: boolean
+  /** Vino sin destinatario: el beneficiario se heredó de los cheques que renueva. */
+  beneficiarioDesdeRenovacion?: boolean
   clasificacionManual?: { tipo: TipoOperacionManual; uid: string; fecha: string } | null
   vientriId: number
   baja: boolean
@@ -439,8 +456,10 @@ export interface EslabonDetalleRef {
 
 export interface OcasionalDetalleResponse {
   cheque: ChequeOcasionalItem
-  clasificacion?: ChequeClasificado | null
-  cadena?: CadenaRenovacion | null
+  /** La renovación de la que salió este cheque (es uno de los cheques nuevos). */
+  operacionOrigen?: OperacionDelChequeItem | null
+  /** La renovación donde este cheque se reemplazó por otros (es uno de los cheques viejos). */
+  operacionRenovacion?: OperacionDelChequeItem | null
   renovacionDeDetalle?: EslabonDetalleRef[]
   renovadoPorDetalle?: EslabonDetalleRef[]
   /** Lo que se puede leer del OBS para precargar la clasificación a mano. */
@@ -710,6 +729,9 @@ export interface ChequeEnOperacionItem {
   fechaEmision: string | null
   rol: 'capital' | 'interes' | 'mixto' | null
   pagado: boolean
+  /** A nombre de quién salió el cheque. */
+  beneficiario?: string
+  beneficiarioNormalizado?: string
 }
 
 export interface OperacionRenovacionItem {
@@ -732,6 +754,33 @@ export interface OperacionRenovacionItem {
   tipoVinculo: 'explicito' | 'implicito'
   obsOriginal: string
   debugAutolink?: string
+}
+
+/** Interés de una renovación que se pagó aparte, en otros cheques, y Finanzas confirmó. */
+export interface InteresAparteItem {
+  cantidadCheques: number
+  totalCentavos: number
+  tasaPorcentaje: number
+  porMes: boolean
+  meses: number
+  baseDescripcion: string
+  /** Puede faltar si el backend todavía no se actualizó. */
+  baseCentavos?: number
+  cheques?: ChequeDeInteresAparteItem[]
+}
+
+/** Un cheque de interés pagado aparte. */
+export interface ChequeDeInteresAparteItem {
+  numeroCheque: string
+  montoCentavos: number
+  fechaEmision: string | null
+  fechaVencimiento: string | null
+  obs: string
+  estado: EstadoChequeRenov
+}
+
+export interface OperacionDelChequeItem extends OperacionRenovacionItem {
+  interesAparte?: InteresAparteItem | null
 }
 
 export interface ResumenOperacionesRenovacion {
@@ -771,6 +820,22 @@ export interface OperacionSeguimientoItem extends Omit<OperacionRenovacionItem, 
   origenRevisar?: boolean
   estadoOperacion: 'abierta' | 'cerrada'
   ancestrosIds: string[]
+  /**
+   * Cheques viejos que salieron a nombre de otro proveedor (ej. POVO 20/02/2026 renueva cheques de MANA). Vacío si
+   * son todos del mismo; puede faltar si el backend todavía no se actualizó.
+   */
+  viejosDeOtroBeneficiario?: ViejosDeOtroBeneficiario[]
+  /**
+   * Interés que la renovación pagó aparte, en otros cheques, y Finanzas confirmó. No está en `interesCentavos`
+   * (que es solo nuevos − viejos). Puede faltar si el backend todavía no se actualizó.
+   */
+  interesAparte?: InteresAparteItem | null
+}
+
+export interface ViejosDeOtroBeneficiario {
+  beneficiario: string
+  cantidadCheques: number
+  montoCentavos: number
 }
 
 export interface BeneficiarioSeguimientoItem {
@@ -965,6 +1030,147 @@ export interface CuentaHipotesis {
   tasaPorcentaje: number | null
   esperadoCentavos: number
   diferenciaCentavos: number
+  /** Si la diferencia se explica por redondear cada cheque al peso: cuántos cheques. Null si es más que eso. */
+  redondeoCheques?: number | null
+}
+
+export interface BaseProbada {
+  /** 'YYYY-MM', o null si la base no es un mes. */
+  mes: string | null
+  /** Qué es la base cuando no es un mes (ej. "la operación del 08/09"). */
+  descripcion?: string
+  cantidadCheques: number
+  baseCentavos: number
+  tasaPorcentaje: number
+  cierra: boolean
+}
+
+export type FormaInteres = 'mes_vencimiento' | 'mismo_vencimiento' | 'renovacion' | 'porcentaje_renovacion' | 'diferencia'
+
+/** Un pago de interés: un cheque suelto o una cuota (los cheques que vencen juntos). */
+export interface PagoInteres {
+  desde: string | null
+  hasta: string | null
+  cantidadCheques: number
+  montoCentavos: number
+}
+
+export interface LoteBase {
+  fechaEmision: string | null
+  obs: string
+  cantidadCheques: number
+  montoCentavos: number
+  esDolares: boolean
+  esRenovacion: boolean
+}
+
+export interface RenovacionRelacionada {
+  fechaEmision: string
+  obs: string
+  cantidadViejos: number
+  cantidadNuevos: number
+  vencianDesde: string | null
+  vencianHasta: string | null
+  vencenDesde: string | null
+  vencenHasta: string | null
+  dias: number | null
+  meses: number | null
+  viejosCentavos: number
+  nuevosCentavos: number
+  interesAdentroCentavos: number
+  mismoDia: boolean
+}
+
+/** Una base y los cheques de interés que explica. */
+export interface TramoInteres {
+  chequesInteres: string[]
+  pagadoCentavos: number
+  vencimientos: string[]
+  baseDescripcion: string
+  baseCentavos: number
+  cantidadChequesBase: number
+  lotes: LoteBase[]
+  tipoCuenta: 'tasa' | 'resta'
+  nuevosCentavos: number | null
+  esperadoCentavos: number
+  renovacion: RenovacionRelacionada | null
+  alternativas: BaseProbada[]
+}
+
+/** El paso a paso de un interés: qué se pagó, sobre qué, la cuenta, por qué tiene sentido y otras bases. */
+export interface DetalleInteres {
+  forma: FormaInteres
+  tasaPorcentaje: number
+  porMes: boolean
+  periodos: number
+  totalPagadoCentavos: number
+  pagos: PagoInteres[]
+  tramos: TramoInteres[]
+  esperadoCentavos: number
+  diferenciaCentavos: number
+  redondeoCheques: number | null
+}
+
+/** Espejo de `backend/.../domain/detalle-dolares.ts`. */
+export interface VencimientoDolares {
+  fecha: string | null
+  dias: number | null
+  cantidadCheques: number
+  montoCentavos: number
+}
+
+export interface ParteDolares {
+  fechaEmision: string | null
+  obs: string
+  cantidadCheques: number
+  montoCentavos: number
+}
+
+export interface TasaRedondaDolares {
+  /** 'interes': cheque = parte × (1 + tasa × días/30). 'descuento': parte = cheque × (1 − tasa × días/30). */
+  modo: 'interes' | 'descuento'
+  tasaMensualPorcentaje: number
+  valorHoyCentavos: number
+  diferenciaCentavos: number
+  /** 'al_peso': cierra con $1 por cheque. 'a_miles': los cheques salieron por montos redondos. */
+  ajuste: 'al_peso' | 'a_miles'
+}
+
+export interface OperacionDolaresComparable {
+  proveedor: string
+  mismoProveedor: boolean
+  fechaEmision: string
+  obs: string
+  montoUsd: number
+  cotizacion: number
+  capitalCentavos: number
+  chequesCentavos: number
+  plazoDias: number
+  mensualPorcentaje: number
+}
+
+export type LecturaDolares = 'justo' | 'tasa_redonda' | 'interes_por_plazo' | 'sin_plazo' | 'faltan_cheques'
+
+/** El paso a paso de una operación en dólares: qué se pidió, cómo se pagó, la cuenta y por qué tiene sentido. */
+export interface DetalleDolares {
+  montoUsd: number
+  cotizacion: number
+  capitalCentavos: number
+  cantidadCheques: number
+  totalChequesCentavos: number
+  vencimientos: VencimientoDolares[]
+  chequesIguales: { usdPorCheque: number; capitalPorChequeCentavos: number; montoCentavos: number } | null
+  partes: ParteDolares[]
+  diferenciaCentavos: number
+  redondeoCheques: number | null
+  recargoPorcentaje: number
+  cotizacionEfectiva: number
+  plazoPromedioDias: number | null
+  mensualPorcentaje: number | null
+  tasaRedonda: TasaRedondaDolares | null
+  comparables: OperacionDolaresComparable[]
+  rangoProveedor: { min: number; max: number } | null
+  lectura: LecturaDolares
 }
 
 export interface HipotesisRevisar {
@@ -976,6 +1182,12 @@ export interface HipotesisRevisar {
   cheques: ChequeEvidencia[]
   chequesTotal: number
   avisos: string[]
+  /** Aclaración que no es una alerta. */
+  nota?: string | null
+  /** Solo intereses en cuotas: el detalle paso a paso. */
+  detalleInteres?: DetalleInteres | null
+  /** Solo dólares: el paso a paso (qué se pidió, cómo se pagó, la cuenta, por qué tiene sentido). */
+  detalleDolares?: DetalleDolares | null
   /** Lo que se guarda al confirmar (mismo pedido que la clasificación a mano). Null si no hay nada para guardar. */
   confirmar: { tipo: TipoOperacionManual; datos: DatosOperacionManual; etiqueta: string; efecto: string } | null
 }
@@ -991,6 +1203,8 @@ export interface RenovacionDelDia {
   tasaPorcentaje: number | null
   grupoSobreViejosPorcentaje: number | null
   grupoSobreNuevosPorcentaje: number | null
+  /** Días que se corrieron los vencimientos. */
+  diasRenovacion?: number | null
 }
 
 export interface GrupoARevisar {

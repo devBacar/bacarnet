@@ -19,6 +19,10 @@ vi.mock('./recalcular-seguimiento.js', () => ({
   recalcularSeguimiento: vi.fn(async () => ({ operaciones: 0, actualizados: 0 })),
 }))
 
+vi.mock('./patrones-ocasionales.repository.js', () => ({
+  listarPatronesOcasionales: vi.fn(async () => []),
+}))
+
 vi.mock('./completos-ocasionales.js', () => ({
   reconstruirCompletos: vi.fn(async () => ({ total: 3, reales: 3, sinteticos: 0, conteo: { nuevos: 3, cambiados: 0, iguales: 0, borrados: 0 } })),
 }))
@@ -29,6 +33,8 @@ import {
   REVISAR_SIN_DATOS_FINANCIEROS,
 } from './importar-cheques-ocasionales.js'
 import { sincronizarColeccion } from './vientri.repository.js'
+import { recalcularSeguimiento } from './recalcular-seguimiento.js'
+import { adminDb } from '../../../../lib/firebase/admin.js'
 import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
 
 const mockSync = vi.mocked(sincronizarColeccion)
@@ -207,6 +213,20 @@ describe('importarChequesOcasionales', () => {
     const input = mockSync.mock.calls[0]![0]
     expect(input.borrarFaltantes).toBe(false)
     expect(input.camposVivos).toEqual(['pagado', 'estado', 'estadoCodigo', 'fechaConciliado', 'baja'])
+  })
+
+  it('al importar de verdad, el seguimiento borra las operaciones que dejaron de existir (igual que Recalcular todo)', async () => {
+    vi.mocked(adminDb).mockReturnValue({
+      collection: () => ({ get: async () => ({ docs: [] }) }),
+    } as unknown as ReturnType<typeof adminDb>)
+    const mockSeguimiento = vi.mocked(recalcularSeguimiento)
+    mockSeguimiento.mockClear()
+    const csv = [CSV_HEADER, fila({ vientri_id: '70', destinatario: 'Presta Plata', obs: 'int' })].join('\n')
+
+    await importarChequesOcasionales({ csv, origen: 'script', actor: 'test' })
+
+    expect(mockSeguimiento).toHaveBeenCalledTimes(1)
+    expect(mockSeguimiento.mock.calls[0]![0]).toMatchObject({ importacionId: 'imp-test-001', borrarFaltantes: true })
   })
 
   it('solo importa los que vencen desde la ventana cuando se pasa desde', async () => {

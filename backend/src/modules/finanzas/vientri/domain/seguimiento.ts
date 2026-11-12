@@ -1,5 +1,6 @@
 import type { ChequeOcasionalDoc, OperacionRenovacion } from './cheque-ocasional.types.js'
 import { agruparOperacionesRenovacion, beneficiariosCompatibles } from './operacion-renovacion.js'
+import { estadoChequeRenov, interesAparteDe } from './operaciones-del-cheque.js'
 import { resolverProveedor, type ProveedorDelCatalogo } from './operaciones-usd.js'
 import type {
   BeneficiarioSeguimiento,
@@ -10,6 +11,7 @@ import type {
   OperacionPersistida,
   OperacionSeguimientoItem,
   SeguimientoResponse,
+  ViejosDeOtroBeneficiario,
 } from './seguimiento.types.js'
 
 const ESTADOS_EN_EXPOSICION: ReadonlySet<EstadoChequeRenov> = new Set(['pendiente', 'rechazado'])
@@ -57,13 +59,7 @@ function asignarIds(ops: OperacionRenovacion[]): Map<OperacionRenovacion, string
   return ids
 }
 
-function estadoDeCheque(doc: ChequeOcasionalDoc | undefined, pagado: boolean): EstadoChequeRenov {
-  if (doc?.estadoCodigo === 5) return 'renovado'
-  if (doc?.estadoCodigo === 9) return 'anulado'
-  if (doc?.estadoCodigo === 3) return 'rechazado'
-  if (pagado) return 'debitado'
-  return 'pendiente'
-}
+const estadoDeCheque = estadoChequeRenov
 
 /**
  * Deriva el seguimiento a partir de la salida de `agruparOperacionesRenovacion`:
@@ -189,6 +185,35 @@ function ancestrosTransitivos(op: OperacionPersistida, porId: Map<string, Operac
 }
 
 /**
+ * Los cheques viejos que salieron a nombre de otro proveedor, sumados por proveedor. Solo cuenta como otro si los dos
+ * están cargados como proveedores distintos, o si alguno no está cargado y los nombres no se parecen: así una forma
+ * de escribirlo que falta en el catálogo (GONZALES FABIAN / GONZALEZ FABIAN, HNA CLAUDIA / HERMANA DE CLAUDIA) no se
+ * marca. Si la operación o el viejo no tienen beneficiario, no se marca.
+ */
+export function viejosDeOtroBeneficiario(
+  op: Pick<OperacionPersistida, 'beneficiario' | 'beneficiarioNormalizado' | 'chequesViejos'>,
+  catalogo: ReadonlyMap<string, ProveedorDelCatalogo>,
+): ViejosDeOtroBeneficiario[] {
+  if (!op.beneficiarioNormalizado) return []
+  const propio = resolverProveedor(op.beneficiario, op.beneficiarioNormalizado, catalogo)
+  const por = new Map<string, ViejosDeOtroBeneficiario>()
+  for (const c of op.chequesViejos) {
+    if (!c.beneficiarioNormalizado) continue
+    const p = resolverProveedor(c.beneficiario ?? '', c.beneficiarioNormalizado, catalogo)
+    const mismo =
+      propio.proveedorId !== null && p.proveedorId !== null
+        ? propio.proveedorId === p.proveedorId
+        : propio.proveedorId === p.proveedorId || beneficiariosCompatibles(op.beneficiarioNormalizado, c.beneficiarioNormalizado)
+    if (mismo) continue
+    const g = por.get(p.clave) ?? { beneficiario: p.nombre, cantidadCheques: 0, montoCentavos: 0 }
+    g.cantidadCheques += 1
+    g.montoCentavos += c.montoCentavos
+    por.set(p.clave, g)
+  }
+  return [...por.values()].sort((a, b) => b.montoCentavos - a.montoCentavos)
+}
+
+/**
  * Arma la respuesta del seguimiento a partir de las operaciones persistidas:
  * calcula abierta/cerrada con `hoy` (YYYY-MM-DD), filtra, agrupa y resuelve los ancestros de cada operación.
  * Agrupa por proveedor del catálogo; lo que no está cargado, por beneficiario compatible (HNA CLAUDIA + HERMANA CLAUDIA).
@@ -198,12 +223,16 @@ export function armarSeguimiento(
   hoy: string,
   filtro: FiltroSeguimiento,
   catalogo: ReadonlyMap<string, ProveedorDelCatalogo> = new Map(),
+  /** Cheques con interés confirmado (`interesDe`): el interés que cada renovación pagó aparte. */
+  docsInteres: ChequeOcasionalDoc[] = [],
 ): SeguimientoResponse {
   const porId = new Map(operaciones.map((o) => [o.id, o]))
   const items: OperacionSeguimientoItem[] = operaciones.map((op) => ({
     ...op,
     estadoOperacion: estadoOperacion(op, hoy),
     ancestrosIds: ancestrosTransitivos(op, porId),
+    viejosDeOtroBeneficiario: viejosDeOtroBeneficiario(op, catalogo),
+    interesAparte: interesAparteDe(op, docsInteres, catalogo),
   }))
   const itemPorId = new Map(items.map((i) => [i.id, i]))
 

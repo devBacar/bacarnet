@@ -19,7 +19,7 @@ export const REVISAR_INTERES_POSIBLE_PREFIJO = 'Posible interés '
 /** Diferencia aceptada entre el monto del cheque y la cuenta (1 peso: los cheques se redondean). */
 const TOLERANCIA_CENTAVOS = 100
 /** Tasas que se prueban, en centésimos de punto: de 0,25 % a 20 % de a 0,25 %. */
-const TASAS_BP = Array.from({ length: 80 }, (_, i) => (i + 1) * 25)
+export const TASAS_BP = Array.from({ length: 80 }, (_, i) => (i + 1) * 25)
 
 export interface OperacionDeLaBase {
   fechaEmision: string | null
@@ -53,7 +53,7 @@ export interface SugerenciaInteres {
   chequesInteres: string[]
 }
 
-const coincide = (baseCentavos: number, bp: number, divisor: number, montoCentavos: number) =>
+export const coincide = (baseCentavos: number, bp: number, divisor: number, montoCentavos: number) =>
   Math.abs(Math.round((baseCentavos * bp) / 10_000 / divisor) - montoCentavos) <= TOLERANCIA_CENTAVOS
 
 const claveOperacion = (d: ChequeOcasionalDoc) => `${d.fechaEmision ?? ''}|${d.beneficiarioNormalizado}|${d.obsOriginal.trim()}`
@@ -77,7 +77,7 @@ const numerosCortos = (lista: string[]) => lista.map((n) => n.split('-').pop() ?
  * no reemplazados todavía por una renovación. Los de interés no cuentan como base. Tampoco los de operaciones en
  * dólares: esos cheques ya traen el interés adentro, así que no se les calcula interés aparte (salvo `incluirUsd`).
  */
-function chequesVivos(
+export function chequesVivos(
   grupo: ChequeOcasionalDoc[],
   todos: ChequeOcasionalDoc[],
   catalogo: ReadonlyMap<string, ProveedorDelCatalogo>,
@@ -148,20 +148,43 @@ function porMismoVencimiento(grupo: ChequeOcasionalDoc[], vivos: ChequeOcasional
 /** Días entre vencimientos que todavía cuentan como la misma cuota (29/11, 30/11 y 01/12 son una sola). */
 const DIAS_MISMA_CUOTA = 5
 
+/** Una cuota del interés: los cheques que vencen juntos (a pocos días) cuentan como el pago de un mes. */
+export interface CuotaInteres {
+  desde: string
+  hasta: string
+  cheques: number
+  montoCentavos: number
+}
+
+/** Agrupa los vencimientos del grupo en cuotas: 29/11, 30/11 y 01/12 son una sola. */
+export function cuotasDelInteres(grupo: Pick<ChequeOcasionalDoc, 'fechaVencimiento' | 'montoCentavos'>[]): CuotaInteres[] {
+  const ordenados = grupo
+    .filter((c): c is typeof c & { fechaVencimiento: string } => c.fechaVencimiento !== null)
+    .slice()
+    .sort((a, b) => a.fechaVencimiento.localeCompare(b.fechaVencimiento))
+  const cuotas: CuotaInteres[] = []
+  let anterior = -Infinity
+  for (const c of ordenados) {
+    const v = Date.parse(`${c.fechaVencimiento}T12:00:00Z`)
+    if (v - anterior > DIAS_MISMA_CUOTA * 86_400_000) {
+      cuotas.push({ desde: c.fechaVencimiento, hasta: c.fechaVencimiento, cheques: 0, montoCentavos: 0 })
+    }
+    const actual = cuotas[cuotas.length - 1]!
+    actual.hasta = c.fechaVencimiento
+    actual.cheques += 1
+    actual.montoCentavos += c.montoCentavos
+    anterior = v
+  }
+  return cuotas
+}
+
 /**
  * Cuántos cheques tiene cada cuota mensual, según cómo se agrupan los vencimientos. Sin esto el monto no alcanza:
  * 3 cheques por mes al 6 % dan lo mismo que 1 cheque por mes al 2 %. Null si las cuotas no son parejas.
  */
 function chequesPorCuota(grupo: ChequeOcasionalDoc[]): number | null {
-  const vtos = grupo.map((c) => Date.parse(`${c.fechaVencimiento}T12:00:00Z`)).sort((a, b) => a - b)
-  const cuotas: number[] = []
-  let anterior = -Infinity
-  for (const v of vtos) {
-    if (v - anterior > DIAS_MISMA_CUOTA * 86_400_000) cuotas.push(0)
-    cuotas[cuotas.length - 1]! += 1
-    anterior = v
-  }
-  return cuotas.every((n) => n === cuotas[0]) ? cuotas[0]! : null
+  const cuotas = cuotasDelInteres(grupo).map((c) => c.cheques)
+  return cuotas.length > 0 && cuotas.every((n) => n === cuotas[0]) ? cuotas[0]! : null
 }
 
 function porMesDeVencimiento(grupo: ChequeOcasionalDoc[], vivos: ChequeOcasionalDoc[]): SugerenciaInteres | null {
@@ -196,6 +219,57 @@ function porMesDeVencimiento(grupo: ChequeOcasionalDoc[], vivos: ChequeOcasional
     }
   }
   return null
+}
+
+/** Una base que se probó para un interés en cuotas: qué tasa mensual daría (interés de un mes ÷ base). */
+export interface BaseProbada {
+  /** 'YYYY-MM' del mes de vencimiento, o null para "todo lo que estaba vivo". */
+  mes: string | null
+  /** Qué es la base, cuando no es un mes (ej. "la operación del 08/09"). */
+  descripcion?: string
+  cantidadCheques: number
+  baseCentavos: number
+  /** Tasa mensual que da, con decimales (6 = 6 %). */
+  tasaPorcentaje: number
+  /** La tasa es redonda (múltiplo de 0,25 %) y la cuenta cierra al peso en cada cheque. */
+  cierra: boolean
+}
+
+/**
+ * Para un interés pagado en cuotas iguales: la tasa mensual que daría cada base posible (lo que vence en cada mes y
+ * todo lo vivo junto), con x = interés de un mes ÷ base. Sirve para mostrar por qué se elige una base y no otra:
+ * casi siempre una sola da una tasa redonda. Null si las cuotas no son parejas.
+ */
+export function basesProbadas(
+  grupo: ChequeOcasionalDoc[],
+  todos: ChequeOcasionalDoc[],
+  catalogo: ReadonlyMap<string, ProveedorDelCatalogo> = new Map(),
+  opts: { incluirUsd?: boolean } = {},
+): BaseProbada[] | null {
+  if (grupo.length === 0 || !grupo[0]!.fechaEmision || grupo.some((c) => !c.fechaVencimiento || c.montoCentavos <= 0)) return null
+  const monto = grupo[0]!.montoCentavos
+  if (grupo.some((c) => c.montoCentavos !== monto)) return null
+  const k = chequesPorCuota(grupo)
+  if (k === null) return null
+  const vivos = chequesVivos(grupo, todos, catalogo, opts.incluirUsd ?? false)
+  if (vivos.length === 0) return null
+
+  const interesPorMes = monto * k
+  const probar = (mes: string | null, base: ChequeOcasionalDoc[]): BaseProbada => {
+    const total = base.reduce((s, d) => s + d.montoCentavos, 0)
+    return {
+      mes,
+      cantidadCheques: base.length,
+      baseCentavos: total,
+      tasaPorcentaje: total > 0 ? (interesPorMes / total) * 100 : 0,
+      cierra: TASAS_BP.some((bp) => coincide(total, bp, k, monto)),
+    }
+  }
+  const porMes = new Map<string, ChequeOcasionalDoc[]>()
+  for (const d of vivos) porMes.set(d.fechaVencimiento!.slice(0, 7), [...(porMes.get(d.fechaVencimiento!.slice(0, 7)) ?? []), d])
+  const res = [...porMes].sort(([a], [b]) => a.localeCompare(b)).map(([mes, base]) => probar(mes, base))
+  if (porMes.size > 1) res.push(probar(null, vivos))
+  return res
 }
 
 /**

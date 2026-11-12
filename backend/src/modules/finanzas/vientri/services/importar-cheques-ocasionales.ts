@@ -29,6 +29,7 @@ import {
   completarBeneficiarioDesdeObs,
   nombresConocidos,
 } from '../domain/beneficiario-desde-obs.js'
+import { completarBeneficiariosDesdeRenovacion, sinBeneficiarioHeredado } from '../domain/beneficiario-desde-renovacion.js'
 import {
   aplicarDiferenciaSugerida,
   aplicarInteresSugerido,
@@ -151,7 +152,7 @@ async function leerBase(): Promise<ChequeOcasionalDoc[]> {
   return snap.docs.map((s) => normalizarDocOcasional(s.data() as ChequeOcasionalDoc))
 }
 
-const CAMPOS_DERIVADOS = ['beneficiario', 'beneficiarioNormalizado', 'beneficiarioDesdeObs', 'renovadoPor', 'operacionUsd', 'esProveedorFinanciero', 'tipoProveedor', 'proveedorFinancieroId', 'esCompraIva', 'sugerencia', 'interesSugerido', 'revisar'] as const
+const CAMPOS_DERIVADOS = ['beneficiario', 'beneficiarioNormalizado', 'beneficiarioDesdeObs', 'beneficiarioDesdeRenovacion', 'renovadoPor', 'operacionUsd', 'esProveedorFinanciero', 'tipoProveedor', 'proveedorFinancieroId', 'esCompraIva', 'sugerencia', 'interesSugerido', 'revisar'] as const
 
 /**
  * Hay campos que no vienen del CSV sino de otros cheques o de la lista de proveedores: `renovadoPor`
@@ -170,9 +171,13 @@ export async function sincronizarDerivadosEnBase(): Promise<number> {
 
   const actuales = docs.map((base) => ({ ...base, operacionUsd: base.operacionUsd, renovadoPor: [...base.renovadoPor].sort() }))
   // Último recurso para los que vienen sin destinatario: el nombre del comienzo del OBS, si es un nombre ya conocido.
-  const conocidos = nombresConocidos(actuales.filter((d) => !d.beneficiarioDesdeObs), proveedores)
-  const esperados = actuales.map((actual, i) => {
-    const conBeneficiario = completarBeneficiarioDesdeObs(actual, conocidos)
+  const conocidos = nombresConocidos(actuales.filter((d) => !d.beneficiarioDesdeObs && !d.beneficiarioDesdeRenovacion), proveedores)
+  // Primero el OBS ("Mana usd60.000…"); si no, la renovación hereda el beneficiario de los cheques que renueva.
+  const conBeneficiarios = completarBeneficiariosDesdeRenovacion(
+    actuales.map((actual) => completarBeneficiarioDesdeObs(sinBeneficiarioHeredado(actual), conocidos)),
+  )
+  const esperados = actuales.map((_, i) => {
+    const conBeneficiario = conBeneficiarios[i]!
     // Se relee solo lo que el OBS dice con la palabra USD; nunca se borra un USD ya cargado (por ejemplo a mano).
     const operacionUsd = conBeneficiario.operacionUsd ?? parsearObs(conBeneficiario.obsOriginal).operacionUsd
     return aplicarPatrones(
@@ -202,6 +207,7 @@ export async function sincronizarDerivadosEnBase(): Promise<number> {
         beneficiario: esperado.beneficiario,
         beneficiarioNormalizado: esperado.beneficiarioNormalizado,
         beneficiarioDesdeObs: esperado.beneficiarioDesdeObs ?? false,
+        beneficiarioDesdeRenovacion: esperado.beneficiarioDesdeRenovacion ?? false,
         renovadoPor: esperado.renovadoPor,
         operacionUsd: esperado.operacionUsd,
         esProveedorFinanciero: esperado.esProveedorFinanciero,
@@ -390,7 +396,9 @@ export async function importarChequesOcasionales(opts: {
   let seguimientoError: string | null = null
   if (!simular && importacionId) {
     try {
-      seguimiento = await recalcularSeguimiento({ docs: await leerBase(), importacionId })
+      // Igual que "Recalcular todo": las operaciones que dejaron de existir (cambió el beneficiario, el
+      // agrupamiento o el sufijo -2/-3) se borran; si no, quedan fantasmas duplicando proveedores.
+      seguimiento = await recalcularSeguimiento({ docs: await leerBase(), importacionId, borrarFaltantes: true })
     } catch (err) {
       seguimientoError = err instanceof Error ? err.message : 'No se pudo recalcular el seguimiento'
       console.error('[finanzas/cheques-ocasionales] seguimiento', err)

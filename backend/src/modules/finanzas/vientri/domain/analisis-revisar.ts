@@ -1,7 +1,18 @@
-import type { ChequeOcasionalDoc, DatosOperacionManual, OperacionRenovacion, TipoOperacionManual } from './cheque-ocasional.types.js'
-import { sugerirInteres, textoInteresSugerido } from './interes-posicion.js'
+import type { ChequeOcasionalDoc, DatosOperacionManual, InteresDeRenovacion, OperacionRenovacion, TipoOperacionManual } from './cheque-ocasional.types.js'
+import {
+  avisosDelDetalle,
+  chequesDeRedondeo,
+  detalleDiferenciaDeInteres,
+  detalleMesVencimiento,
+  detalleMismoVencimiento,
+  detallePorcentajeRenovacion,
+  detalleRestaRenovacion,
+  fuerzaDelDetalle,
+  type DetalleInteres,
+} from './detalle-interes.js'
+import { armarDetalleDolares, usdDelGrupo, type DetalleDolares } from './detalle-dolares.js'
+import { sugerirInteres } from './interes-posicion.js'
 import { resolverProveedor, type ProveedorDelCatalogo } from './operaciones-usd.js'
-import { parsearUsdSuelto } from './parsear-obs.js'
 import { armarPropuestaRenovacion, mismoBeneficiario, numeroCorto } from './propuesta-renovacion.js'
 
 /**
@@ -38,6 +49,8 @@ export interface ChequeEvidencia {
 }
 
 /** La cuenta que respalda una hipótesis: base × tasa = esperado, comparado contra el total del grupo. */
+export { chequesDeRedondeo }
+
 export interface CuentaHipotesis {
   baseCentavos: number
   /** 6 = 6 %. Null cuando no hay tasa (dólares). */
@@ -45,6 +58,11 @@ export interface CuentaHipotesis {
   esperadoCentavos: number
   /** Total del grupo − esperado. Cero (o centavos) cuando da justo. */
   diferenciaCentavos: number
+  /**
+   * Si la diferencia se explica porque cada cheque se redondeó al peso (hasta $0,50 por cheque): cuántos cheques.
+   * Null si la diferencia es más grande que eso.
+   */
+  redondeoCheques: number | null
 }
 
 /**
@@ -69,6 +87,12 @@ export interface HipotesisRevisar {
   cheques: ChequeEvidencia[]
   chequesTotal: number
   avisos: string[]
+  /** Aclaración que no es una alerta (se muestra chica). */
+  nota?: string | null
+  /** Solo intereses: el paso a paso (qué se pagó, sobre qué, la cuenta, por qué tiene sentido, otras bases). */
+  detalleInteres?: DetalleInteres | null
+  /** Solo dólares: el paso a paso (qué se pidió, cómo se pagó, la cuenta, por qué tiene sentido). */
+  detalleDolares?: DetalleDolares | null
   confirmar: ConfirmarHipotesis | null
 }
 
@@ -87,6 +111,8 @@ export interface RenovacionDelDia {
   /** Cuánto es el total del grupo sobre los cheques viejos y sobre los nuevos (6 = 6 %), dé o no una tasa redonda. */
   grupoSobreViejosPorcentaje: number | null
   grupoSobreNuevosPorcentaje: number | null
+  /** Días que se corrieron los vencimientos (de los viejos a los nuevos). */
+  diasRenovacion: number | null
 }
 
 export interface OperacionDelMismoDia {
@@ -170,8 +196,8 @@ function tasaRedonda(baseCentavos: number, montoCentavos: number, tolerancia: nu
 }
 
 /**
- * Marcar como interés: solo si el grupo todavía no dice si es interés o capital. Hoy no se guarda sobre qué
- * cheques se calculó, así que el cheque sigue a revisar con el aviso "Interés sin operación de origen".
+ * Marcar como interés: solo si el grupo todavía no dice si es interés o capital. Se usa cuando no hay detalle (no se
+ * sabe de qué operación viene); el cheque sigue a revisar con el aviso "Interés sin operación de origen".
  */
 function confirmarInteres(grupo: ChequeOcasionalDoc[]): ConfirmarHipotesis | null {
   if (grupo.some((d) => d.rolEnOperacion !== null)) return null
@@ -180,6 +206,78 @@ function confirmarInteres(grupo: ChequeOcasionalDoc[]): ConfirmarHipotesis | nul
     datos: { rol: 'interes' },
     etiqueta: 'Marcar como interés',
     efecto: 'Queda marcado como interés. Todavía no se guarda sobre qué cheques se calculó, así que sigue en A revisar como "Interés sin operación de origen".',
+  }
+}
+
+function textoCuenta(d: DetalleInteres): string {
+  if (d.forma === 'renovacion') return 'cheques nuevos − cheques viejos'
+  return d.porMes ? `${porcentaje(d.tasaPorcentaje)} mensual × ${plural(d.periodos, 'mes', 'meses')}` : porcentaje(d.tasaPorcentaje)
+}
+
+/**
+ * Confirmar un interés con detalle: cada cheque queda marcado como interés y atado a la operación de su tramo (la
+ * renovación relacionada, si la hay), con la tasa y la base. Así deja de estar "sin operación de origen" y sale de
+ * A revisar. En el detalle de cada renovación se ve solo el interés de sus cheques.
+ */
+function confirmarDetalle(grupo: ChequeOcasionalDoc[], d: DetalleInteres): ConfirmarHipotesis | null {
+  if (grupo.every((x) => x.interesDe != null)) return null
+  const interesDePorCheque: Record<string, InteresDeRenovacion> = {}
+  for (const t of d.tramos) {
+    for (const n of t.chequesInteres) {
+      interesDePorCheque[numeroCorto(n)] = {
+        fechaRenovacion: t.renovacion?.fechaEmision ?? null,
+        obsRenovacion: t.renovacion?.obs ?? '',
+        tasaPorcentaje: d.tasaPorcentaje,
+        porMes: d.porMes,
+        meses: d.periodos,
+        baseCentavos: t.baseCentavos,
+        baseDescripcion: t.baseDescripcion,
+      }
+    }
+  }
+  const renovaciones = d.tramos.map((t) => t.renovacion)
+  const fechas = new Set(renovaciones.map((r) => r?.fechaEmision ?? null))
+  const distintas = new Set(renovaciones.map((r) => `${r?.fechaEmision ?? ''}|${r?.obs ?? ''}`)).size
+  let etiqueta = 'Confirmar este interés'
+  let destino: string | null = null
+  if (renovaciones.every((r) => r !== null) && fechas.size === 1) {
+    const f = fechaCorta(renovaciones[0]!.fechaEmision)
+    etiqueta = distintas === 1 ? `Confirmar como interés de la renovación del ${f}` : `Confirmar como interés de las renovaciones del ${f}`
+    destino = distintas === 1 ? `de la renovación del ${f}` : `de su renovación del ${f}`
+  } else if (renovaciones.some((r) => r !== null)) {
+    etiqueta = 'Confirmar como interés de estas renovaciones'
+    destino = 'de su renovación'
+  }
+  return {
+    tipo: 'rol',
+    datos: { rol: 'interes', interesDePorCheque },
+    etiqueta,
+    efecto: destino
+      ? `${grupo.length === 1 ? 'El cheque queda' : 'Cada cheque queda'} como el interés ${destino} (${textoCuenta(d)}) y sale de A revisar.`
+      : `${grupo.length === 1 ? 'Queda' : 'Quedan'} como interés (${textoCuenta(d)}) y ${grupo.length === 1 ? 'sale' : 'salen'} de A revisar.`,
+  }
+}
+
+/** Arma una hipótesis de interés a partir de su detalle: la cuenta, la fuerza, los avisos y qué se guarda al confirmar. */
+function deDetalle(
+  base: Pick<HipotesisRevisar, 'tipo' | 'titulo' | 'explicacion' | 'cheques' | 'chequesTotal'> & { avisos?: string[]; nota?: string | null },
+  grupo: ChequeOcasionalDoc[],
+  d: DetalleInteres,
+): HipotesisRevisar {
+  return {
+    ...base,
+    fuerza: fuerzaDelDetalle(d),
+    cuenta: {
+      baseCentavos: d.tramos.reduce((s, t) => s + t.baseCentavos, 0),
+      tasaPorcentaje: d.tasaPorcentaje,
+      esperadoCentavos: d.esperadoCentavos,
+      diferenciaCentavos: d.diferenciaCentavos,
+      redondeoCheques: d.redondeoCheques,
+    },
+    avisos: [...(base.avisos ?? []), ...avisosDelDetalle(d)],
+    nota: base.nota ?? null,
+    detalleInteres: d,
+    confirmar: confirmarDetalle(grupo, d),
   }
 }
 
@@ -230,7 +328,7 @@ function hipotesisRenovacionObs(grupo: ChequeOcasionalDoc[], total: number, ctx:
           : `El OBS nombra ${plural(propuesta.viejos.length, 'cheque', 'cheques')}; ${todosEncontrados ? 'están todos' : `se encontraron ${encontrados.length}`} en la base y suman ${pesos(totalViejos)}. Los nuevos suman ${pesos(total)}${tasa !== null ? `: la diferencia es ${pesos(total - totalViejos)} (${porcentaje(tasa * 100)})` : ''}.`,
       cuenta:
         totalViejos > 0
-          ? { baseCentavos: totalViejos, tasaPorcentaje: tasa !== null ? Math.round(tasa * 10_000) / 100 : null, esperadoCentavos: totalViejos, diferenciaCentavos: total - totalViejos }
+          ? { baseCentavos: totalViejos, tasaPorcentaje: tasa !== null ? Math.round(tasa * 10_000) / 100 : null, esperadoCentavos: totalViejos, diferenciaCentavos: total - totalViejos, redondeoCheques: null }
           : null,
       ...conCheques(docs),
       avisos,
@@ -264,16 +362,18 @@ function hipotesisSobreRenovaciones(grupo: ChequeOcasionalDoc[], total: number, 
 
     // 1) El total es justo el interés de esa renovación (nuevos − viejos).
     if (op.interesCentavos > 0 && Math.abs(op.interesCentavos - total) <= tolerancia) {
-      res.push({
-        tipo: 'interes_renovacion',
-        fuerza: 'fuerte',
-        titulo: `Es justo el interés de la renovación ${cuando}`,
-        explicacion: `En esa renovación los cheques nuevos (${pesos(op.totalNuevosCentavos)}) superan a los viejos (${pesos(op.totalViejosCentavos)}) por ${pesos(op.interesCentavos)}, que es lo que suma este grupo.`,
-        cuenta: { baseCentavos: op.totalViejosCentavos, tasaPorcentaje: Math.round(op.tasaImplicita * 10_000) / 100, esperadoCentavos: op.interesCentavos, diferenciaCentavos: total - op.interesCentavos },
-        ...conCheques(docsDe(op.chequesNuevos)),
-        avisos: [],
-        confirmar: confirmarInteres(grupo),
-      })
+      res.push(
+        deDetalle(
+          {
+            tipo: 'interes_renovacion',
+            titulo: `Es justo el interés de la renovación ${cuando}`,
+            explicacion: `En esa renovación los cheques nuevos (${pesos(op.totalNuevosCentavos)}) superan a los viejos (${pesos(op.totalViejosCentavos)}) por ${pesos(op.interesCentavos)}, que es lo que suma este grupo.`,
+            ...conCheques(docsDe(op.chequesNuevos)),
+          },
+          grupo,
+          detalleRestaRenovacion(grupo, op, ctx),
+        ),
+      )
     }
 
     // 2) El total es un % redondo de los cheques viejos o de los nuevos de esa renovación.
@@ -284,27 +384,48 @@ function hipotesisSobreRenovaciones(grupo: ChequeOcasionalDoc[], total: number, 
       const bp = tasaRedonda(base, total, tolerancia)
       if (bp === null) continue
       const esperado = Math.round((base * bp) / 10_000)
-      const redonda = base % BASE_REDONDA_CENTAVOS === 0
       const esDiferencia = bp <= TASA_MAX_DIFERENCIA_BP && !mismoDia
-      res.push({
-        tipo: esDiferencia ? 'diferencia' : 'interes_renovacion',
-        fuerza: redonda ? 'debil' : mismoDia ? 'fuerte' : 'posible',
-        titulo: `${esDiferencia ? 'Diferencia' : 'Interés'} del ${porcentaje(bp / 100)} sobre los cheques ${cual} de la renovación ${cuando}`,
-        explicacion: `Los ${plural(lista.length, 'cheque', 'cheques')} ${cual} de esa renovación suman ${pesos(base)}. El ${porcentaje(bp / 100)} de eso es ${pesos(esperado)} y este grupo suma ${pesos(total)}.`,
-        cuenta: { baseCentavos: base, tasaPorcentaje: bp / 100, esperadoCentavos: esperado, diferenciaCentavos: total - esperado },
-        ...conCheques(docsDe(lista)),
-        avisos: redonda ? ['La base es un monto redondo: la coincidencia puede ser casualidad'] : [],
-        confirmar: confirmarInteres(grupo),
-      })
+      res.push(
+        deDetalle(
+          {
+            tipo: esDiferencia ? 'diferencia' : 'interes_renovacion',
+            titulo: `${esDiferencia ? 'Diferencia' : 'Interés'} del ${porcentaje(bp / 100)} sobre los cheques ${cual} de la renovación ${cuando}`,
+            explicacion: `Los ${plural(lista.length, 'cheque', 'cheques')} ${cual} de esa renovación suman ${pesos(base)}. El ${porcentaje(bp / 100)} de eso es ${pesos(esperado)} y este grupo suma ${pesos(total)}.`,
+            ...conCheques(docsDe(lista)),
+          },
+          grupo,
+          detallePorcentajeRenovacion(grupo, op, cual, bp, esDiferencia ? 'diferencia' : 'porcentaje_renovacion', ctx),
+        ),
+      )
     }
   }
   return res
 }
 
-function hipotesisInteresPosicion(grupo: ChequeOcasionalDoc[], total: number, proveedor: string, ctx: Contexto): HipotesisRevisar[] {
+function tituloPosicion(d: DetalleInteres, proveedor: string): string {
+  if (d.forma === 'mes_vencimiento') {
+    const t = d.tramos[0]!
+    return `Interés del ${porcentaje(d.tasaPorcentaje)} mensual, ${plural(d.periodos, 'mes', 'meses')}, sobre ${t.baseDescripcion.replace('lo que vence', `lo que ${proveedor} tiene venciendo`)}`
+  }
+  const renovaciones = d.tramos.map((t) => t.renovacion)
+  const fechas = new Set(renovaciones.map((r) => r?.fechaEmision ?? null))
+  const cuantas = d.tramos.length > 1 ? `, de ${d.tramos.length} operaciones` : ''
+  let de = ''
+  if (renovaciones.every((r) => r !== null) && fechas.size === 1) {
+    de = ` (${d.tramos.length > 1 ? 'renovaciones' : 'renovación'} del ${fechaCorta(renovaciones[0]!.fechaEmision)})`
+  } else if (d.tramos.length === 1) {
+    de = ` (${d.tramos[0]!.baseDescripcion})`
+  }
+  return `Interés del ${porcentaje(d.tasaPorcentaje)} sobre el capital que vence el mismo día${cuantas}${de}`
+}
+
+/**
+ * Interés pagado aparte sobre lo que el proveedor tiene por vencer. Finanzas confirmó (11/2026) que en una renovación,
+ * para no reemitir todo, a veces los cheques nuevos salen por el mismo importe y la diferencia (el interés) se emite
+ * aparte en varios cheques. Por eso la base puede incluir cheques de compras en dólares sin que sea raro.
+ */
+function hipotesisInteresPosicion(grupo: ChequeOcasionalDoc[], proveedor: string, ctx: Contexto): HipotesisRevisar[] {
   if (grupo.some((d) => d.esRenovacion)) return []
-  // Las operaciones en dólares ya traen el interés en sus cheques: no son base. Si solo cierra contándolas, se
-  // muestra igual pero como dudosa, para que Finanzas vea la coincidencia y decida.
   const sinUsd = sugerirInteres(grupo, ctx.todos, ctx.catalogo)
   const s = sinUsd ?? sugerirInteres(grupo, ctx.todos, ctx.catalogo, { incluirUsd: true })
   if (!s) return []
@@ -312,22 +433,22 @@ function hipotesisInteresPosicion(grupo: ChequeOcasionalDoc[], total: number, pr
   const lotes = s.operaciones
     .map((o) => `${plural(o.cantidadCheques, 'cheque', 'cheques')} del ${fechaCorta(o.fechaEmision)}${o.obs ? ` ("${o.obs}")` : ''} por ${pesos(o.montoCentavos)}`)
     .join('; ')
-  // Por mes: la base × tasa se paga una vez por mes. Mismo vencimiento: cada cheque ya dio justo contra su base.
-  const esperado = s.forma === 'mes_vencimiento' ? Math.round((s.baseCentavos * s.tasaPorcentaje) / 100) * (s.meses ?? 1) : total
+  const d = s.forma === 'mes_vencimiento' ? detalleMesVencimiento(grupo, s, ctx, conUsd) : detalleMismoVencimiento(grupo, s, ctx, conUsd)
   return [
-    {
-      tipo: 'interes_posicion',
-      fuerza: conUsd ? 'debil' : 'posible',
-      titulo: textoInteresSugerido(grupo[0]!, s, proveedor),
-      explicacion: `La base sale de: ${lotes}.`,
-      cuenta: { baseCentavos: s.baseCentavos, tasaPorcentaje: s.tasaPorcentaje, esperadoCentavos: esperado, diferenciaCentavos: total - esperado },
-      cheques: [],
-      chequesTotal: s.cantidadChequesBase,
-      avisos: conUsd
-        ? ['La cuenta solo cierra contando cheques de operaciones en dólares, que en teoría ya traen el interés adentro']
-        : [],
-      confirmar: confirmarInteres(grupo),
-    },
+    deDetalle(
+      {
+        tipo: 'interes_posicion',
+        titulo: tituloPosicion(d, proveedor),
+        explicacion: `La base sale de: ${lotes}.`,
+        cheques: [],
+        chequesTotal: s.cantidadChequesBase,
+        nota: conUsd
+          ? 'La base incluye cheques de compras en dólares. Es normal: cuando se renueva sin reemitir todo, el interés sale aparte en varios cheques.'
+          : null,
+      },
+      grupo,
+      d,
+    ),
   ]
 }
 
@@ -351,47 +472,77 @@ function hipotesisDiferenciaDeInteres(grupo: ChequeOcasionalDoc[], total: number
     const bp = tasaRedonda(s.baseCentavos, total, tolerancia)
     if (bp === null || bp > TASA_MAX_DIFERENCIA_BP) continue
     const esperado = Math.round((s.baseCentavos * bp) / 10_000)
-    const redonda = s.baseCentavos % BASE_REDONDA_CENTAVOS === 0
-    res.push({
-      tipo: 'diferencia',
-      fuerza: redonda ? 'debil' : 'posible',
-      titulo: `Diferencia del ${porcentaje(bp / 100)} sobre la misma base que los intereses del ${fechaCorta(d.fechaEmision)}`,
-      explicacion: `Los intereses del ${fechaCorta(d.fechaEmision)}${d.obsOriginal.trim() ? ` ("${d.obsOriginal.trim()}")` : ''} se calcularon al ${porcentaje(s.tasaPorcentaje)} sobre ${pesos(s.baseCentavos)}. El ${porcentaje(bp / 100)} de esa base es ${pesos(esperado)} y este grupo suma ${pesos(total)}.`,
-      cuenta: { baseCentavos: s.baseCentavos, tasaPorcentaje: bp / 100, esperadoCentavos: esperado, diferenciaCentavos: total - esperado },
-      ...conCheques(ctx.todos.filter((x) => !x.baja && claveOperacion(x) === claveOperacion(d))),
-      avisos: redonda ? ['La base es un monto redondo: la coincidencia puede ser casualidad'] : [],
-      confirmar: confirmarInteres(grupo),
-    })
+    res.push(
+      deDetalle(
+        {
+          tipo: 'diferencia',
+          titulo: `Diferencia del ${porcentaje(bp / 100)} sobre la misma base que los intereses del ${fechaCorta(d.fechaEmision)}`,
+          explicacion: `Los intereses del ${fechaCorta(d.fechaEmision)}${d.obsOriginal.trim() ? ` ("${d.obsOriginal.trim()}")` : ''} se calcularon al ${porcentaje(s.tasaPorcentaje)} sobre ${pesos(s.baseCentavos)}. El ${porcentaje(bp / 100)} de esa base es ${pesos(esperado)} y este grupo suma ${pesos(total)}.`,
+          ...conCheques(ctx.todos.filter((x) => !x.baja && claveOperacion(x) === claveOperacion(d))),
+        },
+        grupo,
+        detalleDiferenciaDeInteres(grupo, s, d.fechaEmision, bp, ctx),
+      ),
+    )
   }
   if (res.length > 1) for (const h of res) h.avisos.push('Coincide con más de una base: hay que confirmar cuál es')
   return res
 }
 
-function hipotesisDolares(grupo: ChequeOcasionalDoc[], total: number): HipotesisRevisar[] {
-  const usd = grupo.find((d) => d.operacionUsd)?.operacionUsd ?? parsearUsdSuelto(grupo[0]!.obsOriginal)
-  if (!usd) return []
-  const esperado = Math.round(usd.montoUsd * usd.cotizacion * 100)
-  const diferencia = total - esperado
-  const justo = Math.abs(diferencia) <= TOLERANCIA_POR_CHEQUE_CENTAVOS * grupo.length
-  const yaCargado = grupo.every((d) => d.operacionUsd)
-  const avisos: string[] = []
-  if (!justo) {
-    avisos.push(
-      diferencia < 0
-        ? `Los cheques suman ${pesos(-diferencia)} menos: puede haber más cheques de esta operación con otra emisión u otro OBS`
-        : `Los cheques suman ${pesos(diferencia)} más: puede incluir interés`,
-    )
+const porcentajeCorto = (p: number): string => `${p.toLocaleString('es-AR', { maximumFractionDigits: 1 })}%`
+
+/** Lo que dice la cuenta de dólares, en una línea, para los avisos. */
+function avisosDolares(d: DetalleDolares): string[] {
+  switch (d.lectura) {
+    case 'faltan_cheques':
+      return [`Los cheques suman ${pesos(-d.diferenciaCentavos)} menos que dólares × cotización: puede haber más cheques de esta operación con otra emisión u otro OBS`]
+    case 'sin_plazo':
+      return [
+        d.plazoPromedioDias !== null && d.plazoPromedioDias < 7
+          ? `Los cheques suman ${porcentajeCorto(d.recargoPorcentaje)} más y vencen enseguida: no es interés por plazo. Puede ser otra cotización ($${d.cotizacionEfectiva.toLocaleString('es-AR', { maximumFractionDigits: 2 })}) o un costo de la operación`
+          : `Los cheques suman ${porcentajeCorto(d.recargoPorcentaje)} más: da una tasa mensual muy alta para ser interés por plazo`,
+      ]
+    case 'interes_por_plazo':
+      return d.rangoProveedor && d.mensualPorcentaje !== null && (d.mensualPorcentaje < d.rangoProveedor.min - 2 || d.mensualPorcentaje > d.rangoProveedor.max + 2)
+        ? [`La tasa (${porcentajeCorto(d.mensualPorcentaje)} mensual) está fuera de lo que suele cobrar este proveedor`]
+        : []
+    default:
+      return []
   }
+}
+
+function hipotesisDolares(grupo: ChequeOcasionalDoc[], ctx: Contexto): HipotesisRevisar[] {
+  const usd = usdDelGrupo(grupo)
+  const d = armarDetalleDolares(grupo, ctx)
+  if (!usd || !d) return []
+  const yaCargado = grupo.every((x) => x.operacionUsd)
+  const montoUsd = usd.montoUsd.toLocaleString('es-AR')
+  const cotizacion = usd.cotizacion.toLocaleString('es-AR')
   return [
     {
       tipo: 'dolares',
-      fuerza: justo ? 'fuerte' : 'posible',
-      titulo: `Operación en dólares: US$ ${usd.montoUsd.toLocaleString('es-AR')} a ${usd.cotizacion.toLocaleString('es-AR')}`,
-      explicacion: `${yaCargado ? 'Ya está cargada como operación en dólares. ' : 'El OBS se lee como dólares y cotización. '}US$ ${usd.montoUsd.toLocaleString('es-AR')} × ${usd.cotizacion.toLocaleString('es-AR')} = ${pesos(esperado)}; los ${plural(grupo.length, 'cheque suma', 'cheques suman')} ${pesos(total)}.`,
-      cuenta: { baseCentavos: esperado, tasaPorcentaje: null, esperadoCentavos: esperado, diferenciaCentavos: diferencia },
+      fuerza:
+        d.lectura === 'justo' || (d.lectura === 'tasa_redonda' && d.tasaRedonda?.ajuste === 'al_peso')
+          ? 'fuerte'
+          : d.lectura === 'sin_plazo'
+            ? 'debil'
+            : 'posible',
+      titulo:
+        d.lectura === 'tasa_redonda'
+          ? `Operación en dólares: US$ ${montoUsd} a ${cotizacion}, con ${porcentaje(d.tasaRedonda!.tasaMensualPorcentaje)} mensual de interés`
+          : `Operación en dólares: US$ ${montoUsd} a ${cotizacion}`,
+      explicacion: `${yaCargado ? 'Ya está cargada como operación en dólares. ' : 'El OBS se lee como dólares y cotización. '}US$ ${montoUsd} × ${cotizacion} = ${pesos(d.capitalCentavos)}; los ${plural(grupo.length, 'cheque suma', 'cheques suman')} ${pesos(d.totalChequesCentavos)}.`,
+      cuenta: {
+        baseCentavos: d.capitalCentavos,
+        tasaPorcentaje: null,
+        esperadoCentavos: d.capitalCentavos,
+        diferenciaCentavos: d.diferenciaCentavos,
+        redondeoCheques: d.redondeoCheques,
+      },
       cheques: [],
       chequesTotal: 0,
-      avisos,
+      avisos: avisosDolares(d),
+      detalleDolares: d,
       confirmar: yaCargado
         ? null
         : {
@@ -439,7 +590,7 @@ function hipotesisOrigenPosible(grupo: ChequeOcasionalDoc[], total: number, ctx:
       fuerza: 'posible',
       titulo: `Puede venir de ${nombre}`,
       explicacion: `Esos cheques se cobraron o vencían en los días de la emisión (${fechaCorta(emision)}) y nadie los renovó todavía. Suman ${pesos(base)}; si este grupo los reemplaza, el interés sería ${pesos(total - base)} (${porcentaje(tasa * 100)}).`,
-      cuenta: { baseCentavos: base, tasaPorcentaje: Math.round(tasa * 10_000) / 100, esperadoCentavos: base, diferenciaCentavos: total - base },
+      cuenta: { baseCentavos: base, tasaPorcentaje: Math.round(tasa * 10_000) / 100, esperadoCentavos: base, diferenciaCentavos: total - base, redondeoCheques: null },
       ...conCheques(docs),
       avisos: [],
       confirmar: confirmarRenovacion(docs.map((d) => numeroCorto(d.numeroCheque))),
@@ -447,6 +598,27 @@ function hipotesisOrigenPosible(grupo: ChequeOcasionalDoc[], total: number, ctx:
   }
   // El que deja menos interés suele ser el reemplazo más parejo: va primero.
   return res.sort((a, b) => (a.cuenta!.diferenciaCentavos - b.cuenta!.diferenciaCentavos)).slice(0, 5)
+}
+
+/**
+ * Dos caminos distintos pueden llegar a la misma cuenta: "8 % de lo que vence el mismo día" y "8 % de los cheques nuevos
+ * de la renovación del 08/09" son la misma base cuando esos cheques nuevos son lo que vence ese día. Se deja solo la
+ * primera (las hipótesis ya vienen ordenadas de más fuerte a más débil).
+ */
+function primeraDeCadaCuenta(): (h: HipotesisRevisar) => boolean {
+  const vistas = new Set<string>()
+  return (h) => {
+    const d = h.detalleInteres
+    if (!d) return true
+    const tramos = d.tramos
+      .map((t) => `${t.baseCentavos}|${t.renovacion?.fechaEmision ?? ''}|${t.renovacion?.obs ?? ''}|${[...t.chequesInteres].sort().join(',')}`)
+      .sort()
+      .join(';')
+    const clave = `${d.tasaPorcentaje}|${d.porMes}|${d.periodos}|${tramos}`
+    if (vistas.has(clave)) return false
+    vistas.add(clave)
+    return true
+  }
 }
 
 /** Arma el análisis de un grupo (todos los cheques de la misma operación, estén o no a revisar). */
@@ -491,16 +663,24 @@ function analizarGrupo(grupo: ChequeOcasionalDoc[], ctx: Contexto): GrupoARevisa
       tasaPorcentaje: op.vinculada ? Math.round(op.tasaImplicita * 10_000) / 100 : null,
       grupoSobreViejosPorcentaje: porcentajeDe(op.totalViejosCentavos),
       grupoSobreNuevosPorcentaje: porcentajeDe(op.totalNuevosCentavos),
+      diasRenovacion: op.diasRenovacion,
     }))
 
   const hipotesis = [
     ...hipotesisRenovacionObs(grupo, total, ctx),
-    ...hipotesisDolares(grupo, total),
+    ...hipotesisDolares(grupo, ctx),
     ...hipotesisSobreRenovaciones(grupo, total, ctx),
-    ...hipotesisInteresPosicion(grupo, total, proveedor.nombre, ctx),
+    ...hipotesisInteresPosicion(grupo, proveedor.nombre, ctx),
     ...hipotesisDiferenciaDeInteres(grupo, total, ctx),
     ...hipotesisOrigenPosible(grupo, total, ctx),
-  ].sort((a, b) => ORDEN_FUERZA[a.fuerza] - ORDEN_FUERZA[b.fuerza])
+  ]
+    .sort((a, b) => ORDEN_FUERZA[a.fuerza] - ORDEN_FUERZA[b.fuerza])
+    .filter(primeraDeCadaCuenta())
+  for (const h of hipotesis) {
+    if (h.cuenta && h.cuenta.redondeoCheques === null && h.tipo !== 'renovacion_obs' && h.tipo !== 'origen_posible') {
+      h.cuenta.redondeoCheques = chequesDeRedondeo(h.cuenta.diferenciaCentavos, grupo.length)
+    }
+  }
 
   return {
     id: `oca-${primero.vientriId}`,

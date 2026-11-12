@@ -27,12 +27,34 @@ export type RolEnOperacion = 'capital' | 'interes' | 'mixto' | null
 /** Tipos de operación que Finanzas puede marcar a mano en un cheque ocasional. */
 export type TipoOperacionManual = 'usd' | 'renovacion' | 'rol'
 
+/**
+ * Interés pagado aparte que Finanzas confirmó: a qué renovación corresponde y cómo se calculó. Se guarda en los
+ * cheques de interés (los del mismo grupo) y no lo pisa la importación.
+ */
+export interface InteresDeRenovacion {
+  /** Emisión de la renovación a la que corresponde ('YYYY-MM-DD'); null si no hubo renovación ese día. */
+  fechaRenovacion: string | null
+  obsRenovacion: string
+  /** 6 = 6 %. Si `porMes`, es por mes durante `meses`. */
+  tasaPorcentaje: number
+  porMes: boolean
+  meses: number
+  baseCentavos: number
+  /** Sobre qué se calculó, en palabras: "lo que vence en enero de 2027". */
+  baseDescripcion: string
+}
+
 /** Los datos de una operación marcada a mano; solo viene el bloque del tipo elegido. */
 export interface DatosOperacionManual {
   usd?: OperacionUsdParseada
   /** Números de los cheques viejos que este cheque renueva. */
   chequeIds?: string[]
   rol?: Exclude<RolEnOperacion, null>
+  /**
+   * Solo con rol "interés": a qué operación corresponde cada cheque de interés pagado aparte, por número corto de
+   * cheque (cada cheque puede ir a una renovación distinta).
+   */
+  interesDePorCheque?: Record<string, InteresDeRenovacion>
 }
 
 export interface SugerenciaOperacion {
@@ -85,6 +107,9 @@ export interface ChequeEnOperacion {
   fechaEmision: string | null
   rol: 'capital' | 'interes' | 'mixto' | null
   pagado: boolean
+  /** A nombre de quién salió el cheque (las operaciones guardadas antes de 11/2026 no lo tienen). */
+  beneficiario?: string
+  beneficiarioNormalizado?: string
 }
 
 export interface OperacionRenovacion {
@@ -121,6 +146,11 @@ export interface ChequeOcasionalDoc {
   beneficiarioCuit: string | null
   /** El cheque vino sin destinatario y el beneficiario se tomó del comienzo del OBS (ver `beneficiario-desde-obs.ts`). */
   beneficiarioDesdeObs?: boolean
+  /**
+   * El cheque vino sin destinatario y el beneficiario se heredó de los cheques que renueva (todos del mismo
+   * beneficiario; ver `beneficiario-desde-renovacion.ts`).
+   */
+  beneficiarioDesdeRenovacion?: boolean
   montoCentavos: number
   fechaVencimiento: string | null
   fechaEmision: string | null
@@ -144,6 +174,8 @@ export interface ChequeOcasionalDoc {
   sugerencia?: SugerenciaOperacion | null
   /** Sobre qué cheques parece calculado un interés pagado aparte (ver `interes-posicion.ts`). Se recalcula en cada sincronización. */
   interesSugerido?: SugerenciaInteres | null
+  /** Interés pagado aparte confirmado por Finanzas: a qué renovación corresponde. */
+  interesDe?: InteresDeRenovacion | null
   /** Quién marcó a mano el tipo de operación (si lo hizo alguien). */
   clasificacionManual?: { tipo: TipoOperacionManual; uid: string; fecha: string } | null
   vientriId: number

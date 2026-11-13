@@ -1,4 +1,4 @@
-import type { ChequeEnOperacion, OperacionRenovacion } from './cheque-ocasional.types.js'
+import type { ChequeEnOperacion, OperacionRenovacion, TipoOperacion } from './cheque-ocasional.types.js'
 import type { InteresAparte } from './operaciones-del-cheque.js'
 
 /**
@@ -29,6 +29,18 @@ export interface OperacionPersistida extends Omit<OperacionRenovacion, 'chequesN
   exposicionCentavos: number
   /** La renovación se armó a mano desde "A revisar" (algún cheque nuevo tiene clasificación manual de renovación). */
   origenRevisar?: boolean
+  /**
+   * Cheques viejos que eran interés de la operación inicial (según su `desgloseInicial`): no son capital. Null si no
+   * hay ninguno o si es una operación inicial.
+   */
+  interesInicialEnViejos?: InteresInicialEnViejos | null
+}
+
+export interface InteresInicialEnViejos {
+  cantidadCheques: number
+  montoCentavos: number
+  /** Viejos − ese interés: el capital que se renovó. */
+  capitalRenovadoCentavos: number
 }
 
 export type EstadoOperacion = 'abierta' | 'cerrada'
@@ -42,7 +54,17 @@ export interface ViejosDeOtroBeneficiario {
   montoCentavos: number
 }
 
+/**
+ * - inicial_sola: préstamo original que todavía no se renovó.
+ * - inicial_renovada: préstamo original con algún cheque renovado (primer eslabón de una cadena).
+ * - renovacion: una renovación.
+ */
+export type ClaseOperacion = 'inicial_sola' | 'inicial_renovada' | 'renovacion'
+
 export interface OperacionSeguimientoItem extends OperacionPersistida {
+  /** Siempre presente en la respuesta (las guardadas sin `tipo` son renovaciones). */
+  tipo: TipoOperacion
+  clase: ClaseOperacion
   estadoOperacion: EstadoOperacion
   /** Ancestros transitivos (ids), del más cercano al más lejano. */
   ancestrosIds: string[]

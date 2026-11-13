@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ChequeOcasionalDoc } from './cheque-ocasional.types.js'
-import { agruparOperacionesRenovacion } from './operacion-renovacion.js'
+import { agruparOperacionesRenovacion, resumirTasaRenovaciones } from './operacion-renovacion.js'
 
 function doc(overrides: Partial<ChequeOcasionalDoc>): ChequeOcasionalDoc {
   return {
@@ -463,5 +463,71 @@ describe('agruparOperacionesRenovacion', () => {
       expect(atras).toEqual(adelante)
       expect(mezclado).toEqual(adelante)
     })
+  })
+})
+
+describe('tasa de las renovaciones', () => {
+  const viejo = (n: string, monto: number, vto: string) =>
+    doc({ numeroCheque: `020-923-5000-${n}`, montoCentavos: monto, fechaEmision: '2026-01-01', fechaVencimiento: vto, beneficiario: 'MANA', beneficiarioNormalizado: 'mana', pagado: true })
+  const nuevo = (n: string, monto: number, vto: string, refs: string[], banco = '020-923-5000') =>
+    doc({ numeroCheque: `${banco}-${n}`, montoCentavos: monto, fechaEmision: '2026-03-11', fechaVencimiento: vto, beneficiario: 'MANA', beneficiarioNormalizado: 'mana', esRenovacion: true, renovacionDe: refs, obsOriginal: 'Renovacion' })
+
+  it('mide el plazo con el vencimiento promedio, no con la fecha donde cae más plata', () => {
+    // 1.000 → 1.160: la mitad vence a 30 días y la otra mitad a 60 → plazo promedio 45 días, no 30.
+    const ops = agruparOperacionesRenovacion([
+      viejo('1', 100000, '2026-03-11'),
+      nuevo('2', 60000, '2026-04-10', ['1']),
+      nuevo('3', 56000, '2026-05-10', ['1']),
+    ])
+    const op = ops[0]!
+    expect(op.diasRenovacion).toBe(44)
+    expect(op.tasaImplicita).toBeCloseTo(0.16, 4)
+    expect(op.tasaMensualEstimada).toBeCloseTo(0.16 / 44 * 30, 4)
+    expect(op.avisoTasa).toBeNull()
+  })
+
+  it('junta en una operación los nuevos de dos bancos que renuevan los mismos viejos', () => {
+    const ops = agruparOperacionesRenovacion([
+      viejo('1', 50000, '2026-03-11'),
+      viejo('2', 50000, '2026-03-11'),
+      nuevo('3', 20000, '2026-04-10', ['1', '2'], '020-923-5000'),
+      nuevo('4', 88000, '2026-04-10', ['1', '2'], '020-923-5010'),
+    ])
+    expect(ops).toHaveLength(1)
+    expect(ops[0]!.chequesNuevos).toHaveLength(2)
+    expect(ops[0]!.chequesViejos).toHaveLength(2)
+    expect(ops[0]!.tasaImplicita).toBeCloseTo(0.08, 4)
+  })
+
+  it('avisa si el OBS nombra un cheque que no está (la tasa sale inflada)', () => {
+    const ops = agruparOperacionesRenovacion([viejo('1', 100000, '2026-03-11'), nuevo('3', 216000, '2026-04-10', ['1', '999'])])
+    expect(ops[0]!.viejosNoEncontrados).toEqual(['999'])
+    expect(ops[0]!.avisoTasa).toBe('faltan_viejos')
+  })
+
+  it('avisa pago parcial cuando los nuevos suman menos que los viejos', () => {
+    const ops = agruparOperacionesRenovacion([viejo('1', 100000, '2026-03-11'), nuevo('3', 60000, '2026-04-10', ['1'])])
+    expect(ops[0]!.avisoTasa).toBe('pago_parcial')
+  })
+
+  it('avisa plata nueva cuando pasa el 15 % por mes', () => {
+    const ops = agruparOperacionesRenovacion([viejo('1', 100000, '2026-03-11'), nuevo('3', 130000, '2026-04-10', ['1'])])
+    expect(ops[0]!.avisoTasa).toBe('capital_nuevo')
+  })
+
+  it('el promedio por mes pesa por capital y deja afuera las operaciones con aviso', () => {
+    const ops = agruparOperacionesRenovacion([
+      viejo('1', 100000, '2026-03-11'),
+      nuevo('2', 108000, '2026-04-10', ['1']), // 8 % en 30 días
+      viejo('5', 300000, '2026-03-11'),
+      nuevo('6', 324000, '2026-05-10', ['5']), // 8 % en 60 días = 4 % por mes
+      viejo('7', 100000, '2026-03-11'),
+      nuevo('8', 50000, '2026-04-10', ['7']), // pago parcial: afuera
+    ])
+    const r = resumirTasaRenovaciones(ops)
+    expect(r.operacionesContadas).toBe(2)
+    expect(r.operacionesConAviso).toBe(1)
+    // (8.000 × 30/30 + 24.000 × 30/60) / 400.000 = 20.000 / 400.000 = 5 %
+    expect(r.tasaMensualPromedio).toBeCloseTo(0.05, 4)
   })
 })

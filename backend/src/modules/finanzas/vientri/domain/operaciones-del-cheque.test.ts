@@ -25,6 +25,8 @@ function op(id: string, viejos: ChequeEnOperacion[], nuevos: ChequeEnOperacion[]
     diasRenovacion: null,
     tasaImplicita: totalViejos > 0 ? (totalNuevos - totalViejos) / totalViejos : 0,
     tasaMensualEstimada: null,
+    avisoTasa: null,
+    viejosNoEncontrados: [],
     vinculada: viejos.length > 0,
     tipoVinculo: 'explicito',
     obsOriginal: '',

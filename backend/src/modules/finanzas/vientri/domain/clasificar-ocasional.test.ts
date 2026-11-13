@@ -138,6 +138,13 @@ describe('reclasificarDoc', () => {
     expect(reclasificarDoc({ ...r, renovacionDe: ['020-111-2222-0'] }, PROVEEDORES).revisar).toEqual([])
   })
 
+  it('capital con interés ("INTERESES Y CAP") es operación inicial: no queda a revisar por falta de origen', () => {
+    const mixto = doc({ rolEnOperacion: 'mixto', obsOriginal: 'INTERESES Y CAP' })
+    expect(reclasificarDoc(mixto, PROVEEDORES).revisar).toEqual([])
+    const capital = doc({ rolEnOperacion: 'capital', obsOriginal: 'Capital' })
+    expect(reclasificarDoc(capital, PROVEEDORES).revisar).toEqual([])
+  })
+
   it('conserva los otros textos de revisar', () => {
     const r = reclasificarDoc(doc({ revisar: ['Importe cero o negativo'], esRenovacion: true }), PROVEEDORES)
     expect(r.revisar).toEqual(['Importe cero o negativo'])

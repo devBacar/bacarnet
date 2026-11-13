@@ -51,6 +51,8 @@ function op(overrides: Partial<OperacionRenovacion> = {}): OperacionRenovacion {
     diasRenovacion: null,
     tasaImplicita: 0.1,
     tasaMensualEstimada: null,
+    avisoTasa: null,
+    viejosNoEncontrados: [],
     vinculada: true,
     tipoVinculo: 'explicito',
     obsOriginal: 'Renovacion',

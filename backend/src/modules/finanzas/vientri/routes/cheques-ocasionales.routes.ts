@@ -36,7 +36,7 @@ import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
 import { analizarOcasionalesVsEmitidos } from '../domain/analisis-ocasionales-emitidos.js'
 import { analizarInteresVsRenovaciones } from '../domain/analisis-interes-renovacion.js'
 import { reconstruirCadenas, clasificarCheques, resumirCostoFinanciero } from '../domain/cadena-renovacion.js'
-import { agruparOperacionesRenovacion } from '../domain/operacion-renovacion.js'
+import { agruparOperacionesRenovacion, resumirTasaRenovaciones } from '../domain/operacion-renovacion.js'
 import { interesAparteDe, operacionesDelCheque } from '../domain/operaciones-del-cheque.js'
 import { armarSeguimiento } from '../domain/seguimiento.js'
 import { analizarARevisar } from '../domain/analisis-revisar.js'
@@ -75,6 +75,8 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
       | '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva' | 'otros_pagos'
     const q = typeof req.query.q === 'string' ? normalizar(req.query.q.trim()) : ''
     const page = Math.max(1, Number(req.query.page) || 1)
+    // Solo la pestaña "Otros pagos" pide la lista agrupada; elegido desde el select de "Todos" va suelto.
+    const agrupar = filtro === 'otros_pagos' && req.query.agrupar === '1'
 
     let filtrados = todos.filter(
       (d) => !d.baja && !d.revisar.some((r) => r.toLowerCase().includes('imposible')),
@@ -85,10 +87,23 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
     else if (filtro === 'compra_iva') filtrados = filtrados.filter((d) => d.esCompraIva === true)
     else if (filtro === 'otros_pagos') filtrados = filtrados.filter((d) => esOtroPago(d.beneficiarioNormalizado ?? '', d.obsOriginal ?? ''))
 
-    if (q) {
-      filtrados = filtrados.filter((d) =>
-        normalizar(`${d.beneficiario} ${d.numeroCheque} ${d.obsOriginal} ${d.estado}`).includes(q),
-      )
+    // El buscador mira solo el OBS.
+    if (q) filtrados = filtrados.filter((d) => normalizar(d.obsOriginal ?? '').includes(q))
+
+    const esYmd = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+    const fechaDesde = esYmd(req.query.fechaDesde) ? req.query.fechaDesde : null
+    const fechaHasta = esYmd(req.query.fechaHasta) ? req.query.fechaHasta : null
+    if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+      res.status(400).json({ error: 'La fecha "desde" no puede ser posterior a la fecha "hasta".' })
+      return
+    }
+    if (fechaDesde || fechaHasta) {
+      const porEmision = req.query.campoFecha === 'emision'
+      filtrados = filtrados.filter((d) => {
+        const f = porEmision ? d.fechaEmision : d.fechaVencimiento
+        if (!f) return false
+        return (!fechaDesde || f >= fechaDesde) && (!fechaHasta || f <= fechaHasta)
+      })
     }
 
     const rangoMonto = leerRangoMonto(
@@ -100,7 +115,7 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
     const total = filtrados.length
     const totalCentavos = filtrados.reduce((s, d) => s + d.montoCentavos, 0)
 
-    if (filtro === 'otros_pagos') {
+    if (agrupar) {
       // Se pagina por grupo (emisión + OBS + beneficiario) para que un grupo nunca quede partido entre páginas.
       const grupos = new Map<string, ChequeOcasionalDoc[]>()
       for (const d of filtrados) {
@@ -154,6 +169,8 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
     const [pool, catalogo] = await Promise.all([leerCompletos(), mapaProveedoresFinancieros()])
     const cadenas = reconstruirCadenas(pool)
     const resumen = resumirCostoFinanciero(cadenas, catalogo)
+    // La tasa que se muestra es por mes y sale de las renovaciones; la de las cadenas es acumulada de varios meses.
+    const tasaRenovaciones = resumirTasaRenovaciones(agruparOperacionesRenovacion(pool))
 
     // Stats solo de docs reales (no sintéticos)
     const activos = pool.filter((d) => d.vientriId !== 0)
@@ -203,6 +220,7 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
       cotizacionPromedioUsd,
       porMes,
       costoFinanciero: resumen,
+      tasaRenovaciones,
     })
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] resumen', err)

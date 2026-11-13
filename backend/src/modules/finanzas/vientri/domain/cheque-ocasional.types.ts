@@ -112,6 +112,14 @@ export interface ChequeEnOperacion {
   beneficiarioNormalizado?: string
 }
 
+/**
+ * Por qué la tasa de una renovación no es confiable:
+ *  - faltan_viejos: el OBS nombra cheques que no aparecen → la base queda chica y la tasa se infla.
+ *  - pago_parcial: los nuevos suman menos que los viejos → se pagó una parte; no es interés negativo.
+ *  - capital_nuevo: más de 15 % por mes → seguramente se sumó plata prestada además del interés.
+ */
+export type AvisoTasaRenovacion = 'faltan_viejos' | 'pago_parcial' | 'capital_nuevo'
+
 export interface OperacionRenovacion {
   id: string
   beneficiario: string
@@ -128,14 +136,51 @@ export interface OperacionRenovacion {
 
   fechaVtoViejos: string | null
   fechaVtoNuevos: string | null
+  /** Días entre el vencimiento promedio de los viejos y el de los nuevos (promedio ponderado por monto). */
   diasRenovacion: number | null
+  /** Interés ÷ viejos: lo que se pagó por TODO el plazo, no por mes. */
   tasaImplicita: number
+  /** `tasaImplicita` llevada a 30 días. Es la que se compara entre operaciones. */
   tasaMensualEstimada: number | null
+  /** Si la cuenta nuevos − viejos no es confiable como interés, por qué. Null si está bien. */
+  avisoTasa: AvisoTasaRenovacion | null
+  /** Cheques que el OBS dice que se renuevan pero no están en los datos (ej. número mal tipeado). */
+  viejosNoEncontrados: string[]
 
   vinculada: boolean
   tipoVinculo: 'explicito' | 'implicito'
   obsOriginal: string
   debugAutolink?: string
+  /**
+   * 'inicial' = el préstamo original (OBS "Capital", "INTERESES Y CAP"…): sus cheques van en `chequesNuevos` y no tiene
+   * viejos. Falta (las guardadas antes de 11/2026) o 'renovacion' = una renovación.
+   */
+  tipo?: TipoOperacion
+  /** Solo en operaciones iniciales: qué cheques son interés y cuáles capital, si se pudo saber. */
+  desgloseInicial?: DesgloseInicial | null
+}
+
+export type TipoOperacion = 'inicial' | 'renovacion'
+
+/**
+ * Préstamo con el interés pagado mes a mes en cheques iguales y el capital aparte (ej. HERMANA CLAU 11/03/2026:
+ * 3 cheques de $1.262.266 = 7 % de $18.032.366; MAHUM DIEGO 04/09/2026: 2 cheques de $550.000 por mes = 5,5 % de
+ * $20.000.000). Solo se arma cuando la tasa da redonda: ver `detectarDesgloseInicial`.
+ */
+export interface DesgloseInicial {
+  /** Por mes (0,07 = 7 %). */
+  tasaMensual: number
+  capitalCentavos: number
+  /** Suma de todos los cheques de interés. */
+  interesCentavos: number
+  /** Monto de cada cheque de interés. */
+  interesPorChequeCentavos: number
+  /** Cheques de interés que vencen cada mes (MAHUM DIEGO 04/09/2026: 2, el 24 y el 26). */
+  chequesPorMes: number
+  /** Interés de un mes: monto × cheques por mes. Es el que da la tasa. */
+  interesPorMesCentavos: number
+  chequesInteres: string[]
+  chequesCapital: string[]
 }
 
 export interface ChequeOcasionalDoc {

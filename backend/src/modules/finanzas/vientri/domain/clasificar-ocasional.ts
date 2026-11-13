@@ -41,7 +41,10 @@ export interface SenalesFinancieras {
   tieneUsd: boolean
   tieneTasaExplicita: boolean
   tieneRol: boolean
-  /** El OBS lo marca solo como interés (sin capital ni renovación). */
+  /**
+   * El OBS lo marca solo como interés (sin capital ni renovación). Los que dicen "capital"/"cap" (con o sin
+   * interés, ej. "INTERESES Y CAP") son la operación inicial de la que salen las renovaciones: no les falta origen.
+   */
   esSoloInteres: boolean
   /** Se sabe de dónde viene: renueva a otro cheque, o tiene USD o tasa explícita. */
   tieneOrigen: boolean

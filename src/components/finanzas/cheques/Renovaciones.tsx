@@ -6,9 +6,11 @@ import {
   fetchSeguimientoRenovaciones,
   type BeneficiarioSeguimientoItem,
   type ChequeConEstadoItem,
+  type ClaseOperacionItem,
   type EstadoChequeRenov,
   type OperacionSeguimientoItem,
   type SeguimientoEstadoFiltro,
+  TEXTO_AVISO_TASA,
 } from '../../../services/finanzasChequesApi'
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
@@ -26,9 +28,9 @@ function chequeCorto(num: string): string {
   return partes.length >= 4 ? partes[3]! : num
 }
 
-function formatTasa(interesCentavos: number, capitalCentavos: number): string {
-  if (capitalCentavos <= 0) return '—'
-  return `${((interesCentavos / capitalCentavos) * 100).toFixed(1)}%`
+/** Tasa por mes (0,08 → "8.0%/mes"). */
+function formatTasaMensual(tasa: number | null): string {
+  return tasa === null ? '—' : `${(tasa * 100).toFixed(1)}%/mes`
 }
 
 function normalizar(t: string): string {
@@ -86,14 +88,50 @@ function EstadoOperacionBadge({ op }: { op: OperacionSeguimientoItem }) {
   )
 }
 
+function esInicial(op: OperacionSeguimientoItem): boolean {
+  return op.tipo === 'inicial'
+}
+
+function claseDe(op: OperacionSeguimientoItem): ClaseOperacionItem {
+  if (op.clase) return op.clase
+  if (!esInicial(op)) return 'renovacion'
+  return op.chequesNuevos.some((c) => c.estado === 'renovado') ? 'inicial_renovada' : 'inicial_sola'
+}
+
 function etiquetaOp(op: OperacionSeguimientoItem): string {
-  return `Op ${formatFecha(op.fechaEmision)}${op.banco ? ` · ${op.banco}` : ''}`
+  return `${esInicial(op) ? 'Inicial' : 'Renovación'} ${formatFecha(op.fechaEmision)}${op.banco ? ` · ${op.banco}` : ''}`
+}
+
+/** Filtro por tipo de operación. */
+type FiltroTipo = 'todas' | ClaseOperacionItem
+const FILTRO_TIPO: ReadonlyArray<readonly [FiltroTipo, string]> = [
+  ['todas', 'Todas'],
+  ['inicial_sola', 'Iniciales sin renovar'],
+  ['inicial_renovada', 'Iniciales renovadas'],
+  ['renovacion', 'Renovaciones'],
+]
+
+const CLASE_UI: Record<Exclude<ClaseOperacionItem, 'renovacion'>, { label: string; title: string; clase: string }> = {
+  inicial_sola: {
+    label: 'Sin renovar',
+    title: 'Préstamo original (el OBS dice capital): todavía no se renovó ninguno de sus cheques.',
+    clase: 'border-sky-300 bg-sky-50 text-sky-900 dark:border-sky-700 dark:bg-sky-900/30 dark:text-sky-200',
+  },
+  inicial_renovada: {
+    label: 'Renovada',
+    title: 'Préstamo original: algunos de sus cheques se cambiaron por otros. Es el primer paso de la cadena.',
+    clase: 'border-violet-300 bg-violet-100 text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-200',
+  },
 }
 
 const EN_LA_CALLE: ReadonlySet<EstadoChequeRenov> = new Set(['pendiente', 'rechazado'])
 
-/** Interés de la operación: el que viene adentro de los cheques nuevos (nuevos − viejos) más el pagado aparte. */
+/**
+ * Interés de la operación: el que viene adentro de los cheques nuevos (nuevos − viejos) más el pagado aparte. En una
+ * operación inicial, el de sus cheques de interés si se pudo separar.
+ */
 function interesDeOp(op: OperacionSeguimientoItem): number {
+  if (op.tipo === 'inicial') return op.desgloseInicial?.interesCentavos ?? 0
   return (op.vinculada ? op.interesCentavos : 0) + (op.interesAparte?.totalCentavos ?? 0)
 }
 
@@ -101,25 +139,33 @@ function interesDeOp(op: OperacionSeguimientoItem): number {
  * Interés y tasa promedio. `interes` suma el que viene adentro de los cheques nuevos y el pagado aparte. La tasa
  * promedio usa solo el de adentro sobre los cheques viejos: el pagado aparte se calcula sobre otra base (ej. todo lo
  * que vence en un mes) y mezclarlo daría una tasa falsa.
+ *
+ * `tasaMensual` es el promedio por mes de cada renovación (interés × 30 ÷ días), pesado por los viejos. Deja afuera
+ * las que tienen aviso (pago parcial, cheques que faltan, plata nueva): su diferencia no es interés.
  */
-function capitalEInteres(ops: OperacionSeguimientoItem[]): { capital: number; interes: number; adentro: number } {
-  let capital = 0
+function capitalEInteres(ops: OperacionSeguimientoItem[]): { interes: number; adentro: number; tasaMensual: number | null } {
   let adentro = 0
   let aparte = 0
+  let capitalTasa = 0
+  let interesMensual = 0
   for (const op of ops) {
     aparte += op.interesAparte?.totalCentavos ?? 0
     if (!op.vinculada) continue
-    capital += op.totalViejosCentavos
     adentro += op.interesCentavos
+    if (op.avisoTasa || !op.diasRenovacion || op.diasRenovacion <= 0 || op.totalViejosCentavos <= 0) continue
+    capitalTasa += op.totalViejosCentavos
+    interesMensual += (op.interesCentavos * 30) / op.diasRenovacion
   }
-  return { capital, interes: adentro + aparte, adentro }
+  return { interes: adentro + aparte, adentro, tasaMensual: capitalTasa > 0 ? interesMensual / capitalTasa : null }
 }
 
-/** La tasa de una operación: la confirmada si el interés se pagó aparte; si no, nuevos − viejos sobre los viejos. */
+/** La tasa de una operación: la confirmada si el interés se pagó aparte; si no, nuevos − viejos por mes. */
 function tasaDeOp(op: OperacionSeguimientoItem): string {
+  if (op.tipo === 'inicial') return op.desgloseInicial ? formatTasaMensual(op.desgloseInicial.tasaMensual) : '—'
   const a = op.interesAparte
   if (a) return `${a.tasaPorcentaje.toLocaleString('es-AR', { maximumFractionDigits: 2 })}%${a.porMes ? '/mes' : ''}`
-  return op.vinculada ? formatTasa(op.interesCentavos, op.totalViejosCentavos) : '—'
+  if (!op.vinculada || op.avisoTasa) return '—'
+  return formatTasaMensual(op.tasaMensualEstimada)
 }
 
 /** Próximo vencimiento de un cheque todavía en la calle. `vencido` si alguno ya pasó la fecha. */
@@ -159,8 +205,9 @@ interface OperacionConGrupo {
 }
 
 /**
- * Renovaciones y su seguimiento en una sola pantalla: qué cheques se cambiaron por cuáles, con qué interés,
- * y cuánta plata sigue en la calle. Se ve sumado por proveedor o una operación por fila.
+ * Operaciones y renovaciones en una sola pantalla: el préstamo original (operación inicial), qué cheques se cambiaron
+ * por cuáles, con qué interés, y cuánta plata sigue en la calle. Se ve sumado por proveedor o una operación por fila,
+ * y se puede filtrar por tipo (iniciales sin renovar, iniciales renovadas, renovaciones).
  */
 export function Renovaciones() {
   const { user } = useAuth()
@@ -169,6 +216,8 @@ export function Renovaciones() {
   const setEstado = (v: SeguimientoEstadoFiltro) => cambiar({ seg: v === 'abiertas' ? null : v })
   const agrupar = valorPermitido<Agrupar>(params.get('ver'), ['proveedor', 'operacion'], 'proveedor')
   const setAgrupar = (v: Agrupar) => cambiar({ ver: v === 'proveedor' ? null : v })
+  const tipo = valorPermitido<FiltroTipo>(params.get('tipo'), FILTRO_TIPO.map(([v]) => v), 'todas')
+  const setTipo = (v: FiltroTipo) => cambiar({ tipo: v === 'todas' ? null : v })
   /** Viene de "Renov." en la lista de Cheques: muestra solo ese beneficiario. */
   const beneficiarioFiltro = params.get('benef') ?? ''
   /** Pila de navegación de la cadena (en la URL como ?cadena=id1,id2): la última es la operación que se está viendo. */
@@ -210,13 +259,14 @@ export function Renovaciones() {
       }
       const operaciones = g.operaciones.filter(
         (op) =>
+          (tipo === 'todas' || claseDe(op) === tipo) &&
           (!q || coincideBusqueda(op, g.beneficiario, q)) &&
           (!(vtoDesde || vtoHasta) || coincideVencimiento(op, vtoDesde, vtoHasta)),
       )
       if (operaciones.length > 0) out.push({ ...g, operaciones })
     }
     return out
-  }, [data, beneficiarioFiltro, q, vtoDesde, vtoHasta])
+  }, [data, beneficiarioFiltro, tipo, q, vtoDesde, vtoHasta])
 
   const todasLasOps = useMemo(() => (data?.beneficiarios ?? []).flatMap((g) => g.operaciones), [data])
   const interesTotal = useMemo(() => capitalEInteres(todasLasOps), [todasLasOps])
@@ -224,11 +274,11 @@ export function Renovaciones() {
   const opActualId = pila[pila.length - 1]
   const opActual = opActualId ? opsPorId.get(opActualId) ?? null : null
 
-  if (isLoading) return <p className="text-body-muted text-sm">Cargando renovaciones…</p>
+  if (isLoading) return <p className="text-body-muted text-sm">Cargando operaciones…</p>
   if (isError) {
     return (
       <p className="text-danger text-sm">
-        {error instanceof Error ? error.message : 'No se pudieron cargar las renovaciones'}
+        {error instanceof Error ? error.message : 'No se pudieron cargar las operaciones'}
       </p>
     )
   }
@@ -267,7 +317,7 @@ export function Renovaciones() {
             titulo="Interés de las renovaciones"
             valor={formatMoneyCentavos(interesTotal.interes, 'ARS')}
             valorClase="text-red-600 dark:text-red-400"
-            detalle={`Tasa promedio ${formatTasa(interesTotal.adentro, interesTotal.capital)}${interesTotal.interes !== interesTotal.adentro ? ' (sin el pagado aparte)' : ''} · ${estado === 'abiertas' ? 'operaciones abiertas' : 'todas las operaciones'}`}
+            detalle={`Tasa promedio ${formatTasaMensual(interesTotal.tasaMensual)}${interesTotal.interes !== interesTotal.adentro ? ' (sin el pagado aparte)' : ''} · ${estado === 'abiertas' ? 'operaciones abiertas' : 'todas las operaciones'}`}
           />
         </div>
       ) : null}
@@ -290,6 +340,7 @@ export function Renovaciones() {
             valor={agrupar}
             onCambiar={setAgrupar}
           />
+          <Selector opciones={FILTRO_TIPO} valor={tipo} onCambiar={setTipo} />
           <div className="relative w-full sm:max-w-xs">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
             <input
@@ -337,11 +388,11 @@ export function Renovaciones() {
 
         {grupos.length === 0 ? (
           <p className="text-body-muted py-8 text-center text-sm">
-            {hayFiltros || beneficiarioFiltro
-              ? 'No hay renovaciones con esos filtros.'
+            {hayFiltros || beneficiarioFiltro || tipo !== 'todas'
+              ? 'No hay operaciones con esos filtros.'
               : estado === 'abiertas'
-                ? 'No hay renovaciones abiertas. Elegí "Todas" para ver las cerradas.'
-                : 'No hay operaciones de renovación.'}
+                ? 'No hay operaciones abiertas. Elegí "Todas" para ver las cerradas.'
+                : 'No hay operaciones.'}
           </p>
         ) : agrupar === 'proveedor' ? (
           <TablaPorProveedor grupos={grupos} hoy={hoy} abrirSolo={Boolean(beneficiarioFiltro)} onVerCadena={verCadena} />
@@ -428,6 +479,18 @@ function Selector<T extends string>({
   )
 }
 
+/** Sin renovar / Renovada, solo para las operaciones iniciales. */
+function ClaseBadge({ op }: { op: OperacionSeguimientoItem }) {
+  const clase = claseDe(op)
+  if (clase === 'renovacion') return null
+  const ui = CLASE_UI[clase]
+  return (
+    <span className={`ml-1.5 inline-block rounded border px-1.5 py-0.5 text-[10px] font-medium ${ui.clase}`} title={ui.title}>
+      {ui.label}
+    </span>
+  )
+}
+
 function SinAsignarBadge() {
   return (
     <span
@@ -477,7 +540,7 @@ function TablaPorProveedor({
           {grupos.map((g) => {
             const clave = claveDe(g)
             const abierto = expandido === clave || (abrirSolo && grupos.length === 1 && expandido === null)
-            const { capital, interes, adentro } = capitalEInteres(g.operaciones)
+            const { interes, adentro, tasaMensual } = capitalEInteres(g.operaciones)
             const proximo = proximoVencimiento(g.operaciones, hoy)
             return (
               <Fragment key={clave}>
@@ -511,7 +574,7 @@ function TablaPorProveedor({
                     className="px-2.5 py-2 text-right tabular-nums"
                     title={interes !== adentro ? 'Tasa del interés que viene adentro de las renovaciones; el pagado aparte se calcula sobre otra base.' : undefined}
                   >
-                    {formatTasa(adentro, capital)}
+                    {formatTasaMensual(tasaMensual)}
                   </td>
                   <td className="whitespace-nowrap px-2.5 py-2 text-right tabular-nums">
                     {proximo.vencido ? (
@@ -621,7 +684,7 @@ function CabeceraOperaciones({ conProveedor }: { conProveedor: boolean }) {
         <th className="w-6 px-1 py-2"></th>
         {conProveedor ? <th className="px-2.5 py-2">Proveedor</th> : null}
         <th className="px-2.5 py-2">Operación</th>
-        <th className="px-2.5 py-2 text-right">Cheques viejos → nuevos</th>
+        <th className="px-2.5 py-2 text-right">Monto (viejos → nuevos)</th>
         <th className="px-2.5 py-2 text-right">Interés</th>
         <th className="px-2.5 py-2 text-right">Tasa</th>
         <th className="px-2.5 py-2 text-right">Días</th>
@@ -691,7 +754,8 @@ function FilaOperacion({
         ) : null}
         <td className="whitespace-nowrap px-2.5 py-1.5">
           {etiquetaOp(op)}
-          {!op.vinculada ? (
+          {esInicial(op) ? <ClaseBadge op={op} /> : null}
+          {!op.vinculada && !esInicial(op) ? (
             <span
               className="ml-1.5 inline-block rounded border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-200"
               title="No se encontró el cheque viejo que reemplaza (puede ser anterior a los datos que hay)."
@@ -728,7 +792,15 @@ function FilaOperacion({
             </span>
           ) : null}
         </td>
-        <td className="px-2.5 py-1.5 text-right tabular-nums">{tasaDeOp(op)}</td>
+        <td
+          className="whitespace-nowrap px-2.5 py-1.5 text-right tabular-nums"
+          title={op.avisoTasa && !op.interesAparte ? TEXTO_AVISO_TASA[op.avisoTasa] : undefined}
+        >
+          {tasaDeOp(op)}
+          {op.avisoTasa && !op.interesAparte ? (
+            <AlertTriangle className="ml-1 inline h-3.5 w-3.5 text-amber-500" aria-label={TEXTO_AVISO_TASA[op.avisoTasa]} />
+          ) : null}
+        </td>
         <td className="px-2.5 py-1.5 text-right tabular-nums">{op.diasRenovacion ?? '—'}</td>
         <td className="px-2.5 py-1.5">
           <EstadoOperacionBadge op={op} />
@@ -754,6 +826,8 @@ function FilaOperacion({
           <td colSpan={columnas} className="px-2.5 py-2">
             <div className="ml-6 space-y-1.5">
               <NotaOtroBeneficiario op={op} />
+              <NotaDesgloseInicial op={op} />
+              <NotaInteresInicialEnViejos op={op} />
               <TablaPares op={op} />
               <InteresAparteBloque op={op} />
               {op.obsOriginal ? <p className="text-body-muted font-mono text-[11px]">OBS: {op.obsOriginal}</p> : null}
@@ -765,21 +839,68 @@ function FilaOperacion({
   )
 }
 
+/** En una operación inicial: cuánto es capital y cuánto interés, cuando se pudo separar. */
+function NotaDesgloseInicial({ op }: { op: OperacionSeguimientoItem }) {
+  const d = op.tipo === 'inicial' ? op.desgloseInicial : null
+  if (!d) return null
+  const n = d.chequesInteres.length
+  const porMes = d.chequesPorMes ?? 1
+  const interesMes = d.interesPorMesCentavos ?? d.interesPorChequeCentavos * porMes
+  return (
+    <div className="rounded-md border border-sky-300 bg-sky-50 px-2.5 py-1.5 text-xs text-sky-900 dark:border-sky-700 dark:bg-sky-900/30 dark:text-sky-200">
+      <p>
+        <span className="font-semibold">Capital {formatMoneyCentavos(d.capitalCentavos, 'ARS')}</span> · interés de{' '}
+        {formatMoneyCentavos(interesMes, 'ARS')} por mes ({formatTasaMensual(d.tasaMensual)})
+        {porMes > 1 ? ` en ${porMes} cheques de ${formatMoneyCentavos(d.interesPorChequeCentavos, 'ARS')}` : ''} · en total {n}{' '}
+        {n === 1 ? 'cheque' : 'cheques'} = <span className="font-semibold">{formatMoneyCentavos(d.interesCentavos, 'ARS')}</span>
+      </p>
+      <p className="text-[11px] opacity-80">
+        Calculado: los cheques de interés son iguales, vencen mes a mes y el interés de cada mes es justo esa tasa sobre el
+        capital.
+      </p>
+    </div>
+  )
+}
+
+/** En una renovación: alguno de los cheques viejos era interés de la operación inicial, no capital. */
+function NotaInteresInicialEnViejos({ op }: { op: OperacionSeguimientoItem }) {
+  const i = op.interesInicialEnViejos
+  if (!i) return null
+  return (
+    <div className="rounded-md border border-sky-300 bg-sky-50 px-2.5 py-1.5 text-xs text-sky-900 dark:border-sky-700 dark:bg-sky-900/30 dark:text-sky-200">
+      De los cheques viejos, {i.cantidadCheques === 1 ? '1 cheque' : `${i.cantidadCheques} cheques`} (
+      {formatMoneyCentavos(i.montoCentavos, 'ARS')}) {i.cantidadCheques === 1 ? 'era' : 'eran'} interés de la operación
+      inicial que no se pagó y se renovó junto con el capital. Capital renovado:{' '}
+      <span className="font-semibold">{formatMoneyCentavos(i.capitalRenovadoCentavos, 'ARS')}</span>. La tasa de esta
+      renovación se sigue calculando sobre todos los cheques viejos.
+    </div>
+  )
+}
+
 /** Qué cheque viejo se cambió por cuál nuevo, y en qué quedó el nuevo. */
 function TablaPares({ op, onIr, opsPorId }: { op: OperacionSeguimientoItem; onIr?: (opId: string) => void; opsPorId?: Map<string, OperacionSeguimientoItem> }) {
   const pares = useMemo(() => armarPares(op), [op])
+  /** Una operación inicial no reemplaza a nada: solo sus cheques. */
+  const conViejos = !esInicial(op)
+  const desglose = esInicial(op) ? op.desgloseInicial ?? null : null
+  const rolDe = (numero: string): 'Interés' | 'Capital' | null =>
+    !desglose ? null : desglose.chequesInteres.includes(numero) ? 'Interés' : desglose.chequesCapital.includes(numero) ? 'Capital' : null
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
       <table className="min-w-full text-xs">
         <thead className="text-body-muted bg-neutral-50/80 text-left dark:bg-zinc-800/40">
           <tr>
-            <th className="px-2 py-1.5">Cheque viejo</th>
+            {conViejos ? (
+              <>
+                <th className="px-2 py-1.5">Cheque viejo</th>
+                <th className="px-2 py-1.5">Vto</th>
+                <th className="px-2 py-1.5 text-right">Monto viejo</th>
+              </>
+            ) : null}
+            <th className="px-2 py-1.5">{conViejos ? 'Cheque nuevo' : 'Cheque'}</th>
             <th className="px-2 py-1.5">Vto</th>
-            <th className="px-2 py-1.5 text-right">Monto viejo</th>
-            <th className="px-2 py-1.5">Cheque nuevo</th>
-            <th className="px-2 py-1.5">Vto</th>
-            <th className="px-2 py-1.5 text-right">Monto nuevo</th>
-            <th className="px-2 py-1.5">Estado del nuevo</th>
+            <th className="px-2 py-1.5 text-right">{conViejos ? 'Monto nuevo' : 'Monto'}</th>
+            <th className="px-2 py-1.5">{conViejos ? 'Estado del nuevo' : 'Estado'}</th>
           </tr>
         </thead>
         <tbody>
@@ -788,12 +909,29 @@ function TablaPares({ op, onIr, opsPorId }: { op: OperacionSeguimientoItem; onIr
               key={i}
               className={`border-t border-subtle ${p.nuevo?.estado === 'rechazado' ? 'bg-red-50/70 dark:bg-red-950/20' : ''}`}
             >
-              <td className="whitespace-nowrap px-2 py-1.5 font-mono">{p.viejo ? chequeCorto(p.viejo.numeroCheque) : '—'}</td>
-              <td className="whitespace-nowrap px-2 py-1.5">{p.viejo ? formatFecha(p.viejo.fechaVencimiento) : ''}</td>
-              <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
-                {p.viejo ? formatMoneyCentavos(p.viejo.montoCentavos, 'ARS') : ''}
+              {conViejos ? (
+                <>
+                  <td className="whitespace-nowrap px-2 py-1.5 font-mono">{p.viejo ? chequeCorto(p.viejo.numeroCheque) : '—'}</td>
+                  <td className="whitespace-nowrap px-2 py-1.5">{p.viejo ? formatFecha(p.viejo.fechaVencimiento) : ''}</td>
+                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                    {p.viejo ? formatMoneyCentavos(p.viejo.montoCentavos, 'ARS') : ''}
+                  </td>
+                </>
+              ) : null}
+              <td className="whitespace-nowrap px-2 py-1.5 font-mono">
+                {p.nuevo ? chequeCorto(p.nuevo.numeroCheque) : '—'}
+                {p.nuevo && rolDe(p.nuevo.numeroCheque) ? (
+                  <span
+                    className={`ml-1.5 inline-block rounded border px-1.5 py-0.5 font-sans text-[10px] font-medium ${
+                      rolDe(p.nuevo.numeroCheque) === 'Interés'
+                        ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300'
+                        : 'border-neutral-300 bg-neutral-100 text-neutral-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+                    }`}
+                  >
+                    {rolDe(p.nuevo.numeroCheque)}
+                  </span>
+                ) : null}
               </td>
-              <td className="whitespace-nowrap px-2 py-1.5 font-mono">{p.nuevo ? chequeCorto(p.nuevo.numeroCheque) : '—'}</td>
               <td className="whitespace-nowrap px-2 py-1.5">{p.nuevo ? formatFecha(p.nuevo.fechaVencimiento) : ''}</td>
               <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
                 {p.nuevo ? formatMoneyCentavos(p.nuevo.montoCentavos, 'ARS') : ''}
@@ -824,13 +962,21 @@ function TablaPares({ op, onIr, opsPorId }: { op: OperacionSeguimientoItem; onIr
         {pares.length > 1 ? (
           <tfoot className="border-t-2 border-neutral-300 text-xs font-semibold dark:border-zinc-600">
             <tr>
-              <td colSpan={2} className="px-2 py-1.5">
-                Total ({op.chequesViejos.length} → {op.chequesNuevos.length})
-              </td>
-              <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
-                {op.totalViejosCentavos > 0 ? formatMoneyCentavos(op.totalViejosCentavos, 'ARS') : ''}
-              </td>
-              <td colSpan={2} />
+              {conViejos ? (
+                <>
+                  <td colSpan={2} className="px-2 py-1.5">
+                    Total ({op.chequesViejos.length} → {op.chequesNuevos.length})
+                  </td>
+                  <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
+                    {op.totalViejosCentavos > 0 ? formatMoneyCentavos(op.totalViejosCentavos, 'ARS') : ''}
+                  </td>
+                  <td colSpan={2} />
+                </>
+              ) : (
+                <td colSpan={2} className="px-2 py-1.5">
+                  Total ({op.chequesNuevos.length} cheques)
+                </td>
+              )}
               <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums">
                 {formatMoneyCentavos(op.totalNuevosCentavos, 'ARS')}
               </td>
@@ -1021,7 +1167,11 @@ function CadenaModal({
           </div>
         ) : (
           <p className="text-body-muted mb-3 text-xs">
-            {op.vinculada ? 'Origen de la cadena: no viene de otra operación.' : 'Sin cheques viejos vinculados.'}
+            {esInicial(op)
+              ? 'Operación inicial: es el préstamo original, no viene de otra operación.'
+              : op.vinculada
+                ? 'Origen de la cadena: no viene de otra operación.'
+                : 'Sin cheques viejos vinculados.'}
           </p>
         )}
 
@@ -1030,6 +1180,10 @@ function CadenaModal({
             <NotaOtroBeneficiario op={op} />
           </div>
         ) : null}
+        <div className="mb-2 space-y-1.5">
+          <NotaDesgloseInicial op={op} />
+          <NotaInteresInicialEnViejos op={op} />
+        </div>
         <TablaPares op={op} onIr={onIr} opsPorId={opsPorId} />
         {op.interesAparte ? (
           <div className="mt-2">

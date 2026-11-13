@@ -117,8 +117,8 @@ function CadenaCard({ cadena }: { cadena: CadenaRenovacion }) {
             {formatMoneyCentavos(cadena.interesTotalCentavos, 'ARS')}
           </span>
         </span>
-        <span>
-          <span className="text-body-muted">Tasa implícita:</span>{' '}
+        <span title="Lo que creció el cheque en toda la cadena, sumando todas las renovaciones. No es una tasa por mes.">
+          <span className="text-body-muted">Creció en total:</span>{' '}
           <span className="text-heading font-medium">{(cadena.tasaImplicita * 100).toFixed(1)}%</span>
         </span>
         {cadena.fechaInicio || cadena.fechaFin ? (

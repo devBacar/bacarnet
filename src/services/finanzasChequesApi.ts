@@ -445,6 +445,12 @@ export interface OcasionalesResumenResponse {
       tasaImplicita: number
     }>
   }
+  /** Tasa por mes promedio de las renovaciones (sin las que tienen aviso). Puede faltar si el backend es viejo. */
+  tasaRenovaciones?: {
+    tasaMensualPromedio: number | null
+    operacionesContadas: number
+    operacionesConAviso: number
+  }
 }
 
 export interface EslabonDetalleRef {
@@ -649,14 +655,25 @@ export async function fetchChequesOcasionales(params: {
   q?: string
   montoDesde?: string
   montoHasta?: string
+  /** Qué fecha mira el rango: vencimiento (por defecto) o emisión. */
+  campoFecha?: 'vencimiento' | 'emision'
+  /** 'YYYY-MM-DD', inclusive. */
+  fechaDesde?: string
+  fechaHasta?: string
   page?: number
+  /** Solo para "otros_pagos": junta los cheques por emisión + OBS + beneficiario (la pestaña Otros pagos). */
+  agrupar?: boolean
 }): Promise<OcasionalesListResponse> {
   const qs = new URLSearchParams()
   if (params.filtro) qs.set('filtro', params.filtro)
   if (params.q) qs.set('q', params.q)
   if (params.montoDesde) qs.set('montoDesde', params.montoDesde)
   if (params.montoHasta) qs.set('montoHasta', params.montoHasta)
+  if (params.campoFecha === 'emision') qs.set('campoFecha', 'emision')
+  if (params.fechaDesde) qs.set('fechaDesde', params.fechaDesde)
+  if (params.fechaHasta) qs.set('fechaHasta', params.fechaHasta)
   if (params.page) qs.set('page', String(params.page))
+  if (params.agrupar) qs.set('agrupar', '1')
   const s = qs.toString()
   const res = await ocasionalesFetch(s ? `?${s}` : '/')
   const body = (await res.json().catch(() => null)) as { error?: string } | OcasionalesListResponse | null
@@ -734,6 +751,16 @@ export interface ChequeEnOperacionItem {
   beneficiarioNormalizado?: string
 }
 
+/** Igual que `AvisoTasaRenovacion` del backend. */
+export type AvisoTasaRenovacion = 'faltan_viejos' | 'pago_parcial' | 'capital_nuevo'
+
+/** Explicación simple de cada aviso de tasa, para mostrar en pantalla. */
+export const TEXTO_AVISO_TASA: Record<AvisoTasaRenovacion, string> = {
+  faltan_viejos: 'Falta algún cheque que nombra el OBS: la tasa sale más alta de lo real',
+  pago_parcial: 'Se pagó una parte en la renovación: la diferencia no es interés',
+  capital_nuevo: 'Más de 15 % por mes: seguramente se sumó plata prestada además del interés',
+}
+
 export interface OperacionRenovacionItem {
   id: string
   beneficiario: string
@@ -747,14 +774,56 @@ export interface OperacionRenovacionItem {
   interesCentavos: number
   fechaVtoViejos: string | null
   fechaVtoNuevos: string | null
+  /** Días entre el vencimiento promedio de los viejos y el de los nuevos. */
   diasRenovacion: number | null
+  /** Interés ÷ viejos por todo el plazo (no por mes). */
   tasaImplicita: number
   tasaMensualEstimada: number | null
+  /** Por qué la tasa no es confiable; null si está bien. Puede faltar en operaciones guardadas antes del cambio. */
+  avisoTasa?: AvisoTasaRenovacion | null
+  /** Cheques que nombra el OBS y no están en los datos. */
+  viejosNoEncontrados?: string[]
   vinculada: boolean
   tipoVinculo: 'explicito' | 'implicito'
   obsOriginal: string
   debugAutolink?: string
+  /**
+   * 'inicial' = el préstamo original (OBS "Capital", "INTERESES Y CAP"…): sus cheques vienen en `chequesNuevos` y no
+   * tiene viejos. Falta o 'renovacion' = una renovación.
+   */
+  tipo?: 'inicial' | 'renovacion'
+  /** Solo en operaciones iniciales: qué cheques son interés y cuáles capital, si se pudo saber. */
+  desgloseInicial?: DesgloseInicialItem | null
 }
+
+/** Préstamo con el interés pagado mes a mes en cheques iguales y el capital aparte (la tasa da redonda). */
+export interface DesgloseInicialItem {
+  /** Por mes (0,07 = 7 %). */
+  tasaMensual: number
+  capitalCentavos: number
+  interesCentavos: number
+  interesPorChequeCentavos: number
+  /** Cheques de interés que vencen cada mes (1, 2…). Puede faltar si el backend no se actualizó (entonces 1). */
+  chequesPorMes?: number
+  /** Interés de un mes: monto × cheques por mes. Puede faltar si el backend no se actualizó. */
+  interesPorMesCentavos?: number
+  chequesInteres: string[]
+  chequesCapital: string[]
+}
+
+/** Cheques viejos de una renovación que eran interés de la operación inicial. */
+export interface InteresInicialEnViejosItem {
+  cantidadCheques: number
+  montoCentavos: number
+  capitalRenovadoCentavos: number
+}
+
+/**
+ * - inicial_sola: préstamo original que todavía no se renovó.
+ * - inicial_renovada: préstamo original con algún cheque renovado (primer eslabón de una cadena).
+ * - renovacion: una renovación.
+ */
+export type ClaseOperacionItem = 'inicial_sola' | 'inicial_renovada' | 'renovacion'
 
 /** Interés de una renovación que se pagó aparte, en otros cheques, y Finanzas confirmó. */
 export interface InteresAparteItem {
@@ -819,6 +888,10 @@ export interface OperacionSeguimientoItem extends Omit<OperacionRenovacionItem, 
   /** Se armó a mano desde "A revisar". */
   origenRevisar?: boolean
   estadoOperacion: 'abierta' | 'cerrada'
+  /** Puede faltar si el backend todavía no se actualizó (entonces es una renovación). */
+  clase?: ClaseOperacionItem
+  /** Viejos que eran interés de la operación inicial (no capital). Puede faltar si el backend no se actualizó. */
+  interesInicialEnViejos?: InteresInicialEnViejosItem | null
   ancestrosIds: string[]
   /**
    * Cheques viejos que salieron a nombre de otro proveedor (ej. POVO 20/02/2026 renueva cheques de MANA). Vacío si

@@ -62,17 +62,17 @@ describe('recalcularSeguimiento', () => {
     mockSync.mockClear()
     const r = await recalcularSeguimiento({ docs: [viejo, nuevo], importacionId: 'imp-1' })
 
-    expect(r.operaciones).toBe(1)
+    // La renovación y la operación inicial de donde salió el cheque viejo.
+    expect(r.operaciones).toBe(2)
     const input = mockSync.mock.calls[0]![0]
     expect(input.coleccion).toBe(VIENTRI_OPERACIONES_RENOVACION)
     expect(input.coleccion).toBe('renovacionesChequesAgrupados')
     expect(input.importacionId).toBe('imp-1')
     expect(input.borrarFaltantes).toBe(false)
     expect(input.simular).toBe(false)
-    expect(input.docs).toHaveLength(1)
-    expect(input.docs[0]!.id).toBe('renov-julio-2026-02-01-020-923-5000')
+    expect(input.docs.map((d) => d.id).sort()).toEqual(['ini-julio-2026-01-01-020-923-5000', 'renov-julio-2026-02-01-020-923-5000'])
 
-    const data = input.docs[0]!.data as { chequesNuevos: Array<{ estado: string }>; exposicionCentavos: number }
+    const data = input.docs.find((d) => d.id.startsWith('renov-'))!.data as { chequesNuevos: Array<{ estado: string }>; exposicionCentavos: number }
     expect(data.chequesNuevos[0]!.estado).toBe('pendiente')
     expect(data.exposicionCentavos).toBe(100_000_00)
   })

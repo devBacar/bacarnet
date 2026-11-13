@@ -1,4 +1,5 @@
 import type {
+  AvisoTasaRenovacion,
   ChequeEnOperacion,
   ChequeOcasionalDoc,
   OperacionRenovacion,
@@ -10,7 +11,79 @@ function diasEntre(a: string, b: string): number {
   return Math.round((msB - msA) / 86_400_000)
 }
 
-function fechaModaVto(cheques: ChequeEnOperacion[]): string | null {
+/** Más de esto por mes no es solo interés: casi seguro se sumó plata prestada (las tasas reales rondan 4–9 %). */
+export const TASA_MENSUAL_MAXIMA_CREIBLE = 0.15
+
+/**
+ * Vencimiento promedio ponderado por monto (en días desde la época). Con cheques que vencen en varios meses, la
+ * fecha "donde cae más plata" acorta o alarga el plazo y distorsiona la tasa por mes; el promedio no.
+ */
+function vtoPromedioDias(cheques: ChequeEnOperacion[]): number | null {
+  let total = 0
+  let ponderado = 0
+  for (const c of cheques) {
+    if (!c.fechaVencimiento) continue
+    total += c.montoCentavos
+    ponderado += (Date.parse(`${c.fechaVencimiento}T12:00:00Z`) / 86_400_000) * c.montoCentavos
+  }
+  return total > 0 ? ponderado / total : null
+}
+
+/** Días entre el vencimiento promedio de los viejos y el de los nuevos. */
+export function plazoPonderadoDias(viejos: ChequeEnOperacion[], nuevos: ChequeEnOperacion[]): number | null {
+  const v = vtoPromedioDias(viejos)
+  const n = vtoPromedioDias(nuevos)
+  return v !== null && n !== null ? Math.round(n - v) : null
+}
+
+/** Por qué la tasa de la operación no se puede tomar como interés, o null si se puede. */
+export function avisoDeTasa(op: {
+  vinculada: boolean
+  interesCentavos: number
+  tasaMensualEstimada: number | null
+  viejosNoEncontrados: string[]
+}): AvisoTasaRenovacion | null {
+  if (!op.vinculada) return null
+  if (op.viejosNoEncontrados.length > 0) return 'faltan_viejos'
+  if (op.interesCentavos < 0) return 'pago_parcial'
+  if (op.tasaMensualEstimada !== null && op.tasaMensualEstimada > TASA_MENSUAL_MAXIMA_CREIBLE) return 'capital_nuevo'
+  return null
+}
+
+export interface ResumenTasaRenovaciones {
+  /** Promedio de la tasa por mes, pesado por lo que se renovó (cheques viejos). Null si no hay operaciones contables. */
+  tasaMensualPromedio: number | null
+  /** Operaciones que entran en el promedio. */
+  operacionesContadas: number
+  /** Operaciones vinculadas que quedan afuera por tener aviso (pago parcial, cheques que faltan, plata nueva). */
+  operacionesConAviso: number
+}
+
+/** Tasa por mes promedio de las renovaciones confiables: Σ(interés × 30 / días) ÷ Σ viejos. */
+export function resumirTasaRenovaciones(ops: OperacionRenovacion[]): ResumenTasaRenovaciones {
+  let capital = 0
+  let interesMensual = 0
+  let contadas = 0
+  let conAviso = 0
+  for (const op of ops) {
+    if (!op.vinculada) continue
+    if (op.avisoTasa) {
+      conAviso += 1
+      continue
+    }
+    if (!op.diasRenovacion || op.diasRenovacion <= 0 || op.totalViejosCentavos <= 0) continue
+    capital += op.totalViejosCentavos
+    interesMensual += (op.interesCentavos * 30) / op.diasRenovacion
+    contadas += 1
+  }
+  return {
+    tasaMensualPromedio: capital > 0 ? interesMensual / capital : null,
+    operacionesContadas: contadas,
+    operacionesConAviso: conAviso,
+  }
+}
+
+export function fechaModaVto(cheques: ChequeEnOperacion[]): string | null {
   const conteo = new Map<string, number>()
   for (const c of cheques) {
     if (c.fechaVencimiento) {
@@ -43,7 +116,7 @@ function sumarDias(ymd: string, n: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-function docAChequeEnOp(d: ChequeOcasionalDoc): ChequeEnOperacion {
+export function docAChequeEnOp(d: ChequeOcasionalDoc): ChequeEnOperacion {
   return {
     numeroCheque: d.numeroCheque,
     montoCentavos: d.montoCentavos,
@@ -56,7 +129,7 @@ function docAChequeEnOp(d: ChequeOcasionalDoc): ChequeEnOperacion {
   }
 }
 
-function extraerBanco(numeroCheque: string): string | null {
+export function extraerBanco(numeroCheque: string): string | null {
   const partes = numeroCheque.split('-')
   return partes.length >= 3 ? partes.slice(0, 3).join('-') : null
 }
@@ -133,6 +206,33 @@ function subdividirPorRenovacionDe(grupo: ChequeOcasionalDoc[]): ChequeOcasional
   const result = [...componentes.values()]
   if (sinRefs.length > 0) result.push(sinRefs)
   return result
+}
+
+/**
+ * Une sub-grupos del mismo beneficiario y día que renuevan los mismos cheques viejos aunque los nuevos sean de bancos
+ * distintos (ej. MANA 11/03/2026: los 8 viejos se reemplazaron con 2 cheques de un banco y 6 de otro). Separados, cada
+ * parte toma todos los viejos y da una tasa negativa; juntos dan la tasa real.
+ */
+function unirEntreBancos(subgrupos: ChequeOcasionalDoc[][]): ChequeOcasionalDoc[][] {
+  const refsDe = (sub: ChequeOcasionalDoc[]) => new Set(sub.flatMap((d) => d.renovacionDe))
+  const claveDia = (sub: ChequeOcasionalDoc[]) => `${sub[0]!.beneficiarioNormalizado}|${sub[0]!.fechaEmision ?? '?'}`
+  const resultado: { clave: string; docs: ChequeOcasionalDoc[]; refs: Set<string> }[] = []
+  for (const sub of subgrupos) {
+    const refs = refsDe(sub)
+    const clave = claveDia(sub)
+    const destino = refs.size > 0
+      ? resultado.find((r) => r.clave === clave && [...refs].some((id) => r.refs.has(id)))
+      : undefined
+    if (destino) {
+      destino.docs.push(...sub)
+      for (const id of refs) destino.refs.add(id)
+    } else {
+      resultado.push({ clave, docs: [...sub], refs })
+    }
+  }
+  const unidos = resultado.map((r) => r.docs)
+  // Otra pasada si se unió algo: A y C pueden compartir viejos solo a través de B.
+  return unidos.length < subgrupos.length ? unirEntreBancos(unidos) : unidos
 }
 
 /**
@@ -296,12 +396,13 @@ export function agruparOperacionesRenovacion(
   }
 
   // Sub-dividir grupos cuando los renovacionDe son disjuntos
-  const subgrupos: ChequeOcasionalDoc[][] = []
+  const separados: ChequeOcasionalDoc[][] = []
   for (const [, grupo] of grupos) {
     for (const sub of subdividirPorRenovacionDe(grupo)) {
-      subgrupos.push(sub)
+      separados.push(sub)
     }
   }
+  const subgrupos = unirEntreBancos(separados)
 
   const operaciones: OperacionRenovacion[] = []
   const viejosUsados = new Set<string>()
@@ -334,8 +435,10 @@ export function agruparOperacionesRenovacion(
 
     const chequesViejosDocs: ChequeOcasionalDoc[] = []
     const viejosVistos = new Set<string>()
+    const viejosNoEncontrados: string[] = []
     for (const id of idsViejos) {
       const viejo = porNumero.get(id)
+      if (!viejo) viejosNoEncontrados.push(id)
       if (viejo && !viejosVistos.has(viejo.numeroCheque)) {
         viejosVistos.add(viejo.numeroCheque)
         chequesViejosDocs.push(viejo)
@@ -408,14 +511,15 @@ export function agruparOperacionesRenovacion(
     const fechaVtoViejos = fechaModaVto(chequesViejos)
     const fechaVtoNuevos = fechaModaVto(chequesNuevos)
 
-    const dias = fechaVtoViejos && fechaVtoNuevos
-      ? diasEntre(fechaVtoViejos, fechaVtoNuevos)
-      : null
+    const dias = plazoPonderadoDias(chequesViejos, chequesNuevos)
 
     const tasaImplicita = totalViejos > 0 ? interes / totalViejos : 0
     const tasaMensual = dias && dias > 0 && totalViejos > 0
       ? (interes / totalViejos) / dias * 30
       : null
+    // Solo los que nombra el OBS y no se encontraron, si la operación quedó vinculada con otros.
+    const faltantes = vinculada ? viejosNoEncontrados.sort() : []
+    const avisoTasa = avisoDeTasa({ vinculada, interesCentavos: interes, tasaMensualEstimada: tasaMensual, viejosNoEncontrados: faltantes })
 
     operaciones.push({
       id: `renov-${primero.beneficiarioNormalizado}-${primero.fechaEmision ?? 'sin-fecha'}`,
@@ -433,6 +537,8 @@ export function agruparOperacionesRenovacion(
       diasRenovacion: dias,
       tasaImplicita,
       tasaMensualEstimada: tasaMensual,
+      avisoTasa,
+      viejosNoEncontrados: faltantes,
       vinculada,
       tipoVinculo,
       obsOriginal: primero.obsOriginal,

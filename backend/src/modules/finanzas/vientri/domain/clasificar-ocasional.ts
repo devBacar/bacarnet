@@ -17,6 +17,23 @@ export function esCompraIva(beneficiarioNormalizado: string, obsOriginal: string
   return BENEFICIARIO_COMPRA_IVA.test(beneficiarioNormalizado) || /\biva\b/i.test(obsOriginal)
 }
 
+/**
+ * Otros pagos: cheques a personas que no son operaciones financieras (retiros, pagos sueltos).
+ * Iván Barrera solo cuando el OBS dice "retiro"; Fabrega Gabriela y Cavazza siempre.
+ * Se mira por palabras sueltas para no depender del orden del nombre ("barrera ivan" / "ivan barrera").
+ */
+export function esOtroPago(beneficiarioNormalizado: string, obsOriginal: string): boolean {
+  const palabras = new Set(beneficiarioNormalizado.split(' '))
+  if (palabras.has('barrera') && palabras.has('ivan')) return /\bretiro/i.test(obsOriginal)
+  if (palabras.has('fabrega') && palabras.has('gabriela')) return true
+  return palabras.has('cavazza')
+}
+
+/** Clave para juntar los otros pagos de una misma vez: fecha de emisión + OBS + beneficiario. */
+export function claveGrupoOtroPago(d: { fechaEmision: string | null; obsOriginal: string; beneficiarioNormalizado: string }): string {
+  return `${d.fechaEmision ?? ''}|${d.obsOriginal.trim().toLowerCase()}|${d.beneficiarioNormalizado}`
+}
+
 export interface SenalesFinancieras {
   esRenovacion: boolean
   /** Otro cheque lo renueva: es el cheque viejo de una operación, aunque su OBS esté vacío. */
@@ -24,7 +41,10 @@ export interface SenalesFinancieras {
   tieneUsd: boolean
   tieneTasaExplicita: boolean
   tieneRol: boolean
-  /** El OBS lo marca solo como interés (sin capital ni renovación). */
+  /**
+   * El OBS lo marca solo como interés (sin capital ni renovación). Los que dicen "capital"/"cap" (con o sin
+   * interés, ej. "INTERESES Y CAP") son la operación inicial de la que salen las renovaciones: no les falta origen.
+   */
   esSoloInteres: boolean
   /** Se sabe de dónde viene: renueva a otro cheque, o tiene USD o tasa explícita. */
   tieneOrigen: boolean

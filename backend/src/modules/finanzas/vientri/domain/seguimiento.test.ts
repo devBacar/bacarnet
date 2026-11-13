@@ -57,10 +57,18 @@ describe('construirSeguimiento', () => {
     ]
 
     const ops = construirSeguimiento([...viejos, ...nuevosOp1, ...nuevosOp2])
-    expect(ops).toHaveLength(2)
+    // Los 3 viejos son la operación inicial (el préstamo original) de la cadena.
+    expect(ops).toHaveLength(3)
 
+    const ini = ops.find((o) => o.tipo === 'inicial')!
     const op1 = ops.find((o) => o.fechaEmision === '2026-04-01')!
     const op2 = ops.find((o) => o.fechaEmision === '2026-04-29')!
+    expect(ini.id).toBe('ini-julio-2026-01-01-020-923-5000')
+    expect(ini.chequesViejos).toEqual([])
+    expect(ini.chequesNuevos.map((c) => [c.estado, c.operacionSiguienteId])).toEqual([
+      ['renovado', op1.id], ['renovado', op1.id], ['renovado', op1.id],
+    ])
+    expect(ini.exposicionCentavos).toBe(0)
 
     expect(op1.id).toBe('renov-julio-2026-04-01-020-923-5000')
     expect(op2.id).toBe('renov-julio-2026-04-29-020-923-5000')
@@ -68,7 +76,7 @@ describe('construirSeguimiento', () => {
     const estados1 = Object.fromEntries(op1.chequesNuevos.map((c) => [c.numeroCheque.slice(-3), c.estado]))
     expect(estados1).toEqual({ '929': 'renovado', '930': 'pendiente', '931': 'pendiente', '932': 'debitado', '933': 'debitado' })
     expect(op1.chequesNuevos.find((c) => c.numeroCheque === num(929))!.operacionSiguienteId).toBe(op2.id)
-    expect(op1.operacionesAnterioresIds).toEqual([])
+    expect(op1.operacionesAnterioresIds).toEqual([ini.id])
 
     const estados2 = Object.fromEntries(op2.chequesNuevos.map((c) => [c.numeroCheque.slice(-3), c.estado]))
     expect(estados2).toEqual({ '084': 'pendiente', '085': 'debitado' })
@@ -117,12 +125,13 @@ describe('construirSeguimiento', () => {
     const c = doc({ numeroCheque: num(4), pagado: false, esRenovacion: true, renovacionDe: [corto(3)], fechaEmision: '2026-04-01', fechaVencimiento: '2026-05-01' })
 
     const ops = construirSeguimiento([base, a, b, c])
-    expect(ops).toHaveLength(3)
+    expect(ops).toHaveLength(4)
+    const ini = ops.find((o) => o.tipo === 'inicial')!
     const opA = ops.find((o) => o.fechaEmision === '2026-02-01')!
     const opB = ops.find((o) => o.fechaEmision === '2026-03-01')!
     const opC = ops.find((o) => o.fechaEmision === '2026-04-01')!
 
-    expect(opA.operacionesAnterioresIds).toEqual([])
+    expect(opA.operacionesAnterioresIds).toEqual([ini.id])
     expect(opB.operacionesAnterioresIds).toEqual([opA.id])
     expect(opC.operacionesAnterioresIds).toEqual([opB.id])
 
@@ -143,7 +152,7 @@ describe('construirSeguimiento', () => {
       doc({ numeroCheque: num(13), esRenovacion: true, renovacionDe: [corto(10)], fechaEmision: '2026-02-01', fechaVencimiento: '2026-03-01', baja: true }),
       doc({ numeroCheque: num(14), esRenovacion: true, renovacionDe: [corto(10)], fechaEmision: '2026-02-01', fechaVencimiento: '2026-03-01', pagado: true }),
     ]
-    const ops = construirSeguimiento([viejo, ...nuevos])
+    const ops = construirSeguimiento([viejo, ...nuevos]).filter((o) => o.tipo !== 'inicial')
     expect(ops).toHaveLength(1)
     const op = ops[0]!
 
@@ -188,6 +197,8 @@ describe('construirSeguimiento', () => {
     const ops = construirSeguimiento([viejoA, viejoB, nuevoA, nuevoB])
     const ids = ops.map((o) => o.id).sort()
     expect(ids).toEqual([
+      'ini-julio-2026-01-01-020-923-5000',
+      'ini-julio-2026-01-01-020-923-5000-2',
       'renov-julio-2026-02-01-020-923-5000',
       'renov-julio-2026-02-01-020-923-5000-2',
     ])
@@ -211,8 +222,9 @@ describe('armarSeguimiento', () => {
 
     const opA = ops.find((o) => o.fechaEmision === '2026-02-01')!
     const opB = ops.find((o) => o.fechaEmision === '2026-03-01')!
-    expect(opC!.ancestrosIds).toEqual([opB.id, opA.id])
-    expect(r.ancestros.map((x) => x.id).sort()).toEqual([opA.id, opB.id].sort())
+    const ini = ops.find((o) => o.tipo === 'inicial')!
+    expect(opC!.ancestrosIds).toEqual([opB.id, opA.id, ini.id])
+    expect(r.ancestros.map((x) => x.id).sort()).toEqual([opA.id, opB.id, ini.id].sort())
     expect(r.ancestros.every((x) => x.estadoOperacion === 'cerrada')).toBe(true)
 
     expect(r.beneficiarios[0]!.posicionesAbiertas).toBe(1)
@@ -223,14 +235,14 @@ describe('armarSeguimiento', () => {
     expect(r.totales.exposicionCentavos).toBe(100_000_00)
     expect(r.totales.vencidosCantidad).toBe(1)
     expect(r.totales.vencidosCentavos).toBe(100_000_00)
-    expect(r.totales.profundidadMaxCadena).toBe(2)
+    expect(r.totales.profundidadMaxCadena).toBe(3)
   })
 
   it('todas: incluye las cerradas y no repite ancestros', () => {
     const r = armarSeguimiento(ops, '2026-12-01', 'todas')
-    expect(r.beneficiarios[0]!.operaciones).toHaveLength(3)
+    expect(r.beneficiarios[0]!.operaciones).toHaveLength(4)
     expect(r.ancestros).toEqual([])
-    expect(r.totales.operaciones).toBe(3)
+    expect(r.totales.operaciones).toBe(4)
     expect(r.totales.exposicionCentavos).toBe(100_000_00)
   })
 

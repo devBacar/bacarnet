@@ -1,10 +1,12 @@
 import type { ChequeOcasionalDoc, OperacionRenovacion } from './cheque-ocasional.types.js'
+import { armarOperacionesIniciales } from './operacion-inicial.js'
 import { agruparOperacionesRenovacion, beneficiariosCompatibles } from './operacion-renovacion.js'
 import { estadoChequeRenov, interesAparteDe } from './operaciones-del-cheque.js'
 import { resolverProveedor, type ProveedorDelCatalogo } from './operaciones-usd.js'
 import type {
   BeneficiarioSeguimiento,
   ChequeConEstado,
+  ClaseOperacion,
   EstadoChequeRenov,
   EstadoOperacion,
   FiltroSeguimiento,
@@ -30,7 +32,8 @@ function clavesDeNumero(numero: string): string[] {
 }
 
 function idBase(op: OperacionRenovacion): string {
-  const base = `renov-${op.beneficiarioNormalizado}-${op.fechaEmision ?? 'sin-fecha'}-${op.banco ?? '?'}`
+  const prefijo = op.tipo === 'inicial' ? 'ini' : 'renov'
+  const base = `${prefijo}-${op.beneficiarioNormalizado}-${op.fechaEmision ?? 'sin-fecha'}-${op.banco ?? '?'}`
   // '/' no es válido en ids de documentos de Firestore
   return base.replace(/\//g, '_')
 }
@@ -40,7 +43,7 @@ function primerNumeroNuevo(op: OperacionRenovacion): string {
 }
 
 /**
- * Asigna ids determinísticos: renov-{beneficiario}-{fechaEmision}-{banco}.
+ * Asigna ids determinísticos: renov-{beneficiario}-{fechaEmision}-{banco} (ini-… para las operaciones iniciales).
  * Si dos operaciones comparten base (subgrupos de un mismo grupo), la segunda y siguientes
  * llevan sufijo -2, -3… según el orden por primer cheque nuevo.
  */
@@ -77,6 +80,12 @@ export function derivarSeguimiento(
   }
 
   const ids = asignarIds(operaciones)
+
+  // Cheques que una operación inicial pagó como interés (sacados de su desglose).
+  const esInteresInicial = new Set<string>()
+  for (const op of operaciones) {
+    for (const n of op.desgloseInicial?.chequesInteres ?? []) for (const k of clavesDeNumero(n)) esInteresInicial.add(k)
+  }
   const ordenadas = [...operaciones].sort((a, b) => ids.get(a)!.localeCompare(ids.get(b)!))
 
   // número de cheque → operación donde figura como NUEVO / como VIEJO
@@ -127,6 +136,13 @@ export function derivarSeguimiento(
       clavesDeNumero(c.numeroCheque).some((k) => docPorNumero.get(k)?.clasificacionManual?.tipo === 'renovacion'),
     )
 
+    const viejosInteres = op.chequesViejos.filter((c) => clavesDeNumero(c.numeroCheque).some((k) => esInteresInicial.has(k)))
+    const montoInteres = viejosInteres.reduce((s, c) => s + c.montoCentavos, 0)
+    const interesInicialEnViejos =
+      op.tipo !== 'inicial' && viejosInteres.length > 0
+        ? { cantidadCheques: viejosInteres.length, montoCentavos: montoInteres, capitalRenovadoCentavos: op.totalViejosCentavos - montoInteres }
+        : null
+
     return {
       ...op,
       id,
@@ -135,6 +151,7 @@ export function derivarSeguimiento(
       fechaVtoMax,
       exposicionCentavos,
       origenRevisar,
+      interesInicialEnViejos,
     }
   })
 
@@ -145,12 +162,20 @@ export function derivarSeguimiento(
 }
 
 /**
- * Punto de entrada: excluye los cheques con `baja`, agrupa en operaciones y deriva el seguimiento.
+ * Punto de entrada: excluye los cheques con `baja`, agrupa en renovaciones, suma las operaciones iniciales (el
+ * préstamo original de cada cadena) y deriva el seguimiento.
  * `docs` debe incluir también los viejos (CHQOCA + sintéticos de CHQ) para poder vincular.
  */
 export function construirSeguimiento(docs: ChequeOcasionalDoc[]): OperacionPersistida[] {
   const activos = docs.filter((d) => !d.baja)
-  return derivarSeguimiento(agruparOperacionesRenovacion(activos), activos)
+  const renovaciones = agruparOperacionesRenovacion(activos)
+  return derivarSeguimiento([...renovaciones, ...armarOperacionesIniciales(activos, renovaciones)], activos)
+}
+
+/** Inicial sola (nunca se renovó), inicial renovada (primer eslabón de una cadena) o renovación. */
+export function claseOperacion(op: Pick<OperacionPersistida, 'tipo' | 'chequesNuevos'>): ClaseOperacion {
+  if (op.tipo !== 'inicial') return 'renovacion'
+  return op.chequesNuevos.some((c) => c.estado === 'renovado') ? 'inicial_renovada' : 'inicial_sola'
 }
 
 /**
@@ -227,13 +252,19 @@ export function armarSeguimiento(
   docsInteres: ChequeOcasionalDoc[] = [],
 ): SeguimientoResponse {
   const porId = new Map(operaciones.map((o) => [o.id, o]))
-  const items: OperacionSeguimientoItem[] = operaciones.map((op) => ({
-    ...op,
-    estadoOperacion: estadoOperacion(op, hoy),
-    ancestrosIds: ancestrosTransitivos(op, porId),
-    viejosDeOtroBeneficiario: viejosDeOtroBeneficiario(op, catalogo),
-    interesAparte: interesAparteDe(op, docsInteres, catalogo),
-  }))
+  const items: OperacionSeguimientoItem[] = operaciones.map((op) => {
+    const inicial = op.tipo === 'inicial'
+    return {
+      ...op,
+      tipo: inicial ? 'inicial' : 'renovacion',
+      clase: claseOperacion(op),
+      estadoOperacion: estadoOperacion(op, hoy),
+      ancestrosIds: ancestrosTransitivos(op, porId),
+      viejosDeOtroBeneficiario: viejosDeOtroBeneficiario(op, catalogo),
+      // El interés aparte se confirma contra una renovación; una inicial no tiene.
+      interesAparte: inicial ? null : interesAparteDe(op, docsInteres, catalogo),
+    }
+  })
   const itemPorId = new Map(items.map((i) => [i.id, i]))
 
   const seleccion = filtro === 'todas' ? items : items.filter((i) => i.estadoOperacion === 'abierta')

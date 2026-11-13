@@ -24,6 +24,7 @@ import {
   type OperacionRenovacionItem,
   type OperacionUsdAgrupadaItem,
   type UsdPorProveedorItem,
+  TEXTO_AVISO_TASA,
 } from '../../../services/finanzasChequesApi'
 import { finanzasInputClass } from '../FinanzasFormField'
 import { formatMoneyCentavos } from '../formatMoney'
@@ -47,13 +48,57 @@ function formatFecha(iso: string | null): string {
 const SUBVISTAS = ['cheques', 'revision', 'renovaciones', 'usd', 'operaciones', 'proveedores'] as const
 type Subvista = (typeof SUBVISTAS)[number]
 
-const FILTRO_TABS: [OcasionalesFiltro, string][] = [
-  ['', 'Todos'],
+/** Opciones del select de la pestaña "Todos". */
+const FILTRO_OPCIONES: [OcasionalesFiltro, string][] = [
+  ['', 'Sin filtro'],
   ['revisar', 'A revisar'],
   ['con_renovacion', 'Con renovación'],
   ['con_usd', 'Con USD'],
   ['compra_iva', 'Compra de IVA'],
+  ['otros_pagos', 'Otros pagos'],
 ]
+
+/** Pestañas de arriba. Renovaciones y USD (agrupadas) viven dentro de "Cheques". */
+const PESTANAS_PRINCIPALES: ['cheques' | 'revision' | 'operaciones' | 'proveedores', string][] = [
+  ['cheques', 'Cheques'],
+  ['revision', 'Revisión asistida'],
+  ['operaciones', 'Operaciones USD / Renovaciones'],
+  ['proveedores', 'Proveedores financieros'],
+]
+
+/** Listados fijos de cheques que tienen pestaña propia (además de poder elegirse en el select de "Todos"). */
+const LISTAS = ['compra_iva', 'otros_pagos'] as const
+type Lista = (typeof LISTAS)[number]
+
+/** Pestañas de abajo, dentro de "Cheques". */
+type PestanaCheques = 'todos' | 'renovaciones' | 'usd' | Lista
+const PESTANAS_CHEQUES: [PestanaCheques, string][] = [
+  ['todos', 'Todos'],
+  ['renovaciones', 'Operaciones y renovaciones'],
+  ['usd', 'Operaciones USD (agrupadas)'],
+  ['compra_iva', 'Compra IVA'],
+  ['otros_pagos', 'Otros pagos'],
+]
+
+/** Misma clave que el backend: los otros pagos se juntan por fecha de emisión + OBS + beneficiario. */
+function claveGrupoOtroPago(ch: ChequeOcasionalItem): string {
+  return `${ch.fechaEmision ?? ''}|${ch.obsOriginal.trim().toLowerCase()}|${ch.beneficiarioNormalizado}`
+}
+
+/** Junta cheques consecutivos con la misma clave (el backend ya los manda ordenados por grupo). */
+function agruparOtrosPagos(cheques: ChequeOcasionalItem[]): ChequeOcasionalItem[][] {
+  const grupos: ChequeOcasionalItem[][] = []
+  let clave: string | null = null
+  for (const ch of cheques) {
+    const k = claveGrupoOtroPago(ch)
+    if (k === clave) grupos[grupos.length - 1].push(ch)
+    else {
+      grupos.push([ch])
+      clave = k
+    }
+  }
+  return grupos
+}
 
 export function PestanaOcasionales() {
   const { user } = useAuth()
@@ -62,14 +107,21 @@ export function PestanaOcasionales() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [importMsg, setImportMsg] = useState<string | null>(null)
   const { params, cambiar } = useParamsUrl()
-  const filtro = valorPermitido<OcasionalesFiltro>(params.get('filtro'), FILTRO_TABS.map(([v]) => v), '')
-  const setFiltro = (v: OcasionalesFiltro) => cambiar({ filtro: v || null })
+  const filtroSelect = valorPermitido<OcasionalesFiltro>(params.get('filtro'), FILTRO_OPCIONES.map(([v]) => v), '')
+  const lista = valorPermitido<Lista | ''>(params.get('lista'), ['', ...LISTAS], '')
+  /** Lo que se le pide al backend: la pestaña fija manda; en "Todos", lo que diga el select. */
+  const filtro: OcasionalesFiltro = lista || filtroSelect
+  /** Agrupado solo en la pestaña "Otros pagos"; en "Todos" la lista va siempre cheque por cheque. */
+  const agrupar = lista === 'otros_pagos'
   const [busqueda, setBusqueda] = useState('')
   const [q, setQ] = useState('')
   const [montoMin, setMontoMin] = useState('')
   const [montoMinAplicado, setMontoMinAplicado] = useState('')
   const [montoMax, setMontoMax] = useState('')
   const [montoMaxAplicado, setMontoMaxAplicado] = useState('')
+  const [campoFecha, setCampoFecha] = useState<'vencimiento' | 'emision'>('vencimiento')
+  const [fechaDesde, setFechaDesde] = useState('')
+  const [fechaHasta, setFechaHasta] = useState('')
   const [page, setPage] = useState(1)
   // Seguimiento ahora vive dentro de Renovaciones: los links viejos con ?sub=seguimiento abren ahí.
   const subParam = params.get('sub')
@@ -77,7 +129,7 @@ export function PestanaOcasionales() {
   const vistaUsd = valorPermitido(params.get('usd'), ['general', 'proveedor'] as const, 'general')
   /** Cambiar de sub-pestaña limpia lo que era propio de la anterior. */
   const setSubvista = (v: Subvista) =>
-    cambiar({ sub: v === 'cheques' ? null : v, benef: null, usd: null, seg: null, ver: null, cadena: null })
+    cambiar({ sub: v === 'cheques' ? null : v, lista: null, benef: null, usd: null, seg: null, ver: null, cadena: null })
   const setVistaUsd = (v: 'general' | 'proveedor') => cambiar({ usd: v === 'general' ? null : v })
   const [detalleId, setDetalleId] = useState<string | null>(null)
   const [mostrarMesesViejos, setMostrarMesesViejos] = useState(false)
@@ -114,14 +166,18 @@ export function PestanaOcasionales() {
   }, [busqueda])
 
   const { data, isLoading, isFetching, isError, error } = useQuery({
-    queryKey: ['finanzas', 'cheques-ocasionales', filtro, q, montoMinAplicado, montoMaxAplicado, page],
+    queryKey: ['finanzas', 'cheques-ocasionales', filtro, agrupar, q, montoMinAplicado, montoMaxAplicado, campoFecha, fechaDesde, fechaHasta, page],
     queryFn: () =>
       fetchChequesOcasionales({
         filtro,
         q: q || undefined,
         montoDesde: montoMinAplicado || undefined,
         montoHasta: montoMaxAplicado || undefined,
+        campoFecha,
+        fechaDesde: fechaDesde || undefined,
+        fechaHasta: fechaHasta || undefined,
         page,
+        agrupar,
       }),
     enabled: Boolean(user),
     placeholderData: (prev) => prev,
@@ -140,6 +196,7 @@ export function PestanaOcasionales() {
   const irARenovaciones = (beneficiarioNormalizado: string) =>
     cambiar({
       sub: 'renovaciones',
+      lista: null,
       benef: beneficiarioNormalizado || null,
       seg: beneficiarioNormalizado ? 'todas' : null,
       usd: null,
@@ -148,38 +205,60 @@ export function PestanaOcasionales() {
     })
 
   const descripcionVista: Record<typeof subvista, string> = {
-    cheques: 'Listado de todos los cheques ocasionales importados desde Vientri. Filtrá por estado, buscá por beneficiario o número.',
+    cheques: 'Listado de todos los cheques ocasionales importados desde Vientri. Filtrá con el desplegable, buscá por texto del OBS y acotá por fecha o monto.',
     revision:
       'Los cheques a revisar, juntos por operación (mismo beneficiario, misma emisión y mismo OBS). Abrí una para ver de dónde puede venir: renovación, interés, diferencia, dólares o cheques que salieron en esos días.',
     renovaciones:
-      'Qué cheques se cambiaron por otros nuevos, con qué interés, y cuánta plata sigue "en la calle" (cheques pendientes o rechazados que todavía no se cobraron ni se renovaron). Miralo sumado por proveedor o una operación por fila; "Ver cadena" muestra todas las renovaciones encadenadas.',
+      'Cada préstamo desde el principio: la operación inicial (el OBS dice capital), qué cheques se cambiaron por otros nuevos, con qué interés, y cuánta plata sigue "en la calle" (cheques pendientes o rechazados que todavía no se cobraron ni se renovaron). Filtrá por iniciales sin renovar, iniciales renovadas o renovaciones; "Ver cadena" muestra el préstamo y todas sus renovaciones encadenadas.',
     usd: 'Operaciones en dólares, con el nombre del proveedor tal como está en el catálogo. Podés verlas una por una o sumadas por proveedor.',
     operaciones: 'Detalle de cada operación USD individual con su tipo de cambio y montos.',
     proveedores: 'Catálogo de proveedores financieros. Cada uno reúne todas las formas en que aparece escrito su nombre en los cheques; abajo están los nombres que todavía no se asignaron a ninguno.',
   }
 
+  /** Pestaña de arriba activa: Renovaciones y USD (agrupadas) cuentan como "Cheques". */
+  const pestanaPrincipal = subvista === 'renovaciones' || subvista === 'usd' ? 'cheques' : subvista
+  /** Pestaña de abajo activa (solo dentro de "Cheques"). */
+  const pestanaCheques: PestanaCheques =
+    subvista === 'renovaciones' || subvista === 'usd' ? subvista : lista || 'todos'
+  const elegirPestanaCheques = (p: PestanaCheques) => {
+    if (p === 'renovaciones' || p === 'usd') {
+      setSubvista(p)
+      return
+    }
+    cambiar({
+      sub: null,
+      lista: p === 'todos' ? null : p,
+      benef: null,
+      usd: null,
+      seg: null,
+      ver: null,
+      cadena: null,
+    })
+    setPage(1)
+  }
+
+  const claseBoton = (activo: boolean) =>
+    `rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+      activo ? 'bg-brand-primary text-white shadow-sm' : 'text-body-muted hover:text-heading'
+    }`
+
+  /** Todos | Renovaciones | Operaciones USD (agrupadas) | Compra IVA | Otros pagos */
+  const pestanasCheques = (
+    <div className="inline-flex flex-wrap rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
+      {PESTANAS_CHEQUES.map(([val, label]) => (
+        <button key={val} type="button" onClick={() => elegirPestanaCheques(val)} className={claseBoton(pestanaCheques === val)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
   const subTabs = (
     <div className="mb-4 space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
-          {([
-            ['cheques', 'Cheques'],
-            ['revision', 'Revisión asistida'],
-            ['renovaciones', 'Renovaciones'],
-            ['usd', 'USD (agrupadas)'],
-            ['operaciones', 'Operaciones USD / Renovaciones'],
-            ['proveedores', 'Proveedores financieros'],
-          ] as const).map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              onClick={() => setSubvista(val)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                subvista === val
-                  ? 'bg-brand-primary text-white shadow-sm'
-                  : 'text-body-muted hover:text-heading'
-              }`}
-            >
+        <div className="inline-flex flex-wrap rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
+          {PESTANAS_PRINCIPALES.map(([val, label]) => (
+            <button key={val} type="button" onClick={() => setSubvista(val)} className={claseBoton(pestanaPrincipal === val)}>
               {label}
             </button>
           ))}
@@ -229,6 +308,8 @@ export function PestanaOcasionales() {
           ) : null}
         </div>
       </div>
+      {/* En el listado van abajo del costo financiero; en Renovaciones y USD, que no lo tienen, quedan acá. */}
+      {subvista === 'renovaciones' || subvista === 'usd' ? pestanasCheques : null}
       <p className="flex items-start gap-1.5 text-xs text-body-muted">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400 dark:text-zinc-500" />
         {descripcionVista[subvista]}
@@ -381,7 +462,11 @@ export function PestanaOcasionales() {
               }
               hint={
                 resumen.costoFinanciero.cantidadCadenas > 0
-                  ? `${resumen.costoFinanciero.cantidadCadenas} cadenas · Tasa ${(resumen.costoFinanciero.tasaImplicitaPromedio * 100).toFixed(1)}%`
+                  ? `${resumen.costoFinanciero.cantidadCadenas} cadenas${
+                      resumen.tasaRenovaciones?.tasaMensualPromedio != null
+                        ? ` · Tasa ${(resumen.tasaRenovaciones.tasaMensualPromedio * 100).toFixed(1)}% por mes`
+                        : ''
+                    }`
                   : undefined
               }
             />
@@ -482,37 +567,50 @@ export function PestanaOcasionales() {
               <span className="text-body-muted">Interés total:</span>{' '}
               <span className="font-medium text-red-600 dark:text-red-400">{formatMoneyCentavos(resumen.costoFinanciero.interesTotalCentavos, 'ARS')}</span>
             </span>
-            <span>
-              <span className="text-body-muted">Tasa implícita:</span>{' '}
-              <span className="text-heading font-medium">{(resumen.costoFinanciero.tasaImplicitaPromedio * 100).toFixed(1)}%</span>
-            </span>
+            {resumen.tasaRenovaciones?.tasaMensualPromedio != null ? (
+              <span
+                title={`Promedio de ${resumen.tasaRenovaciones.operacionesContadas} renovaciones, pesado por lo que se renovó.${
+                  resumen.tasaRenovaciones.operacionesConAviso > 0
+                    ? ` Quedan afuera ${resumen.tasaRenovaciones.operacionesConAviso} con pagos parciales, cheques que faltan o plata nueva.`
+                    : ''
+                }`}
+              >
+                <span className="text-body-muted">Tasa promedio:</span>{' '}
+                <span className="text-heading font-medium">
+                  {(resumen.tasaRenovaciones.tasaMensualPromedio * 100).toFixed(1)}% por mes
+                </span>
+              </span>
+            ) : null}
           </div>
         </button>
       ) : null}
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 dark:border-zinc-800">
-          {FILTRO_TABS.map(([val, label]) => (
-            <button
-              key={val}
-              type="button"
-              onClick={() => { setFiltro(val); setPage(1) }}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                filtro === val
-                  ? 'bg-brand-primary text-white shadow-sm'
-                  : 'text-body-muted hover:text-heading'
-              }`}
+      <div className="mb-4">{pestanasCheques}</div>
+
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        {pestanaCheques === 'todos' ? (
+          <label className="w-full text-sm sm:w-48">
+            <span className="text-body-muted mb-1 block">Filtro</span>
+            <select
+              className={finanzasInputClass}
+              value={filtroSelect}
+              onChange={(e) => {
+                cambiar({ filtro: e.target.value || null })
+                setPage(1)
+              }}
             >
-              {label}
-            </button>
-          ))}
-        </div>
+              {FILTRO_OPCIONES.map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <div className="relative w-full sm:max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
           <input
             type="text"
             className={`${finanzasInputClass} pl-9`}
-            placeholder="Buscar por beneficiario o número…"
+            placeholder="Buscar en el OBS…"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
           />
@@ -566,8 +664,48 @@ export function PestanaOcasionales() {
             onChange={(e) => setMontoMax(e.target.value)}
           />
         </form>
+        <label className="w-full text-sm sm:w-36">
+          <span className="text-body-muted mb-1 block">Fecha de</span>
+          <select
+            className={finanzasInputClass}
+            value={campoFecha}
+            onChange={(e) => { setCampoFecha(e.target.value as 'vencimiento' | 'emision'); setPage(1) }}
+          >
+            <option value="vencimiento">Vencimiento</option>
+            <option value="emision">Emisión</option>
+          </select>
+        </label>
+        <label className="w-full text-sm sm:w-40">
+          <span className="text-body-muted mb-1 block">Desde</span>
+          <input
+            type="date"
+            className={finanzasInputClass}
+            value={fechaDesde}
+            max={fechaHasta || undefined}
+            onChange={(e) => { setFechaDesde(e.target.value); setPage(1) }}
+          />
+        </label>
+        <label className="w-full text-sm sm:w-40">
+          <span className="text-body-muted mb-1 block">Hasta</span>
+          <input
+            type="date"
+            className={finanzasInputClass}
+            value={fechaHasta}
+            min={fechaDesde || undefined}
+            onChange={(e) => { setFechaHasta(e.target.value); setPage(1) }}
+          />
+        </label>
+        {fechaDesde || fechaHasta ? (
+          <button
+            type="button"
+            className="text-body-muted hover:text-heading self-end pb-2 text-xs underline"
+            onClick={() => { setFechaDesde(''); setFechaHasta(''); setPage(1) }}
+          >
+            Quitar fechas
+          </button>
+        ) : null}
         {data ? (
-          <span className="text-body-muted text-sm whitespace-nowrap">
+          <span className="text-body-muted pb-2 text-sm whitespace-nowrap">
             {total.toLocaleString('es-AR')} cheques · {formatMoneyCentavos(data.totalCentavos, 'ARS')}
           </span>
         ) : null}
@@ -595,14 +733,38 @@ export function PestanaOcasionales() {
               </tr>
             </thead>
             <tbody>
-              {(data?.cheques ?? []).map((ch) => (
-                <OcasionalRow
-                  key={ch.vientriId}
-                  ch={ch}
-                  onAbrir={() => setDetalleId(`oca-${ch.vientriId}`)}
-                  onVerRenov={() => irARenovaciones(ch.beneficiarioNormalizado)}
-                />
-              ))}
+              {agrupar
+                ? agruparOtrosPagos(data?.cheques ?? []).map((grupo) => (
+                    <Fragment key={claveGrupoOtroPago(grupo[0])}>
+                      <tr className="border-t border-neutral-300 bg-neutral-100 text-xs dark:border-zinc-700 dark:bg-zinc-800/60">
+                        <td colSpan={8} className="px-3 py-2">
+                          <span className="text-heading font-semibold">{grupo[0].beneficiario || '—'}</span>
+                          <span className="text-body-muted"> · emitido el {formatFecha(grupo[0].fechaEmision)}</span>
+                          {grupo[0].obsOriginal ? <span className="text-body-muted"> · {grupo[0].obsOriginal}</span> : null}
+                          <span className="text-body-muted"> · {grupo.length} {grupo.length === 1 ? 'cheque' : 'cheques'} · </span>
+                          <span className="text-brand-primary font-semibold">
+                            {formatMoneyCentavos(grupo.reduce((s, c) => s + c.montoCentavos, 0), 'ARS')}
+                          </span>
+                        </td>
+                      </tr>
+                      {grupo.map((ch) => (
+                        <OcasionalRow
+                          key={ch.vientriId}
+                          ch={ch}
+                          onAbrir={() => setDetalleId(`oca-${ch.vientriId}`)}
+                          onVerRenov={() => irARenovaciones(ch.beneficiarioNormalizado)}
+                        />
+                      ))}
+                    </Fragment>
+                  ))
+                : (data?.cheques ?? []).map((ch) => (
+                    <OcasionalRow
+                      key={ch.vientriId}
+                      ch={ch}
+                      onAbrir={() => setDetalleId(`oca-${ch.vientriId}`)}
+                      onVerRenov={() => irARenovaciones(ch.beneficiarioNormalizado)}
+                    />
+                  ))}
             </tbody>
           </table>
           {(data?.cheques.length ?? 0) === 0 ? (
@@ -802,9 +964,27 @@ function OperacionDelCheque({
               <>
                 <dt className="text-body-muted">Interés de la operación</dt>
                 <dd className="text-right font-semibold text-red-600 dark:text-red-400">
-                  {formatMoneyCentavos(op.interesCentavos, 'ARS')} ({(op.tasaImplicita * 100).toFixed(1)}%
-                  {op.tasaMensualEstimada !== null ? ` · ${(op.tasaMensualEstimada * 100).toFixed(1)}% por mes` : ''})
+                  {formatMoneyCentavos(op.interesCentavos, 'ARS')}
+                  {op.avisoTasa ? null : op.tasaMensualEstimada !== null ? (
+                    <span className="block">
+                      {(op.tasaMensualEstimada * 100).toFixed(1)}% por mes
+                      <span className="text-body-muted font-normal">
+                        {' '}({(op.tasaImplicita * 100).toFixed(1)}% en {op.diasRenovacion} días)
+                      </span>
+                    </span>
+                  ) : (
+                    ` (${(op.tasaImplicita * 100).toFixed(1)}%)`
+                  )}
                 </dd>
+                {op.avisoTasa ? (
+                  <dd className="col-span-2 mt-0.5 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200">
+                    {TEXTO_AVISO_TASA[op.avisoTasa]}
+                    {op.avisoTasa === 'faltan_viejos' && op.viejosNoEncontrados?.length
+                      ? ` (no está: ${op.viejosNoEncontrados.join(', ')})`
+                      : ''}
+                    .
+                  </dd>
+                ) : null}
               </>
             )}
             {op.interesAparte ? (

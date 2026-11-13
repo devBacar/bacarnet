@@ -12,7 +12,7 @@ import {
   quitarProveedorFinanciero,
   renombrarProveedorFinanciero,
 } from '../../agenda/services/proveedores-financieros.service.js'
-import { esCompraIva } from '../domain/clasificar-ocasional.js'
+import { claveGrupoOtroPago, esCompraIva, esOtroPago } from '../domain/clasificar-ocasional.js'
 import { parsearUsdSuelto } from '../domain/parsear-obs.js'
 import type { TipoOperacionManual } from '../domain/cheque-ocasional.types.js'
 import { normalizarDocOcasional } from '../domain/normalizar-doc-ocasional.js'
@@ -36,7 +36,7 @@ import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
 import { analizarOcasionalesVsEmitidos } from '../domain/analisis-ocasionales-emitidos.js'
 import { analizarInteresVsRenovaciones } from '../domain/analisis-interes-renovacion.js'
 import { reconstruirCadenas, clasificarCheques, resumirCostoFinanciero } from '../domain/cadena-renovacion.js'
-import { agruparOperacionesRenovacion } from '../domain/operacion-renovacion.js'
+import { agruparOperacionesRenovacion, resumirTasaRenovaciones } from '../domain/operacion-renovacion.js'
 import { interesAparteDe, operacionesDelCheque } from '../domain/operaciones-del-cheque.js'
 import { armarSeguimiento } from '../domain/seguimiento.js'
 import { analizarARevisar } from '../domain/analisis-revisar.js'
@@ -72,9 +72,11 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
     const todos = await leerTodos()
 
     const filtro = (typeof req.query.filtro === 'string' ? req.query.filtro : '') as
-      | '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva'
+      | '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva' | 'otros_pagos'
     const q = typeof req.query.q === 'string' ? normalizar(req.query.q.trim()) : ''
     const page = Math.max(1, Number(req.query.page) || 1)
+    // Solo la pestaña "Otros pagos" pide la lista agrupada; elegido desde el select de "Todos" va suelto.
+    const agrupar = filtro === 'otros_pagos' && req.query.agrupar === '1'
 
     let filtrados = todos.filter(
       (d) => !d.baja && !d.revisar.some((r) => r.toLowerCase().includes('imposible')),
@@ -83,11 +85,25 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
     else if (filtro === 'con_renovacion') filtrados = filtrados.filter((d) => d.renovacionDe.length > 0 || d.renovadoPor.length > 0)
     else if (filtro === 'con_usd') filtrados = filtrados.filter((d) => d.operacionUsd !== null)
     else if (filtro === 'compra_iva') filtrados = filtrados.filter((d) => d.esCompraIva === true)
+    else if (filtro === 'otros_pagos') filtrados = filtrados.filter((d) => esOtroPago(d.beneficiarioNormalizado ?? '', d.obsOriginal ?? ''))
 
-    if (q) {
-      filtrados = filtrados.filter((d) =>
-        normalizar(`${d.beneficiario} ${d.numeroCheque} ${d.obsOriginal} ${d.estado}`).includes(q),
-      )
+    // El buscador mira solo el OBS.
+    if (q) filtrados = filtrados.filter((d) => normalizar(d.obsOriginal ?? '').includes(q))
+
+    const esYmd = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+    const fechaDesde = esYmd(req.query.fechaDesde) ? req.query.fechaDesde : null
+    const fechaHasta = esYmd(req.query.fechaHasta) ? req.query.fechaHasta : null
+    if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+      res.status(400).json({ error: 'La fecha "desde" no puede ser posterior a la fecha "hasta".' })
+      return
+    }
+    if (fechaDesde || fechaHasta) {
+      const porEmision = req.query.campoFecha === 'emision'
+      filtrados = filtrados.filter((d) => {
+        const f = porEmision ? d.fechaEmision : d.fechaVencimiento
+        if (!f) return false
+        return (!fechaDesde || f >= fechaDesde) && (!fechaHasta || f <= fechaHasta)
+      })
     }
 
     const rangoMonto = leerRangoMonto(
@@ -96,14 +112,35 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
     )
     filtrados = filtrados.filter((d) => dentroDelRangoMonto(d.montoCentavos, rangoMonto))
 
+    const total = filtrados.length
+    const totalCentavos = filtrados.reduce((s, d) => s + d.montoCentavos, 0)
+
+    if (agrupar) {
+      // Se pagina por grupo (emisión + OBS + beneficiario) para que un grupo nunca quede partido entre páginas.
+      const grupos = new Map<string, ChequeOcasionalDoc[]>()
+      for (const d of filtrados) {
+        const k = claveGrupoOtroPago(d)
+        const g = grupos.get(k)
+        if (g) g.push(d)
+        else grupos.set(k, [d])
+      }
+      const ordenados = [...grupos.values()]
+        .map((g) => g.sort((a, b) => (a.fechaVencimiento ?? '').localeCompare(b.fechaVencimiento ?? '')))
+        .sort((a, b) => (b[0].fechaEmision ?? '').localeCompare(a[0].fechaEmision ?? '')
+          || a[0].beneficiarioNormalizado.localeCompare(b[0].beneficiarioNormalizado))
+      const pages = Math.max(1, Math.ceil(ordenados.length / POR_PAGINA))
+      const start = (page - 1) * POR_PAGINA
+      const items = ordenados.slice(start, start + POR_PAGINA).flat()
+      res.json({ cheques: items, total, totalCentavos, page, pages })
+      return
+    }
+
     filtrados.sort((a, b) => {
       const fa = a.fechaVencimiento ?? ''
       const fb = b.fechaVencimiento ?? ''
       return fb.localeCompare(fa)
     })
 
-    const total = filtrados.length
-    const totalCentavos = filtrados.reduce((s, d) => s + d.montoCentavos, 0)
     const pages = Math.max(1, Math.ceil(total / POR_PAGINA))
     const start = (page - 1) * POR_PAGINA
     const items = filtrados.slice(start, start + POR_PAGINA)
@@ -132,6 +169,8 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
     const [pool, catalogo] = await Promise.all([leerCompletos(), mapaProveedoresFinancieros()])
     const cadenas = reconstruirCadenas(pool)
     const resumen = resumirCostoFinanciero(cadenas, catalogo)
+    // La tasa que se muestra es por mes y sale de las renovaciones; la de las cadenas es acumulada de varios meses.
+    const tasaRenovaciones = resumirTasaRenovaciones(agruparOperacionesRenovacion(pool))
 
     // Stats solo de docs reales (no sintéticos)
     const activos = pool.filter((d) => d.vientriId !== 0)
@@ -181,6 +220,7 @@ finanzasChequesOcasionalesRouter.get('/resumen', async (_req, res) => {
       cotizacionPromedioUsd,
       porMes,
       costoFinanciero: resumen,
+      tasaRenovaciones,
     })
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] resumen', err)

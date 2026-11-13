@@ -31,6 +31,7 @@ import { formatMoneyCentavos } from '../formatMoney'
 import { usePermisosFinanzas } from '../permisosFinanzas'
 import { PendientesDeRenovar } from './PendientesDeRenovar'
 import { ProveedoresFinancierosCatalogo } from './ProveedoresFinancierosCatalogo'
+import { BeneficiariosPago } from './BeneficiariosPago'
 import { Renovaciones } from './Renovaciones'
 import { RevisionAsistida } from './RevisionAsistida'
 import { ClasificarOperacionPanel } from './ClasificarOperacionPanel'
@@ -80,7 +81,7 @@ const PESTANAS_CHEQUES: [PestanaCheques, string][] = [
   ['otros_pagos', 'Otros pagos'],
 ]
 
-/** Misma clave que el backend: los otros pagos se juntan por fecha de emisión + OBS + beneficiario. */
+/** Misma clave que el backend: una operación (otros pagos, compra IVA) junta fecha de emisión + OBS + beneficiario. */
 function claveGrupoOtroPago(ch: ChequeOcasionalItem): string {
   return `${ch.fechaEmision ?? ''}|${ch.obsOriginal.trim().toLowerCase()}|${ch.beneficiarioNormalizado}`
 }
@@ -111,8 +112,8 @@ export function PestanaOcasionales() {
   const lista = valorPermitido<Lista | ''>(params.get('lista'), ['', ...LISTAS], '')
   /** Lo que se le pide al backend: la pestaña fija manda; en "Todos", lo que diga el select. */
   const filtro: OcasionalesFiltro = lista || filtroSelect
-  /** Agrupado solo en la pestaña "Otros pagos"; en "Todos" la lista va siempre cheque por cheque. */
-  const agrupar = lista === 'otros_pagos'
+  /** Agrupado por operación en "Compra IVA" y "Otros pagos"; en "Todos" la lista va siempre cheque por cheque. */
+  const agrupar = lista !== ''
   const [busqueda, setBusqueda] = useState('')
   const [q, setQ] = useState('')
   const [montoMin, setMontoMin] = useState('')
@@ -586,6 +587,8 @@ export function PestanaOcasionales() {
       ) : null}
 
       <div className="mb-4">{pestanasCheques}</div>
+
+      {lista === 'otros_pagos' ? <BeneficiariosPago puedeEditar={puedeEditarCheques} /> : null}
 
       <div className="mb-4 flex flex-wrap items-end gap-3">
         {pestanaCheques === 'todos' ? (

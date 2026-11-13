@@ -359,6 +359,8 @@ export interface ChequeOcasionalItem {
   obsOriginal: string
   revisar: string[]
   esCompraIva?: boolean
+  /** Otro pago (retiro, pago a una persona): solo se ve en la pestaña "Otros pagos". */
+  esOtroPago?: boolean
   /** Tipo de operación propuesto por lo que Finanzas ya confirmó en cheques con el mismo OBS. */
   sugerencia?: SugerenciaOperacion | null
   /** Interés pagado aparte: sobre qué cheques parece calculado. Solo una sugerencia. */
@@ -661,7 +663,7 @@ export async function fetchChequesOcasionales(params: {
   fechaDesde?: string
   fechaHasta?: string
   page?: number
-  /** Solo para "otros_pagos": junta los cheques por emisión + OBS + beneficiario (la pestaña Otros pagos). */
+  /** Solo para "compra_iva" y "otros_pagos": junta los cheques por emisión + OBS + beneficiario (una operación). */
   agrupar?: boolean
 }): Promise<OcasionalesListResponse> {
   const qs = new URLSearchParams()
@@ -981,6 +983,42 @@ export async function recalcularTodoOcasionales(): Promise<RecalcularTodoRespons
     throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo recalcular')
   }
   return body as RecalcularTodoResponse
+}
+
+/** Quiénes son "otros pagos" en cheques ocasionales. */
+export interface BeneficiariosPagoResponse {
+  /** Reglas fijas: no se pueden quitar desde la pantalla. */
+  deFabrica: { nombre: string; detalle: string }[]
+  /** Marcados a mano por Finanzas. */
+  marcados: { beneficiarioNormalizado: string; nombre: string }[]
+  /** Beneficiarios que todavía no son pago, para elegir. */
+  disponibles: { beneficiarioNormalizado: string; nombre: string; cheques: number; montoCentavos: number }[]
+}
+
+export async function fetchBeneficiariosPago(): Promise<BeneficiariosPagoResponse> {
+  const res = await ocasionalesFetch('/beneficiarios-pago')
+  const body = (await res.json().catch(() => null)) as { error?: string } | BeneficiariosPagoResponse | null
+  if (!res.ok) {
+    throw new Error(body && 'error' in body && body.error ? body.error : 'No se pudo cargar la lista de pagos')
+  }
+  return body as BeneficiariosPagoResponse
+}
+
+/** Marca o desmarca un beneficiario como pago: sus cheques pasan a verse solo en "Otros pagos". */
+export async function guardarBeneficiarioPago(input: {
+  beneficiarioNormalizado: string
+  nombre: string
+  esPago: boolean
+}): Promise<void> {
+  const res = await ocasionalesFetch('/beneficiarios-pago', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null
+    throw new Error(body?.error || 'No se pudo guardar el cambio')
+  }
 }
 
 export interface ImportarOcasionalesResponse {

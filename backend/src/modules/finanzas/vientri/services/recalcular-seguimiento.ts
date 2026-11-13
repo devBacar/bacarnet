@@ -8,6 +8,7 @@
  * El estado abierta/cerrada no se guarda (depende de la fecha de hoy): ver `estadoOperacion`.
  */
 import type { ChequeOcasionalDoc } from '../domain/cheque-ocasional.types.js'
+import { marcarOtrosPagos } from '../domain/clasificar-ocasional.js'
 import { construirSeguimiento } from '../domain/seguimiento.js'
 import { leerActivosConEslabonesDeVientri } from './completar-eslabones-vientri.js'
 import { inyectarChqParaAutolink } from './inyectar-chq-autolink.js'
@@ -27,8 +28,10 @@ export async function recalcularSeguimiento(opts: {
   simular?: boolean
   /** Por defecto false: se hace upsert de las operaciones actuales y no se borran las que dejaron de existir. */
   borrarFaltantes?: boolean
+  /** Beneficiarios marcados a mano como pago: sus cheques no arman operaciones (ver `esOtroPago`). */
+  marcadosComoPago?: ReadonlySet<string>
 }): Promise<ResultadoSeguimiento> {
-  const activos = opts.docs.filter((d) => !d.baja)
+  const activos = marcarOtrosPagos(opts.docs.filter((d) => !d.baja), opts.marcadosComoPago ?? new Set())
   const completos = await leerActivosConEslabonesDeVientri(activos)
   const conChq = await inyectarChqParaAutolink(completos)
   const operaciones = construirSeguimiento(conChq)

@@ -19,6 +19,9 @@ vi.mock('./recalcular-seguimiento.js', () => ({
   recalcularSeguimiento: vi.fn(async () => ({ operaciones: 0, actualizados: 0 })),
 }))
 
+vi.mock('./beneficiarios-pago.repository.js', () => ({
+  beneficiariosMarcadosComoPago: vi.fn(async () => new Set<string>()),
+}))
 vi.mock('./patrones-ocasionales.repository.js', () => ({
   listarPatronesOcasionales: vi.fn(async () => []),
 }))

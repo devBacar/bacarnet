@@ -19,17 +19,38 @@ export function esCompraIva(beneficiarioNormalizado: string, obsOriginal: string
 
 /**
  * Otros pagos: cheques a personas que no son operaciones financieras (retiros, pagos sueltos).
- * Iván Barrera solo cuando el OBS dice "retiro"; Fabrega Gabriela y Cavazza siempre.
+ * De fábrica: Iván Barrera solo cuando el OBS dice "retiro"; Fabrega Gabriela y Cavazza siempre.
+ * Además, los beneficiarios que Finanzas marcó a mano como pago (`marcadosComoPago`, nombres ya normalizados).
  * Se mira por palabras sueltas para no depender del orden del nombre ("barrera ivan" / "ivan barrera").
  */
-export function esOtroPago(beneficiarioNormalizado: string, obsOriginal: string): boolean {
+export function esOtroPago(
+  beneficiarioNormalizado: string,
+  obsOriginal: string,
+  marcadosComoPago: ReadonlySet<string> = new Set(),
+): boolean {
+  if (beneficiarioNormalizado !== '' && marcadosComoPago.has(beneficiarioNormalizado)) return true
   const palabras = new Set(beneficiarioNormalizado.split(' '))
   if (palabras.has('barrera') && palabras.has('ivan')) return /\bretiro/i.test(obsOriginal)
   if (palabras.has('fabrega') && palabras.has('gabriela')) return true
   return palabras.has('cavazza')
 }
 
-/** Clave para juntar los otros pagos de una misma vez: fecha de emisión + OBS + beneficiario. */
+/** Los que ya son pago por la regla de fábrica: no hace falta (ni se puede) marcarlos a mano. */
+export const OTROS_PAGOS_DE_FABRICA = [
+  { nombre: 'Fabrega Gabriela', detalle: 'siempre' },
+  { nombre: 'Cavazza', detalle: 'siempre' },
+  { nombre: 'Iván Barrera', detalle: 'solo cuando el OBS dice "retiro"' },
+] as const
+
+/** Deja en cada cheque la marca `esOtroPago` (de fábrica o marcado a mano). No cambia nada más. */
+export function marcarOtrosPagos<T extends { beneficiarioNormalizado?: string; obsOriginal?: string }>(
+  docs: T[],
+  marcadosComoPago: ReadonlySet<string>,
+): (T & { esOtroPago: boolean })[] {
+  return docs.map((d) => ({ ...d, esOtroPago: esOtroPago(d.beneficiarioNormalizado ?? '', d.obsOriginal ?? '', marcadosComoPago) }))
+}
+
+/** Clave de una operación (otros pagos, compra de IVA): cheques emitidos juntos, mismo OBS y beneficiario. */
 export function claveGrupoOtroPago(d: { fechaEmision: string | null; obsOriginal: string; beneficiarioNormalizado: string }): string {
   return `${d.fechaEmision ?? ''}|${d.obsOriginal.trim().toLowerCase()}|${d.beneficiarioNormalizado}`
 }

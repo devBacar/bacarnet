@@ -6,6 +6,7 @@
  * Segunda pasada: resuelve `renovadoPor` (link inverso).
  */
 import { FieldValue } from 'firebase-admin/firestore'
+import { beneficiariosMarcadosComoPago } from './beneficiarios-pago.repository.js'
 import { adminDb } from '../../../../lib/firebase/admin.js'
 import { normalizarNombre } from '../../agenda/domain/normalizar-nombre.js'
 import {
@@ -398,7 +399,12 @@ export async function importarChequesOcasionales(opts: {
     try {
       // Igual que "Recalcular todo": las operaciones que dejaron de existir (cambió el beneficiario, el
       // agrupamiento o el sufijo -2/-3) se borran; si no, quedan fantasmas duplicando proveedores.
-      seguimiento = await recalcularSeguimiento({ docs: await leerBase(), importacionId, borrarFaltantes: true })
+      seguimiento = await recalcularSeguimiento({
+        docs: await leerBase(),
+        importacionId,
+        borrarFaltantes: true,
+        marcadosComoPago: await beneficiariosMarcadosComoPago(),
+      })
     } catch (err) {
       seguimientoError = err instanceof Error ? err.message : 'No se pudo recalcular el seguimiento'
       console.error('[finanzas/cheques-ocasionales] seguimiento', err)

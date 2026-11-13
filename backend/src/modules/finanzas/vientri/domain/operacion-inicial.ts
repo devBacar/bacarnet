@@ -119,7 +119,7 @@ export function armarOperacionesIniciales(
   for (const d of docs) {
     if (d.baja || d.esRenovacion || d.esCompraIva || !d.numeroCheque) continue
     if (clavesDeNumero(d.numeroCheque).some((k) => nuevosDeRenov.has(k))) continue
-    if (esOtroPago(d.beneficiarioNormalizado ?? '', d.obsOriginal ?? '')) continue
+    if (d.esOtroPago || esOtroPago(d.beneficiarioNormalizado ?? '', d.obsOriginal ?? '')) continue
     const k = claveInicial(d)
     const g = grupos.get(k)
     if (g) g.push(d)

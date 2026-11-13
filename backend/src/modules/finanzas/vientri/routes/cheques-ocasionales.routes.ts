@@ -12,7 +12,8 @@ import {
   quitarProveedorFinanciero,
   renombrarProveedorFinanciero,
 } from '../../agenda/services/proveedores-financieros.service.js'
-import { claveGrupoOtroPago, esCompraIva, esOtroPago } from '../domain/clasificar-ocasional.js'
+import { claveGrupoOtroPago, esCompraIva, marcarOtrosPagos, OTROS_PAGOS_DE_FABRICA } from '../domain/clasificar-ocasional.js'
+import { beneficiariosMarcadosComoPago, guardarBeneficiarioPago, listarBeneficiariosPago } from '../services/beneficiarios-pago.repository.js'
 import { parsearUsdSuelto } from '../domain/parsear-obs.js'
 import type { TipoOperacionManual } from '../domain/cheque-ocasional.types.js'
 import { normalizarDocOcasional } from '../domain/normalizar-doc-ocasional.js'
@@ -45,7 +46,7 @@ import { armarPropuestaRenovacion, chequesElegidosDelGrupo } from '../domain/pro
 import { MESES_VENTANA, restarMeses } from '../domain/ventana.js'
 import type { FiltroSeguimiento, OperacionPersistida } from '../domain/seguimiento.types.js'
 import { recalcularSeguimiento, VIENTRI_OPERACIONES_RENOVACION } from '../services/recalcular-seguimiento.js'
-import { leerCompletos, reconstruirCompletos } from '../services/completos-ocasionales.js'
+import { leerCompletos as leerCompletosCrudos, reconstruirCompletos } from '../services/completos-ocasionales.js'
 import { VIENTRI_CHEQUES } from '../services/vientri.repository.js'
 import { dentroDelRangoMonto, leerRangoMonto } from '../../cheques/domain/filtro-monto.js'
 
@@ -58,13 +59,30 @@ function normalizar(t: string): string {
   return t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 }
 
+/** Todos los cheques, con las marcas de compra de IVA y de otro pago. Incluye los otros pagos. */
 async function leerTodos(): Promise<ChequeOcasionalDoc[]> {
-  const snap = await adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).get()
-  // La marca se calcula al leer: los docs guardados antes de que existiera no la tienen hasta la próxima importación.
-  return snap.docs.map((d) => {
+  const [snap, marcados] = await Promise.all([
+    adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).get(),
+    beneficiariosMarcadosComoPago(),
+  ])
+  // Las marcas se calculan al leer: los docs guardados antes de que existieran no las tienen hasta la próxima importación,
+  // y marcar un beneficiario como pago se ve enseguida sin recalcular nada.
+  const docs = snap.docs.map((d) => {
     const doc = d.data() as ChequeOcasionalDoc
     return { ...doc, esCompraIva: esCompraIva(doc.beneficiarioNormalizado ?? '', doc.obsOriginal ?? '') }
   })
+  return marcarOtrosPagos(docs, marcados)
+}
+
+/** Sin los otros pagos: no son operaciones financieras y solo se ven en su pestaña. */
+async function leerSinOtrosPagos(): Promise<ChequeOcasionalDoc[]> {
+  return (await leerTodos()).filter((d) => !d.esOtroPago)
+}
+
+/** Cheques completos (con eslabones) sin los otros pagos. Es lo que usan renovaciones, cadenas y resumen. */
+async function leerCompletos(): Promise<ChequeOcasionalDoc[]> {
+  const [pool, marcados] = await Promise.all([leerCompletosCrudos(), beneficiariosMarcadosComoPago()])
+  return marcarOtrosPagos(pool, marcados).filter((d) => !d.esOtroPago)
 }
 
 finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
@@ -75,8 +93,9 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
       | '' | 'revisar' | 'con_renovacion' | 'con_usd' | 'compra_iva' | 'otros_pagos'
     const q = typeof req.query.q === 'string' ? normalizar(req.query.q.trim()) : ''
     const page = Math.max(1, Number(req.query.page) || 1)
-    // Solo la pestaña "Otros pagos" pide la lista agrupada; elegido desde el select de "Todos" va suelto.
-    const agrupar = filtro === 'otros_pagos' && req.query.agrupar === '1'
+    // Las pestañas "Compra IVA" y "Otros pagos" piden la lista agrupada: los cheques emitidos juntos al mismo
+    // beneficiario con el mismo OBS son una sola operación. Elegido desde el select de "Todos" va suelto.
+    const agrupar = (filtro === 'otros_pagos' || filtro === 'compra_iva') && req.query.agrupar === '1'
 
     let filtrados = todos.filter(
       (d) => !d.baja && !d.revisar.some((r) => r.toLowerCase().includes('imposible')),
@@ -85,7 +104,8 @@ finanzasChequesOcasionalesRouter.get('/',async (req, res) => {
     else if (filtro === 'con_renovacion') filtrados = filtrados.filter((d) => d.renovacionDe.length > 0 || d.renovadoPor.length > 0)
     else if (filtro === 'con_usd') filtrados = filtrados.filter((d) => d.operacionUsd !== null)
     else if (filtro === 'compra_iva') filtrados = filtrados.filter((d) => d.esCompraIva === true)
-    else if (filtro === 'otros_pagos') filtrados = filtrados.filter((d) => esOtroPago(d.beneficiarioNormalizado ?? '', d.obsOriginal ?? ''))
+    // Los otros pagos solo se ven en su pestaña (o eligiéndolos en el filtro): no ensucian Todos, A revisar, etc.
+    filtrados = filtrados.filter((d) => (filtro === 'otros_pagos') === (d.esOtroPago === true))
 
     // El buscador mira solo el OBS.
     if (q) filtrados = filtrados.filter((d) => normalizar(d.obsOriginal ?? '').includes(q))
@@ -268,7 +288,7 @@ finanzasChequesOcasionalesRouter.post('/importar', requireFinanzasPermiso('finan
 // ── Catálogo de proveedores financieros (nombre + alias) y beneficiarios sin asignar ──────────────
 
 async function armarCatalogo() {
-  const [docs, filas] = await Promise.all([leerTodos(), listProveedoresFinancierosDocs()])
+  const [docs, filas] = await Promise.all([leerSinOtrosPagos(), listProveedoresFinancierosDocs()])
   const proveedores: ProveedorCatalogoEntrada[] = filas.map((f) => ({
     id: f.id,
     nombre: f.data.nombre,
@@ -403,7 +423,7 @@ finanzasChequesOcasionalesRouter.delete(
  */
 finanzasChequesOcasionalesRouter.get('/revisar-asistido', async (_req, res) => {
   try {
-    const [todosCrudos, pool, catalogo] = await Promise.all([leerTodos(), leerCompletos(), mapaProveedoresFinancieros()])
+    const [todosCrudos, pool, catalogo] = await Promise.all([leerSinOtrosPagos(), leerCompletos(), mapaProveedoresFinancieros()])
     const grupos = analizarARevisar(todosCrudos.map(normalizarDocOcasional), catalogo, agruparOperacionesRenovacion(pool))
     res.json({
       grupos,
@@ -456,16 +476,20 @@ function hoyArgentina(): string {
 finanzasChequesOcasionalesRouter.get('/seguimiento', async (req, res) => {
   try {
     const filtro: FiltroSeguimiento = req.query.estado === 'todas' ? 'todas' : 'abiertas'
-    const [snap, catalogo, conInteres] = await Promise.all([
+    const [snap, catalogo, conInteres, marcados] = await Promise.all([
       adminDb().collection(VIENTRI_OPERACIONES_RENOVACION).get(),
       mapaProveedoresFinancieros(),
       // Solo los cheques con interés confirmado: el interés que cada renovación pagó aparte.
       adminDb().collection(VIENTRI_CHEQUES_OCASIONALES).where('interesDe', '!=', null).get(),
+      beneficiariosMarcadosComoPago(),
     ])
-    const operaciones = snap.docs.map((d) => {
-      const { huella, importacionId, actualizadoAt, ...rest } = d.data() as OperacionPersistida & Record<string, unknown>
-      return rest as OperacionPersistida
-    })
+    // Un beneficiario recién marcado como pago desaparece ya, sin esperar a que se recalcule el seguimiento.
+    const operaciones = snap.docs
+      .map((d) => {
+        const { huella, importacionId, actualizadoAt, ...rest } = d.data() as OperacionPersistida & Record<string, unknown>
+        return rest as OperacionPersistida
+      })
+      .filter((op) => !marcados.has(op.beneficiarioNormalizado))
     const docsInteres = conInteres.docs.map((d) => normalizarDocOcasional(d.data() as ChequeOcasionalDoc))
     res.json(armarSeguimiento(operaciones, hoyArgentina(), filtro, catalogo, docsInteres))
   } catch (err) {
@@ -480,11 +504,12 @@ finanzasChequesOcasionalesRouter.get('/seguimiento', async (req, res) => {
  */
 finanzasChequesOcasionalesRouter.post('/seguimiento/recalcular', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
   try {
-    const docs = await leerTodos()
+    const [docs, marcadosComoPago] = await Promise.all([leerTodos(), beneficiariosMarcadosComoPago()])
     const resultado = await recalcularSeguimiento({
       docs,
       importacionId: `manual-${Date.now()}`,
       borrarFaltantes: true,
+      marcadosComoPago,
     })
     res.json({ ok: true, operaciones: resultado.operaciones, conteo: resultado.conteo })
   } catch (err) {
@@ -509,6 +534,7 @@ async function recalcularTodoOcasionales() {
       docs: await leerTodos(),
       importacionId: `manual-${Date.now()}`,
       borrarFaltantes: true,
+      marcadosComoPago: await beneficiariosMarcadosComoPago(),
     })
     return { chequesActualizados, completos: completos.total, operaciones: seguimiento.operaciones }
   } catch (err) {
@@ -555,6 +581,67 @@ finanzasChequesOcasionalesRouter.get('/analisis-interes', async (_req, res) => {
   } catch (err) {
     console.error('[finanzas/cheques-ocasionales] analisis-interes', err)
     res.status(500).json({ error: 'No se pudo realizar el análisis de interés vs renovaciones' })
+  }
+})
+
+// ── Beneficiarios que son pagos (pestaña "Otros pagos") ──────────────────────────────────────────
+
+/**
+ * Quiénes son "otros pagos": los de fábrica, los marcados a mano, y los beneficiarios que se pueden marcar
+ * (con cuántos cheques tienen), para elegir en pantalla.
+ */
+finanzasChequesOcasionalesRouter.get('/beneficiarios-pago', async (_req, res) => {
+  try {
+    const [todos, guardados] = await Promise.all([leerTodos(), listarBeneficiariosPago()])
+    const marcados = guardados
+      .filter((g) => g.estado === 'activo')
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+      .map((g) => ({ beneficiarioNormalizado: g.beneficiarioNormalizado, nombre: g.nombre }))
+    const yaMarcados = new Set(marcados.map((m) => m.beneficiarioNormalizado))
+
+    const porBenef = new Map<string, { beneficiarioNormalizado: string; nombre: string; cheques: number; montoCentavos: number }>()
+    for (const d of todos) {
+      if (d.baja || !d.beneficiarioNormalizado || d.esOtroPago || yaMarcados.has(d.beneficiarioNormalizado)) continue
+      const b = porBenef.get(d.beneficiarioNormalizado)
+      if (b) {
+        b.cheques += 1
+        b.montoCentavos += d.montoCentavos
+      } else {
+        porBenef.set(d.beneficiarioNormalizado, {
+          beneficiarioNormalizado: d.beneficiarioNormalizado,
+          nombre: d.beneficiario || d.beneficiarioNormalizado,
+          cheques: 1,
+          montoCentavos: d.montoCentavos,
+        })
+      }
+    }
+    const disponibles = [...porBenef.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+    res.json({ deFabrica: OTROS_PAGOS_DE_FABRICA, marcados, disponibles })
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] beneficiarios-pago', err)
+    res.status(500).json({ error: 'No se pudo cargar la lista de beneficiarios que son pagos' })
+  }
+})
+
+/** Marca (o desmarca) un beneficiario como pago. Body: `{ beneficiarioNormalizado, nombre, esPago }`. */
+finanzasChequesOcasionalesRouter.put('/beneficiarios-pago', requireFinanzasPermiso('finanzas_cheques'), async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as { beneficiarioNormalizado?: unknown; nombre?: unknown; esPago?: unknown }
+    const benef = typeof body.beneficiarioNormalizado === 'string' ? body.beneficiarioNormalizado.trim() : ''
+    const nombre = typeof body.nombre === 'string' && body.nombre.trim() ? body.nombre.trim() : benef
+    if (!benef) {
+      res.status(400).json({ error: 'Falta elegir el beneficiario.' })
+      return
+    }
+    if (typeof body.esPago !== 'boolean') {
+      res.status(400).json({ error: 'Falta decir si es un pago o no.' })
+      return
+    }
+    await guardarBeneficiarioPago({ beneficiarioNormalizado: benef, nombre, esPago: body.esPago, uid: req.authedUser!.uid })
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[finanzas/cheques-ocasionales] guardar beneficiario-pago', err)
+    res.status(500).json({ error: 'No se pudo guardar el cambio' })
   }
 })
 

@@ -8,6 +8,7 @@ import {
   clasificarOcasional,
   esCompraIva,
   esOtroPago,
+  marcarOtrosPagos,
   reclasificarDoc,
 } from './clasificar-ocasional.js'
 
@@ -192,6 +193,27 @@ describe('esOtroPago', () => {
   it('otros beneficiarios no', () => {
     expect(esOtroPago('presta plata', 'retiro')).toBe(false)
     expect(esOtroPago('gabriela perez', '')).toBe(false)
+  })
+  it('los marcados a mano como pago, siempre', () => {
+    const marcados = new Set(['juan perez'])
+    expect(esOtroPago('juan perez', 'RENOV CHQ 123', marcados)).toBe(true)
+    expect(esOtroPago('juan perezoso', '', marcados)).toBe(false)
+    expect(esOtroPago('', '', new Set(['']))).toBe(false)
+  })
+})
+
+describe('marcarOtrosPagos', () => {
+  it('marca cada cheque sin tocar lo demás', () => {
+    const r = marcarOtrosPagos(
+      [
+        { beneficiarioNormalizado: 'juan perez', obsOriginal: '', montoCentavos: 1 },
+        { beneficiarioNormalizado: 'cavazza', obsOriginal: '', montoCentavos: 2 },
+        { beneficiarioNormalizado: 'presta plata', obsOriginal: '', montoCentavos: 3 },
+      ],
+      new Set(['juan perez']),
+    )
+    expect(r.map((d) => d.esOtroPago)).toEqual([true, true, false])
+    expect(r.map((d) => d.montoCentavos)).toEqual([1, 2, 3])
   })
 })
 

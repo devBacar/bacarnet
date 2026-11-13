@@ -215,6 +215,8 @@ export interface ChequeOcasionalDoc {
   proveedorFinancieroId: string | null
   /** Compra de IVA: OBS con "IVA" o beneficiario CONTA I / III / IIII / IV. Se recalcula en cada sincronización. */
   esCompraIva?: boolean
+  /** Otros pagos (retiros, pagos a personas): no es operación financiera. Se calcula al leer, no se guarda. */
+  esOtroPago?: boolean
   /** Tipo de operación propuesto por un patrón aprendido; Finanzas lo confirma a mano. Se recalcula en cada sincronización. */
   sugerencia?: SugerenciaOperacion | null
   /** Sobre qué cheques parece calculado un interés pagado aparte (ver `interes-posicion.ts`). Se recalcula en cada sincronización. */

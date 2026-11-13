@@ -181,7 +181,10 @@ export function PestanaOcasionales() {
         agrupar,
       }),
     enabled: Boolean(user),
-    placeholderData: (prev) => prev,
+    // Mientras carga se deja ver la lista anterior solo si es de la misma pestaña (cambió la página o un filtro chico).
+    // Si no, al pasar de Todos a Compra IVA se veía la lista de Todos agrupada como si fuera Compra IVA.
+    placeholderData: (prev, prevQuery) =>
+      prevQuery?.queryKey[2] === filtro && prevQuery?.queryKey[3] === agrupar ? prev : undefined,
   })
 
   const { data: resumen } = useQuery({
